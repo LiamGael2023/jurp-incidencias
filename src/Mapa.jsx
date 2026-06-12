@@ -14,6 +14,7 @@ import geoPuentePeatonal from './data/Puente_Peatonal.json';
 import geoPuentePeatonal2 from './data/Puente_Peatonal_2.json';
 import geoAlcantarilla from './data/Alcantarilla.json';
 import geoAlcantarilla2 from './data/Alcantarilla_2.json';
+import logo from './assets/logo1.png';
 
 function VolarAUbicacion({ posicion }) {
   const map = useMap();
@@ -123,9 +124,12 @@ function MapaChavimochic() {
 
       <div className={`panel-control-avanzado ${leyendaExpandida ? '' : 'colapsado'}`}>
         <div className="pca-cabecera">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1d273b', fontWeight: '600', fontSize: '0.875rem' }}>
-            <FaLayerGroup color="#206bc4" /> Panel de Control
+          {/* 🟢 Logo mostrado en el panel */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <img src={logo} alt="Logo" style={{ height: '30px', width: 'auto' }} />
+            {leyendaExpandida && <span style={{ color: '#1d273b', fontWeight: '600', fontSize: '0.875rem' }}>Panel de Control</span>}
           </div>
+          
           <button className="pca-btn-icon" onClick={() => setLeyendaExpandida(!leyendaExpandida)}>
             {leyendaExpandida ? <FaChevronLeft size={10} /> : <FaChevronRight size={10} />}
           </button>
