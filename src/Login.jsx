@@ -102,11 +102,13 @@ function Login({ onLoginSuccess }) {
           {error && <div className="error-mensaje">{error}</div>}
         </form>
       </div>
-      <img 
-        src={portadaPortada} 
-        alt="Portada" 
-        className="login-imagen-portada" 
-      />
+      <div className="login-imagen-contenedor">
+        <img 
+          src={portadaPortada} 
+          alt="Portada" 
+          className="login-imagen-portada" 
+        />
+      </div>
     </div>
   );
 }

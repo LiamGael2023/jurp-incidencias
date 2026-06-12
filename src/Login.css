@@ -110,12 +110,11 @@
 
 /* --- SECCIÓN DERECHA (65%) --- */
 .login-imagen-portada {
-  flex: 0 0 65%; /* Ocupa exactamente el 65% restante */
-  background-image: url('http://jriegopresurizado.org.pe/wp-content/uploads/2024/07/Portada-Pagina-Web-Julio.png');
-  background-size: cover; /* La imagen cubre todo el espacio */
-  background-position: center; /* Centrada */
-  background-repeat: no-repeat;
-  position: relative;
+  flex: 0 0 65%; /* Ocupa el 65% restante */
+  width: 65%;
+  height: 100vh; /* Asegura que ocupe todo el alto */
+  object-fit: cover; /* Esto hace que la imagen se recorte para llenar el espacio sin deformarse */
+  display: block;
 }
 
 /* Efecto opcional de degradado sobre la imagen */
