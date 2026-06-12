@@ -52,21 +52,21 @@ function Incidentes() {
   const [nuevoRecurso, setNuevoRecurso] = useState(estadoInicialRecurso);
 
   const obtenerIncidentes = async () => {
-  const token = localStorage.getItem('userToken'); // 1. Sacamos el token
-  if (!token) return;
-  
-  setCargando(true);
-  try {
-    // 2. Usamos la ruta relativa y pasamos el token en los headers
-    const res = await fetch('/api/v1/mobile/hi-incidents/list/', { 
-      headers: { 
-        'Content-Type': 'application/json', 
-        'Authorization': `Token ${token}` // ¡Aquí va el token!
-      } 
-    });
+    const token = localStorage.getItem('userToken'); // 1. Sacamos el token
+    if (!token) return;
     
-    if (res.ok) {
-      const data = await res.json();
+    setCargando(true);
+    try {
+      // 2. Usamos la ruta relativa (PROXY VERCEL) y pasamos el token en los headers
+      const res = await fetch('/api/v1/mobile/hi-incidents/list/', { 
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': `Token ${token}` 
+        } 
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
         const tiposMapa = { '1': 'Deslizamiento', '2': 'Obstrucción', '3': 'Falla Mecánica', '4': 'Robo', '5': 'Daño Estructural', '6': 'Otro' };
 
         const listaFormateada = (data.results || []).map(inc => {
@@ -91,22 +91,22 @@ function Incidentes() {
   };
 
   const cargarCosteosGuardados = async (incidenteId) => {
-  const BASE_URL = ''; // Usamos el proxy de Vercel
-  const token = localStorage.getItem('userToken'); // Obtenemos el token
-  
-  try {
-    // Preparamos los headers con el token
-    const headers = { 'Authorization': `Token ${token}` };
+    // 🟢 URL DIRECTA A GIDEON
+    const BASE_URL = 'https://gideonstudio.duckdns.org'; 
+    const token = localStorage.getItem('userToken'); 
+    
+    try {
+      const headers = { 'Authorization': `Token ${token}` };
 
-    const [resPers, resMat, resMaq] = await Promise.all([
-      fetch(`${BASE_URL}/api/v1/mobile/operations/incident-personnels/`, { headers }),
-      fetch(`${BASE_URL}/api/v1/mobile/operations/incident-materials/`, { headers }),
-      fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`, { headers })
-    ]);
+      const [resPers, resMat, resMaq] = await Promise.all([
+        fetch(`${BASE_URL}/api/v1/mobile/operations/incident-personnels/`, { headers }),
+        fetch(`${BASE_URL}/api/v1/mobile/operations/incident-materials/`, { headers }),
+        fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`, { headers })
+      ]);
 
-    const [dataPers, dataMat, dataMaq] = await Promise.all([
-      resPers.json(), resMat.json(), resMaq.json()
-    ]);
+      const [dataPers, dataMat, dataMaq] = await Promise.all([
+        resPers.json(), resMat.json(), resMaq.json()
+      ]);
 
       const listPers = Array.isArray(dataPers) ? dataPers : (dataPers.results || []);
       const listMat = Array.isArray(dataMat) ? dataMat : (dataMat.results || []);
@@ -151,8 +151,8 @@ function Incidentes() {
     cargarCosteosGuardados(inc.id); 
   };
 
-  // NUEVA FUNCIÓN PARA ABRIR EL MODAL DEL PDF
   const abrirModalPdf = (dbId) => {
+    // 🟢 URL DIRECTA A GIDEON PARA EL PDF
     const url = `https://gideonstudio.duckdns.org/api/v1/mobile/operations/daily-part-heavy-equipments/${dbId}/pdf/`;
     setPdfUrlActivo(url);
     setModalPdfAbierto(true);
@@ -205,18 +205,21 @@ function Incidentes() {
   const eliminarRecurso = (idLocal) => setRecursos(recursos.filter(r => r.idLocal !== idLocal));
   const costoTotalIncidente = recursos.reduce((sum, item) => sum + item.total, 0);
 
-  const recursosNuevos = recursos.filter(r => !r.guardadoEnDB);
-  if (recursosNuevos.length === 0) return Swal.fire({ icon: 'info', title: 'Todo al día', text: 'No hay recursos nuevos.' });
-  
-  setGuardando(true);
-  const BASE_URL = ''; // Usamos proxy
-  const token = localStorage.getItem('userToken'); // Obtenemos el token
+  // 🟢 FUNCIÓN GUARDAR COSTEOS CORREGIDA (Estaba rota en tu versión anterior)
+  const guardarCosteos = async () => {
+    const recursosNuevos = recursos.filter(r => !r.guardadoEnDB);
+    if (recursosNuevos.length === 0) return Swal.fire({ icon: 'info', title: 'Todo al día', text: 'No hay recursos nuevos.' });
+    
+    setGuardando(true);
+    // 🟢 URL DIRECTA A GIDEON
+    const BASE_URL = 'https://gideonstudio.duckdns.org'; 
+    const token = localStorage.getItem('userToken'); 
 
-  try {
-    for (const r of recursosNuevos) {
-      let endpoint = '';
-      let formData = new FormData();
-      formData.append('incident_report', incidenteActivo.id);
+    try {
+      for (const r of recursosNuevos) {
+        let endpoint = '';
+        let formData = new FormData();
+        formData.append('incident_report', incidenteActivo.id);
 
         if (r.tipo === 'Personal') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-personnels/`;
@@ -259,8 +262,7 @@ function Incidentes() {
         const res = await fetch(endpoint, { 
           method: 'POST', 
           headers: {
-            'Authorization': `Token ${token}` // Autenticación
-            // Nota: Con FormData NO se pone 'Content-Type', el navegador lo pone solo
+            'Authorization': `Token ${token}` 
           },
           body: formData 
         });
@@ -270,9 +272,10 @@ function Incidentes() {
       Swal.fire({ icon: 'success', title: 'Éxito', text: 'Se guardó correctamente', confirmButtonColor: '#206bc4' });
       setRecursos([]); 
       setModalAbierto(false); 
+      // Opcional: Podrías llamar a cargarCosteosGuardados(incidenteActivo.id) aquí si quieres refrescar la lista al guardar.
     } catch (error) {
       console.error(error);
-      Swal.fire({ icon: 'error', title: 'Error', text: 'Hubo un error al guardar en la base de datos de pruebas.' });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Hubo un error al guardar en la base de datos.' });
     } finally {
       setGuardando(false);
     }
@@ -527,6 +530,6 @@ function Incidentes() {
 
     </div>
   );
-
+}
 
 export default Incidentes;
