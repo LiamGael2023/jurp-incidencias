@@ -91,17 +91,15 @@ function Incidentes() {
   };
 
   const cargarCosteosGuardados = async (incidenteId) => {
-    // 🟢 URL DIRECTA A GIDEON
     const BASE_URL = 'https://gideonstudio.duckdns.org'; 
-    const token = localStorage.getItem('userToken'); 
+    // Quitamos la lectura del token aquí
     
     try {
-      const headers = { 'Authorization': `Token ${token}` };
-
+      // Hacemos los fetch directamente sin cabeceras
       const [resPers, resMat, resMaq] = await Promise.all([
-        fetch(`${BASE_URL}/api/v1/mobile/operations/incident-personnels/`, { headers }),
-        fetch(`${BASE_URL}/api/v1/mobile/operations/incident-materials/`, { headers }),
-        fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`, { headers })
+        fetch(`${BASE_URL}/api/v1/mobile/operations/incident-personnels/`),
+        fetch(`${BASE_URL}/api/v1/mobile/operations/incident-materials/`),
+        fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`)
       ]);
 
       const [dataPers, dataMat, dataMaq] = await Promise.all([
@@ -261,9 +259,6 @@ function Incidentes() {
 
         const res = await fetch(endpoint, { 
           method: 'POST', 
-          headers: {
-            'Authorization': `Token ${token}` 
-          },
           body: formData 
         });
         if (!res.ok) throw new Error(`Error al guardar el registro de ${r.tipo}`);
