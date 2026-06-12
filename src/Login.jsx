@@ -20,11 +20,9 @@ function Login({ onLoginSuccess }) {
     };
 
     try {
-      const respuesta = await fetch('http://sistema.jriegopresurizado.org.pe/api/v1/mobile/auth/login/', {
+      const respuesta = await fetch('/api/v1/mobile/auth/login/', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json' 
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(datosLogin)
       });
 
