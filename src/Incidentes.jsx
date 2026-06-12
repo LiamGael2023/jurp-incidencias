@@ -52,13 +52,21 @@ function Incidentes() {
   const [nuevoRecurso, setNuevoRecurso] = useState(estadoInicialRecurso);
 
   const obtenerIncidentes = async () => {
-    const token = localStorage.getItem('userToken');
-    if (!token) return;
-    setCargando(true);
-    try {
-      const res = await fetch('/api/v1/mobile/hi-incidents/list/', { headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
+  const token = localStorage.getItem('userToken'); // 1. Sacamos el token
+  if (!token) return;
+  
+  setCargando(true);
+  try {
+    // 2. Usamos la ruta relativa y pasamos el token en los headers
+    const res = await fetch('/api/v1/mobile/hi-incidents/list/', { 
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Authorization': `Token ${token}` // ¡Aquí va el token!
+      } 
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
         const tiposMapa = { '1': 'Deslizamiento', '2': 'Obstrucción', '3': 'Falla Mecánica', '4': 'Robo', '5': 'Daño Estructural', '6': 'Otro' };
 
         const listaFormateada = (data.results || []).map(inc => {
@@ -83,17 +91,22 @@ function Incidentes() {
   };
 
   const cargarCosteosGuardados = async (incidenteId) => {
-    const BASE_URL = '';
-    try {
-      const [resPers, resMat, resMaq] = await Promise.all([
-        fetch(`${BASE_URL}/api/v1/mobile/operations/incident-personnels/`),
-        fetch(`${BASE_URL}/api/v1/mobile/operations/incident-materials/`),
-        fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`)
-      ]);
+  const BASE_URL = ''; // Usamos el proxy de Vercel
+  const token = localStorage.getItem('userToken'); // Obtenemos el token
+  
+  try {
+    // Preparamos los headers con el token
+    const headers = { 'Authorization': `Token ${token}` };
 
-      const [dataPers, dataMat, dataMaq] = await Promise.all([
-        resPers.json(), resMat.json(), resMaq.json()
-      ]);
+    const [resPers, resMat, resMaq] = await Promise.all([
+      fetch(`${BASE_URL}/api/v1/mobile/operations/incident-personnels/`, { headers }),
+      fetch(`${BASE_URL}/api/v1/mobile/operations/incident-materials/`, { headers }),
+      fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`, { headers })
+    ]);
+
+    const [dataPers, dataMat, dataMaq] = await Promise.all([
+      resPers.json(), resMat.json(), resMaq.json()
+    ]);
 
       const listPers = Array.isArray(dataPers) ? dataPers : (dataPers.results || []);
       const listMat = Array.isArray(dataMat) ? dataMat : (dataMat.results || []);
@@ -192,18 +205,18 @@ function Incidentes() {
   const eliminarRecurso = (idLocal) => setRecursos(recursos.filter(r => r.idLocal !== idLocal));
   const costoTotalIncidente = recursos.reduce((sum, item) => sum + item.total, 0);
 
-  const guardarCosteos = async () => {
-    const recursosNuevos = recursos.filter(r => !r.guardadoEnDB);
-    if (recursosNuevos.length === 0) return Swal.fire({ icon: 'info', title: 'Todo al día', text: 'No hay recursos nuevos por guardar en este incidente.' });
-    
-    setGuardando(true);
-    const BASE_URL = 'https://gideonstudio.duckdns.org';
+  const recursosNuevos = recursos.filter(r => !r.guardadoEnDB);
+  if (recursosNuevos.length === 0) return Swal.fire({ icon: 'info', title: 'Todo al día', text: 'No hay recursos nuevos.' });
+  
+  setGuardando(true);
+  const BASE_URL = ''; // Usamos proxy
+  const token = localStorage.getItem('userToken'); // Obtenemos el token
 
-    try {
-      for (const r of recursosNuevos) {
-        let endpoint = '';
-        let formData = new FormData();
-        formData.append('incident_report', incidenteActivo.id);
+  try {
+    for (const r of recursosNuevos) {
+      let endpoint = '';
+      let formData = new FormData();
+      formData.append('incident_report', incidenteActivo.id);
 
         if (r.tipo === 'Personal') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-personnels/`;
@@ -243,7 +256,14 @@ function Incidentes() {
           }
         }
 
-        const res = await fetch(endpoint, { method: 'POST', body: formData });
+        const res = await fetch(endpoint, { 
+          method: 'POST', 
+          headers: {
+            'Authorization': `Token ${token}` // Autenticación
+            // Nota: Con FormData NO se pone 'Content-Type', el navegador lo pone solo
+          },
+          body: formData 
+        });
         if (!res.ok) throw new Error(`Error al guardar el registro de ${r.tipo}`);
       }
       
@@ -507,6 +527,6 @@ function Incidentes() {
 
     </div>
   );
-}
+
 
 export default Incidentes;
