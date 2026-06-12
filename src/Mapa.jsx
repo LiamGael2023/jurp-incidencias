@@ -4,7 +4,7 @@ import L, { divIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { 
   FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, 
-  FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe 
+  FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt 
 } from 'react-icons/fa';
 
 import geoCanalMadre from './data/Canal_Madre.json';
@@ -19,7 +19,6 @@ import geoAlcantarilla from './data/Alcantarilla.json';
 import geoAlcantarilla2 from './data/Alcantarilla_2.json';
 import logo from './assets/logo1.png';
 
-// 🟢 Componente para botón de "Encuadre General"
 function BotonEncuadreGeneral({ centro }) {
   const map = useMap();
   return (
@@ -58,6 +57,10 @@ function MapaChavimochic() {
   const [miUbicacion, setMiUbicacion] = useState(null);
   const [buscandoGPS, setBuscandoGPS] = useState(false);
 
+  // 🟢 ESTADOS PARA EL DETALLE MULTIMEDIA
+  const [detalleActivo, setDetalleActivo] = useState(null);
+  const [cargandoDetalle, setCargandoDetalle] = useState(false);
+
   const countBocatomas = geoBocatoma?.features?.length || 0;
   const countPtesVeh = (geoPuenteVehicular?.features?.length || 0) + (geoPuenteVehicular2?.features?.length || 0);
   const countPtesPea = (geoPuentePeatonal?.features?.length || 0) + (geoPuentePeatonal2?.features?.length || 0);
@@ -87,7 +90,7 @@ function MapaChavimochic() {
             fecha: new Date(inc.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' }),
             timestamp: new Date(inc.created_at).getTime(), 
             imagenUrl: inc.thumbnail || inc.image || null,
-            codigo: inc.code || 'Sin Código' // 🟢 Aseguramos traer el código
+            codigo: inc.code || 'Sin Código'
           };
         }).filter(inc => !isNaN(inc.lat) && !isNaN(inc.lng) && inc.lat !== 0 && inc.lng !== 0);
         setIncidentesAPI(incidentesMapeados);
@@ -116,6 +119,27 @@ function MapaChavimochic() {
   };
 
   useEffect(() => { obtenerDatosDeApis(); }, []);
+
+  // 🟢 FUNCIÓN PARA CARGAR EL DETALLE (MULTIMEDIA) AL HACER CLIC
+  const cargarDetalleIncidente = async (id) => {
+    setDetalleActivo(null);
+    setCargandoDetalle(true);
+    const token = localStorage.getItem('userToken');
+    try {
+      // Usamos el proxy de Vercel (ruta relativa) para ir a sistema.jriegopresurizado...
+      const res = await fetch(`/api/v1/mobile/hi-incidents/${id}/`, { 
+        headers: { 'Authorization': `Token ${token}` } 
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDetalleActivo(data);
+      }
+    } catch (error) {
+      console.error("Error al cargar detalle:", error);
+    } finally {
+      setCargandoDetalle(false);
+    }
+  };
 
   const toggleCapa = (nombreCapa) => { setCapas(prev => ({ ...prev, [nombreCapa]: !prev[nombreCapa] })); };
   const obtenerMiUbicacion = () => {
@@ -147,7 +171,6 @@ function MapaChavimochic() {
   const iconoGPS = divIcon({ className: 'icono-vacio', html: `<div style="background-color: #206bc4; border: 3px solid white; width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>`, iconSize: [22, 22], iconAnchor: [11, 11] });
   const crearIconoLluvia = (totalRain, isCritical) => divIcon({ className: 'icono-vacio', html: `<div style="display: flex; flex-direction: column; align-items: center; margin-top: -30px;"><div style="background: white; border: 1px solid ${isCritical ? '#d63939' : '#206bc4'}; color: ${isCritical ? '#d63939' : '#206bc4'}; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); white-space: nowrap;">${totalRain.toFixed(1)} mm</div><div style="font-size: 26px; color: ${isCritical ? '#d63939' : '#206bc4'}; line-height: 1; margin-top: 2px;">🌧️</div></div>`, iconSize: [60, 60], iconAnchor: [30, 45] });
 
-  // 🟢 Función para los colores de estado en la tarjeta
   const getEstadoBadgeMap = (estado) => {
     switch (estado) {
       case 'pat': return <span style={{backgroundColor:'#f59f00', color:'#fff', padding:'2px 6px', borderRadius:'4px', fontSize:'10px', fontWeight:'bold'}}>Pendiente</span>;
@@ -175,41 +198,70 @@ function MapaChavimochic() {
         {capas.Puentes_Peatonales && <><GeoJSON data={geoPuentePeatonal} pointToLayer={(f, ll) => L.marker(ll, { icon: crearIconoPunto('#f76707') })} /><GeoJSON data={geoPuentePeatonal2} pointToLayer={(f, ll) => L.marker(ll, { icon: crearIconoPunto('#f76707') })} /></>}
         {capas.Alcantarillas && <><GeoJSON data={geoAlcantarilla} pointToLayer={(f, ll) => L.marker(ll, { icon: crearIconoPunto('#6f42c1') })} /><GeoJSON data={geoAlcantarilla2} pointToLayer={(f, ll) => L.marker(ll, { icon: crearIconoPunto('#6f42c1') })} /></>}
 
-        {/* 🟢 Incidentes (Todos los estados filtrados con Popups Enriquecidos) */}
+        {/* 🟢 Incidentes con Popups Enriquecidos y Galería Multimedia On-Demand */}
         {(capas.Incidentes_Nuevos || capas.Incidentes_Atencion) && incidentesFiltrados.map(inc => {
-          // Filtramos según el switch activado en el panel
           if (!capas.Incidentes_Nuevos && inc.estado !== 'eat') return null;
           if (!capas.Incidentes_Atencion && inc.estado === 'eat') return null;
 
           return (
-            <Marker key={inc.id} position={[inc.lat, inc.lng]} icon={crearIconoIncidente(inc.gravedad)}>
-              <Popup minWidth={260} maxWidth={300} className="popup-incidente-custom">
+            <Marker 
+              key={inc.id} 
+              position={[inc.lat, inc.lng]} 
+              icon={crearIconoIncidente(inc.gravedad)}
+              eventHandlers={{
+                click: () => cargarDetalleIncidente(inc.id) // 🟢 AL HACER CLIC SE LLAMA A LA API
+              }}
+            >
+              <Popup minWidth={280} maxWidth={320} className="popup-incidente-custom">
                 <div style={{ padding: '2px', fontFamily: 'system-ui, sans-serif' }}>
                   
-                  {/* Cabecera del Popup */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px', marginBottom: '8px' }}>
                     <h4 style={{ margin: 0, color: '#1d273b', fontSize: '15px', fontWeight: 'bold' }}>{inc.tipo}</h4>
                     {getEstadoBadgeMap(inc.estado)}
                   </div>
                   
-                  {/* Imagen (Si existe) */}
-                  {inc.imagenUrl && (
-                    <div style={{ width: '100%', height: '140px', overflow: 'hidden', borderRadius: '6px', marginBottom: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                      <img src={inc.imagenUrl} alt="Evidencia" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  {/* 🟢 GALERÍA MULTIMEDIA DINÁMICA */}
+                  {cargandoDetalle ? (
+                    <div style={{ textAlign: 'center', padding: '20px 0', color: '#206bc4' }}>
+                      <FaSyncAlt className="icon-spin" /> <span style={{fontSize: '12px', marginLeft: '5px'}}>Cargando evidencia...</span>
                     </div>
+                  ) : detalleActivo && detalleActivo.id === inc.id ? (
+                    <div style={{ display: 'flex', overflowX: 'auto', gap: '8px', paddingBottom: '8px', marginBottom: '8px' }}>
+                      {/* Imágenes */}
+                      {detalleActivo.images && detalleActivo.images.map((item, idx) => (
+                        <a key={`img-${idx}`} href={item.image} target="_blank" rel="noopener noreferrer" style={{flexShrink: 0}}>
+                          <img src={item.image} alt="Evidencia" style={{ width: '120px', height: '100px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #e2e8f0' }} />
+                        </a>
+                      ))}
+                      {/* Videos */}
+                      {detalleActivo.videos && detalleActivo.videos.map((item, idx) => (
+                        <div key={`vid-${idx}`} style={{flexShrink: 0, width: '150px', height: '100px'}}>
+                          <video src={item.video} style={{ width: '150px', height: '100px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #e2e8f0', backgroundColor: '#000' }} controls preload="metadata" />
+                        </div>
+                      ))}
+                      {/* Si no hay media en el detalle pero sí thumbnail base */}
+                      {(!detalleActivo.images?.length && !detalleActivo.videos?.length && inc.imagenUrl) && (
+                        <img src={inc.imagenUrl} alt="Evidencia" style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '6px' }} />
+                      )}
+                    </div>
+                  ) : (
+                    /* Fallback antes de que termine de cargar */
+                    inc.imagenUrl && (
+                      <div style={{ width: '100%', height: '140px', overflow: 'hidden', borderRadius: '6px', marginBottom: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                        <img src={inc.imagenUrl} alt="Evidencia" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </div>
+                    )
                   )}
                   
-                  {/* Detalles */}
                   <div style={{ fontSize: '12px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div><strong>Código:</strong> <span style={{color: '#206bc4', fontWeight: 'bold'}}>{inc.codigo}</span></div>
                     <div><strong>Ubicación:</strong> {inc.lugar}</div>
                     
-                    <div style={{ backgroundColor: '#f1f5f9', padding: '8px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ backgroundColor: '#f1f5f9', padding: '8px', borderRadius: '4px', border: '1px solid #e2e8f0', maxHeight: '100px', overflowY: 'auto' }}>
                       <strong style={{color: '#1e293b'}}>Descripción del reporte:</strong><br/>
                       <span style={{color: '#334155', lineHeight: '1.4', display: 'block', marginTop: '4px'}}>{inc.descripcion}</span>
                     </div>
 
-                    {/* Pie del Popup */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '2px', fontSize: '11px' }}>
                       <span title="Reportado por">👤 <b>{inc.usuario}</b></span>
                       <span title="Fecha y Hora">🕒 {inc.fecha}</span>
