@@ -4,6 +4,7 @@ import MapaChavimochic from './Mapa';
 import Login from './Login';
 import Incidentes from './Incidentes';
 import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaCog } from 'react-icons/fa';
+import logo from './assets/logo1.png';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('userToken'));
@@ -35,19 +36,16 @@ function App() {
       
       {/* SIDEBAR CLARO (Fondo Blanco) */}
       <aside className={`tbl-sidebar ${menuLateralAbierto ? 'expanded' : 'collapsed'}`}>
-        <div className="tbl-sidebar-header">
-          
-          {/* Le quitamos el centrado y le agregamos paddingLeft para empujarlo a la derecha */}
-          <div className="tbl-brand" style={{ width: '100%', paddingLeft: '18px' }}>
-            <img 
-              src="http://jriegopresurizado.org.pe/wp-content/uploads/2022/03/logo1.png" 
-              alt="JURP" 
-              className="tbl-brand-img" 
-              style={{ height: '42px' }} 
-            />
-          </div>
-          
-        </div>
+  <div className="tbl-sidebar-header">
+    <div className="tbl-brand" style={{ width: '100%', paddingLeft: '18px' }}>
+      <img 
+        src={logo} // 🟢 USAMOS EL LOGO LOCAL IMPORTADO
+        alt="JURP" 
+        className="tbl-brand-img" 
+        style={{ height: '42px' }} 
+      />
+    </div>
+  </div>
         
         <ul className="tbl-nav">
           <li className="tbl-nav-label">{menuLateralAbierto ? 'Menú Principal' : '...'}</li>
