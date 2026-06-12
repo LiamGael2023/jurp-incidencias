@@ -1,0 +1,127 @@
+/* src/Login.css */
+
+.login-completo {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  overflow: hidden;
+  font-family: Arial, sans-serif;
+}
+
+/* --- SECCIÓN IZQUIERDA (35%) --- */
+.login-formulario-seccion {
+  flex: 0 0 35%; /* Ocupa exactamente el 35% */
+  background-color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* Centrado vertical */
+  align-items: center; /* Centrado horizontal */
+  padding: 40px;
+  box-sizing: border-box;
+  box-shadow: 5px 0 15px rgba(0,0,0,0.1);
+  z-index: 10;
+}
+
+.login-logo {
+  height: 100px; /* Tamaño del logo en el login */
+  width: auto;
+  margin-bottom: 30px;
+}
+
+.login-titulo {
+  color: #0d47a1; /* Color primaryBlue de tu App.css */
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.formulario {
+  width: 100%;
+  max-width: 320px; /* Ancho máximo del formulario interno */
+  display: flex;
+  flex-direction: column;
+}
+
+.input-grupo {
+  margin-bottom: 20px;
+}
+
+.input-grupo label {
+  display: block;
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+
+.input-formulario {
+  width: 100%;
+  padding: 12px 15px;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-sizing: border-box;
+  transition: border-color 0.3s;
+}
+
+.input-formulario:focus {
+  outline: none;
+  border-color: #2196F3; /* Color azul de foco */
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.boton-login {
+  background-color: #0d47a1; /* PrimaryBlue */
+  color: white;
+  border: none;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: bold;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.1s;
+  margin-top: 10px;
+}
+
+.boton-login:hover {
+  background-color: #1565C0; /* Un azul un poco más claro al pasar el mouse */
+}
+
+.boton-login:active {
+  transform: scale(0.98); /* Pequeño efecto de pulsado */
+}
+
+.boton-login:disabled {
+  background-color: #90CAF9;
+  cursor: not-allowed;
+}
+
+.error-mensaje {
+  color: #d32f2f;
+  background-color: #ffcdd2;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-top: 20px;
+  text-align: center;
+  border: 1px solid #ef9a9a;
+}
+
+/* --- SECCIÓN DERECHA (65%) --- */
+.login-imagen-portada {
+  flex: 0 0 65%; /* Ocupa exactamente el 65% restante */
+  background-image: url('http://jriegopresurizado.org.pe/wp-content/uploads/2024/07/Portada-Pagina-Web-Julio.png');
+  background-size: cover; /* La imagen cubre todo el espacio */
+  background-position: center; /* Centrada */
+  background-repeat: no-repeat;
+  position: relative;
+}
+
+/* Efecto opcional de degradado sobre la imagen */
+.login-imagen-portada::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(135deg, rgba(13, 71, 161, 0.3) 0%, rgba(0,0,0,0.1) 100%);
+}

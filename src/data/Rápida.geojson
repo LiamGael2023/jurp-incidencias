@@ -1,0 +1,9 @@
+{
+"type": "FeatureCollection",
+"name": "Rapida",
+"features": [
+{ "type": "Feature", "properties": { "Name": "Rapida RA1", "COD_EST": "CANAL MADRE", "ESTRUCTURA": "Rapida", "Field_1": "RA1", "NOMBRE": "RA1", "PROGRESIVA": "22+799.589", "TRAMO": "Tramo 0" }, "geometry": { "type": "Point", "coordinates": [ -78.4815613, -8.7127819, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Rapida RA2", "COD_EST": "CANAL MADRE", "ESTRUCTURA": "Rapida", "Field_1": "RA2", "NOMBRE": "RA2", "PROGRESIVA": "23+664.599", "TRAMO": "Tramo 0" }, "geometry": { "type": "Point", "coordinates": [ -78.4905243, -8.7117182, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Rapida RA3", "COD_EST": "CANAL MADRE", "ESTRUCTURA": "Rapida", "Field_1": "RA3", "NOMBRE": "RA3", "PROGRESIVA": "24+230.649", "TRAMO": "Tramo 0" }, "geometry": { "type": "Point", "coordinates": [ -78.495451, -8.712005, 0.0 ] } }
+]
+}

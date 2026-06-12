@@ -1,0 +1,10 @@
+{
+"type": "FeatureCollection",
+"name": "Alcantarilla no2",
+"features": [
+{ "type": "Feature", "properties": { "Name": "Alcantarilla  ALC-01", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Alcantarilla", "FID": 1, "Field_1": "ALC-01", "NOMBRE": "ALC-01", "Nº": 1, "PROGRESIVA": "0+035.15", "TRAMO": "Tramo VI" }, "geometry": { "type": "Point", "coordinates": [ -78.7484964, -8.3888258, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Alcantarilla  ALC-02", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Alcantarilla", "FID": 2, "Field_1": "ALC-02", "NOMBRE": "ALC-02", "Nº": 2, "PROGRESIVA": "4+924.4", "TRAMO": "Tramo VI" }, "geometry": { "type": "Point", "coordinates": [ -78.7787549, -8.3818644, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Alcantarilla  ALC-03", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Alcantarilla", "FID": 3, "Field_1": "ALC-03", "NOMBRE": "ALC-03", "Nº": 3, "PROGRESIVA": "5+300.4", "TRAMO": "Tramo VI" }, "geometry": { "type": "Point", "coordinates": [ -78.7806805, -8.3794281, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Alcantarilla  ALC-04", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Alcantarilla", "FID": 4, "Field_1": "ALC-04", "NOMBRE": "ALC-04", "Nº": 4, "PROGRESIVA": "6+681.2", "TRAMO": "Tramo VI" }, "geometry": { "type": "Point", "coordinates": [ -78.7869832, -8.3750878, 0.0 ] } }
+]
+}

@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "Aliviadero no2",
+"features": [
+{ "type": "Feature", "properties": { "Name": "Aliviadero ALV - 01", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Aliviadero", "Field_1": "ALV - 01", "NOMBRE": "ALV - 01", "Nombre_del_Canal": "Lateral 10", "Nº": 1, "PROGRESIVA": "19+472.24", "TRAMO": "Tramo X" }, "geometry": { "type": "Point", "coordinates": [ -78.8529563, -8.3509526, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Aliviadero ALV - 02", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Aliviadero", "Field_1": "ALV - 02", "NOMBRE": "ALV - 02", "Nombre_del_Canal": "Lateral 10", "Nº": 2, "PROGRESIVA": "19+746.74", "TRAMO": "Tramo X" }, "geometry": { "type": "Point", "coordinates": [ -78.8545011, -8.3491111, 0.0 ] } }
+]
+}
