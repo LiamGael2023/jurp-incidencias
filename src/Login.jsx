@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import './Login.css';
+import logo from './assets/logo1.png';
 
 function Login({ onLoginSuccess }) {
   const [username, setUsername] = useState('');
@@ -58,7 +59,7 @@ function Login({ onLoginSuccess }) {
     <div className="login-completo">
       <div className="login-formulario-seccion">
         <img 
-          src="http://jriegopresurizado.org.pe/wp-content/uploads/2022/03/logo1.png" // Agregué la 's'
+          src={logo}
           alt="Logo J Riego Presurizado" 
           className="login-logo"
         />
