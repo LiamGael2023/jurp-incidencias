@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import './Login.css';
 import logo from './assets/logo1.png';
-import portadaPortada from './assets/portada-julio.png';
+import portadaPortada from './assets/Portada-Pagina-Web-Julio.png';
 
 function Login({ onLoginSuccess }) {
   const [username, setUsername] = useState('');
