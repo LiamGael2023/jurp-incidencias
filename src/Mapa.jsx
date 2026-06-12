@@ -19,7 +19,7 @@ import geoAlcantarilla from './data/Alcantarilla.json';
 import geoAlcantarilla2 from './data/Alcantarilla_2.json';
 import logo from './assets/logo1.png';
 
-// 🟢 MEJORA 2: Componente para botón de "Encuadre General"
+// 🟢 Componente para botón de "Encuadre General"
 function BotonEncuadreGeneral({ centro }) {
   const map = useMap();
   return (
@@ -49,7 +49,7 @@ function MapaChavimochic() {
   const centroMapa = [-8.4186, -78.7533]; 
   const [leyendaExpandida, setLeyendaExpandida] = useState(true);
   const [mapaBase, setMapaBase] = useState('satelite');
-  const [filtroTiempo, setFiltroTiempo] = useState(30); // 🟢 MEJORA 3: Filtro de 30 días por defecto
+  const [filtroTiempo, setFiltroTiempo] = useState(30);
   
   const [capas, setCapas] = useState({ Incidentes_Nuevos: true, Incidentes_Atencion: true, Lluvias: true, Canales: true, Bocatomas: false, Puentes_Vehiculares: false, Puentes_Peatonales: false, Alcantarillas: false });
   const [incidentesAPI, setIncidentesAPI] = useState([]);
@@ -80,14 +80,14 @@ function MapaChavimochic() {
           const anotherTypeStr = inc.another_type || inc.location_text;
           if (anotherTypeStr && (tipoNombre === 'Otro' || tipoNombre === 'Otros')) tipoNombre = `Otro (${anotherTypeStr.trim()})`;
           
-          // 🟢 MEJORA 1: Extraemos la imagen y el timestamp para el popup y el filtro
           return { 
             id: inc.id, lat: lat, lng: lng, tipo: tipoNombre, estado: inc.status || 'pat', 
             gravedad: inc.severity || 'lev', descripcion: inc.description || 'Sin descripción.', 
             usuario: inc.user?.username || inc.username || 'Usuario', lugar: inc.location_text || 'Coordenada de Campo', 
             fecha: new Date(inc.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' }),
-            timestamp: new Date(inc.created_at).getTime(), // Para filtrar por fecha
-            imagenUrl: inc.thumbnail || inc.image || null // Imagen para el popup
+            timestamp: new Date(inc.created_at).getTime(), 
+            imagenUrl: inc.thumbnail || inc.image || null,
+            codigo: inc.code || 'Sin Código' // 🟢 Aseguramos traer el código
           };
         }).filter(inc => !isNaN(inc.lat) && !isNaN(inc.lng) && inc.lat !== 0 && inc.lng !== 0);
         setIncidentesAPI(incidentesMapeados);
@@ -147,7 +147,16 @@ function MapaChavimochic() {
   const iconoGPS = divIcon({ className: 'icono-vacio', html: `<div style="background-color: #206bc4; border: 3px solid white; width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>`, iconSize: [22, 22], iconAnchor: [11, 11] });
   const crearIconoLluvia = (totalRain, isCritical) => divIcon({ className: 'icono-vacio', html: `<div style="display: flex; flex-direction: column; align-items: center; margin-top: -30px;"><div style="background: white; border: 1px solid ${isCritical ? '#d63939' : '#206bc4'}; color: ${isCritical ? '#d63939' : '#206bc4'}; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); white-space: nowrap;">${totalRain.toFixed(1)} mm</div><div style="font-size: 26px; color: ${isCritical ? '#d63939' : '#206bc4'}; line-height: 1; margin-top: 2px;">🌧️</div></div>`, iconSize: [60, 60], iconAnchor: [30, 45] });
 
-  // 🟢 Aplicamos el filtro de tiempo a los incidentes
+  // 🟢 Función para los colores de estado en la tarjeta
+  const getEstadoBadgeMap = (estado) => {
+    switch (estado) {
+      case 'pat': return <span style={{backgroundColor:'#f59f00', color:'#fff', padding:'2px 6px', borderRadius:'4px', fontSize:'10px', fontWeight:'bold'}}>Pendiente</span>;
+      case 'ate': return <span style={{backgroundColor:'#206bc4', color:'#fff', padding:'2px 6px', borderRadius:'4px', fontSize:'10px', fontWeight:'bold'}}>En Atención</span>;
+      case 'cer': return <span style={{backgroundColor:'#2fb344', color:'#fff', padding:'2px 6px', borderRadius:'4px', fontSize:'10px', fontWeight:'bold'}}>Cerrado</span>;
+      default: return <span style={{backgroundColor:'#6c7a89', color:'#fff', padding:'2px 6px', borderRadius:'4px', fontSize:'10px'}}>{estado}</span>;
+    }
+  };
+
   const tiempoLimite = Date.now() - (filtroTiempo * 24 * 60 * 60 * 1000);
   const incidentesFiltrados = filtroTiempo === 0 ? incidentesAPI : incidentesAPI.filter(inc => inc.timestamp >= tiempoLimite);
 
@@ -166,52 +175,53 @@ function MapaChavimochic() {
         {capas.Puentes_Peatonales && <><GeoJSON data={geoPuentePeatonal} pointToLayer={(f, ll) => L.marker(ll, { icon: crearIconoPunto('#f76707') })} /><GeoJSON data={geoPuentePeatonal2} pointToLayer={(f, ll) => L.marker(ll, { icon: crearIconoPunto('#f76707') })} /></>}
         {capas.Alcantarillas && <><GeoJSON data={geoAlcantarilla} pointToLayer={(f, ll) => L.marker(ll, { icon: crearIconoPunto('#6f42c1') })} /><GeoJSON data={geoAlcantarilla2} pointToLayer={(f, ll) => L.marker(ll, { icon: crearIconoPunto('#6f42c1') })} /></>}
 
-        {/* 🟢 MEJORA 1: Popups Enriquecidos */}
-        {capas.Incidentes_Nuevos && incidentesFiltrados.map(inc => inc.estado !== 'eat' && (
-          <Marker key={inc.id} position={[inc.lat, inc.lng]} icon={crearIconoIncidente(inc.gravedad)}>
-            <Popup minWidth={220} className="popup-incidente-custom">
-              <div style={{ padding: '4px' }}>
-                <h4 style={{ margin: '0 0 8px 0', color: inc.gravedad === 'gra' ? '#d63939' : '#f76707', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>
-                  {inc.tipo}
-                </h4>
-                {inc.imagenUrl && (
-                  <div style={{ width: '100%', height: '120px', overflow: 'hidden', borderRadius: '4px', marginBottom: '8px' }}>
-                    <img src={inc.imagenUrl} alt="Incidente" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        {/* 🟢 Incidentes (Todos los estados filtrados con Popups Enriquecidos) */}
+        {(capas.Incidentes_Nuevos || capas.Incidentes_Atencion) && incidentesFiltrados.map(inc => {
+          // Filtramos según el switch activado en el panel
+          if (!capas.Incidentes_Nuevos && inc.estado !== 'eat') return null;
+          if (!capas.Incidentes_Atencion && inc.estado === 'eat') return null;
+
+          return (
+            <Marker key={inc.id} position={[inc.lat, inc.lng]} icon={crearIconoIncidente(inc.gravedad)}>
+              <Popup minWidth={260} maxWidth={300} className="popup-incidente-custom">
+                <div style={{ padding: '2px', fontFamily: 'system-ui, sans-serif' }}>
+                  
+                  {/* Cabecera del Popup */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px', marginBottom: '8px' }}>
+                    <h4 style={{ margin: 0, color: '#1d273b', fontSize: '15px', fontWeight: 'bold' }}>{inc.tipo}</h4>
+                    {getEstadoBadgeMap(inc.estado)}
                   </div>
-                )}
-                <p style={{ margin: '0 0 6px 0', fontSize: '13px', lineHeight: '1.4' }}>{inc.descripcion}</p>
-                <div style={{ fontSize: '11px', color: '#666', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  <span>📍 <b>Ubicación:</b> {inc.lugar}</span>
-                  <span>🕒 <b>Fecha:</b> {inc.fecha}</span>
-                  <span>👤 <b>Reporte:</b> {inc.usuario}</span>
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-        
-        {capas.Incidentes_Atencion && incidentesFiltrados.map(inc => inc.estado === 'eat' && (
-          <Marker key={inc.id} position={[inc.lat, inc.lng]} icon={crearIconoIncidente(inc.gravedad)}>
-            <Popup minWidth={220}>
-              <div style={{ padding: '4px' }}>
-                <h4 style={{ margin: '0 0 8px 0', color: '#206bc4', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>
-                  {inc.tipo} <span style={{fontSize:'10px', backgroundColor:'#e0f2fe', padding:'2px 4px', borderRadius:'4px'}}>En Atención</span>
-                </h4>
-                {inc.imagenUrl && (
-                  <div style={{ width: '100%', height: '120px', overflow: 'hidden', borderRadius: '4px', marginBottom: '8px' }}>
-                    <img src={inc.imagenUrl} alt="Incidente" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  
+                  {/* Imagen (Si existe) */}
+                  {inc.imagenUrl && (
+                    <div style={{ width: '100%', height: '140px', overflow: 'hidden', borderRadius: '6px', marginBottom: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                      <img src={inc.imagenUrl} alt="Evidencia" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                  )}
+                  
+                  {/* Detalles */}
+                  <div style={{ fontSize: '12px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div><strong>Código:</strong> <span style={{color: '#206bc4', fontWeight: 'bold'}}>{inc.codigo}</span></div>
+                    <div><strong>Ubicación:</strong> {inc.lugar}</div>
+                    
+                    <div style={{ backgroundColor: '#f1f5f9', padding: '8px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                      <strong style={{color: '#1e293b'}}>Descripción del reporte:</strong><br/>
+                      <span style={{color: '#334155', lineHeight: '1.4', display: 'block', marginTop: '4px'}}>{inc.descripcion}</span>
+                    </div>
+
+                    {/* Pie del Popup */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '2px', fontSize: '11px' }}>
+                      <span title="Reportado por">👤 <b>{inc.usuario}</b></span>
+                      <span title="Fecha y Hora">🕒 {inc.fecha}</span>
+                    </div>
                   </div>
-                )}
-                <p style={{ margin: '0 0 6px 0', fontSize: '13px', lineHeight: '1.4' }}>{inc.descripcion}</p>
-                <div style={{ fontSize: '11px', color: '#666', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  <span>📍 <b>Ubicación:</b> {inc.lugar}</span>
-                  <span>🕒 <b>Fecha:</b> {inc.fecha}</span>
-                  <span>👤 <b>Reporte:</b> {inc.usuario}</span>
+
                 </div>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+              </Popup>
+            </Marker>
+          );
+        })}
+
         {capas.Lluvias && lluviasAPI.map(pluv => <Marker key={pluv.id} position={[pluv.lat, pluv.lng]} icon={crearIconoLluvia(pluv.totalRain, pluv.isCritical)}><Popup><b>{pluv.name}</b></Popup></Marker>)}
       </MapContainer>
 
@@ -244,7 +254,6 @@ function MapaChavimochic() {
               <label className="pca-switch-row"><div className="pca-switch-container"><input type="checkbox" checked={capas.Canales} onChange={() => toggleCapa('Canales')} /><span className="pca-slider-round"></span></div><div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#206bc4' }}></div><span>Trazado de Canales</span></label>
               <label className="pca-switch-row"><div className="pca-switch-container"><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={() => { toggleCapa('Incidentes_Atencion'); toggleCapa('Incidentes_Nuevos'); }} /><span className="pca-slider-round"></span></div><FaExclamationTriangle color="#d63939" /><span>Alertas de Incidentes</span></label>
               
-              {/* 🟢 MEJORA 3: Filtro de tiempo desplegable bajo los incidentes */}
               {(capas.Incidentes_Nuevos || capas.Incidentes_Atencion) && (
                 <div style={{ paddingLeft: '40px', marginTop: '-5px', marginBottom: '10px' }}>
                   <select 
