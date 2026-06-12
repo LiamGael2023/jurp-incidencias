@@ -109,18 +109,27 @@
 }
 
 /* --- SECCIÓN DERECHA (65%) --- */
-.login-imagen-portada {
-  flex: 0 0 65%; /* Ocupa el 65% restante */
+.login-imagen-contenedor {
+  flex: 0 0 65%;
   width: 65%;
-  height: 100vh; /* Asegura que ocupe todo el alto */
-  object-fit: cover; /* Esto hace que la imagen se recorte para llenar el espacio sin deformarse */
+  height: 100vh;
+  position: relative; /* Importante para el ::before */
+  overflow: hidden;
+}
+
+.login-imagen-portada {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Recorta la imagen para llenar el contenedor sin estirarse */
   display: block;
 }
 
-/* Efecto opcional de degradado sobre la imagen */
-.login-imagen-portada::before {
+/* Ahora el ::before se aplicará sobre el contenedor, cubriendo la imagen */
+.login-imagen-contenedor::before {
   content: '';
   position: absolute;
   top: 0; left: 0; width: 100%; height: 100%;
   background: linear-gradient(135deg, rgba(13, 71, 161, 0.3) 0%, rgba(0,0,0,0.1) 100%);
+  z-index: 1; /* Asegura que esté por encima de la imagen */
+  pointer-events: none; /* Permite que si añades algo más, no bloquee los clics */
 }
