@@ -58,7 +58,7 @@ function Login({ onLoginSuccess }) {
     <div className="login-completo">
       <div className="login-formulario-seccion">
         <img 
-          src="https://jriegopresurizado.org.pe/wp-content/uploads/2022/03/logo1.png" // Agregué la 's'
+          src="http://jriegopresurizado.org.pe/wp-content/uploads/2022/03/logo1.png" // Agregué la 's'
           alt="Logo J Riego Presurizado" 
           className="login-logo"
         />
