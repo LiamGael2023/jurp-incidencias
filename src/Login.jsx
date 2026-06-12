@@ -20,7 +20,7 @@ function Login({ onLoginSuccess }) {
     };
 
     try {
-      const respuesta = await fetch('https://gideonstudio.duckdns.org/api/v1/mobile/auth/login/', {
+      const respuesta = await fetch('http://sistema.jriegopresurizado.org.pe/api/v1/mobile/auth/login/', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json' 
