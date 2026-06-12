@@ -56,7 +56,7 @@ function Incidentes() {
     if (!token) return;
     setCargando(true);
     try {
-      const res = await fetch('https://gideonstudio.duckdns.org/api/v1/mobile/hi-incidents/list/', { headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` } });
+      const res = await fetch('http://sistema.jriegopresurizado.org.pe/api/v1/mobile/hi-incidents/list/', { headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` } });
       if (res.ok) {
         const data = await res.json();
         const tiposMapa = { '1': 'Deslizamiento', '2': 'Obstrucción', '3': 'Falla Mecánica', '4': 'Robo', '5': 'Daño Estructural', '6': 'Otro' };
@@ -83,7 +83,7 @@ function Incidentes() {
   };
 
   const cargarCosteosGuardados = async (incidenteId) => {
-    const BASE_URL = 'https://gideonstudio.duckdns.org';
+    const BASE_URL = 'http://sistema.jriegopresurizado.org.pe';
     try {
       const [resPers, resMat, resMaq] = await Promise.all([
         fetch(`${BASE_URL}/api/v1/mobile/operations/incident-personnels/`),
