@@ -124,12 +124,16 @@ function MapaChavimochic() {
   const cargarDetalleIncidente = async (id) => {
     setDetalleActivo(null);
     setCargandoDetalle(true);
-    const token = localStorage.getItem('userToken');
+    const token = localStorage.getItem('userToken'); // 1. Recuperamos el token
     try {
-      // Usamos el proxy de Vercel (ruta relativa) para ir a sistema.jriegopresurizado...
+      // 2. Agregamos el token en los headers para que el servidor nos responda
       const res = await fetch(`/api/v1/mobile/hi-incidents/${id}/`, { 
-        headers: { 'Authorization': `Token ${token}` } 
+        headers: { 
+          'Authorization': `Token ${token}`,
+          'Content-Type': 'application/json'
+        } 
       });
+      
       if (res.ok) {
         const data = await res.json();
         setDetalleActivo(data);
