@@ -26,7 +26,6 @@ function MapaChavimochic() {
   const centroMapa = [-8.4186, -78.7533]; 
   const [leyendaExpandida, setLeyendaExpandida] = useState(true);
   const [mapaBase, setMapaBase] = useState('satelite');
-  const [opacidad, setOpacidad] = useState(1);
   const [capas, setCapas] = useState({ Incidentes_Nuevos: true, Incidentes_Atencion: true, Lluvias: true, Canales: true, Bocatomas: false, Puentes_Vehiculares: false, Puentes_Peatonales: false, Alcantarillas: false });
   const [incidentesAPI, setIncidentesAPI] = useState([]);
   const [lluviasAPI, setLluviasAPI] = useState([]); 
@@ -93,6 +92,17 @@ function MapaChavimochic() {
     );
   };
 
+  // 🟢 Función para determinar la URL del mapa según la selección
+  const obtenerUrlMapa = () => {
+    switch (mapaBase) {
+      case 'calles': return "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}";
+      case 'topografico': return "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png";
+      case 'oscuro': return "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+      case 'satelite':
+      default: return "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}";
+    }
+  };
+
   const crearIconoIncidente = (gravedad) => {
     let colorCentro = '#f59f00'; let colorBorde = '#e67e22'; // Yellow Tabler
     if (gravedad === 'mod') { colorCentro = '#f76707'; colorBorde = '#d9480f'; } // Orange Tabler
@@ -107,7 +117,8 @@ function MapaChavimochic() {
   return (
     <div style={{ height: '100%', width: '100%', position: 'relative' }}>
       <MapContainer center={centroMapa} zoom={10} style={{ height: '100%', width: '100%', zIndex: 0 }}>
-        <TileLayer url={mapaBase === 'satelite' ? "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" : "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"} opacity={opacidad} maxZoom={22} attribution="&copy; Google Maps" />
+        {/* 🟢 Usamos la función para obtener la URL dinámica sin opacidad */}
+        <TileLayer url={obtenerUrlMapa()} maxZoom={20} attribution="&copy; Map Contributors" />
         <VolarAUbicacion posicion={miUbicacion} />
         {miUbicacion && <Marker position={miUbicacion} icon={iconoGPS}><Popup>Estás aquí</Popup></Marker>}
 
@@ -124,7 +135,6 @@ function MapaChavimochic() {
 
       <div className={`panel-control-avanzado ${leyendaExpandida ? '' : 'colapsado'}`}>
         <div className="pca-cabecera">
-          {/* 🟢 Logo mostrado en el panel */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <img src={logo} alt="Logo" style={{ height: '30px', width: 'auto' }} />
             {leyendaExpandida && <span style={{ color: '#1d273b', fontWeight: '600', fontSize: '0.875rem' }}>Panel de Control</span>}
@@ -139,17 +149,16 @@ function MapaChavimochic() {
           <div className="pca-cuerpo">
             <div className="pca-seccion">
               <div className="pca-label">Mapa Base</div>
+              {/* 🟢 Nuevas opciones agregadas al selector */}
               <select className="pca-select" value={mapaBase} onChange={e => setMapaBase(e.target.value)}>
                 <option value="satelite">Google Satélite</option>
                 <option value="calles">Google Calles</option>
+                <option value="topografico">Topográfico (Relieve)</option>
+                <option value="oscuro">Modo Oscuro</option>
               </select>
             </div>
-            <div className="pca-seccion">
-              <div className="pca-label">Opacidad: {Math.round(opacidad * 100)}%</div>
-              <input type="range" min="0.2" max="1" step="0.1" value={opacidad} onChange={e => setOpacidad(parseFloat(e.target.value))} className="pca-slider" />
-            </div>
 
-            <hr className="pca-divider" />
+            <hr className="pca-divider" style={{ marginTop: '15px' }} />
             <div className="pca-switches">
               <label className="pca-switch-row"><div className="pca-switch-container"><input type="checkbox" checked={capas.Canales} onChange={() => toggleCapa('Canales')} /><span className="pca-slider-round"></span></div><div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#206bc4' }}></div><span>Trazado de Canales</span></label>
               <label className="pca-switch-row"><div className="pca-switch-container"><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={() => { toggleCapa('Incidentes_Atencion'); toggleCapa('Incidentes_Nuevos'); }} /><span className="pca-slider-round"></span></div><FaExclamationTriangle color="#d63939" /><span>Alertas de Incidentes</span></label>
