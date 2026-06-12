@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import './Login.css';
 import logo from './assets/logo1.png';
+import portadaPortada from './assets/portada-julio.png';
 
 function Login({ onLoginSuccess }) {
   const [username, setUsername] = useState('');
@@ -101,7 +102,11 @@ function Login({ onLoginSuccess }) {
           {error && <div className="error-mensaje">{error}</div>}
         </form>
       </div>
-      <div className="login-imagen-portada"></div>
+      <img 
+        src={portadaPortada} 
+        alt="Portada" 
+        className="login-imagen-portada" 
+      />
     </div>
   );
 }
