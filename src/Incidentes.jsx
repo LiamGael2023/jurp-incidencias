@@ -38,6 +38,7 @@ function Incidentes() {
   
   const estadoInicialRecurso = {
     tipo: 'Personal', descripcion: '', cantidad: 1, precioUnitario: 0,
+    numPersonas: 1, horasTrabajo: 8, // 🟢 Agregamos las variables para la Cuadrilla
     numeroParte: generarCorrelativo(), 
     fechaParte: getFechaHoy(), 
     turno: 'Día', zonaTrabajo: '',
@@ -92,7 +93,6 @@ function Incidentes() {
 
   const cargarCosteosGuardados = async (incidenteId) => {
     const BASE_URL = 'https://gideonstudio.duckdns.org'; 
-    // Quitamos la lectura del token aquí
     
     try {
       // Hacemos los fetch directamente sin cabeceras
@@ -150,7 +150,6 @@ function Incidentes() {
   };
 
   const abrirModalPdf = (dbId) => {
-    // 🟢 URL DIRECTA A GIDEON PARA EL PDF
     const url = `https://gideonstudio.duckdns.org/api/v1/mobile/operations/daily-part-heavy-equipments/${dbId}/pdf/`;
     setPdfUrlActivo(url);
     setModalPdfAbierto(true);
@@ -182,6 +181,19 @@ function Incidentes() {
       descFinal += `Actividad: ${nuevoRecurso.actividad}`;
       
       if (nuevoRecurso.incluirMetrado) descFinal += `\nVol. Extraído: ${volumenMetrado} m3`;
+      
+    // 🟢 NUEVA LÓGICA PARA PERSONAL (CUADRILLAS)
+    } else if (nuevoRecurso.tipo === 'Personal') {
+      const pers = parseInt(nuevoRecurso.numPersonas) || 0;
+      const hrs = parseFloat(nuevoRecurso.horasTrabajo) || 0;
+      cantFinal = pers * hrs; // Total HH
+      
+      if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa el cargo (Ej. Peón)' });
+      if (cantFinal <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa la cantidad de personas y horas' });
+      
+      // Armamos un resumen bonito para la tabla y la BD
+      descFinal = `${nuevoRecurso.descripcion}\n(Cuadrilla: ${pers} persona(s) x ${hrs} horas)`;
+      
     } else {
       if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa una descripción' });
     }
@@ -203,13 +215,11 @@ function Incidentes() {
   const eliminarRecurso = (idLocal) => setRecursos(recursos.filter(r => r.idLocal !== idLocal));
   const costoTotalIncidente = recursos.reduce((sum, item) => sum + item.total, 0);
 
-  // 🟢 FUNCIÓN GUARDAR COSTEOS CORREGIDA (Estaba rota en tu versión anterior)
   const guardarCosteos = async () => {
     const recursosNuevos = recursos.filter(r => !r.guardadoEnDB);
     if (recursosNuevos.length === 0) return Swal.fire({ icon: 'info', title: 'Todo al día', text: 'No hay recursos nuevos.' });
     
     setGuardando(true);
-    // 🟢 URL DIRECTA A GIDEON
     const BASE_URL = 'https://gideonstudio.duckdns.org'; 
     const token = localStorage.getItem('userToken'); 
 
@@ -221,7 +231,7 @@ function Incidentes() {
 
         if (r.tipo === 'Personal') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-personnels/`;
-          formData.append('description', r.descripcion);
+          formData.append('description', r.descripcionResumen || r.descripcion); // Aseguramos que guarde el texto de la cuadrilla
           formData.append('quantity_hours', r.cantidad);
           formData.append('unit_price', r.precioUnitario);
         } else if (r.tipo === 'Insumo') {
@@ -267,7 +277,6 @@ function Incidentes() {
       Swal.fire({ icon: 'success', title: 'Éxito', text: 'Se guardó correctamente', confirmButtonColor: '#206bc4' });
       setRecursos([]); 
       setModalAbierto(false); 
-      // Opcional: Podrías llamar a cargarCosteosGuardados(incidenteActivo.id) aquí si quieres refrescar la lista al guardar.
     } catch (error) {
       console.error(error);
       Swal.fire({ icon: 'error', title: 'Error', text: 'Hubo un error al guardar en la base de datos.' });
@@ -416,9 +425,21 @@ function Incidentes() {
                       <div className="tbl-col"><label className="tbl-form-label">Observaciones</label><input type="text" className="tbl-form-control" placeholder="Condiciones del terreno, clima..." value={nuevoRecurso.observaciones} onChange={e => setNuevoRecurso({...nuevoRecurso, observaciones: e.target.value})} /></div>
                     </div>
                   </div>
+
+                {/* 🟢 NUEVO FORMULARIO PARA PERSONAL */}
+                ) : nuevoRecurso.tipo === 'Personal' ? (
+                  <div className="tbl-row tbl-mb-3">
+                    <div className="tbl-col-3"><label className="tbl-form-label">Cargo</label><input type="text" className="tbl-form-control" placeholder="Ej. Peón, Operario..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
+                    <div className="tbl-col-3"><label className="tbl-form-label">N° Personas (Cuadrilla)</label><input type="number" min="1" className="tbl-form-control" value={nuevoRecurso.numPersonas} onChange={e => setNuevoRecurso({...nuevoRecurso, numPersonas: e.target.value})} /></div>
+                    <div className="tbl-col-2"><label className="tbl-form-label">Horas (Jornal)</label><input type="number" min="1" className="tbl-form-control" value={nuevoRecurso.horasTrabajo} onChange={e => setNuevoRecurso({...nuevoRecurso, horasTrabajo: e.target.value})} /></div>
+                    <div className="tbl-col-2"><label className="tbl-form-label">S/ por HH</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
+                    <div className="tbl-col-2"><label className="tbl-form-label">Total HH</label><input type="text" className="tbl-form-control" disabled value={(nuevoRecurso.numPersonas * nuevoRecurso.horasTrabajo) || 0} style={{backgroundColor: '#e0f2fe', color: '#0284c7', fontWeight: 'bold'}} /></div>
+                  </div>
+
+                {/* 🟢 FORMULARIO PARA INSUMOS */}
                 ) : (
                   <div className="tbl-row tbl-mb-3">
-                    <div className="tbl-col"><label className="tbl-form-label">Descripción</label><input type="text" className="tbl-form-control" placeholder={nuevoRecurso.tipo === 'Personal' ? "Ej. Operario, Peón..." : "Ej. Piedra chancada, Cemento..."} value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
+                    <div className="tbl-col"><label className="tbl-form-label">Descripción del Insumo</label><input type="text" className="tbl-form-control" placeholder="Ej. Piedra chancada, Cemento..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">Cant.</label><input type="number" className="tbl-form-control" value={nuevoRecurso.cantidad} onChange={e => setNuevoRecurso({...nuevoRecurso, cantidad: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">Precio Unit. (S/)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
                   </div>
@@ -445,7 +466,8 @@ function Incidentes() {
                             <td>
                               {r.guardadoEnDB ? (
                                 <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-                                  <span className="tbl-badge bg-green-lt">En BD</span>
+                                  {/* 🟢 Cambiamos "En BD" por "Guardado" */}
+                                  <span className="tbl-badge bg-green-lt">Guardado</span>
                                   {r.tipo === 'Maquinaria' && (
                                     <button 
                                       type="button"
