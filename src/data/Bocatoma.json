@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "Bocatoma",
+"features": [
+{ "type": "Feature", "properties": { "Name": "BOCATOMA CHAVIMOCHIC", "COD_BOCA": 1, "COD_EST": "CANAL MADRE", "ESTE": 797668.06, "ESTRUCTURA": "Bocatoma", "Field_1": 1, "MARGEN": "DERECHA", "NOMBRE": "BOCATOMA CHAVIMOCHIC", "NORTE": 9041740.71, "PROGRESIVA": "0+000.00", "TRAMO": "Tramo 0" }, "geometry": { "type": "Point", "coordinates": [ -78.2952582, -8.6594374, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "BOCATOMA ALTERNA", "COD_BOCA": 2, "COD_EST": "CANAL MADRE", "ESTE": 797771.13, "ESTRUCTURA": "Bocatoma", "Field_1": 2, "MARGEN": "DERECHA", "NOMBRE": "BOCATOMA ALTERNA", "NORTE": 9041709.61, "PROGRESIVA": "0+035.00", "TRAMO": "Tramo 0" }, "geometry": { "type": "Point", "coordinates": [ -78.2943203, -8.6597117, 0.0 ] } }
+]
+}

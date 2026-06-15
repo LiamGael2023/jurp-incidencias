@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "Partidor",
+"features": [
+{ "type": "Feature", "properties": { "Name": "REP - 01", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Partidor", "FID": 1, "Field_1": "REP - 01", "NOMBRE": "REP - 01", "Nº": 1, "PROGRESIVA": "1+949.9", "TRAMO": "Tramo X" }, "geometry": { "type": "Point", "coordinates": [ -78.8529913, -8.3507496, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "REP - 02", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Partidor", "FID": 2, "Field_1": "REP - 02", "NOMBRE": "REP - 02", "Nº": 2, "PROGRESIVA": "20+052.57", "TRAMO": "Tramo X" }, "geometry": { "type": "Point", "coordinates": [ -78.8564272, -8.3473135, 0.0 ] } }
+]
+}
