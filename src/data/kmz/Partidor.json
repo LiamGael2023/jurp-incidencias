@@ -1,0 +1,1 @@
+{"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"name": "REP - 01", "folder": "Partidor"}, "geometry": {"type": "Point", "coordinates": [-78.85299126414601, -8.350749569907345]}}, {"type": "Feature", "properties": {"name": "REP - 02", "folder": "Partidor"}, "geometry": {"type": "Point", "coordinates": [-78.8564272312588, -8.347313531191107]}}]}

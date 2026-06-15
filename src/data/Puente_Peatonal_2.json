@@ -1,8 +1,0 @@
-{
-"type": "FeatureCollection",
-"name": "Puente Peatonal no2",
-"features": [
-{ "type": "Feature", "properties": { "Name": "Pte. Peatonal PP-01", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Pte. Peatonal", "FID": 1, "Field_1": "PP-01", "NOMBRE": "PP-01", "Nº": 1, "PROGRESIVA1": "0+193.17", "TRAMO": "Tramo VII" }, "geometry": { "type": "Point", "coordinates": [ -78.7492542, -8.3879117, 0.0 ] } },
-{ "type": "Feature", "properties": { "Name": "Pte. Peatonal PP-02", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Pte. Peatonal", "FID": 2, "Field_1": "PP-02", "NOMBRE": "PP-02", "Nº": 2, "PROGRESIVA1": "11+956.49", "TRAMO": "Tramo IX" }, "geometry": { "type": "Point", "coordinates": [ -78.8119376, -8.3803091, 0.0 ] } }
-]
-}
