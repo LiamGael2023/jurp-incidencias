@@ -19,7 +19,7 @@ function Incidentes() {
   const [recursos, setRecursos] = useState([]); 
   const [guardando, setGuardando] = useState(false);
 
-  // --- ESTADOS DEL MODAL PDF (NUEVO) ---
+  // --- ESTADOS DEL MODAL PDF ---
   const [modalPdfAbierto, setModalPdfAbierto] = useState(false);
   const [pdfUrlActivo, setPdfUrlActivo] = useState(null);
 
@@ -38,7 +38,8 @@ function Incidentes() {
   
   const estadoInicialRecurso = {
     tipo: 'Personal', descripcion: '', cantidad: 1, precioUnitario: 0,
-    numPersonas: 1, horasTrabajo: 8, // 🟢 Agregamos las variables para la Cuadrilla
+    // 🟢 Variables para Cuadrilla y Horas Extras
+    numPersonas: 1, horasTrabajo: 8, horasExtras: 0, 
     numeroParte: generarCorrelativo(), 
     fechaParte: getFechaHoy(), 
     turno: 'Día', zonaTrabajo: '',
@@ -53,12 +54,11 @@ function Incidentes() {
   const [nuevoRecurso, setNuevoRecurso] = useState(estadoInicialRecurso);
 
   const obtenerIncidentes = async () => {
-    const token = localStorage.getItem('userToken'); // 1. Sacamos el token
+    const token = localStorage.getItem('userToken'); 
     if (!token) return;
     
     setCargando(true);
     try {
-      // 2. Usamos la ruta relativa (PROXY VERCEL) y pasamos el token en los headers
       const res = await fetch('/api/v1/mobile/hi-incidents/list/', { 
         headers: { 
           'Content-Type': 'application/json', 
@@ -95,7 +95,6 @@ function Incidentes() {
     const BASE_URL = 'https://gideonstudio.duckdns.org'; 
     
     try {
-      // Hacemos los fetch directamente sin cabeceras
       const [resPers, resMat, resMaq] = await Promise.all([
         fetch(`${BASE_URL}/api/v1/mobile/operations/incident-personnels/`),
         fetch(`${BASE_URL}/api/v1/mobile/operations/incident-materials/`),
@@ -182,17 +181,18 @@ function Incidentes() {
       
       if (nuevoRecurso.incluirMetrado) descFinal += `\nVol. Extraído: ${volumenMetrado} m3`;
       
-    // 🟢 NUEVA LÓGICA PARA PERSONAL (CUADRILLAS)
+    // 🟢 NUEVA LÓGICA PARA PERSONAL (CUADRILLAS + EXTRAS)
     } else if (nuevoRecurso.tipo === 'Personal') {
       const pers = parseInt(nuevoRecurso.numPersonas) || 0;
       const hrs = parseFloat(nuevoRecurso.horasTrabajo) || 0;
-      cantFinal = pers * hrs; // Total HH
+      const ext = parseFloat(nuevoRecurso.horasExtras) || 0;
+      cantFinal = pers * (hrs + ext); // Total HH = Personas x (Horas Normales + Extras)
       
       if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa el cargo (Ej. Peón)' });
       if (cantFinal <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa la cantidad de personas y horas' });
       
       // Armamos un resumen bonito para la tabla y la BD
-      descFinal = `${nuevoRecurso.descripcion}\n(Cuadrilla: ${pers} persona(s) x ${hrs} horas)`;
+      descFinal = `${nuevoRecurso.descripcion}\n(Cuadrilla: ${pers} persona(s) x ${hrs}h normales + ${ext}h extras)`;
       
     } else {
       if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa una descripción' });
@@ -231,7 +231,7 @@ function Incidentes() {
 
         if (r.tipo === 'Personal') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-personnels/`;
-          formData.append('description', r.descripcionResumen || r.descripcion); // Aseguramos que guarde el texto de la cuadrilla
+          formData.append('description', r.descripcionResumen || r.descripcion); 
           formData.append('quantity_hours', r.cantidad);
           formData.append('unit_price', r.precioUnitario);
         } else if (r.tipo === 'Insumo') {
@@ -426,17 +426,18 @@ function Incidentes() {
                     </div>
                   </div>
 
-                
+                {/* 🟢 NUEVO FORMULARIO PARA PERSONAL CON HORAS EXTRAS */}
                 ) : nuevoRecurso.tipo === 'Personal' ? (
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col-3"><label className="tbl-form-label">Cargo</label><input type="text" className="tbl-form-control" placeholder="Ej. Peón, Operario..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
-                    <div className="tbl-col-3"><label className="tbl-form-label">N° Personas (Cuadrilla)</label><input type="number" min="1" className="tbl-form-control" value={nuevoRecurso.numPersonas} onChange={e => setNuevoRecurso({...nuevoRecurso, numPersonas: e.target.value})} /></div>
-                    <div className="tbl-col-2"><label className="tbl-form-label">Horas (Jornal)</label><input type="number" min="1" className="tbl-form-control" value={nuevoRecurso.horasTrabajo} onChange={e => setNuevoRecurso({...nuevoRecurso, horasTrabajo: e.target.value})} /></div>
+                    <div className="tbl-col-2"><label className="tbl-form-label">N° Personas</label><input type="number" min="1" className="tbl-form-control" value={nuevoRecurso.numPersonas} onChange={e => setNuevoRecurso({...nuevoRecurso, numPersonas: e.target.value})} /></div>
+                    <div className="tbl-col-2"><label className="tbl-form-label">H. Normales</label><input type="number" min="0" className="tbl-form-control" value={nuevoRecurso.horasTrabajo} onChange={e => setNuevoRecurso({...nuevoRecurso, horasTrabajo: e.target.value})} /></div>
+                    <div className="tbl-col-2"><label className="tbl-form-label">H. Extras</label><input type="number" min="0" className="tbl-form-control" value={nuevoRecurso.horasExtras} onChange={e => setNuevoRecurso({...nuevoRecurso, horasExtras: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">S/ por HH</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
-                    <div className="tbl-col-2"><label className="tbl-form-label">Total HH</label><input type="text" className="tbl-form-control" disabled value={(nuevoRecurso.numPersonas * nuevoRecurso.horasTrabajo) || 0} style={{backgroundColor: '#e0f2fe', color: '#0284c7', fontWeight: 'bold'}} /></div>
+                    <div className="tbl-col-1"><label className="tbl-form-label">Total</label><input type="text" className="tbl-form-control" disabled value={(nuevoRecurso.numPersonas * ((parseFloat(nuevoRecurso.horasTrabajo)||0) + (parseFloat(nuevoRecurso.horasExtras)||0))) || 0} style={{backgroundColor: '#e0f2fe', color: '#0284c7', fontWeight: 'bold'}} title="Total HH" /></div>
                   </div>
 
-                
+                {/* 🟢 FORMULARIO PARA INSUMOS */}
                 ) : (
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col"><label className="tbl-form-label">Descripción del Insumo</label><input type="text" className="tbl-form-control" placeholder="Ej. Piedra chancada, Cemento..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
@@ -466,7 +467,6 @@ function Incidentes() {
                             <td>
                               {r.guardadoEnDB ? (
                                 <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-                                  {/* 🟢 Cambiamos "En BD" por "Guardado" */}
                                   <span className="tbl-badge bg-green-lt">Guardado</span>
                                   {r.tipo === 'Maquinaria' && (
                                     <button 
