@@ -426,7 +426,7 @@ function Incidentes() {
                     </div>
                   </div>
 
-                {/* 🟢 NUEVO FORMULARIO PARA PERSONAL CON HORAS EXTRAS */}
+                
                 ) : nuevoRecurso.tipo === 'Personal' ? (
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col-3"><label className="tbl-form-label">Cargo</label><input type="text" className="tbl-form-control" placeholder="Ej. Peón, Operario..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
@@ -437,7 +437,7 @@ function Incidentes() {
                     <div className="tbl-col-1"><label className="tbl-form-label">Total</label><input type="text" className="tbl-form-control" disabled value={(nuevoRecurso.numPersonas * ((parseFloat(nuevoRecurso.horasTrabajo)||0) + (parseFloat(nuevoRecurso.horasExtras)||0))) || 0} style={{backgroundColor: '#e0f2fe', color: '#0284c7', fontWeight: 'bold'}} title="Total HH" /></div>
                   </div>
 
-                {/* 🟢 FORMULARIO PARA INSUMOS */}
+                
                 ) : (
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col"><label className="tbl-form-label">Descripción del Insumo</label><input type="text" className="tbl-form-control" placeholder="Ej. Piedra chancada, Cemento..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
