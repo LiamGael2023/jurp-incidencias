@@ -1,0 +1,7 @@
+{
+"type": "FeatureCollection",
+"name": "Camara Rompepresion",
+"features": [
+{ "type": "Feature", "properties": { "Name": "Cámara Rompepresión CRP-01", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Cámara Rompepresión", "FID": 1, "Field_1": "CRP-01", "NOMBRE": "CRP-01", "Nombre_del_Canal": "Evacuador Quebrada Honda", "Nº": 1, "PROGRESIVA": "0+050.5", "TRAMO": "Tramo X" }, "geometry": { "type": "Point", "coordinates": [ -78.8539379, -8.3502389, 0.0 ] } }
+]
+}

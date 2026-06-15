@@ -1,0 +1,13 @@
+{
+"type": "FeatureCollection",
+"name": "Puente Vehicular no2",
+"features": [
+{ "type": "Feature", "properties": { "Name": "Pte. Vehicular PV-01", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Pte. Vehicular", "FID": 1, "Field_1": "PV-01", "NOMBRE": "PV-01", "Nº": 1, "PROGRESIVA": "0+718.95", "TRAMO": "Tramo VII" }, "geometry": { "type": "Point", "coordinates": [ -78.7511378, -8.3846414, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Pte. Vehicular PV-02", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Pte. Vehicular", "FID": 2, "Field_1": "PV-02", "NOMBRE": "PV-02", "Nº": 2, "PROGRESIVA": "1+190.48", "TRAMO": "Tramo VII" }, "geometry": { "type": "Point", "coordinates": [ -78.754577, -8.3863116, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Pte. Vehicular PV-03", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Pte. Vehicular", "FID": 3, "Field_1": "PV-03", "NOMBRE": "PV-03", "Nº": 3, "PROGRESIVA": "2+783.28", "TRAMO": "Tramo VII" }, "geometry": { "type": "Point", "coordinates": [ -78.7661297, -8.3856323, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Pte. Vehicular PV-04", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Pte. Vehicular", "FID": 4, "Field_1": "PV-04", "NOMBRE": "PV-04", "Nº": 4, "PROGRESIVA": "7+272.71", "TRAMO": "Tramo IX" }, "geometry": { "type": "Point", "coordinates": [ -78.7918231, -8.3762673, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Pte. Vehicular PV-05", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Pte. Vehicular", "FID": 5, "Field_1": "PV-05", "NOMBRE": "PV-05", "Nº": 5, "PROGRESIVA": "9+279.11", "TRAMO": "Tramo IX" }, "geometry": { "type": "Point", "coordinates": [ -78.7991532, -8.3680355, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Pte. Vehicular PV-06", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Pte. Vehicular", "FID": 6, "Field_1": "PV-06", "NOMBRE": "PV-06", "Nº": 6, "PROGRESIVA": "13+773.64", "TRAMO": "Tramo IX" }, "geometry": { "type": "Point", "coordinates": [ -78.8265527, -8.3839753, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Pte. Vehicular PV-07", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Pte. Vehicular", "FID": 7, "Field_1": "PV-07", "NOMBRE": "PV-07", "Nº": 7, "PROGRESIVA": "17+738.32", "TRAMO": "Tramo IX" }, "geometry": { "type": "Point", "coordinates": [ -78.8495283, -8.3652185, 0.0 ] } }
+]
+}

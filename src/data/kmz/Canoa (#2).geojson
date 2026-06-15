@@ -1,0 +1,14 @@
+{
+"type": "FeatureCollection",
+"name": "Canoa no2",
+"features": [
+{ "type": "Feature", "properties": { "Name": "Canoa C-01", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Canoa", "Field_1": "C-01", "NOMBRE": "C-01", "Nº": 1, "PROGRESIVA": "0+729.03", "TRAMO": "Tramo VII" }, "geometry": { "type": "Point", "coordinates": [ -78.7512256, -8.3846161, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Canoa C-02", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Canoa", "Field_1": "C-02", "NOMBRE": "C-02", "Nº": 2, "PROGRESIVA": "1+093.47", "TRAMO": "Tramo VII" }, "geometry": { "type": "Point", "coordinates": [ -78.753812, -8.3861075, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Canoa C-03", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Canoa", "Field_1": "C-03", "NOMBRE": "C-03", "Nº": 3, "PROGRESIVA": "1+914.46", "TRAMO": "Tramo VII" }, "geometry": { "type": "Point", "coordinates": [ -78.7594044, -8.385557, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Canoa C-04", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Canoa", "Field_1": "C-04", "NOMBRE": "C-04", "Nº": 4, "PROGRESIVA": "2+561.3", "TRAMO": "Tramo VII" }, "geometry": { "type": "Point", "coordinates": [ -78.7642227, -8.3854395, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Canoa C-05", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Canoa", "Field_1": "C-05", "NOMBRE": "C-05", "Nº": 0, "PROGRESIVA": "2+793.24", "TRAMO": "Tramo VII" }, "geometry": { "type": "Point", "coordinates": [ -78.766216, -8.3856052, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Canoa C-06", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Canoa", "Field_1": "C-06", "NOMBRE": "C-06", "Nº": 6, "PROGRESIVA": "3+674.37", "TRAMO": "Tramo VI" }, "geometry": { "type": "Point", "coordinates": [ -78.7726609, -8.3848224, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Canoa C-07", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Canoa", "Field_1": "C-07", "NOMBRE": "C-07", "Nº": 7, "PROGRESIVA": "8+122.29", "TRAMO": "Tramo IX" }, "geometry": { "type": "Point", "coordinates": [ -78.7945502, -8.3699559, 0.0 ] } },
+{ "type": "Feature", "properties": { "Name": "Canoa C-08", "COD_EST": "CANAL LATERAL 10", "ESTRUCTURA": "Canoa", "Field_1": "C-08", "NOMBRE": "C-08", "Nº": 8, "PROGRESIVA": "9+562.22", "TRAMO": "Tramo IX" }, "geometry": { "type": "Point", "coordinates": [ -78.8008138, -8.3661695, 0.0 ] } }
+]
+}
