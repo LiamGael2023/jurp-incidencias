@@ -258,3 +258,16 @@ html, body, #root {
   width: 48px; height: 48px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); cursor: pointer;
   display: flex; justify-content: center; align-items: center; color: #1463A5; font-size: 1.25rem;
 }
+
+/* Tooltips de infraestructura */
+.tooltip-infra {
+  background: rgba(0,0,0,0.8) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 3px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  padding: 3px 8px !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+}
+.tooltip-infra::before { border-top-color: rgba(0,0,0,0.8) !important; }
