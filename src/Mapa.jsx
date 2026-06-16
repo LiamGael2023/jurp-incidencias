@@ -252,12 +252,29 @@ function MapaChavimochic() {
         {/* ── Capas KMZ ─────────────────────────────────────────────────────── */}
         {KMZ_CONFIG.map(cfg => {
           if (!capasKMZ[cfg.key] || !cfg.data?.features?.length) return null;
+          
+          const buildPopup = (feature) => {
+            const p = feature.properties || {};
+            const skip = new Set(['name','folder','FID','nro_ord','N_','Nº','Label','Field']);
+            const labelMap = { NOMBRE:'Nombre', PROGRESIVA:'Progresiva', ESTADO:'Estado', TRAMO:'Tramo', ESTRUCTURA:'Estructura', COD_EST:'Canal/Sistema', ESTE:'Este (UTM)', NORTE:'Norte (UTM)', MARGEN:'Margen', EMPRESA:'Empresa', LONGITUD:'Longitud', TIPO_EST:'Tipo', Nombre_del_Canal:'Canal', NRO:'Nro.' };
+            const rows = Object.entries(p)
+              .filter(([k,v]) => !skip.has(k) && v && v.toString().trim())
+              .map(([k,v]) => `<tr><td style="color:#64748b;padding:3px 8px 3px 0;font-size:11px;white-space:nowrap">${labelMap[k]||k}</td><td style="font-weight:500;padding:3px 0;font-size:11px">${v}</td></tr>`)
+              .join('');
+            const iconUrl = cfg.icon || '';
+            return `<div style="font-family:system-ui,sans-serif;min-width:200px">
+              <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:6px">
+                <img src="${iconUrl}" style="width:24px;height:24px" />
+                <div><div style="font-weight:700;font-size:13px;color:#1d273b">${p.name||'Sin nombre'}</div><div style="font-size:10px;color:#64748b">${cfg.label}</div></div>
+              </div>
+              ${rows ? `<table style="border-collapse:collapse;width:100%">${rows}</table>` : '<span style="font-size:11px;color:#94a3b8">Sin datos adicionales</span>'}
+            </div>`;
+          };
+
           if (cfg.tipo === 'poly') {
             return (
               <GeoJSON key={cfg.key} data={cfg.data} style={() => crearEstiloKMZ(cfg.color)}
-                onEachFeature={(feature, layer) => {
-                  if (feature.properties?.name) layer.bindPopup(`<b>${feature.properties.name}</b><br/><small>${cfg.label}</small>`);
-                }}
+                onEachFeature={(feature, layer) => layer.bindPopup(buildPopup(feature), { maxWidth: 320 })}
               />
             );
           } else {
@@ -266,9 +283,7 @@ function MapaChavimochic() {
             return (
               <GeoJSON key={cfg.key} data={soloPoints}
                 pointToLayer={(feature, latlng) => L.marker(latlng, { icon: crearIconoSimbologia(cfg.icon) })}
-                onEachFeature={(feature, layer) => {
-                  if (feature.properties?.name) layer.bindPopup(`<b>${feature.properties.name}</b><br/><small>${cfg.label}</small>`);
-                }}
+                onEachFeature={(feature, layer) => layer.bindPopup(buildPopup(feature), { maxWidth: 320 })}
               />
             );
           }
