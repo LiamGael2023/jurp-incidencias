@@ -210,6 +210,7 @@ function MapaChavimochic() {
   const [buscandoGPS, setBuscandoGPS] = useState(false);
   const [detalleActivo, setDetalleActivo] = useState(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
+  const [modalMedia, setModalMedia] = useState(null); // { src, type: 'image'|'video' }
 
   const mapRef = useRef(null);
 
@@ -442,11 +443,11 @@ function MapaChavimochic() {
                   {cargandoDetalle ? <div style={{textAlign:'center',padding:'20px 0',color:'#206bc4'}}><FaSyncAlt className="icon-spin"/><span style={{fontSize:'12px',marginLeft:'5px'}}>Cargando...</span></div>
                   : detalleActivo&&detalleActivo.id===inc.id ? (
                     <div style={{display:'flex',overflowX:'auto',gap:'8px',paddingBottom:'8px',marginBottom:'8px'}}>
-                      {detalleActivo.images?.map((it,i)=>{ const src = it.content?.startsWith('http') ? it.content : `data:image/jpeg;base64,${it.content}`; return <a key={i} href={src} target="_blank" rel="noopener noreferrer" style={{flexShrink:0}}><img src={src} alt="" style={{width:'120px',height:'100px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0'}}/></a>; })}
-                      {detalleActivo.videos?.map((it,i)=>{ const src = it.content?.startsWith('http') ? it.content : `data:video/mp4;base64,${it.content}`; return <div key={i} style={{flexShrink:0}}><video src={src} style={{width:'150px',height:'100px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',background:'#000'}} controls preload="metadata"/></div>; })}
-                      {(!detalleActivo.images?.length&&!detalleActivo.videos?.length&&inc.imagenUrl)&&<img src={inc.imagenUrl} alt="" style={{width:'100%',height:'140px',objectFit:'cover',borderRadius:'6px'}}/>}
+                      {detalleActivo.images?.map((it,i)=>{ const src = it.content?.startsWith('http') ? it.content : `data:image/jpeg;base64,${it.content}`; return <div key={i} onClick={()=>setModalMedia({src,type:'image'})} style={{flexShrink:0,cursor:'pointer'}}><img src={src} alt="" style={{width:'120px',height:'100px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0'}}/></div>; })}
+                      {detalleActivo.videos?.map((it,i)=>{ const src = it.content?.startsWith('http') ? it.content : `data:video/mp4;base64,${it.content}`; return <div key={i} onClick={()=>setModalMedia({src,type:'video'})} style={{flexShrink:0,cursor:'pointer',position:'relative'}}><video src={src} style={{width:'150px',height:'100px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',background:'#000'}} preload="metadata"/><div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'rgba(0,0,0,0.5)',borderRadius:'50%',width:'32px',height:'32px',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:'16px'}}>▶</div></div>; })}
+                      {(!detalleActivo.images?.length&&!detalleActivo.videos?.length&&inc.imagenUrl)&&<div onClick={()=>setModalMedia({src:inc.imagenUrl,type:'image'})} style={{cursor:'pointer'}}><img src={inc.imagenUrl} alt="" style={{width:'100%',height:'140px',objectFit:'cover',borderRadius:'6px'}}/></div>}
                     </div>
-                  ) : inc.imagenUrl&&<div style={{width:'100%',height:'140px',overflow:'hidden',borderRadius:'6px',marginBottom:'10px',background:'#f8fafc',border:'1px solid #e2e8f0'}}><img src={inc.imagenUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/></div>}
+                  ) : inc.imagenUrl&&<div onClick={()=>setModalMedia({src:inc.imagenUrl,type:'image'})} style={{width:'100%',height:'140px',overflow:'hidden',borderRadius:'6px',marginBottom:'10px',background:'#f8fafc',border:'1px solid #e2e8f0',cursor:'pointer'}}><img src={inc.imagenUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/></div>}
                   <div style={{fontSize:'12px',color:'#475569',display:'flex',flexDirection:'column',gap:'6px'}}>
                     <div><strong>Código:</strong> <span style={{color:'#206bc4',fontWeight:'bold'}}>{inc.codigo}</span></div>
                     <div><strong>Ubicación:</strong> {inc.lugar}</div>
@@ -568,6 +569,18 @@ function MapaChavimochic() {
 
       <button onClick={obtenerDatosDeApis} className="btn-flotante-actualizar">{cargandoAPIs?'Actualizando...':'Actualizar Datos'}</button>
       <button onClick={obtenerMiUbicacion} disabled={buscandoGPS} className="btn-flotante-gps"><FaLocationArrow/></button>
+
+      {/* ── Modal Fullscreen ───────────────────────────────────────────── */}
+      {modalMedia && (
+        <div onClick={() => setModalMedia(null)} style={{ position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9999,background:'rgba(0,0,0,0.9)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'zoom-out' }}>
+          <button onClick={() => setModalMedia(null)} style={{ position:'absolute',top:'20px',right:'20px',background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',fontSize:'24px',cursor:'pointer',borderRadius:'50%',width:'40px',height:'40px',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10000 }}>✕</button>
+          {modalMedia.type === 'image' ? (
+            <img src={modalMedia.src} alt="Evidencia" onClick={e => e.stopPropagation()} style={{ maxWidth:'90vw',maxHeight:'90vh',objectFit:'contain',borderRadius:'8px',cursor:'default' }} />
+          ) : (
+            <video src={modalMedia.src} onClick={e => e.stopPropagation()} controls autoPlay style={{ maxWidth:'90vw',maxHeight:'90vh',borderRadius:'8px',cursor:'default',background:'#000' }} />
+          )}
+        </div>
+      )}
     </div>
   );
 }
