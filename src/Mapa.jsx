@@ -12,6 +12,24 @@ import geoLateral10 from './data/Lateral_10.json';
 import geoRedes from './data/Redes_Presurizado.json';
 import logo from './assets/logo1.png';
 
+// ── Simbología hidráulica ───────────────────────────────────────────────────
+import icoBocatoma        from './assets/simbologia/bocatoma.png';
+import icoEntrega         from './assets/simbologia/entrega.png';
+import icoToma            from './assets/simbologia/toma.png';
+import icoCanoa           from './assets/simbologia/canoa.png';
+import icoAlcantarilla    from './assets/simbologia/alcantarilla.png';
+import icoPaseVehicular   from './assets/simbologia/pase_vehicular.png';
+import icoPasePeatonal    from './assets/simbologia/pase_peatonal.png';
+import icoAliviadero      from './assets/simbologia/aliviadero.png';
+import icoDesarenador     from './assets/simbologia/desarenador.png';
+import icoRapida          from './assets/simbologia/rapida.png';
+import icoCanalMadre      from './assets/simbologia/canal_madre.png';
+import icoCanalRect       from './assets/simbologia/canal_rectangular.png';
+import icoConducCubierto  from './assets/simbologia/conducto_cubierto.png';
+import icoCaida           from './assets/simbologia/caida.png';
+import icoCanalTrap       from './assets/simbologia/canal_trapezoidal.png';
+import icoAcueducto       from './assets/simbologia/acueducto.png';
+
 // ── KMZ layers (convertidos a GeoJSON) ──────────────────────────────────────
 import kmzEntrega         from './data/kmz/Entrega.json';
 import kmzPuentePeatonal  from './data/kmz/Puente_Peatonal.json';
@@ -33,29 +51,37 @@ import kmzPartidor        from './data/kmz/Partidor.json';
 import kmzPaseTuberias    from './data/kmz/Pase_de_Tuberias.json';
 import kmzRedesPresurizado from './data/kmz/Redes_Presurizado.json';
 
+// ── Helper: crear icono Leaflet desde PNG importado ─────────────────────────
+const crearIconoSimbologia = (iconUrl, size = 28) => L.icon({
+  iconUrl,
+  iconSize: [size, size],
+  iconAnchor: [size / 2, size / 2],
+  popupAnchor: [0, -(size / 2)],
+});
+
 // ── Configuración de capas KMZ ──────────────────────────────────────────────
 const KMZ_CONFIG = [
   // Canales / polígonos
-  { key: 'KMZ_CanalMadre',       label: 'Canal Madre',        color: '#1971c2', data: kmzCanalMadre,       tipo: 'poly' },
-  { key: 'KMZ_Lateral10',        label: 'Lateral 10',         color: '#4dabf7', data: kmzLateral10,        tipo: 'poly' },
-  { key: 'KMZ_RedesPresurizado', label: 'Redes Presurizado',  color: '#74c0fc', data: kmzRedesPresurizado, tipo: 'poly' },
-  { key: 'KMZ_Evacuador',        label: 'Evacuador',          color: '#a5d8ff', data: kmzEvacuador,        tipo: 'poly' },
+  { key: 'KMZ_CanalMadre',       label: 'Canal Madre',        color: '#1971c2', data: kmzCanalMadre,       tipo: 'poly', icon: icoCanalMadre },
+  { key: 'KMZ_Lateral10',        label: 'Lateral 10',         color: '#4dabf7', data: kmzLateral10,        tipo: 'poly', icon: icoCanalTrap },
+  { key: 'KMZ_RedesPresurizado', label: 'Redes Presurizado',  color: '#74c0fc', data: kmzRedesPresurizado, tipo: 'poly', icon: icoConducCubierto },
+  { key: 'KMZ_Evacuador',        label: 'Evacuador',          color: '#a5d8ff', data: kmzEvacuador,        tipo: 'poly', icon: icoAcueducto },
   // Puntos
-  { key: 'KMZ_Bocatoma',         label: 'Bocatoma',           color: '#206bc4', data: kmzBocatoma,         tipo: 'point' },
-  { key: 'KMZ_Entrega',          label: 'Entrega',            color: '#2f9e44', data: kmzEntrega,          tipo: 'point' },
-  { key: 'KMZ_Toma',             label: 'Toma',               color: '#f59f00', data: kmzToma,             tipo: 'point' },
-  { key: 'KMZ_Canoa',            label: 'Canoa',              color: '#f76707', data: kmzCanoa,            tipo: 'point' },
-  { key: 'KMZ_Alcantarilla',     label: 'Alcantarilla',       color: '#7048e8', data: kmzAlcantarilla,     tipo: 'point' },
-  { key: 'KMZ_PuenteVehicular',  label: 'Puente Vehicular',   color: '#8a6d3b', data: kmzPuenteVehicular,  tipo: 'point' },
-  { key: 'KMZ_PuentePeatonal',   label: 'Puente Peatonal',    color: '#e8590c', data: kmzPuentePeatonal,   tipo: 'point' },
-  { key: 'KMZ_Aliviadero',       label: 'Aliviadero',         color: '#c92a2a', data: kmzAliviadero,       tipo: 'point' },
-  { key: 'KMZ_CajaHidraulica',   label: 'Caja Hidráulica',    color: '#495057', data: kmzCajaHidraulica,   tipo: 'point' },
-  { key: 'KMZ_Desarenador',      label: 'Desarenador',        color: '#a0522d', data: kmzDesarenador,      tipo: 'point' },
-  { key: 'KMZ_EstacionControl',  label: 'Estación Control',   color: '#fd7e14', data: kmzEstacionControl,  tipo: 'point' },
-  { key: 'KMZ_Partidor',         label: 'Partidor',           color: '#9c36b5', data: kmzPartidor,         tipo: 'point' },
-  { key: 'KMZ_PaseTuberias',     label: 'Pase Tuberías',      color: '#5c7cfa', data: kmzPaseTuberias,     tipo: 'point' },
-  { key: 'KMZ_CamaraRP',         label: 'Cámara Rompepresión',color: '#e67700', data: kmzCamaraRP,         tipo: 'point' },
-  { key: 'KMZ_Rapida',           label: 'Rápida',             color: '#f03e3e', data: kmzRapida,           tipo: 'point' },
+  { key: 'KMZ_Bocatoma',         label: 'Bocatoma',           color: '#206bc4', data: kmzBocatoma,         tipo: 'point', icon: icoBocatoma },
+  { key: 'KMZ_Entrega',          label: 'Entrega',            color: '#2f9e44', data: kmzEntrega,          tipo: 'point', icon: icoEntrega },
+  { key: 'KMZ_Toma',             label: 'Toma',               color: '#f59f00', data: kmzToma,             tipo: 'point', icon: icoToma },
+  { key: 'KMZ_Canoa',            label: 'Canoa',              color: '#f76707', data: kmzCanoa,            tipo: 'point', icon: icoCanoa },
+  { key: 'KMZ_Alcantarilla',     label: 'Alcantarilla',       color: '#7048e8', data: kmzAlcantarilla,     tipo: 'point', icon: icoAlcantarilla },
+  { key: 'KMZ_PuenteVehicular',  label: 'Puente Vehicular',   color: '#8a6d3b', data: kmzPuenteVehicular,  tipo: 'point', icon: icoPaseVehicular },
+  { key: 'KMZ_PuentePeatonal',   label: 'Puente Peatonal',    color: '#e8590c', data: kmzPuentePeatonal,   tipo: 'point', icon: icoPasePeatonal },
+  { key: 'KMZ_Aliviadero',       label: 'Aliviadero',         color: '#c92a2a', data: kmzAliviadero,       tipo: 'point', icon: icoAliviadero },
+  { key: 'KMZ_CajaHidraulica',   label: 'Caja Hidráulica',    color: '#495057', data: kmzCajaHidraulica,   tipo: 'point', icon: icoCanalRect },
+  { key: 'KMZ_Desarenador',      label: 'Desarenador',        color: '#a0522d', data: kmzDesarenador,      tipo: 'point', icon: icoDesarenador },
+  { key: 'KMZ_EstacionControl',  label: 'Estación Control',   color: '#fd7e14', data: kmzEstacionControl,  tipo: 'point', icon: icoBocatoma },
+  { key: 'KMZ_Partidor',         label: 'Partidor',           color: '#9c36b5', data: kmzPartidor,         tipo: 'point', icon: icoCanalTrap },
+  { key: 'KMZ_PaseTuberias',     label: 'Pase Tuberías',      color: '#5c7cfa', data: kmzPaseTuberias,     tipo: 'point', icon: icoConducCubierto },
+  { key: 'KMZ_CamaraRP',         label: 'Cámara Rompepresión',color: '#e67700', data: kmzCamaraRP,         tipo: 'point', icon: icoCaida },
+  { key: 'KMZ_Rapida',           label: 'Rápida',             color: '#f03e3e', data: kmzRapida,           tipo: 'point', icon: icoRapida },
 ];
 
 const KMZ_CAPAS_DEFAULT = Object.fromEntries(KMZ_CONFIG.map(c => [c.key, false]));
@@ -194,14 +220,7 @@ function MapaChavimochic() {
   };
 
   const estiloCanales = { color: '#206bc4', weight: 4, opacity: 0.8 }; 
-
   const crearEstiloKMZ = (color) => ({ color, weight: 2, opacity: 0.85, fillOpacity: 0.3, fillColor: color });
-
-  const crearIconoKMZ = (color) => divIcon({ 
-    className: 'icono-vacio', 
-    html: `<div style="background-color:${color}; border: 2px solid white; width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.4);"></div>`, 
-    iconSize: [14, 14], iconAnchor: [7, 7] 
-  });
 
   const iconoGPS = divIcon({ className: 'icono-vacio', html: `<div style="background-color: #206bc4; border: 3px solid white; width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>`, iconSize: [22, 22], iconAnchor: [11, 11] });
   const crearIconoLluvia = (totalRain, isCritical) => divIcon({ className: 'icono-vacio', html: `<div style="display: flex; flex-direction: column; align-items: center; margin-top: -30px;"><div style="background: white; border: 1px solid ${isCritical ? '#d63939' : '#206bc4'}; color: ${isCritical ? '#d63939' : '#206bc4'}; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); white-space: nowrap;">${totalRain.toFixed(1)} mm</div><div style="font-size: 26px; color: ${isCritical ? '#d63939' : '#206bc4'}; line-height: 1; margin-top: 2px;">🌧️</div></div>`, iconSize: [60, 60], iconAnchor: [30, 45] });
@@ -246,7 +265,7 @@ function MapaChavimochic() {
             if (!soloPoints.features.length) return null;
             return (
               <GeoJSON key={cfg.key} data={soloPoints}
-                pointToLayer={(feature, latlng) => L.marker(latlng, { icon: crearIconoKMZ(cfg.color) })}
+                pointToLayer={(feature, latlng) => L.marker(latlng, { icon: crearIconoSimbologia(cfg.icon) })}
                 onEachFeature={(feature, layer) => {
                   if (feature.properties?.name) layer.bindPopup(`<b>${feature.properties.name}</b><br/><small>${cfg.label}</small>`);
                 }}
@@ -360,7 +379,7 @@ function MapaChavimochic() {
               <label className="pca-switch-row"><div className="pca-switch-container"><input type="checkbox" checked={capas.Lluvias} onChange={() => toggleCapa('Lluvias')} /><span className="pca-slider-round"></span></div><FaCloudShowersHeavy color="#206bc4" /><span>Estaciones Pluviómetros</span></label>
             </div>
 
-            {/* ── Infraestructura Hidráulica (KMZ) ─────────────────────────── */}
+            {/* ── Infraestructura Hidráulica ────────────────────────────────── */}
             <hr className="pca-divider" />
             <div className="pca-seccion">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', cursor: 'pointer' }}
@@ -386,7 +405,7 @@ function MapaChavimochic() {
                         <div className="pca-item-left">
                           <input type="checkbox" checked={capasKMZ[cfg.key]} onChange={() => toggleCapaKMZ(cfg.key)} className="pca-checkbox" />
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: cfg.color, borderRadius: '2px' }}></span>
+                            <img src={cfg.icon} alt="" style={{ width: '18px', height: '18px' }} />
                             {cfg.label}
                           </span>
                         </div>
@@ -401,7 +420,7 @@ function MapaChavimochic() {
                         <div className="pca-item-left">
                           <input type="checkbox" checked={capasKMZ[cfg.key]} onChange={() => toggleCapaKMZ(cfg.key)} className="pca-checkbox" />
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: cfg.color, borderRadius: '50%' }}></span>
+                            <img src={cfg.icon} alt="" style={{ width: '18px', height: '18px' }} />
                             {cfg.label}
                           </span>
                         </div>
