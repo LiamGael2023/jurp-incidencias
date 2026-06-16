@@ -319,7 +319,7 @@ function MapaChavimochic() {
   const cargarDetalleIncidente = async (id) => {
     setDetalleActivo(null); setCargandoDetalle(true);
     const token = localStorage.getItem('userToken');
-    try { const res = await fetch(`/api/v1/mobile/hi-incidents/${id}/`,{headers:{'Authorization':`Token ${token}`,'Content-Type':'application/json'}}); if(res.ok){setDetalleActivo(await res.json());} } catch(e){console.error(e)} finally{setCargandoDetalle(false)}
+    try { const res = await fetch(`/api/v1/mobile/hi-incidents/${id}/`,{headers:{'Authorization':`Token ${token}`,'Content-Type':'application/json'}}); if(res.ok){ const json = await res.json(); setDetalleActivo(json.data || json); } } catch(e){console.error(e)} finally{setCargandoDetalle(false)}
   };
 
   const toggleCapa = (n) => setCapas(p=>({...p,[n]:!p[n]}));
@@ -442,8 +442,8 @@ function MapaChavimochic() {
                   {cargandoDetalle ? <div style={{textAlign:'center',padding:'20px 0',color:'#206bc4'}}><FaSyncAlt className="icon-spin"/><span style={{fontSize:'12px',marginLeft:'5px'}}>Cargando...</span></div>
                   : detalleActivo&&detalleActivo.id===inc.id ? (
                     <div style={{display:'flex',overflowX:'auto',gap:'8px',paddingBottom:'8px',marginBottom:'8px'}}>
-                      {detalleActivo.images?.map((it,i)=><a key={i} href={it.image} target="_blank" rel="noopener noreferrer" style={{flexShrink:0}}><img src={it.image} alt="" style={{width:'120px',height:'100px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0'}}/></a>)}
-                      {detalleActivo.videos?.map((it,i)=><div key={i} style={{flexShrink:0}}><video src={it.video} style={{width:'150px',height:'100px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',background:'#000'}} controls preload="metadata"/></div>)}
+                      {detalleActivo.images?.map((it,i)=>{ const src = it.content?.startsWith('http') ? it.content : `data:image/jpeg;base64,${it.content}`; return <a key={i} href={src} target="_blank" rel="noopener noreferrer" style={{flexShrink:0}}><img src={src} alt="" style={{width:'120px',height:'100px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0'}}/></a>; })}
+                      {detalleActivo.videos?.map((it,i)=>{ const src = it.content?.startsWith('http') ? it.content : `data:video/mp4;base64,${it.content}`; return <div key={i} style={{flexShrink:0}}><video src={src} style={{width:'150px',height:'100px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',background:'#000'}} controls preload="metadata"/></div>; })}
                       {(!detalleActivo.images?.length&&!detalleActivo.videos?.length&&inc.imagenUrl)&&<img src={inc.imagenUrl} alt="" style={{width:'100%',height:'140px',objectFit:'cover',borderRadius:'6px'}}/>}
                     </div>
                   ) : inc.imagenUrl&&<div style={{width:'100%',height:'140px',overflow:'hidden',borderRadius:'6px',marginBottom:'10px',background:'#f8fafc',border:'1px solid #e2e8f0'}}><img src={inc.imagenUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/></div>}
