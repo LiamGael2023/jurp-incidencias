@@ -3,9 +3,9 @@ import './App.css';
 import MapaChavimochic from './Mapa';
 import Login from './Login';
 import Incidentes from './Incidentes';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaCog } from 'react-icons/fa';
-import logo from './assets/logo1.png';
 import Estadisticas from './Estadisticas';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt } from 'react-icons/fa';
+import logo from './assets/logo1.png';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('userToken'));
@@ -35,18 +35,12 @@ function App() {
   return (
     <div className="tbl-layout">
       
-      {/* SIDEBAR CLARO (Fondo Blanco) */}
       <aside className={`tbl-sidebar ${menuLateralAbierto ? 'expanded' : 'collapsed'}`}>
-  <div className="tbl-sidebar-header">
-    <div className="tbl-brand" style={{ width: '100%', paddingLeft: '18px' }}>
-      <img 
-        src={logo} // 🟢 USAMOS EL LOGO LOCAL IMPORTADO
-        alt="JURP" 
-        className="tbl-brand-img" 
-        style={{ height: '42px' }} 
-      />
-    </div>
-  </div>
+        <div className="tbl-sidebar-header">
+          <div className="tbl-brand" style={{ width: '100%', paddingLeft: '18px' }}>
+            <img src={logo} alt="JURP" className="tbl-brand-img" style={{ height: '42px' }} />
+          </div>
+        </div>
         
         <ul className="tbl-nav">
           <li className="tbl-nav-label">{menuLateralAbierto ? 'Menú Principal' : '...'}</li>
@@ -64,6 +58,13 @@ function App() {
               {menuLateralAbierto && <span className="tbl-nav-title">Incidentes</span>}
             </div>
           </li>
+
+          <li className={`tbl-nav-item ${vistaActual === 'vigilancia' ? 'active' : ''}`} onClick={() => setVistaActual('vigilancia')}>
+            <div className="tbl-nav-link">
+              <span className="tbl-nav-icon"><FaShieldAlt /></span>
+              {menuLateralAbierto && <span className="tbl-nav-title">Vigilancia</span>}
+            </div>
+          </li>
           
           <li className={`tbl-nav-item ${vistaActual === 'reportes' ? 'active' : ''}`} onClick={() => setVistaActual('reportes')}>
             <div className="tbl-nav-link">
@@ -71,18 +72,10 @@ function App() {
               {menuLateralAbierto && <span className="tbl-nav-title">Estadísticas</span>}
             </div>
           </li>
-          
-          <li className={`tbl-nav-item ${vistaActual === 'config' ? 'active' : ''}`} onClick={() => setVistaActual('config')}>
-            <div className="tbl-nav-link">
-              <span className="tbl-nav-icon"><FaCog /></span>
-              {menuLateralAbierto && <span className="tbl-nav-title">Configuración</span>}
-            </div>
-          </li>
         </ul>
       </aside>
 
       <div className="tbl-main-content">
-        {/* HEADER AZUL CORPORATIVO */}
         <header className="tbl-header">
           <div className="tbl-header-left">
             <button className="tbl-btn-menu" onClick={() => setMenuLateralAbierto(!menuLateralAbierto)}>
@@ -94,7 +87,6 @@ function App() {
           <div className="tbl-header-right">
             <div className="tbl-dropdown">
               <div className="tbl-user-menu" onClick={() => setMenuPerfilAbierto(!menuPerfilAbierto)}>
-                {/* Ícono de usuario en color blanco */}
                 <FaUserCircle size={32} color="#ffffff" />
                 <div className="tbl-user-info d-none-mobile">
                   <span className="tbl-user-name">{nombreUsuario}</span>
@@ -113,12 +105,11 @@ function App() {
           </div>
         </header>
 
-        {/* ÁREA DE RENDERIZADO */}
         <div className="tbl-page-content">
           {vistaActual === 'mapa' && <MapaChavimochic />}
           {vistaActual === 'lista' && <Incidentes />}
+          {vistaActual === 'vigilancia' && <div className="tbl-empty-state"><h3>🔒 Módulo de Vigilancia</h3><p>En construcción</p></div>}
           {vistaActual === 'reportes' && <Estadisticas />}
-          {vistaActual === 'config' && <div className="tbl-empty-state"><h3>Configuración</h3><p>En construcción</p></div>}
         </div>
       </div>
     </div>

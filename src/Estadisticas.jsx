@@ -190,7 +190,6 @@ function Estadisticas() {
           {[
             {key:'incidentes', label:'Incidentes', icon:'📊'},
             {key:'estaciones', label:'Estaciones Meteorológicas', icon:'🌧️'},
-            {key:'vigilancia', label:'Vigilancia', icon:'🔒'},
           ].map(tab => (
             <button key={tab.key} onClick={()=>setSubMenu(tab.key)} style={{padding:'12px 20px',border:'none',background:'transparent',cursor:'pointer',fontSize:'13px',fontWeight:subMenu===tab.key?'700':'500',color:subMenu===tab.key?'#206bc4':'#626976',borderBottom:subMenu===tab.key?'2px solid #206bc4':'2px solid transparent',marginBottom:'-2px',transition:'all 0.2s',display:'flex',alignItems:'center',gap:'6px'}}>
               <span>{tab.icon}</span> {tab.label}
@@ -340,17 +339,6 @@ function Estadisticas() {
         </div>
 
         </>)}
-
-        {/* ══════════════════════════════════════════════════════════════════ */}
-        {/* ── TAB: VIGILANCIA ──────────────────────────────────────────── */}
-        {/* ══════════════════════════════════════════════════════════════════ */}
-        {subMenu === 'vigilancia' && (
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'400px',color:'#626976'}}>
-            <div style={{fontSize:'48px',marginBottom:'16px'}}>🔒</div>
-            <h3 style={{margin:'0 0 8px',color:'#1d273b',fontSize:'18px'}}>Módulo de Vigilancia</h3>
-            <p style={{margin:0,fontSize:'14px'}}>En construcción</p>
-          </div>
-        )}
 
         </div>
       </div>
