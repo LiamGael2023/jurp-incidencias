@@ -5,6 +5,7 @@ import Login from './Login';
 import Incidentes from './Incidentes';
 import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaCog } from 'react-icons/fa';
 import logo from './assets/logo1.png';
+import Estadisticas from './Estadisticas';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('userToken'));
@@ -116,7 +117,7 @@ function App() {
         <div className="tbl-page-content">
           {vistaActual === 'mapa' && <MapaChavimochic />}
           {vistaActual === 'lista' && <Incidentes />}
-          {vistaActual === 'reportes' && <div className="tbl-empty-state"><h3>Módulo de Estadísticas</h3><p>En construcción</p></div>}
+          {vistaActual === 'reportes' && <Estadisticas />}
           {vistaActual === 'config' && <div className="tbl-empty-state"><h3>Configuración</h3><p>En construcción</p></div>}
         </div>
       </div>
