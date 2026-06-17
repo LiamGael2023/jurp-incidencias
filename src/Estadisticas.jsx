@@ -287,49 +287,57 @@ function Estadisticas() {
         {/* ══════════════════════════════════════════════════════════════════ */}
         {subMenu === 'estaciones' && (<>
 
-        {/* ── Estaciones Meteorológicas ───────────────────────────────────── */}
-        <div style={{...cardBox, marginBottom:'24px'}}>
-          <div style={sectionTitle}><FaCloudRain/> Estaciones Meteorológicas</div>
-          {estaciones.length === 0 ? <div style={{color:'#626976',fontSize:'13px'}}>No se encontraron estaciones.</div> : (
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))',gap:'12px'}}>
-              {estaciones.map(eq => (
-                <div key={eq.id} onClick={()=>setEstacionSeleccionada(eq.id)} style={{padding:'14px',borderRadius:'4px',border: estacionSeleccionada===eq.id ? '2px solid #206bc4' : '1px solid rgba(98,105,118,0.16)',cursor:'pointer',background: estacionSeleccionada===eq.id ? '#f0f6ff' : '#fff',transition:'all 0.2s'}}>
-                  <div style={{fontWeight:'600',fontSize:'13px',color:'#1d273b',marginBottom:'8px'}}>{eq.nombre || `Estación ${eq.id}`}</div>
-                  <div style={{display:'flex',gap:'12px',fontSize:'12px',color:'#475569'}}>
-                    <span title="Lluvia 24h" style={{color: eq.isCritical ? '#d63939' : '#206bc4', fontWeight:'700'}}><FaCloudRain style={{marginRight:'3px'}}/>{eq.totalRain.toFixed(1)} mm</span>
-                    <span title="Temperatura"><FaThermometerHalf style={{marginRight:'3px',color:'#f76707'}}/>{eq.temp}°C</span>
-                    <span title="Humedad"><FaTint style={{marginRight:'3px',color:'#206bc4'}}/>{eq.hum}%</span>
+        <div style={{display:'flex',gap:'16px',height:'calc(100vh - 240px)'}}>
+          {/* ── Panel izquierdo: Estaciones ─────────────────────────────── */}
+          <div style={{...cardBox, width:'320px', flexShrink:0, display:'flex', flexDirection:'column', overflow:'hidden'}}>
+            <div style={{...sectionTitle, marginBottom:'12px'}}><FaCloudRain/> Estaciones</div>
+            {estaciones.length === 0 ? <div style={{color:'#626976',fontSize:'13px'}}>No se encontraron estaciones.</div> : (
+              <div style={{overflowY:'auto',flex:1,display:'flex',flexDirection:'column',gap:'8px',paddingRight:'4px'}}>
+                {estaciones.map(eq => (
+                  <div key={eq.id} onClick={()=>setEstacionSeleccionada(eq.id)} style={{padding:'10px 12px',borderRadius:'4px',border: estacionSeleccionada===eq.id ? '2px solid #206bc4' : '1px solid rgba(98,105,118,0.16)',cursor:'pointer',background: estacionSeleccionada===eq.id ? '#f0f6ff' : '#fff',transition:'all 0.2s',flexShrink:0}}>
+                    <div style={{fontWeight:'600',fontSize:'12px',color:'#1d273b',marginBottom:'6px'}}>{eq.nombre || `Estación ${eq.id}`}</div>
+                    <div style={{display:'flex',gap:'8px',fontSize:'11px',color:'#475569',flexWrap:'wrap'}}>
+                      <span style={{color: eq.isCritical ? '#d63939' : '#206bc4', fontWeight:'700'}}><FaCloudRain style={{marginRight:'2px'}}/>{eq.totalRain.toFixed(1)} mm</span>
+                      <span><FaThermometerHalf style={{marginRight:'2px',color:'#f76707'}}/>{eq.temp}°C</span>
+                      <span><FaTint style={{marginRight:'2px',color:'#206bc4'}}/>{eq.hum}%</span>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── Gráfico de lluvias ──────────────────────────────────────────── */}
-        {estacionSeleccionada && (
-          <div style={{...cardBox, marginBottom:'24px'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
-              <div style={sectionTitle}><FaCloudRain/> Historial de Lluvias — {estaciones.find(e=>e.id===estacionSeleccionada)?.nombre || 'Estación'}</div>
-              <div style={{display:'flex',gap:'6px'}}>
-                {[7,15,30].map(d => (
-                  <button key={d} onClick={()=>setDiasRango(d)} style={{padding:'4px 12px',borderRadius:'4px',border: diasRango===d ? '1px solid #206bc4' : '1px solid rgba(98,105,118,0.16)',background: diasRango===d ? '#206bc4' : '#fff',color: diasRango===d ? '#fff' : '#626976',fontSize:'12px',fontWeight:'600',cursor:'pointer'}}>{d} días</button>
                 ))}
               </div>
-            </div>
-            {cargandoLluvia ? <div style={{textAlign:'center',padding:'40px',color:'#626976'}}><FaSyncAlt className="icon-spin"/> Cargando...</div> : (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={lluviaChart}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0"/>
-                  <XAxis dataKey="dia" tick={{fontSize:11}} stroke="#626976" interval={diasRango > 15 ? 2 : 0} angle={diasRango > 15 ? -45 : 0} textAnchor={diasRango > 15 ? 'end' : 'middle'} height={diasRango > 15 ? 60 : 30}/>
-                  <YAxis tick={{fontSize:11}} stroke="#626976" unit=" mm"/>
-                  <Tooltip formatter={(v)=>[`${v} mm`,'Lluvia']} contentStyle={{borderRadius:'4px',border:'1px solid #e2e8f0'}}/>
-                  <Bar dataKey="mm" name="Lluvia (mm)" fill="#206bc4" radius={[4,4,0,0]} maxBarSize={diasRango<=7 ? 40 : 20}/>
-                </BarChart>
-              </ResponsiveContainer>
             )}
           </div>
-        )}
+
+          {/* ── Panel derecho: Gráfico de lluvias ──────────────────────── */}
+          <div style={{...cardBox, flex:1, display:'flex', flexDirection:'column', overflow:'hidden'}}>
+            {estacionSeleccionada ? (<>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px',flexShrink:0}}>
+                <div style={sectionTitle}><FaCloudRain/> Historial — {estaciones.find(e=>e.id===estacionSeleccionada)?.nombre || 'Estación'}</div>
+                <div style={{display:'flex',gap:'6px'}}>
+                  {[7,15,30].map(d => (
+                    <button key={d} onClick={()=>setDiasRango(d)} style={{padding:'4px 12px',borderRadius:'4px',border: diasRango===d ? '1px solid #206bc4' : '1px solid rgba(98,105,118,0.16)',background: diasRango===d ? '#206bc4' : '#fff',color: diasRango===d ? '#fff' : '#626976',fontSize:'12px',fontWeight:'600',cursor:'pointer'}}>{d} días</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{flex:1,minHeight:0}}>
+                {cargandoLluvia ? <div style={{textAlign:'center',padding:'40px',color:'#626976'}}><FaSyncAlt className="icon-spin"/> Cargando...</div> : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={lluviaChart}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0"/>
+                      <XAxis dataKey="dia" tick={{fontSize:11}} stroke="#626976" interval={diasRango > 15 ? 2 : 0} angle={diasRango > 15 ? -45 : 0} textAnchor={diasRango > 15 ? 'end' : 'middle'} height={diasRango > 15 ? 60 : 30}/>
+                      <YAxis tick={{fontSize:11}} stroke="#626976" unit=" mm"/>
+                      <Tooltip formatter={(v)=>[`${v} mm`,'Lluvia']} contentStyle={{borderRadius:'4px',border:'1px solid #e2e8f0'}}/>
+                      <Bar dataKey="mm" name="Lluvia (mm)" fill="#206bc4" radius={[4,4,0,0]} maxBarSize={diasRango<=7 ? 40 : 20}/>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </>) : (
+              <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:'#626976',fontSize:'14px'}}>
+                ← Selecciona una estación para ver su historial
+              </div>
+            )}
+          </div>
+        </div>
 
         </>)}
 
