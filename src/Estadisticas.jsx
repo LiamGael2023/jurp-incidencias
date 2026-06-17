@@ -209,28 +209,40 @@ function Estadisticas() {
           {/* Por Estado */}
           <div style={cardBox}>
             <div style={sectionTitle}>Incidentes por Estado</div>
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart><Pie data={porEstado} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({name,value})=>`${name} (${value})`} labelLine={false}>
-                {porEstado.map((d,i) => <Cell key={i} fill={d.color}/>)}
-              </Pie><Tooltip/></PieChart>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={porEstado} cx="50%" cy="45%" innerRadius={40} outerRadius={75} dataKey="value" paddingAngle={2}>
+                  {porEstado.map((d,i) => <Cell key={i} fill={d.color}/>)}
+                </Pie>
+                <Tooltip formatter={(v,n)=>[v,n]}/>
+                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:'12px'}} formatter={(v,entry)=>`${v} (${entry.payload.value})`}/>
+              </PieChart>
             </ResponsiveContainer>
           </div>
           {/* Por Tipo */}
           <div style={cardBox}>
             <div style={sectionTitle}>Incidentes por Tipo</div>
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart><Pie data={porTipo} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({name,value})=>`${name} (${value})`} labelLine={false}>
-                {porTipo.map((d,i) => <Cell key={i} fill={COLORS_TIPO[i % COLORS_TIPO.length]}/>)}
-              </Pie><Tooltip/></PieChart>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={porTipo} cx="50%" cy="45%" innerRadius={40} outerRadius={75} dataKey="value" paddingAngle={2}>
+                  {porTipo.map((d,i) => <Cell key={i} fill={COLORS_TIPO[i % COLORS_TIPO.length]}/>)}
+                </Pie>
+                <Tooltip formatter={(v,n)=>[v,n]}/>
+                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:'12px'}} formatter={(v,entry)=>`${v} (${entry.payload.value})`}/>
+              </PieChart>
             </ResponsiveContainer>
           </div>
           {/* Por Gravedad */}
           <div style={cardBox}>
             <div style={sectionTitle}>Incidentes por Gravedad</div>
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart><Pie data={porGravedad} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({name,value})=>`${name} (${value})`} labelLine={false}>
-                {porGravedad.map((d,i) => { const c = d.name==='Leve'?COLORS_GRAVEDAD.lev:d.name==='Moderada'?COLORS_GRAVEDAD.mod:COLORS_GRAVEDAD.gra; return <Cell key={i} fill={c}/>; })}
-              </Pie><Tooltip/></PieChart>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={porGravedad} cx="50%" cy="45%" innerRadius={40} outerRadius={75} dataKey="value" paddingAngle={2}>
+                  {porGravedad.map((d,i) => { const c = d.name==='Leve'?COLORS_GRAVEDAD.lev:d.name==='Moderada'?COLORS_GRAVEDAD.mod:COLORS_GRAVEDAD.gra; return <Cell key={i} fill={c}/>; })}
+                </Pie>
+                <Tooltip formatter={(v,n)=>[v,n]}/>
+                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:'12px'}} formatter={(v,entry)=>`${v} (${entry.payload.value})`}/>
+              </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
