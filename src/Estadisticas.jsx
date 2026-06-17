@@ -8,6 +8,7 @@ const COLORS_GRAVEDAD = {'lev':'#2fb344','mod':'#f76707','gra':'#d63939'};
 const COLORS_ESTADO = {'pat':'#f59f00','ate':'#206bc4','cer':'#2fb344'};
 
 function Estadisticas() {
+  const [subMenu, setSubMenu] = useState('incidentes');
   const [incidentes, setIncidentes] = useState([]);
   const [estaciones, setEstaciones] = useState([]);
   const [lluviaChart, setLluviaChart] = useState([]);
@@ -182,9 +183,27 @@ function Estadisticas() {
         </div>
       </div>
 
-      <div className="tbl-page-body" style={{padding:'20px',overflowY:'auto',maxHeight:'calc(100vh - 140px)'}}>
+      <div className="tbl-page-body" style={{padding:'0',overflowY:'auto',maxHeight:'calc(100vh - 140px)'}}>
 
-        {/* ── KPI Cards ──────────────────────────────────────────────────── */}
+        {/* ── Sub-menú ───────────────────────────────────────────────────── */}
+        <div style={{display:'flex',gap:'0',borderBottom:'2px solid #e2e8f0',background:'#fff',padding:'0 20px',position:'sticky',top:0,zIndex:10}}>
+          {[
+            {key:'incidentes', label:'Incidentes', icon:'📊'},
+            {key:'estaciones', label:'Estaciones Meteorológicas', icon:'🌧️'},
+            {key:'vigilancia', label:'Vigilancia', icon:'🔒'},
+          ].map(tab => (
+            <button key={tab.key} onClick={()=>setSubMenu(tab.key)} style={{padding:'12px 20px',border:'none',background:'transparent',cursor:'pointer',fontSize:'13px',fontWeight:subMenu===tab.key?'700':'500',color:subMenu===tab.key?'#206bc4':'#626976',borderBottom:subMenu===tab.key?'2px solid #206bc4':'2px solid transparent',marginBottom:'-2px',transition:'all 0.2s',display:'flex',alignItems:'center',gap:'6px'}}>
+              <span>{tab.icon}</span> {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{padding:'20px'}}>
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* ── TAB: INCIDENTES ──────────────────────────────────────────── */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {subMenu === 'incidentes' && (<>
         <div style={{display:'flex',gap:'16px',flexWrap:'wrap',marginBottom:'24px'}}>
           <div style={kpiStyle('#206bc4')}>
             <div style={{fontSize:'12px',color:'#626976',textTransform:'uppercase',fontWeight:'600',marginBottom:'4px'}}><FaClipboardList style={{marginRight:'4px'}}/> Total Incidentes</div>
@@ -261,6 +280,13 @@ function Estadisticas() {
           </ResponsiveContainer>
         </div>
 
+        </>)}
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* ── TAB: ESTACIONES METEOROLÓGICAS ───────────────────────────── */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {subMenu === 'estaciones' && (<>
+
         {/* ── Estaciones Meteorológicas ───────────────────────────────────── */}
         <div style={{...cardBox, marginBottom:'24px'}}>
           <div style={sectionTitle}><FaCloudRain/> Estaciones Meteorológicas</div>
@@ -304,6 +330,21 @@ function Estadisticas() {
             )}
           </div>
         )}
+
+        </>)}
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* ── TAB: VIGILANCIA ──────────────────────────────────────────── */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {subMenu === 'vigilancia' && (
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'400px',color:'#626976'}}>
+            <div style={{fontSize:'48px',marginBottom:'16px'}}>🔒</div>
+            <h3 style={{margin:'0 0 8px',color:'#1d273b',fontSize:'18px'}}>Módulo de Vigilancia</h3>
+            <p style={{margin:0,fontSize:'14px'}}>En construcción</p>
+          </div>
+        )}
+
+        </div>
       </div>
     </div>
   );
