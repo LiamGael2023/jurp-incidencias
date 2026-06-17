@@ -88,6 +88,39 @@ function Incidentes() {
     } catch (error) { console.error(error); } finally { setCargando(false); }
   };
 
+  // ── Cargar thumbnails desde el detalle para cards sin imagen ───────────
+  const cargarThumbnails = async (lista) => {
+    const token = localStorage.getItem('userToken');
+    if (!token) return;
+    const sinThumb = lista.filter(i => !i.imagenUrl && (i.imagesCount > 0 || i.videosCount > 0));
+    if (!sinThumb.length) return;
+
+    const updates = {};
+    await Promise.all(sinThumb.map(async (inc) => {
+      try {
+        const res = await fetch(`/api/v1/mobile/hi-incidents/${inc.id}/`, {
+          headers: { 'Authorization': `Token ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const detail = json.data || json;
+          const firstImg = (detail.images || [])[0];
+          if (firstImg?.content) {
+            updates[inc.id] = firstImg.content.startsWith('http') ? firstImg.content : `data:image/jpeg;base64,${firstImg.content}`;
+          }
+        }
+      } catch (e) { /* silencioso */ }
+    }));
+
+    if (Object.keys(updates).length > 0) {
+      setIncidentes(prev => prev.map(i => updates[i.id] ? { ...i, imagenUrl: updates[i.id] } : i));
+    }
+  };
+
+  useEffect(() => {
+    if (incidentes.length > 0) cargarThumbnails(incidentes);
+  }, [incidentes.length]);
+
   // ── Cargar evidencias (imágenes y videos) de un incidente ──────────────
   const verEvidencias = async (inc) => {
     setGaleriaIncidente(inc);
