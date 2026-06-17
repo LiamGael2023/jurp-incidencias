@@ -282,19 +282,21 @@ function Incidentes() {
   const totalPaginas = Math.ceil(incidentes.length / itemsPorPagina);
 
   const getEstadoBadge = (estado) => {
+    const base = {padding:'3px 10px',borderRadius:'4px',fontSize:'11px',fontWeight:'700',letterSpacing:'0.5px',textShadow:'0 1px 2px rgba(0,0,0,0.15)',border:'1px solid rgba(255,255,255,0.3)'};
     switch (estado) {
-      case 'pat': return <span className="tbl-badge bg-orange-lt">Pendiente</span>;
-      case 'ate': return <span className="tbl-badge bg-blue-lt">En Atención</span>;
-      case 'cer': return <span className="tbl-badge bg-green-lt">Cerrado</span>;
+      case 'pat': return <span style={{...base,backgroundColor:'#f59f00',color:'#fff'}}>Pendiente</span>;
+      case 'ate': return <span style={{...base,backgroundColor:'#206bc4',color:'#fff'}}>En Atención</span>;
+      case 'cer': return <span style={{...base,backgroundColor:'#2fb344',color:'#fff'}}>Cerrado</span>;
       default: return <span className="tbl-badge bg-secondary-lt">{estado}</span>;
     }
   };
 
   const getGravedadBadge = (gravedad) => {
+    const base = {padding:'3px 10px',borderRadius:'4px',fontSize:'11px',fontWeight:'700',letterSpacing:'0.5px',textShadow:'0 1px 2px rgba(0,0,0,0.15)',border:'1px solid rgba(255,255,255,0.3)'};
     switch (gravedad) {
-      case 'lev': return <span className="tbl-badge bg-green-lt">Leve</span>;
-      case 'mod': return <span className="tbl-badge bg-yellow-lt">Moderada</span>;
-      case 'gra': return <span className="tbl-badge bg-red-lt">Grave</span>;
+      case 'lev': return <span style={{...base,backgroundColor:'#2fb344',color:'#fff'}}>Leve</span>;
+      case 'mod': return <span style={{...base,backgroundColor:'#f76707',color:'#fff'}}>Moderada</span>;
+      case 'gra': return <span style={{...base,backgroundColor:'#d63939',color:'#fff'}}>Grave</span>;
       default: return <span className="tbl-badge bg-secondary-lt">{gravedad}</span>;
     }
   };
@@ -323,9 +325,10 @@ function Incidentes() {
             <div className="tbl-row-cards">
               {incidentesActuales.map(inc => (
                 <div className="tbl-card" key={inc.id}>
-                  <div className="tbl-card-img-top" onClick={() => verEvidencias(inc)} style={{cursor:'pointer'}} title="Ver evidencias">
+                  <div className="tbl-card-img-top" onClick={() => verEvidencias(inc)} style={{cursor:'pointer',position:'relative'}} title="Ver evidencias">
                     {inc.imagenUrl ? <img src={inc.imagenUrl} alt="Evidencia" /> : <div className="tbl-img-placeholder"><FaCamera size={24} /><span>Sin Evidencia</span></div>}
-                    <div className="tbl-card-badges">{getEstadoBadge(inc.estado)}{getGravedadBadge(inc.gravedad)}</div>
+                    <div style={{position:'absolute',top:0,left:0,right:0,height:'50px',background:'linear-gradient(to bottom, rgba(0,0,0,0.55), transparent)',borderRadius:'4px 4px 0 0',pointerEvents:'none'}}></div>
+                    <div className="tbl-card-badges" style={{position:'absolute',top:'8px',left:'8px',display:'flex',gap:'4px',zIndex:1}}>{getEstadoBadge(inc.estado)}{getGravedadBadge(inc.gravedad)}</div>
                     {(inc.imagesCount > 0 || inc.videosCount > 0) && (
                       <div style={{position:'absolute',bottom:'8px',right:'8px',background:'rgba(0,0,0,0.6)',color:'#fff',padding:'3px 8px',borderRadius:'12px',fontSize:'11px',display:'flex',alignItems:'center',gap:'6px'}}>
                         {inc.imagesCount > 0 && <span><FaImage size={10}/> {inc.imagesCount}</span>}
