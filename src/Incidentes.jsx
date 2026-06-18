@@ -9,7 +9,7 @@ import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
-import logo from './assets/logo1.png';
+import logo from './assets/jurp.png';
 
 function Incidentes() {
   const [incidentes, setIncidentes] = useState([]);
