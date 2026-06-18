@@ -232,77 +232,102 @@ function Incidentes() {
   const eliminarRecurso = (idLocal) => setRecursos(recursos.filter(r => r.idLocal !== idLocal));
   const costoTotalIncidente = recursos.reduce((sum, item) => sum + item.total, 0);
 
+  // ── Helper: convertir imagen importada a base64 ────────────────────────
+  const imgToBase64 = (src) => new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+
   // ── Exportar PDF ──────────────────────────────────────────────────────
-  const exportarPDF = () => {
+  const exportarPDF = async () => {
     if (!incidenteActivo) return;
     const doc = new jsPDF();
     const inc = incidenteActivo;
     const estadoTexto = inc.estado === 'pat' ? 'Pendiente' : inc.estado === 'ate' ? 'En Atención' : inc.estado === 'cer' ? 'Cerrado' : inc.estado;
     const gravedadTexto = inc.gravedad === 'lev' ? 'Leve' : inc.gravedad === 'mod' ? 'Moderada' : inc.gravedad === 'gra' ? 'Grave' : inc.gravedad;
+    const fechaGenerado = new Date().toLocaleString('es-PE');
 
-    // Header
+    // Header azul con logo
     doc.setFillColor(20, 99, 165);
-    doc.rect(0, 0, 210, 28, 'F');
+    doc.rect(0, 0, 210, 30, 'F');
+
+    const logoBase64 = await imgToBase64(logo);
+    if (logoBase64) {
+      doc.addImage(logoBase64, 'PNG', 12, 4, 22, 22);
+    }
+
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
+    doc.setFontSize(15);
     doc.setFont(undefined, 'bold');
-    doc.text('JUNTA DE RIEGO PRESURIZADO', 14, 12);
+    doc.text('JUNTA DE RIEGO PRESURIZADO', logoBase64 ? 38 : 14, 13);
     doc.setFontSize(10);
     doc.setFont(undefined, 'normal');
-    doc.text('Reporte de Gestión de Incidente', 14, 19);
-    doc.setFontSize(9);
-    doc.text(`Generado: ${new Date().toLocaleString('es-PE')}`, 210 - 14, 19, { align: 'right' });
+    doc.text('Reporte de Gestión de Incidente', logoBase64 ? 38 : 14, 20);
+    doc.setFontSize(8);
+    doc.text(`Generado: ${fechaGenerado}`, 196, 26, { align: 'right' });
 
-    // Info del incidente
-    let y = 36;
+    // Tipo de incidente como título
+    let y = 40;
     doc.setTextColor(30, 41, 59);
-    doc.setFontSize(13);
+    doc.setFontSize(14);
     doc.setFont(undefined, 'bold');
-    doc.text(`${inc.tipo}`, 14, y);
-    y += 7;
+    doc.text(inc.tipo, 14, y);
+    y += 8;
 
+    // Datos del incidente en dos columnas
     doc.setFontSize(9);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(100, 116, 139);
-
-    const info = [
+    const infoIzq = [
       ['Código:', inc.codigo || 'Sin Código'],
       ['Ubicación:', inc.lugar || '-'],
       ['Fecha:', inc.fecha || '-'],
+    ];
+    const infoDer = [
       ['Estado:', estadoTexto],
       ['Gravedad:', gravedadTexto],
       ['Reportado por:', inc.usuario || '-'],
     ];
 
-    for (const [label, val] of info) {
-      doc.setFont(undefined, 'bold');
-      doc.setTextColor(100, 116, 139);
-      doc.text(label, 14, y);
-      doc.setFont(undefined, 'normal');
-      doc.setTextColor(30, 41, 59);
-      doc.text(val, 50, y);
+    for (let i = 0; i < infoIzq.length; i++) {
+      // Columna izquierda
+      doc.setFont(undefined, 'bold'); doc.setTextColor(100, 116, 139);
+      doc.text(infoIzq[i][0], 14, y);
+      doc.setFont(undefined, 'normal'); doc.setTextColor(30, 41, 59);
+      doc.text(infoIzq[i][1], 50, y);
+      // Columna derecha
+      doc.setFont(undefined, 'bold'); doc.setTextColor(100, 116, 139);
+      doc.text(infoDer[i][0], 115, y);
+      doc.setFont(undefined, 'normal'); doc.setTextColor(30, 41, 59);
+      doc.text(infoDer[i][1], 152, y);
       y += 5.5;
     }
 
-    y += 4;
-
-    // Línea separadora
+    y += 5;
     doc.setDrawColor(226, 232, 240);
     doc.line(14, y, 196, y);
-    y += 6;
+    y += 8;
 
     // Tabla de recursos
     doc.setFontSize(11);
     doc.setFont(undefined, 'bold');
     doc.setTextColor(30, 41, 59);
     doc.text('Detalle de Recursos y Costeo', 14, y);
-    y += 4;
+    y += 5;
 
     if (recursos.length > 0) {
       autoTable(doc, {
         startY: y,
-        head: [['Tipo', 'Detalle', 'Cantidad', 'Unidad', 'P. Unit. (S/)', 'Total (S/)']],
-        body: recursos.map(r => [
+        head: [['N°', 'Tipo', 'Detalle', 'Cantidad', 'Unidad', 'P. Unit. (S/)', 'Total (S/)']],
+        body: recursos.map((r, i) => [
+          i + 1,
           r.tipo,
           (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '),
           r.cantidad.toFixed(2),
@@ -310,19 +335,20 @@ function Incidentes() {
           parseFloat(r.precioUnitario).toFixed(2),
           r.total.toFixed(2),
         ]),
-        foot: [['', '', '', '', 'TOTAL:', `S/ ${costoTotalIncidente.toFixed(2)}`]],
+        foot: [['', '', '', '', '', 'COSTO TOTAL:', `S/ ${costoTotalIncidente.toFixed(2)}`]],
         styles: { fontSize: 8, cellPadding: 2.5, lineColor: [226, 232, 240], lineWidth: 0.1 },
         headStyles: { fillColor: [20, 99, 165], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
         footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 9 },
         alternateRowStyles: { fillColor: [248, 250, 252] },
         margin: { left: 14, right: 14 },
         columnStyles: {
-          0: { cellWidth: 22 },
-          1: { cellWidth: 75 },
-          2: { cellWidth: 18, halign: 'right' },
-          3: { cellWidth: 15, halign: 'center' },
-          4: { cellWidth: 25, halign: 'right' },
-          5: { cellWidth: 27, halign: 'right' },
+          0: { cellWidth: 10, halign: 'center' },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 68 },
+          3: { cellWidth: 18, halign: 'right' },
+          4: { cellWidth: 14, halign: 'center' },
+          5: { cellWidth: 24, halign: 'right' },
+          6: { cellWidth: 28, halign: 'right' },
         },
       });
     } else {
@@ -332,7 +358,7 @@ function Incidentes() {
       doc.text('No hay recursos registrados para este incidente.', 14, y + 6);
     }
 
-    // Footer
+    // Footer en todas las páginas
     const pageCount = doc.internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
@@ -350,30 +376,27 @@ function Incidentes() {
     const inc = incidenteActivo;
     const estadoTexto = inc.estado === 'pat' ? 'Pendiente' : inc.estado === 'ate' ? 'En Atención' : inc.estado === 'cer' ? 'Cerrado' : inc.estado;
     const gravedadTexto = inc.gravedad === 'lev' ? 'Leve' : inc.gravedad === 'mod' ? 'Moderada' : inc.gravedad === 'gra' ? 'Grave' : inc.gravedad;
+    const fechaGenerado = new Date().toLocaleString('es-PE');
 
-    // Hoja 1: Info del incidente
-    const infoData = [
-      ['REPORTE DE GESTIÓN DE INCIDENTE'],
+    // Una sola hoja con toda la información (igual al PDF)
+    const data = [
+      ['JUNTA DE RIEGO PRESURIZADO'],
+      ['Reporte de Gestión de Incidente'],
+      [`Generado: ${fechaGenerado}`],
       [''],
-      ['Campo', 'Valor'],
+      ['DATOS DEL INCIDENTE'],
+      ['Tipo de Incidente', inc.tipo],
       ['Código', inc.codigo || 'Sin Código'],
-      ['Tipo', inc.tipo],
       ['Ubicación', inc.lugar || '-'],
       ['Fecha', inc.fecha || '-'],
       ['Estado', estadoTexto],
       ['Gravedad', gravedadTexto],
       ['Reportado por', inc.usuario || '-'],
       [''],
-      ['Costo Total', `S/ ${costoTotalIncidente.toFixed(2)}`],
-    ];
-    const wsInfo = XLSX.utils.aoa_to_sheet(infoData);
-    wsInfo['!cols'] = [{ wch: 18 }, { wch: 55 }];
-    wsInfo['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
-
-    // Hoja 2: Recursos
-    const recursosData = [
-      ['Tipo', 'Detalle', 'Cantidad', 'Unidad', 'Precio Unit. (S/)', 'Total (S/)'],
-      ...recursos.map(r => [
+      ['DETALLE DE RECURSOS Y COSTEO'],
+      ['N°', 'Tipo', 'Detalle', 'Cantidad', 'Unidad', 'P. Unit. (S/)', 'Total (S/)'],
+      ...recursos.map((r, i) => [
+        i + 1,
         r.tipo,
         (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '),
         r.cantidad,
@@ -381,16 +404,35 @@ function Incidentes() {
         parseFloat(r.precioUnitario),
         r.total,
       ]),
-      [],
-      ['', '', '', '', 'TOTAL:', costoTotalIncidente],
+      [''],
+      ['', '', '', '', '', 'COSTO TOTAL:', costoTotalIncidente],
     ];
-    const wsRecursos = XLSX.utils.aoa_to_sheet(recursosData);
-    wsRecursos['!cols'] = [{ wch: 14 }, { wch: 50 }, { wch: 12 }, { wch: 8 }, { wch: 16 }, { wch: 14 }];
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Anchos de columna
+    ws['!cols'] = [
+      { wch: 6 },   // N°
+      { wch: 14 },  // Tipo
+      { wch: 50 },  // Detalle
+      { wch: 12 },  // Cantidad
+      { wch: 8 },   // Unidad
+      { wch: 16 },  // P. Unit.
+      { wch: 16 },  // Total
+    ];
+
+    // Merge celdas del header
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },  // Título
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },  // Subtítulo
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 6 } },  // Fecha
+      { s: { r: 4, c: 0 }, e: { r: 4, c: 6 } },  // Sección datos
+      { s: { r: 13, c: 0 }, e: { r: 13, c: 6 } }, // Sección recursos
+    ];
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, wsInfo, 'Incidente');
-    XLSX.utils.book_append_sheet(wb, wsRecursos, 'Recursos y Costeo');
-    XLSX.writeFile(wb, `Incidente_${inc.codigo || inc.id}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, 'Reporte de Incidente');
+    XLSX.writeFile(wb, `Reporte_Incidente_${inc.codigo || inc.id}_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
   const guardarCosteos = async () => {
