@@ -9,7 +9,7 @@ import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
-import logo from './assets/jurp.png';
+import logo from './assets/logo1.png';
 
 function Incidentes() {
   const [incidentes, setIncidentes] = useState([]);
@@ -271,16 +271,22 @@ function Incidentes() {
 
     let y = 40;
     doc.setTextColor(30, 41, 59); doc.setFontSize(14); doc.setFont(undefined, 'bold');
-    doc.text(inc.tipo, 14, y); y += 8;
+    doc.text(inc.tipo, 14, y); y += 9;
     doc.setFontSize(9);
-    const infoIzq = [['Código:', inc.codigo || 'Sin Código'],['Ubicación:', inc.lugar || '-'],['Fecha:', inc.fecha || '-']];
-    const infoDer = [['Estado:', estadoTexto],['Gravedad:', gravedadTexto],['Reportado por:', inc.usuario || '-']];
-    for (let i = 0; i < infoIzq.length; i++) {
-      doc.setFont(undefined,'bold'); doc.setTextColor(100,116,139); doc.text(infoIzq[i][0], 14, y);
-      doc.setFont(undefined,'normal'); doc.setTextColor(30,41,59); doc.text(infoIzq[i][1], 50, y);
-      doc.setFont(undefined,'bold'); doc.setTextColor(100,116,139); doc.text(infoDer[i][0], 115, y);
-      doc.setFont(undefined,'normal'); doc.setTextColor(30,41,59); doc.text(infoDer[i][1], 152, y);
-      y += 5.5;
+    const infoRows = [
+      ['Código:', inc.codigo || 'Sin Código'],
+      ['Ubicación:', inc.lugar || '-'],
+      ['Fecha:', inc.fecha || '-'],
+      ['Estado:', estadoTexto],
+      ['Gravedad:', gravedadTexto],
+      ['Reportado por:', inc.usuario || '-'],
+    ];
+    for (const [label, val] of infoRows) {
+      doc.setFont(undefined,'bold'); doc.setTextColor(100,116,139); doc.text(label, 14, y);
+      doc.setFont(undefined,'normal'); doc.setTextColor(30,41,59);
+      const lines = doc.splitTextToSize(val, 140);
+      doc.text(lines, 55, y);
+      y += lines.length * 4.5 + 1.5;
     }
     y += 5; doc.setDrawColor(226,232,240); doc.line(14,y,196,y); y += 8;
     doc.setFontSize(11); doc.setFont(undefined,'bold'); doc.setTextColor(30,41,59);
@@ -325,7 +331,7 @@ function Incidentes() {
 
     // Anchos de columna
     ws.columns = [
-      { width: 6 }, { width: 16 }, { width: 50 }, { width: 14 }, { width: 10 }, { width: 16 }, { width: 16 }
+      { width: 20 }, { width: 16 }, { width: 45 }, { width: 14 }, { width: 10 }, { width: 16 }, { width: 16 }
     ];
 
     const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1463A5' } };
@@ -335,43 +341,49 @@ function Incidentes() {
     const fuenteBlancaSm = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
     const borde = { top:{style:'thin',color:{argb:'E2E8F0'}}, bottom:{style:'thin',color:{argb:'E2E8F0'}}, left:{style:'thin',color:{argb:'E2E8F0'}}, right:{style:'thin',color:{argb:'E2E8F0'}} };
 
-    // Logo
+    // Header azul (filas 1-3)
+    for (let r = 1; r <= 3; r++) {
+      for (let c = 1; c <= 7; c++) { ws.getCell(r, c).fill = azul; }
+    }
+    ws.getRow(1).height = 28;
+    ws.getRow(2).height = 20;
+    ws.getRow(3).height = 18;
+
+    // Logo en A1 (ocupa A1:A3)
     try {
       const logoB64 = await imgToBase64(logo);
       if (logoB64) {
         const imgId = wb.addImage({ base64: logoB64.split(',')[1], extension: 'png' });
-        ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 80, height: 80 } });
+        ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 75, height: 65 } });
       }
     } catch(e) {}
 
-    // Header
-    ws.mergeCells('B1:G1');
-    const r1 = ws.getCell('B1');
-    r1.value = 'JUNTA DE RIEGO PRESURIZADO';
-    r1.font = fuenteBlanca; r1.fill = azul; r1.alignment = { vertical: 'middle' };
-    ws.getRow(1).height = 30;
-    ['A1','C1','D1','E1','F1','G1'].forEach(c => { ws.getCell(c).fill = azul; });
+    // Título en C1 (después del logo)
+    ws.mergeCells('C1:G1');
+    ws.getCell('C1').value = 'JUNTA DE RIEGO PRESURIZADO';
+    ws.getCell('C1').font = fuenteBlanca;
+    ws.getCell('C1').alignment = { vertical: 'middle' };
 
-    ws.mergeCells('B2:G2');
-    const r2 = ws.getCell('B2');
-    r2.value = 'Reporte de Gestión de Incidente';
-    r2.font = fuenteBlancaSm; r2.fill = azul; r2.alignment = { vertical: 'middle' };
-    ws.getRow(2).height = 22;
-    ['A2','C2','D2','E2','F2','G2'].forEach(c => { ws.getCell(c).fill = azul; });
+    ws.mergeCells('C2:G2');
+    ws.getCell('C2').value = 'Reporte de Gestión de Incidente';
+    ws.getCell('C2').font = fuenteBlancaSm;
+    ws.getCell('C2').alignment = { vertical: 'middle' };
 
-    ws.mergeCells('A3:G3');
-    const r3 = ws.getCell('A3');
-    r3.value = `Generado: ${fechaGenerado}`;
-    r3.font = { italic: true, size: 9, color: { argb: '626976' } };
+    ws.mergeCells('C3:G3');
+    ws.getCell('C3').value = `Generado: ${fechaGenerado}`;
+    ws.getCell('C3').font = { italic: true, size: 9, color: { argb: 'D0D5DD' } };
+    ws.getCell('C3').alignment = { vertical: 'middle' };
+
+    // Fila 4 vacía
+    ws.getRow(4).height = 6;
 
     // Sección: Datos del incidente
-    const row5 = ws.getRow(5);
     ws.mergeCells('A5:G5');
     ws.getCell('A5').value = 'DATOS DEL INCIDENTE';
     ws.getCell('A5').font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
     ws.getCell('A5').fill = azul;
     ['B5','C5','D5','E5','F5','G5'].forEach(c => { ws.getCell(c).fill = azul; });
-    row5.height = 22;
+    ws.getRow(5).height = 22;
 
     const campos = [
       ['Tipo de Incidente', inc.tipo],
