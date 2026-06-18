@@ -2,10 +2,13 @@ import { useState, useEffect } from 'react';
 import { 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
-  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf 
+  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload
 } from 'react-icons/fa';
 import './Incidentes.css';
 import Swal from 'sweetalert2';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 function Incidentes() {
   const [incidentes, setIncidentes] = useState([]);
@@ -228,6 +231,167 @@ function Incidentes() {
 
   const eliminarRecurso = (idLocal) => setRecursos(recursos.filter(r => r.idLocal !== idLocal));
   const costoTotalIncidente = recursos.reduce((sum, item) => sum + item.total, 0);
+
+  // ── Exportar PDF ──────────────────────────────────────────────────────
+  const exportarPDF = () => {
+    if (!incidenteActivo) return;
+    const doc = new jsPDF();
+    const inc = incidenteActivo;
+    const estadoTexto = inc.estado === 'pat' ? 'Pendiente' : inc.estado === 'ate' ? 'En Atención' : inc.estado === 'cer' ? 'Cerrado' : inc.estado;
+    const gravedadTexto = inc.gravedad === 'lev' ? 'Leve' : inc.gravedad === 'mod' ? 'Moderada' : inc.gravedad === 'gra' ? 'Grave' : inc.gravedad;
+
+    // Header
+    doc.setFillColor(20, 99, 165);
+    doc.rect(0, 0, 210, 28, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.setFont(undefined, 'bold');
+    doc.text('JUNTA DE RIEGO PRESURIZADO', 14, 12);
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text('Reporte de Gestión de Incidente', 14, 19);
+    doc.setFontSize(9);
+    doc.text(`Generado: ${new Date().toLocaleString('es-PE')}`, 210 - 14, 19, { align: 'right' });
+
+    // Info del incidente
+    let y = 36;
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(13);
+    doc.setFont(undefined, 'bold');
+    doc.text(`${inc.tipo}`, 14, y);
+    y += 7;
+
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(100, 116, 139);
+
+    const info = [
+      ['Código:', inc.codigo || 'Sin Código'],
+      ['Ubicación:', inc.lugar || '-'],
+      ['Fecha:', inc.fecha || '-'],
+      ['Estado:', estadoTexto],
+      ['Gravedad:', gravedadTexto],
+      ['Reportado por:', inc.usuario || '-'],
+    ];
+
+    for (const [label, val] of info) {
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(label, 14, y);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(30, 41, 59);
+      doc.text(val, 50, y);
+      y += 5.5;
+    }
+
+    y += 4;
+
+    // Línea separadora
+    doc.setDrawColor(226, 232, 240);
+    doc.line(14, y, 196, y);
+    y += 6;
+
+    // Tabla de recursos
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('Detalle de Recursos y Costeo', 14, y);
+    y += 4;
+
+    if (recursos.length > 0) {
+      autoTable(doc, {
+        startY: y,
+        head: [['Tipo', 'Detalle', 'Cantidad', 'Unidad', 'P. Unit. (S/)', 'Total (S/)']],
+        body: recursos.map(r => [
+          r.tipo,
+          (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '),
+          r.cantidad.toFixed(2),
+          r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.',
+          parseFloat(r.precioUnitario).toFixed(2),
+          r.total.toFixed(2),
+        ]),
+        foot: [['', '', '', '', 'TOTAL:', `S/ ${costoTotalIncidente.toFixed(2)}`]],
+        styles: { fontSize: 8, cellPadding: 2.5, lineColor: [226, 232, 240], lineWidth: 0.1 },
+        headStyles: { fillColor: [20, 99, 165], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+        footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 9 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 14, right: 14 },
+        columnStyles: {
+          0: { cellWidth: 22 },
+          1: { cellWidth: 75 },
+          2: { cellWidth: 18, halign: 'right' },
+          3: { cellWidth: 15, halign: 'center' },
+          4: { cellWidth: 25, halign: 'right' },
+          5: { cellWidth: 27, halign: 'right' },
+        },
+      });
+    } else {
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text('No hay recursos registrados para este incidente.', 14, y + 6);
+    }
+
+    // Footer
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(7);
+      doc.setTextColor(150);
+      doc.text(`Página ${i} de ${pageCount} — Sistema Integrado de Monitoreo — JURP`, 105, 290, { align: 'center' });
+    }
+
+    doc.save(`Reporte_Incidente_${inc.codigo || inc.id}_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
+
+  // ── Exportar Excel ────────────────────────────────────────────────────
+  const exportarExcel = () => {
+    if (!incidenteActivo) return;
+    const inc = incidenteActivo;
+    const estadoTexto = inc.estado === 'pat' ? 'Pendiente' : inc.estado === 'ate' ? 'En Atención' : inc.estado === 'cer' ? 'Cerrado' : inc.estado;
+    const gravedadTexto = inc.gravedad === 'lev' ? 'Leve' : inc.gravedad === 'mod' ? 'Moderada' : inc.gravedad === 'gra' ? 'Grave' : inc.gravedad;
+
+    // Hoja 1: Info del incidente
+    const infoData = [
+      ['REPORTE DE GESTIÓN DE INCIDENTE'],
+      [''],
+      ['Campo', 'Valor'],
+      ['Código', inc.codigo || 'Sin Código'],
+      ['Tipo', inc.tipo],
+      ['Ubicación', inc.lugar || '-'],
+      ['Fecha', inc.fecha || '-'],
+      ['Estado', estadoTexto],
+      ['Gravedad', gravedadTexto],
+      ['Reportado por', inc.usuario || '-'],
+      [''],
+      ['Costo Total', `S/ ${costoTotalIncidente.toFixed(2)}`],
+    ];
+    const wsInfo = XLSX.utils.aoa_to_sheet(infoData);
+    wsInfo['!cols'] = [{ wch: 18 }, { wch: 55 }];
+    wsInfo['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+
+    // Hoja 2: Recursos
+    const recursosData = [
+      ['Tipo', 'Detalle', 'Cantidad', 'Unidad', 'Precio Unit. (S/)', 'Total (S/)'],
+      ...recursos.map(r => [
+        r.tipo,
+        (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '),
+        r.cantidad,
+        r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.',
+        parseFloat(r.precioUnitario),
+        r.total,
+      ]),
+      [],
+      ['', '', '', '', 'TOTAL:', costoTotalIncidente],
+    ];
+    const wsRecursos = XLSX.utils.aoa_to_sheet(recursosData);
+    wsRecursos['!cols'] = [{ wch: 14 }, { wch: 50 }, { wch: 12 }, { wch: 8 }, { wch: 16 }, { wch: 14 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsInfo, 'Incidente');
+    XLSX.utils.book_append_sheet(wb, wsRecursos, 'Recursos y Costeo');
+    XLSX.writeFile(wb, `Incidente_${inc.codigo || inc.id}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
 
   const guardarCosteos = async () => {
     const recursosNuevos = recursos.filter(r => !r.guardadoEnDB);
@@ -463,9 +627,11 @@ function Incidentes() {
                   </table>
                 </div>
               </div>
-              <div className="tbl-modal-footer">
+              <div className="tbl-modal-footer" style={{flexWrap:'wrap',gap:'8px'}}>
                 <div className="tbl-text-start tbl-text-muted">Costo Total: <span style={{fontSize: '1.25rem', color: '#1e293b', fontWeight: 'bold'}}>S/ {costoTotalIncidente.toFixed(2)}</span></div>
-                <div>
+                <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
+                  <button className="tbl-btn" onClick={exportarPDF} style={{background:'#d63939',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar PDF"><FaFilePdf/> PDF</button>
+                  <button className="tbl-btn" onClick={exportarExcel} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar Excel"><FaFileExcel/> Excel</button>
                   <button className="tbl-btn tbl-btn-link" onClick={() => setModalAbierto(false)}>Cerrar</button>
                   <button className="tbl-btn tbl-btn-primary" onClick={guardarCosteos} disabled={guardando}>{guardando ? <><FaSyncAlt className="icon-spin" style={{marginRight: '8px'}} /> Guardando...</> : <><FaSave style={{marginRight: '8px'}} /> Guardar Costeos</>}</button>
                 </div>
