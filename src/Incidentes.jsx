@@ -8,8 +8,8 @@ import './Incidentes.css';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
-import logo from './assets/jurp.png';
+import ExcelJS from 'exceljs';
+import logo from './assets/logo1.png';
 
 function Incidentes() {
   const [incidentes, setIncidentes] = useState([]);
@@ -257,135 +257,123 @@ function Incidentes() {
     const gravedadTexto = inc.gravedad === 'lev' ? 'Leve' : inc.gravedad === 'mod' ? 'Moderada' : inc.gravedad === 'gra' ? 'Grave' : inc.gravedad;
     const fechaGenerado = new Date().toLocaleString('es-PE');
 
-    // Header azul con logo
     doc.setFillColor(20, 99, 165);
     doc.rect(0, 0, 210, 30, 'F');
-
     const logoBase64 = await imgToBase64(logo);
-    if (logoBase64) {
-      doc.addImage(logoBase64, 'PNG', 12, 4, 22, 22);
-    }
-
+    if (logoBase64) doc.addImage(logoBase64, 'PNG', 12, 4, 22, 22);
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(15);
-    doc.setFont(undefined, 'bold');
+    doc.setFontSize(15); doc.setFont(undefined, 'bold');
     doc.text('JUNTA DE RIEGO PRESURIZADO', logoBase64 ? 38 : 14, 13);
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
+    doc.setFontSize(10); doc.setFont(undefined, 'normal');
     doc.text('Reporte de Gestión de Incidente', logoBase64 ? 38 : 14, 20);
     doc.setFontSize(8);
     doc.text(`Generado: ${fechaGenerado}`, 196, 26, { align: 'right' });
 
-    // Tipo de incidente como título
     let y = 40;
-    doc.setTextColor(30, 41, 59);
-    doc.setFontSize(14);
-    doc.setFont(undefined, 'bold');
-    doc.text(inc.tipo, 14, y);
-    y += 8;
-
-    // Datos del incidente en dos columnas
+    doc.setTextColor(30, 41, 59); doc.setFontSize(14); doc.setFont(undefined, 'bold');
+    doc.text(inc.tipo, 14, y); y += 8;
     doc.setFontSize(9);
-    const infoIzq = [
-      ['Código:', inc.codigo || 'Sin Código'],
-      ['Ubicación:', inc.lugar || '-'],
-      ['Fecha:', inc.fecha || '-'],
-    ];
-    const infoDer = [
-      ['Estado:', estadoTexto],
-      ['Gravedad:', gravedadTexto],
-      ['Reportado por:', inc.usuario || '-'],
-    ];
-
+    const infoIzq = [['Código:', inc.codigo || 'Sin Código'],['Ubicación:', inc.lugar || '-'],['Fecha:', inc.fecha || '-']];
+    const infoDer = [['Estado:', estadoTexto],['Gravedad:', gravedadTexto],['Reportado por:', inc.usuario || '-']];
     for (let i = 0; i < infoIzq.length; i++) {
-      // Columna izquierda
-      doc.setFont(undefined, 'bold'); doc.setTextColor(100, 116, 139);
-      doc.text(infoIzq[i][0], 14, y);
-      doc.setFont(undefined, 'normal'); doc.setTextColor(30, 41, 59);
-      doc.text(infoIzq[i][1], 50, y);
-      // Columna derecha
-      doc.setFont(undefined, 'bold'); doc.setTextColor(100, 116, 139);
-      doc.text(infoDer[i][0], 115, y);
-      doc.setFont(undefined, 'normal'); doc.setTextColor(30, 41, 59);
-      doc.text(infoDer[i][1], 152, y);
+      doc.setFont(undefined,'bold'); doc.setTextColor(100,116,139); doc.text(infoIzq[i][0], 14, y);
+      doc.setFont(undefined,'normal'); doc.setTextColor(30,41,59); doc.text(infoIzq[i][1], 50, y);
+      doc.setFont(undefined,'bold'); doc.setTextColor(100,116,139); doc.text(infoDer[i][0], 115, y);
+      doc.setFont(undefined,'normal'); doc.setTextColor(30,41,59); doc.text(infoDer[i][1], 152, y);
       y += 5.5;
     }
-
-    y += 5;
-    doc.setDrawColor(226, 232, 240);
-    doc.line(14, y, 196, y);
-    y += 8;
-
-    // Tabla de recursos
-    doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(30, 41, 59);
-    doc.text('Detalle de Recursos y Costeo', 14, y);
-    y += 5;
+    y += 5; doc.setDrawColor(226,232,240); doc.line(14,y,196,y); y += 8;
+    doc.setFontSize(11); doc.setFont(undefined,'bold'); doc.setTextColor(30,41,59);
+    doc.text('Detalle de Recursos y Costeo', 14, y); y += 5;
 
     if (recursos.length > 0) {
       autoTable(doc, {
         startY: y,
-        head: [['N°', 'Tipo', 'Detalle', 'Cantidad', 'Unidad', 'P. Unit. (S/)', 'Total (S/)']],
-        body: recursos.map((r, i) => [
-          i + 1,
-          r.tipo,
-          (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '),
-          r.cantidad.toFixed(2),
-          r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.',
-          parseFloat(r.precioUnitario).toFixed(2),
-          r.total.toFixed(2),
-        ]),
-        foot: [['', '', '', '', '', 'COSTO TOTAL:', `S/ ${costoTotalIncidente.toFixed(2)}`]],
-        styles: { fontSize: 8, cellPadding: 2.5, lineColor: [226, 232, 240], lineWidth: 0.1 },
-        headStyles: { fillColor: [20, 99, 165], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
-        footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 9 },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
-        margin: { left: 14, right: 14 },
-        columnStyles: {
-          0: { cellWidth: 10, halign: 'center' },
-          1: { cellWidth: 20 },
-          2: { cellWidth: 68 },
-          3: { cellWidth: 18, halign: 'right' },
-          4: { cellWidth: 14, halign: 'center' },
-          5: { cellWidth: 24, halign: 'right' },
-          6: { cellWidth: 28, halign: 'right' },
-        },
+        head: [['N°','Tipo','Detalle','Cantidad','Unidad','P. Unit. (S/)','Total (S/)']],
+        body: recursos.map((r,i) => [i+1, r.tipo, (r.descripcionResumen||r.descripcion||'').replace(/\n/g,' '), r.cantidad.toFixed(2), r.tipo==='Personal'?'HH':r.tipo==='Maquinaria'?'HE':'Unid.', parseFloat(r.precioUnitario).toFixed(2), r.total.toFixed(2)]),
+        foot: [['','','','','','COSTO TOTAL:',`S/ ${costoTotalIncidente.toFixed(2)}`]],
+        styles:{fontSize:8,cellPadding:2.5,lineColor:[226,232,240],lineWidth:0.1},
+        headStyles:{fillColor:[20,99,165],textColor:[255,255,255],fontStyle:'bold',fontSize:8},
+        footStyles:{fillColor:[241,245,249],textColor:[30,41,59],fontStyle:'bold',fontSize:9},
+        alternateRowStyles:{fillColor:[248,250,252]},
+        margin:{left:14,right:14},
+        columnStyles:{0:{cellWidth:10,halign:'center'},1:{cellWidth:20},2:{cellWidth:68},3:{cellWidth:18,halign:'right'},4:{cellWidth:14,halign:'center'},5:{cellWidth:24,halign:'right'},6:{cellWidth:28,halign:'right'}},
       });
     } else {
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'normal');
-      doc.setTextColor(100, 116, 139);
-      doc.text('No hay recursos registrados para este incidente.', 14, y + 6);
+      doc.setFontSize(9); doc.setFont(undefined,'normal'); doc.setTextColor(100,116,139);
+      doc.text('No hay recursos registrados para este incidente.', 14, y+6);
     }
-
-    // Footer en todas las páginas
     const pageCount = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(7);
-      doc.setTextColor(150);
-      doc.text(`Página ${i} de ${pageCount} — Sistema Integrado de Monitoreo — JURP`, 105, 290, { align: 'center' });
-    }
+    for (let i=1;i<=pageCount;i++){doc.setPage(i);doc.setFontSize(7);doc.setTextColor(150);doc.text(`Página ${i} de ${pageCount} — Sistema Integrado de Monitoreo — JURP`,105,290,{align:'center'});}
 
-    doc.save(`Reporte_Incidente_${inc.codigo || inc.id}_${new Date().toISOString().slice(0,10)}.pdf`);
+    // Mostrar en modal
+    const blobUrl = doc.output('bloburl');
+    setPdfUrlActivo(blobUrl);
+    setModalPdfAbierto(true);
   };
 
-  // ── Exportar Excel ────────────────────────────────────────────────────
-  const exportarExcel = () => {
+  // ── Exportar Excel (con logo y headers azules) ────────────────────────
+  const exportarExcel = async () => {
     if (!incidenteActivo) return;
     const inc = incidenteActivo;
     const estadoTexto = inc.estado === 'pat' ? 'Pendiente' : inc.estado === 'ate' ? 'En Atención' : inc.estado === 'cer' ? 'Cerrado' : inc.estado;
     const gravedadTexto = inc.gravedad === 'lev' ? 'Leve' : inc.gravedad === 'mod' ? 'Moderada' : inc.gravedad === 'gra' ? 'Grave' : inc.gravedad;
     const fechaGenerado = new Date().toLocaleString('es-PE');
 
-    // Una sola hoja con toda la información (igual al PDF)
-    const data = [
-      ['JUNTA DE RIEGO PRESURIZADO'],
-      ['Reporte de Gestión de Incidente'],
-      [`Generado: ${fechaGenerado}`],
-      [''],
-      ['DATOS DEL INCIDENTE'],
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Reporte de Incidente');
+
+    // Anchos de columna
+    ws.columns = [
+      { width: 6 }, { width: 16 }, { width: 50 }, { width: 14 }, { width: 10 }, { width: 16 }, { width: 16 }
+    ];
+
+    const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1463A5' } };
+    const azulClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E0F2FE' } };
+    const grisClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9' } };
+    const fuenteBlanca = { bold: true, color: { argb: 'FFFFFF' }, size: 12 };
+    const fuenteBlancaSm = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
+    const borde = { top:{style:'thin',color:{argb:'E2E8F0'}}, bottom:{style:'thin',color:{argb:'E2E8F0'}}, left:{style:'thin',color:{argb:'E2E8F0'}}, right:{style:'thin',color:{argb:'E2E8F0'}} };
+
+    // Logo
+    try {
+      const logoB64 = await imgToBase64(logo);
+      if (logoB64) {
+        const imgId = wb.addImage({ base64: logoB64.split(',')[1], extension: 'png' });
+        ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 80, height: 80 } });
+      }
+    } catch(e) {}
+
+    // Header
+    ws.mergeCells('B1:G1');
+    const r1 = ws.getCell('B1');
+    r1.value = 'JUNTA DE RIEGO PRESURIZADO';
+    r1.font = fuenteBlanca; r1.fill = azul; r1.alignment = { vertical: 'middle' };
+    ws.getRow(1).height = 30;
+    ['A1','C1','D1','E1','F1','G1'].forEach(c => { ws.getCell(c).fill = azul; });
+
+    ws.mergeCells('B2:G2');
+    const r2 = ws.getCell('B2');
+    r2.value = 'Reporte de Gestión de Incidente';
+    r2.font = fuenteBlancaSm; r2.fill = azul; r2.alignment = { vertical: 'middle' };
+    ws.getRow(2).height = 22;
+    ['A2','C2','D2','E2','F2','G2'].forEach(c => { ws.getCell(c).fill = azul; });
+
+    ws.mergeCells('A3:G3');
+    const r3 = ws.getCell('A3');
+    r3.value = `Generado: ${fechaGenerado}`;
+    r3.font = { italic: true, size: 9, color: { argb: '626976' } };
+
+    // Sección: Datos del incidente
+    const row5 = ws.getRow(5);
+    ws.mergeCells('A5:G5');
+    ws.getCell('A5').value = 'DATOS DEL INCIDENTE';
+    ws.getCell('A5').font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
+    ws.getCell('A5').fill = azul;
+    ['B5','C5','D5','E5','F5','G5'].forEach(c => { ws.getCell(c).fill = azul; });
+    row5.height = 22;
+
+    const campos = [
       ['Tipo de Incidente', inc.tipo],
       ['Código', inc.codigo || 'Sin Código'],
       ['Ubicación', inc.lugar || '-'],
@@ -393,10 +381,41 @@ function Incidentes() {
       ['Estado', estadoTexto],
       ['Gravedad', gravedadTexto],
       ['Reportado por', inc.usuario || '-'],
-      [''],
-      ['DETALLE DE RECURSOS Y COSTEO'],
-      ['N°', 'Tipo', 'Detalle', 'Cantidad', 'Unidad', 'P. Unit. (S/)', 'Total (S/)'],
-      ...recursos.map((r, i) => [
+    ];
+    campos.forEach(([label, val], i) => {
+      const row = ws.getRow(6 + i);
+      ws.getCell(`A${6+i}`).value = label;
+      ws.getCell(`A${6+i}`).font = { bold: true, size: 9, color: { argb: '64748B' } };
+      ws.getCell(`A${6+i}`).fill = grisClaro;
+      ws.mergeCells(`B${6+i}:G${6+i}`);
+      ws.getCell(`B${6+i}`).value = val;
+      ws.getCell(`B${6+i}`).font = { size: 10 };
+    });
+
+    // Sección: Recursos
+    const rStart = 14;
+    ws.mergeCells(`A${rStart}:G${rStart}`);
+    ws.getCell(`A${rStart}`).value = 'DETALLE DE RECURSOS Y COSTEO';
+    ws.getCell(`A${rStart}`).font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
+    ws.getCell(`A${rStart}`).fill = azul;
+    ['B','C','D','E','F','G'].forEach(c => { ws.getCell(`${c}${rStart}`).fill = azul; });
+    ws.getRow(rStart).height = 22;
+
+    // Header tabla
+    const hRow = rStart + 1;
+    ['N°','Tipo','Detalle','Cantidad','Unidad','P. Unit. (S/)','Total (S/)'].forEach((h, i) => {
+      const cell = ws.getCell(hRow, i + 1);
+      cell.value = h;
+      cell.font = { bold: true, color: { argb: 'FFFFFF' }, size: 9 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '3B82F6' } };
+      cell.alignment = { horizontal: i >= 3 ? 'right' : 'left', vertical: 'middle' };
+      cell.border = borde;
+    });
+
+    // Filas de datos
+    recursos.forEach((r, i) => {
+      const rowNum = hRow + 1 + i;
+      const vals = [
         i + 1,
         r.tipo,
         (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '),
@@ -404,36 +423,39 @@ function Incidentes() {
         r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.',
         parseFloat(r.precioUnitario),
         r.total,
-      ]),
-      [''],
-      ['', '', '', '', '', 'COSTO TOTAL:', costoTotalIncidente],
-    ];
+      ];
+      vals.forEach((v, j) => {
+        const cell = ws.getCell(rowNum, j + 1);
+        cell.value = v;
+        cell.font = { size: 9 };
+        cell.border = borde;
+        if (j >= 3) cell.alignment = { horizontal: 'right' };
+        if (j === 5 || j === 6) cell.numFmt = '#,##0.00';
+        if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
+      });
+    });
 
-    const ws = XLSX.utils.aoa_to_sheet(data);
+    // Fila total
+    const totalRow = hRow + 1 + recursos.length + 1;
+    ws.mergeCells(`A${totalRow}:E${totalRow}`);
+    ws.getCell(`F${totalRow}`).value = 'COSTO TOTAL:';
+    ws.getCell(`F${totalRow}`).font = { bold: true, size: 10 };
+    ws.getCell(`F${totalRow}`).fill = azulClaro;
+    ws.getCell(`F${totalRow}`).alignment = { horizontal: 'right' };
+    ws.getCell(`G${totalRow}`).value = costoTotalIncidente;
+    ws.getCell(`G${totalRow}`).font = { bold: true, size: 11 };
+    ws.getCell(`G${totalRow}`).numFmt = '"S/ "#,##0.00';
+    ws.getCell(`G${totalRow}`).fill = azulClaro;
 
-    // Anchos de columna
-    ws['!cols'] = [
-      { wch: 6 },   // N°
-      { wch: 14 },  // Tipo
-      { wch: 50 },  // Detalle
-      { wch: 12 },  // Cantidad
-      { wch: 8 },   // Unidad
-      { wch: 16 },  // P. Unit.
-      { wch: 16 },  // Total
-    ];
-
-    // Merge celdas del header
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },  // Título
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },  // Subtítulo
-      { s: { r: 2, c: 0 }, e: { r: 2, c: 6 } },  // Fecha
-      { s: { r: 4, c: 0 }, e: { r: 4, c: 6 } },  // Sección datos
-      { s: { r: 13, c: 0 }, e: { r: 13, c: 6 } }, // Sección recursos
-    ];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Reporte de Incidente');
-    XLSX.writeFile(wb, `Reporte_Incidente_${inc.codigo || inc.id}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    // Descargar
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Reporte_Incidente_${inc.codigo || inc.id}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const guardarCosteos = async () => {
@@ -690,7 +712,7 @@ function Incidentes() {
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '850px', height: '90vh', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10000, marginTop: '2vh' }}>
             <div className="tbl-modal-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
               <div className="tbl-modal-header" style={{ borderBottom: '1px solid #e2e8f0', padding: '15px 20px', backgroundColor: '#f8fafc' }}>
-                <h5 className="tbl-modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><FaFilePdf color="#dc2626" /> Visor de Parte Diario</h5>
+                <h5 className="tbl-modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><FaFilePdf color="#dc2626" /> Visor de Documento PDF</h5>
                 <button className="tbl-btn-close" onClick={() => setModalPdfAbierto(false)}><FaTimes/></button>
               </div>
               <div className="tbl-modal-body" style={{ flex: 1, padding: 0, overflow: 'hidden', backgroundColor: '#525659' }}>
