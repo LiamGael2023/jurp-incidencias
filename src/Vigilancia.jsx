@@ -3,7 +3,6 @@ import { FaSyncAlt, FaShieldAlt, FaClock, FaCar, FaExclamationTriangle, FaChevro
 import './Incidentes.css';
 
 const BASE = 'https://gideonstudio.duckdns.org/api/v1';
-const headers = () => ({ 'Content-Type':'application/json', 'Authorization':`Token ${localStorage.getItem('userToken')}` });
 
 function Vigilancia() {
   const [tab, setTab] = useState('incidentes');
@@ -29,10 +28,10 @@ function Vigilancia() {
     setCargando(true);
     try {
       const [rInc, rTur, rTra, rAle] = await Promise.all([
-        fetch(`${BASE}/incidentes/lista/`, { headers: headers() }),
-        fetch(`${BASE}/incidentes/gestion/`, { headers: headers() }),
-        fetch(`${BASE}/transito/`, { headers: headers() }),
-        fetch(`${BASE}/alertas/`, { headers: headers() }),
+        fetch(`${BASE}/incidentes/lista/`),
+        fetch(`${BASE}/incidentes/gestion/`),
+        fetch(`${BASE}/transito/`),
+        fetch(`${BASE}/alertas/`),
       ]);
 
       if (rInc.ok) { const d = await rInc.json(); setIncidentes(Array.isArray(d) ? d : d.results || []); }
