@@ -28,7 +28,7 @@ function Vigilancia() {
     setCargando(true);
     try {
       const [rInc, rTur, rTra, rAle] = await Promise.all([
-        fetch(`${BASE}/incidentes/lista/`),
+        fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/lista/`),
         fetch(`${BASE}/incidentes/gestion/`),
         fetch(`${BASE}/transito/`),
         fetch(`${BASE}/alertas/`),
