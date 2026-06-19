@@ -43,9 +43,9 @@ function Vigilancia() {
       // 🟢 Pasamos las 'opciones' a cada fetch
       const [rInc, rTur, rTra, rAle] = await Promise.all([
         fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/lista/`, opciones),
-        fetch(`${BASE}/incidentes/gestion/`, opciones),
-        fetch(`${BASE}/transito/`, opciones),
-        fetch(`${BASE}/alertas/`, opciones),
+        fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/gestion/`, opciones),
+        fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/transito/`, opciones),
+        fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/alertas/`, opciones),
       ]);
 
       if (rInc.ok) { const d = await rInc.json(); setIncidentes(Array.isArray(d) ? d : d.results || []); }
