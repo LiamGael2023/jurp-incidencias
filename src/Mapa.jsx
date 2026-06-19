@@ -55,6 +55,16 @@ import kmzPartidor        from './data/kmz/Partidor.json';
 import kmzPaseTuberias    from './data/kmz/Pase_de_Tuberias.json';
 import kmzRedesPresurizado from './data/kmz/Redes_Presurizado.json';
 
+// ── Garitas y Vías ──────────────────────────────────────────────────────────
+import geoGaritasJURP    from './data/garitas/GARITAS_JURP.json';
+import geoGaritasOtros   from './data/garitas/GARITAS_OTROS.json';
+import geoCaminosServ    from './data/garitas/CAMINOS_DE_SERVICIO.json';
+import geoViasAcceso     from './data/garitas/VIAS_DE_ACCESO.json';
+import geoViaAuxiliar    from './data/garitas/VIA_AUXILIAR.json';
+import geoRedNacional    from './data/garitas/RED_NACIONAL.json';
+import icoGaritaJURP     from './assets/simbologia/garita_jurp.png';
+import icoGaritaOtros    from './assets/simbologia/garita_otros.png';
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const crearIconoSimbologia = (iconUrl, size = 28) => L.icon({ iconUrl, iconSize: [size, size], iconAnchor: [size/2, size/2], popupAnchor: [0, -(size/2)] });
 
@@ -95,6 +105,14 @@ const KMZ_CONFIG = [
   { key: 'KMZ_PaseTuberias',     label: 'Pase Tuberías',      color: '#5c7cfa', data: kmzPaseTuberias,     tipo: 'point', icon: icoConducCubierto },
   { key: 'KMZ_CamaraRP',         label: 'Cámara Rompepresión',color: '#e67700', data: kmzCamaraRP,         tipo: 'point', icon: icoCaida },
   { key: 'KMZ_Rapida',           label: 'Rápida',             color: '#f03e3e', data: kmzRapida,           tipo: 'point', icon: icoRapida },
+  // Garitas
+  { key: 'GAR_JURP',             label: 'Garitas JURP',       color: '#1098ad', data: geoGaritasJURP,     tipo: 'point', icon: icoGaritaJURP },
+  { key: 'GAR_Otros',            label: 'Garitas Otros',      color: '#9c36b5', data: geoGaritasOtros,    tipo: 'point', icon: icoGaritaOtros },
+  // Vías
+  { key: 'VIA_CaminosServ',      label: 'Caminos de Servicio',color: '#e67700', data: geoCaminosServ,     tipo: 'line', icon: null },
+  { key: 'VIA_Acceso',           label: 'Vías de Acceso',     color: '#d6336c', data: geoViasAcceso,      tipo: 'line', icon: null },
+  { key: 'VIA_Auxiliar',         label: 'Vía Auxiliar',       color: '#ae3ec9', data: geoViaAuxiliar,     tipo: 'line', icon: null },
+  { key: 'VIA_RedNacional',      label: 'Red Nacional',       color: '#d63939', data: geoRedNacional,     tipo: 'line', icon: null },
 ];
 
 const KMZ_CAPAS_DEFAULT = Object.fromEntries(KMZ_CONFIG.map(c => [c.key, false]));
@@ -414,9 +432,12 @@ function MapaChavimochic() {
           const data = getFilteredData(cfg);
           if (!data?.features?.length) return null;
 
-          if (cfg.tipo === 'poly') {
+          if (cfg.tipo === 'poly' || cfg.tipo === 'line') {
+            const style = cfg.tipo === 'line' 
+              ? () => ({color:cfg.color, weight:3, opacity:0.8, dashArray: cfg.tipo === 'line' ? '8 4' : null})
+              : () => crearEstiloKMZ(cfg.color);
             return (
-              <GeoJSON key={cfg.key + filtroTramo + filtroEstado} data={data} style={()=>crearEstiloKMZ(cfg.color)}
+              <GeoJSON key={cfg.key + filtroTramo + filtroEstado} data={data} style={style}
                 onEachFeature={(f,layer) => {
                   layer.bindTooltip(f.properties?.name||'', {direction:'top',className:'tooltip-infra'});
                   layer.bindPopup(buildPopup(f.properties,cfg.icon,cfg.label),{maxWidth:320});
@@ -530,8 +551,20 @@ function MapaChavimochic() {
                 </div>
                 <div className="pca-label" style={{fontSize:'10px',color:'#888',marginBottom:'4px',marginTop:'8px'}}>Puntos (infraestructura)</div>
                 <div className="pca-list">
-                  {KMZ_CONFIG.filter(c=>c.tipo==='point').map(cfg=>(
+                  {KMZ_CONFIG.filter(c=>c.tipo==='point' && !c.key.startsWith('GAR_')).map(cfg=>(
                     <label key={cfg.key} className="pca-list-item"><div className="pca-item-left"><input type="checkbox" checked={capasKMZ[cfg.key]} onChange={()=>toggleCapaKMZ(cfg.key)} className="pca-checkbox"/><span style={{display:'flex',alignItems:'center',gap:'4px'}}><img src={cfg.icon} alt="" style={{width:'18px',height:'18px'}}/>{cfg.label}</span></div><span className="pca-badge">{cfg.data?.features?.filter(f=>f.geometry?.type==='Point').length||0}</span></label>
+                  ))}
+                </div>
+                <div className="pca-label" style={{fontSize:'10px',color:'#888',marginBottom:'4px',marginTop:'8px'}}>🏠 Garitas de Vigilancia</div>
+                <div className="pca-list">
+                  {KMZ_CONFIG.filter(c=>c.key.startsWith('GAR_')).map(cfg=>(
+                    <label key={cfg.key} className="pca-list-item"><div className="pca-item-left"><input type="checkbox" checked={capasKMZ[cfg.key]} onChange={()=>toggleCapaKMZ(cfg.key)} className="pca-checkbox"/><span style={{display:'flex',alignItems:'center',gap:'4px'}}><img src={cfg.icon} alt="" style={{width:'18px',height:'18px'}}/>{cfg.label}</span></div><span className="pca-badge">{cfg.data?.features?.length||0}</span></label>
+                  ))}
+                </div>
+                <div className="pca-label" style={{fontSize:'10px',color:'#888',marginBottom:'4px',marginTop:'8px'}}>🛣️ Vías y Caminos</div>
+                <div className="pca-list">
+                  {KMZ_CONFIG.filter(c=>c.tipo==='line').map(cfg=>(
+                    <label key={cfg.key} className="pca-list-item"><div className="pca-item-left"><input type="checkbox" checked={capasKMZ[cfg.key]} onChange={()=>toggleCapaKMZ(cfg.key)} className="pca-checkbox"/><span style={{display:'flex',alignItems:'center',gap:'4px'}}><span style={{display:'inline-block',width:'18px',height:'3px',backgroundColor:cfg.color,borderRadius:'2px'}}></span>{cfg.label}</span></div><span className="pca-badge">{cfg.data?.features?.length||0}</span></label>
                   ))}
                 </div>
               </>}
