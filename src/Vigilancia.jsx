@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { FaSyncAlt, FaShieldAlt, FaClock, FaCar, FaExclamationTriangle, FaChevronLeft, FaChevronRight, FaTimes, FaImage, FaMapMarkerAlt, FaUser, FaCalendarAlt, FaCheckCircle, FaSignInAlt, FaSignOutAlt } from 'react-icons/fa';
 import './Incidentes.css';
 
-const BASE = 'https://gideonstudio.duckdns.org/api/v1';
+const BASE = '/api/v1';
+const authHeaders = () => ({ 'Content-Type':'application/json', 'Authorization':`Token ${localStorage.getItem('userToken')}` });
 
 function Vigilancia() {
   const [tab, setTab] = useState('incidentes');
@@ -28,10 +29,10 @@ function Vigilancia() {
     setCargando(true);
     try {
       const [rInc, rTur, rTra, rAle] = await Promise.all([
-        fetch(`${BASE}/incidentes/lista/`),
-        fetch(`${BASE}/incidentes/gestion/`),
-        fetch(`${BASE}/transito/`),
-        fetch(`${BASE}/alertas/`),
+        fetch(`${BASE}/incidentes/lista/`, { headers: authHeaders() }),
+        fetch(`${BASE}/incidentes/gestion/`, { headers: authHeaders() }),
+        fetch(`${BASE}/transito/`, { headers: authHeaders() }),
+        fetch(`${BASE}/alertas/`, { headers: authHeaders() }),
       ]);
 
       if (rInc.ok) { const d = await rInc.json(); setIncidentes(Array.isArray(d) ? d : d.results || []); }
