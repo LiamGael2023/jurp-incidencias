@@ -26,20 +26,37 @@ function Vigilancia() {
   // ── Cargar datos ──────────────────────────────────────────────────────
   const cargarTodo = async () => {
     setCargando(true);
+    
+    // 🟢 TOKEN FIJO DE PRUEBAS
+    const tokenPrueba = 'ae6a7e5db83827115227cd8597f157a5d69dd21b';
+    
+    // 🟢 Configuramos las cabeceras con el Token
+    const opciones = {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Token ${tokenPrueba}`
+      }
+    };
+
     try {
+      // 🟢 Pasamos las 'opciones' a cada fetch
       const [rInc, rTur, rTra, rAle] = await Promise.all([
-        fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/lista/`),
-        fetch(`${BASE}/incidentes/gestion/`),
-        fetch(`${BASE}/transito/`),
-        fetch(`${BASE}/alertas/`),
+        fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/lista/`, opciones),
+        fetch(`${BASE}/incidentes/gestion/`, opciones),
+        fetch(`${BASE}/transito/`, opciones),
+        fetch(`${BASE}/alertas/`, opciones),
       ]);
 
       if (rInc.ok) { const d = await rInc.json(); setIncidentes(Array.isArray(d) ? d : d.results || []); }
       if (rTur.ok) { const d = await rTur.json(); setTurnos(Array.isArray(d) ? d : d.results || []); }
       if (rTra.ok) { const d = await rTra.json(); setTransitos(Array.isArray(d) ? d : d.results || []); }
       if (rAle.ok) { const d = await rAle.json(); setAlertas(Array.isArray(d) ? d : d.results || []); }
-    } catch(e) { console.error('Error cargando vigilancia:', e); }
-    finally { setCargando(false); }
+    } catch(e) { 
+      console.error('Error cargando vigilancia:', e); 
+    } finally { 
+      setCargando(false); 
+    }
   };
 
   useEffect(() => { cargarTodo(); }, []);
