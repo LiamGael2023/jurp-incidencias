@@ -4,6 +4,7 @@ import MapaChavimochic from './Mapa';
 import Login from './Login';
 import Incidentes from './Incidentes';
 import Estadisticas from './Estadisticas';
+import Vigilancia from './Vigilancia';
 import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
@@ -108,7 +109,7 @@ function App() {
         <div className="tbl-page-content">
           {vistaActual === 'mapa' && <MapaChavimochic />}
           {vistaActual === 'lista' && <Incidentes />}
-          {vistaActual === 'vigilancia' && <div className="tbl-empty-state"><h3>🔒 Módulo de Vigilancia</h3><p>En construcción</p></div>}
+          {vistaActual === 'vigilancia' && <Vigilancia />}
           {vistaActual === 'reportes' && <Estadisticas />}
         </div>
       </div>
