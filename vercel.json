@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/vigapi/(.*)",
+      "destination": "https://gideonstudio.duckdns.org/api/v1/$1"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "http://sistema.jriegopresurizado.org.pe/api/$1"
     }
