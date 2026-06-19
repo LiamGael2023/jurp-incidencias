@@ -27,7 +27,7 @@ function Vigilancia() {
   const cargarTodo = async () => {
     setCargando(true);
     
-    // 🟢 TOKEN FIJO DE PRUEBAS
+    // 🟢 TOKEN FIJO DE PRUEBAS (Reemplazar luego por localStorage)
     const tokenPrueba = 'ae6a7e5db83827115227cd8597f157a5d69dd21b';
     
     // 🟢 Configuramos las cabeceras con el Token
@@ -40,23 +40,19 @@ function Vigilancia() {
     };
 
     try {
-      // 🟢 Pasamos las 'opciones' a cada fetch
       const [rInc, rTur, rTra, rAle] = await Promise.all([
         fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/lista/`, opciones),
-        fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/gestion/`, opciones),
+        fetch(`${BASE}/incidentes/gestion/`, opciones),
         fetch(`${BASE}/transito/`, opciones),
-        fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/alertas/`, opciones),
+        fetch(`${BASE}/alertas/`, opciones),
       ]);
 
       if (rInc.ok) { const d = await rInc.json(); setIncidentes(Array.isArray(d) ? d : d.results || []); }
       if (rTur.ok) { const d = await rTur.json(); setTurnos(Array.isArray(d) ? d : d.results || []); }
       if (rTra.ok) { const d = await rTra.json(); setTransitos(Array.isArray(d) ? d : d.results || []); }
       if (rAle.ok) { const d = await rAle.json(); setAlertas(Array.isArray(d) ? d : d.results || []); }
-    } catch(e) { 
-      console.error('Error cargando vigilancia:', e); 
-    } finally { 
-      setCargando(false); 
-    }
+    } catch(e) { console.error('Error cargando vigilancia:', e); }
+    finally { setCargando(false); }
   };
 
   useEffect(() => { cargarTodo(); }, []);
@@ -66,6 +62,13 @@ function Vigilancia() {
   const fmtDuracion = (ini, fin) => { if (!fin) return 'En curso...'; const ms = new Date(fin) - new Date(ini); const h = Math.floor(ms/3600000); const m = Math.floor((ms%3600000)/60000); return `${h}h ${m}m`; };
   const paginar = (data, pag) => data.slice((pag-1)*itemsPP, pag*itemsPP);
   const totalPags = (data) => Math.max(1, Math.ceil(data.length / itemsPP));
+
+  // 🟢 Helper para forzar la URL absoluta de las imágenes
+  const getUrlImagen = (ruta) => {
+    if (!ruta) return null;
+    if (ruta.startsWith('http')) return ruta; 
+    return `https://gideonstudio.duckdns.org${ruta}`; 
+  };
 
   // ── KPIs ──────────────────────────────────────────────────────────────
   const turnosActivos = turnos.filter(t => t.activo).length;
@@ -160,8 +163,9 @@ function Vigilancia() {
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
                         {(inc.evidencias || []).length > 0 ? (
                           <div style={{display:'flex',gap:'4px',justifyContent:'center'}}>
+                            {/* 🟢 Aplicamos getUrlImagen a las evidencias de los incidentes */}
                             {inc.evidencias.slice(0,3).map((ev, j) => (
-                              <img key={j} src={ev.archivo} alt="" onClick={()=>setModalImg(ev.archivo)} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} />
+                              <img key={j} src={getUrlImagen(ev.archivo)} alt="" onClick={()=>setModalImg(getUrlImagen(ev.archivo))} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} />
                             ))}
                             {inc.evidencias.length > 3 && <span style={{fontSize:'11px',color:'#626976',alignSelf:'center'}}>+{inc.evidencias.length-3}</span>}
                           </div>
@@ -211,10 +215,12 @@ function Vigilancia() {
                                   : <span style={{background:'#f1f3f5',color:'#626976',padding:'3px 10px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>Cerrado</span>}
                       </td>
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
-                        {t.foto_inicio ? <img src={t.foto_inicio} alt="" onClick={()=>setModalImg(t.foto_inicio)} style={{width:'40px',height:'40px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}}/> : <span style={{color:'#cbd5e1'}}>—</span>}
+                        {/* 🟢 Aplicamos getUrlImagen */}
+                        {t.foto_inicio ? <img src={getUrlImagen(t.foto_inicio)} alt="" onClick={()=>setModalImg(getUrlImagen(t.foto_inicio))} style={{width:'40px',height:'40px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}}/> : <span style={{color:'#cbd5e1'}}>—</span>}
                       </td>
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
-                        {t.foto_fin ? <img src={t.foto_fin} alt="" onClick={()=>setModalImg(t.foto_fin)} style={{width:'40px',height:'40px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}}/> : <span style={{color:'#cbd5e1'}}>—</span>}
+                        {/* 🟢 Aplicamos getUrlImagen */}
+                        {t.foto_fin ? <img src={getUrlImagen(t.foto_fin)} alt="" onClick={()=>setModalImg(getUrlImagen(t.foto_fin))} style={{width:'40px',height:'40px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}}/> : <span style={{color:'#cbd5e1'}}>—</span>}
                       </td>
                     </tr>
                   ))}
@@ -266,8 +272,9 @@ function Vigilancia() {
                       <td style={{padding:'10px 14px',color:'#475569',maxWidth:'180px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.observacion || '—'}</td>
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
                         <div style={{display:'flex',gap:'4px',justifyContent:'center'}}>
-                          {(t.foto_documento || t.foto_documento_url) && <img src={t.foto_documento || t.foto_documento_url} alt="Doc" onClick={()=>setModalImg(t.foto_documento || t.foto_documento_url)} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} title="Documento"/>}
-                          {(t.foto_movilidad || t.foto_movilidad_url) && <img src={t.foto_movilidad || t.foto_movilidad_url} alt="Mov" onClick={()=>setModalImg(t.foto_movilidad || t.foto_movilidad_url)} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} title="Movilidad"/>}
+                          {/* 🟢 Aplicamos getUrlImagen en todas las condiciones */}
+                          {(t.foto_documento || t.foto_documento_url) && <img src={getUrlImagen(t.foto_documento || t.foto_documento_url)} alt="Doc" onClick={()=>setModalImg(getUrlImagen(t.foto_documento || t.foto_documento_url))} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} title="Documento"/>}
+                          {(t.foto_movilidad || t.foto_movilidad_url) && <img src={getUrlImagen(t.foto_movilidad || t.foto_movilidad_url)} alt="Mov" onClick={()=>setModalImg(getUrlImagen(t.foto_movilidad || t.foto_movilidad_url))} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} title="Movilidad"/>}
                           {!(t.foto_documento || t.foto_documento_url) && !(t.foto_movilidad || t.foto_movilidad_url) && <span style={{color:'#cbd5e1',fontSize:'11px'}}>—</span>}
                         </div>
                       </td>
