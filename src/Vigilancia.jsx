@@ -42,7 +42,7 @@ function Vigilancia() {
     try {
       const [rInc, rTur, rTra, rAle] = await Promise.all([
         fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/lista/`, opciones),
-        fetch(`$https://gideonstudio.duckdns.org/api/v1/incidentes/gestion/`, opciones),
+        fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/gestion/`, opciones),
         fetch(`${BASE}/transito/`, opciones),
         fetch(`${BASE}/alertas/`, opciones),
       ]);
@@ -63,11 +63,22 @@ function Vigilancia() {
   const paginar = (data, pag) => data.slice((pag-1)*itemsPP, pag*itemsPP);
   const totalPags = (data) => Math.max(1, Math.ceil(data.length / itemsPP));
 
-  // 🟢 Helper para forzar la URL absoluta de las imágenes
+  // 🟢 Helper MEGA ROBUSTO para forzar la URL absoluta a Gideon
   const getUrlImagen = (ruta) => {
     if (!ruta) return null;
-    if (ruta.startsWith('http')) return ruta; 
-    return `https://gideonstudio.duckdns.org${ruta}`; 
+    try {
+      // Si Django manda el link completo pero con el dominio de Vercel (o cualquier otro)
+      if (ruta.startsWith('http')) {
+        const urlObj = new URL(ruta);
+        // Retornamos el dominio correcto + la ruta de la carpeta media
+        return `https://gideonstudio.duckdns.org${urlObj.pathname}${urlObj.search}`;
+      }
+      // Si Django manda solo la ruta relativa (/media/...)
+      const slashRuta = ruta.startsWith('/') ? ruta : `/${ruta}`;
+      return `https://gideonstudio.duckdns.org${slashRuta}`;
+    } catch (e) {
+      return ruta; // Si algo falla, devuelve la ruta original
+    }
   };
 
   // ── KPIs ──────────────────────────────────────────────────────────────
