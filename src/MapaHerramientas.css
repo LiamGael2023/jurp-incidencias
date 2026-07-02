@@ -3,14 +3,17 @@
    Paleta JURP: azul #1971c2 · morado #722380 · rosa #E72276 · verde #6CA43A
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Barra de herramientas lateral ─────────────────────────────────────────── */
+/* El zoom (esquina superior derecha) baja para no pisar "Actualizar Datos". */
+.leaflet-top.leaflet-right { top: 72px; }
+
+/* ── Barra de herramientas (horizontal, arriba a la izquierda) ──────────────── */
 .jurp-toolbar {
   position: absolute;
-  top: 58px;              /* justo debajo del botón de encuadre (🌐) */
-  left: 10px;
+  top: 16px;
+  left: 60px;             /* a la derecha del botón de encuadre (🌐) */
   z-index: 1000;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;    /* horizontal */
   background: #fff;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
@@ -32,7 +35,7 @@
 .jurp-tool-btn:hover:not(:disabled) { background: #f1f5f9; color: #1971c2; }
 .jurp-tool-btn.activo { background: #1971c2; color: #fff; }
 .jurp-tool-btn:disabled { opacity: 0.5; cursor: default; }
-.jurp-tool-sep { height: 1px; background: #e2e8f0; margin: 2px 6px; }
+.jurp-tool-sep { width: 1px; background: #e2e8f0; margin: 6px 2px; }
 
 /* El botón GPS flotante sube por encima del minimapa (misma columna derecha). */
 .btn-flotante-gps {
