@@ -165,3 +165,59 @@
 
 /* SweetAlert debe salir por encima del mantenedor (que está en 100000). */
 .swal2-container { z-index: 200000 !important; }
+
+/* ── Selector de origen (JURP / Externa) ───────────────────────────────────── */
+.mnt-origen {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+}
+.mnt-origen-btn {
+  flex: 1;
+  padding: 6px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #64748b;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.mnt-origen-btn.on { background: #206bc4; color: #fff; border-color: #206bc4; }
+.mnt-origen-btn.on.ext { background: #d6832b; border-color: #d6832b; }
+
+/* ── Placas: código y estado ───────────────────────────────────────────────── */
+.mnt-item-placa { cursor: default; }
+.mnt-codigo {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-right: 8px;
+  font-family: monospace;
+}
+.mnt-codigo.jurp { background: #e7f0fb; color: #1a5aa8; }
+.mnt-codigo.ext { background: #fbeede; color: #b3691f; }
+.mnt-placa-txt { font-weight: 500; color: #334155; }
+
+.mnt-item-actions.always { opacity: 1; }
+.mnt-estado {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  border-radius: 12px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mnt-estado svg { font-size: 7px; }
+.mnt-estado.disp { background: #e6f4ea; color: #1e7e34; }
+.mnt-estado.disp:hover { background: #d4edda; }
+.mnt-estado.nodisp { background: #fdecea; color: #c0392b; }
+.mnt-estado.nodisp:hover { background: #fadbd8; }
