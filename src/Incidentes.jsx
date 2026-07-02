@@ -289,12 +289,10 @@ function Incidentes() {
     if (!conf.isConfirmed) return;
 
     const BASE_URL = 'https://gideonstudio.duckdns.org';
-    const token = localStorage.getItem('userToken');
     try {
       const resultados = await Promise.all(registros.map(reg =>
         fetch(`${BASE_URL}/api/v1/mobile/operations/${reg.endpoint}/${reg.dbId}/`, {
           method: 'DELETE',
-          headers: token ? { 'Authorization': `Token ${token}` } : {},
         })
       ));
       const okAll = resultados.every(r => r.ok || r.status === 204);
@@ -303,7 +301,8 @@ function Incidentes() {
         if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
         Swal.fire({ icon: 'success', title: 'Eliminado', timer: 1200, showConfirmButton: false });
       } else {
-        Swal.fire('Error', 'No se pudieron eliminar todos los registros.', 'error');
+        const codigos = resultados.map(r => r.status).join(', ');
+        Swal.fire('Error', `No se pudieron eliminar todos los registros (código: ${codigos}).`, 'error');
       }
     } catch (e) {
       Swal.fire('Error', 'Fallo de conexión al eliminar.', 'error');
