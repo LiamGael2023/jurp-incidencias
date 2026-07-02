@@ -140,10 +140,22 @@ const SEARCH_INDEX = KMZ_CONFIG.flatMap(cfg =>
 );
 
 // ── Componentes auxiliares ───────────────────────────────────────────────────
+// Control de zoom (+/−) recolocado en la esquina superior derecha, para dejar
+// libre toda la columna izquierda a los botones del visor.
+function ZoomDerecha() {
+  const map = useMap();
+  useEffect(() => {
+    const zc = L.control.zoom({ position: 'topright' });
+    zc.addTo(map);
+    return () => zc.remove();
+  }, [map]);
+  return null;
+}
+
 function BotonEncuadreGeneral({ centro }) {
   const map = useMap();
   return (
-    <div className="leaflet-top leaflet-left" style={{ top: '80px', left: '10px', position: 'absolute', zIndex: 1000 }}>
+    <div className="leaflet-top leaflet-left" style={{ top: '10px', left: '10px', position: 'absolute', zIndex: 1000 }}>
       <div className="leaflet-control leaflet-bar">
         <a href="#" role="button" title="Centrar todo el mapa"
           onClick={(e) => { e.preventDefault(); map.flyTo(centro, 10, { animate: true, duration: 1.5 }); }}
@@ -436,7 +448,8 @@ function MapaChavimochic() {
         )}
       </div>
 
-      <MapContainer center={centroMapa} zoom={10} style={{height:'100%',width:'100%',zIndex:0}} ref={mapRef}>
+      <MapContainer center={centroMapa} zoom={10} style={{height:'100%',width:'100%',zIndex:0}} ref={mapRef} zoomControl={false} zoomControlOptions={{position:'topright'}}>
+        <ZoomDerecha />
         <TileLayer url={obtenerUrlMapa()} maxZoom={20} attribution="&copy; JURP Maps" />
         <VolarAUbicacion posicion={miUbicacion || flyTarget} />
         <BotonEncuadreGeneral centro={centroMapa} />
