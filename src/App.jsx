@@ -5,7 +5,8 @@ import Login from './Login';
 import Incidentes from './Incidentes';
 import Estadisticas from './Estadisticas';
 import Vigilancia from './Vigilancia';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt } from 'react-icons/fa';
+import Reportes from './Reportes';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
 function App() {
@@ -24,6 +25,8 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('userToken');
     localStorage.removeItem('userName');
+    localStorage.removeItem('userGroups');
+    localStorage.removeItem('userId');
     setToken(null);
     setNombreUsuario('');
     setMenuPerfilAbierto(false);
@@ -67,10 +70,17 @@ function App() {
             </div>
           </li>
           
-          <li className={`tbl-nav-item ${vistaActual === 'reportes' ? 'active' : ''}`} onClick={() => setVistaActual('reportes')}>
+          <li className={`tbl-nav-item ${vistaActual === 'estadisticas' ? 'active' : ''}`} onClick={() => setVistaActual('estadisticas')}>
             <div className="tbl-nav-link">
               <span className="tbl-nav-icon"><FaChartPie /></span>
               {menuLateralAbierto && <span className="tbl-nav-title">Estadísticas</span>}
+            </div>
+          </li>
+
+          <li className={`tbl-nav-item ${vistaActual === 'reportes' ? 'active' : ''}`} onClick={() => setVistaActual('reportes')}>
+            <div className="tbl-nav-link">
+              <span className="tbl-nav-icon"><FaFilePdf /></span>
+              {menuLateralAbierto && <span className="tbl-nav-title">Reportes</span>}
             </div>
           </li>
         </ul>
@@ -110,7 +120,8 @@ function App() {
           {vistaActual === 'mapa' && <MapaChavimochic />}
           {vistaActual === 'lista' && <Incidentes />}
           {vistaActual === 'vigilancia' && <Vigilancia />}
-          {vistaActual === 'reportes' && <Estadisticas />}
+          {vistaActual === 'estadisticas' && <Estadisticas />}
+          {vistaActual === 'reportes' && <Reportes />}
         </div>
       </div>
     </div>
