@@ -22,6 +22,7 @@ function Incidentes() {
   const [catEquipos, setCatEquipos] = useState([]);
   const [catMarcas, setCatMarcas] = useState([]);
   const [catModelos, setCatModelos] = useState([]);
+  const [catActividades, setCatActividades] = useState([]);
   const [mantenedorAbierto, setMantenedorAbierto] = useState(false);
 
   // --- ESTADOS DEL MODAL PRINCIPAL ---
@@ -101,6 +102,15 @@ function Incidentes() {
 
   useEffect(() => { cargarEquiposCat(); }, []);
 
+  // Carga el catálogo de actividades (para el combo del parte diario).
+  const cargarActividades = async () => {
+    try {
+      const r = await fetch(`${API_OPS}/actividades/?activo=true`);
+      if (r.ok) setCatActividades(await r.json());
+    } catch (e) { console.error(e); }
+  };
+  useEffect(() => { cargarActividades(); }, []);
+
   // Pide al backend el siguiente N° de parte (PD-XXXX-AAAAMMDD, reinicia por año).
   const obtenerCorrelativoParte = async () => {
     try {
@@ -136,6 +146,41 @@ function Incidentes() {
   const onCambiaModelo = (id) => {
     const mo = catModelos.find(m => String(m.id) === String(id));
     setNuevoRecurso(prev => ({ ...prev, modeloId: id, placa: mo?.placa || '', codigoMaquina: mo?.codigo || '' }));
+  };
+
+  // Maneja el combo de actividad. Si elige "__OTRO__", pide el nombre, lo
+  // guarda en el catálogo y lo selecciona.
+  const onCambiaActividad = async (valor) => {
+    if (valor === '__OTRO__') {
+      const { value: nombre } = await Swal.fire({
+        title: 'Nueva actividad',
+        input: 'text',
+        inputPlaceholder: 'Ej. RIEGO DE PLATAFORMA',
+        showCancelButton: true,
+        confirmButtonText: 'Agregar',
+        inputValidator: (v) => !v && 'Escribe el nombre de la actividad',
+      });
+      if (!nombre) return;
+      const limpio = nombre.toUpperCase().trim();
+      try {
+        const r = await fetch(`${API_OPS}/actividades/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: limpio, activo: true }),
+        });
+        if (r.ok) {
+          await cargarActividades();          // refresca el combo con la nueva
+          setNuevoRecurso(prev => ({ ...prev, actividad: limpio }));
+        } else {
+          const e = await r.json();
+          Swal.fire('Error', e.nombre ? e.nombre[0] : 'No se pudo crear la actividad.', 'error');
+        }
+      } catch (e) {
+        Swal.fire('Error', 'Fallo de conexión al crear la actividad.', 'error');
+      }
+    } else {
+      setNuevoRecurso(prev => ({ ...prev, actividad: valor }));
+    }
   };
 
   const obtenerIncidentes = async () => {
@@ -337,29 +382,48 @@ function Incidentes() {
     }
   };
 
-  // Cierra TODOS los partes del incidente y libera todas sus máquinas.
+  // Cierra la incidencia: cierra los partes (libera máquinas) Y cambia el
+  // estado del incidente a "Cerrado" (status='cer').
   const cerrarIncidenteCompleto = async () => {
     if (!incidenteActivo) return;
     const conf = await Swal.fire({
-      title: '¿Cerrar todo el incidente?',
-      html: `Se cerrarán <b>todos los partes diarios</b> de este incidente y se liberarán todas sus máquinas.`,
-      icon: 'warning', showCancelButton: true, confirmButtonColor: '#d97706',
-      confirmButtonText: 'Sí, cerrar incidente', cancelButtonText: 'Cancelar',
+      title: '¿Cerrar esta incidencia?',
+      html: `Se cerrarán <b>todos los partes diarios</b> y sus máquinas quedarán disponibles.<br>El estado de la incidencia cambiará a <b>Cerrado</b>.`,
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#2fb344',
+      confirmButtonText: 'Sí, cerrar incidencia', cancelButtonText: 'Cancelar',
     });
     if (!conf.isConfirmed) return;
     const BASE_URL = 'https://gideonstudio.duckdns.org';
+    const token = localStorage.getItem('userToken');
     try {
+      // 1) Cerrar los partes diarios y liberar máquinas (backend de operaciones).
       const r = await fetch(`${BASE_URL}/api/v1/mobile/operations/incidentes/${incidenteActivo.id}/cerrar-partes/`, { method: 'POST' });
-      if (r.ok) {
-        const data = await r.json();
-        if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
-        setNuevoRecurso(prev => {
-          if (prev.marcaId) cargarModelosCat(prev.marcaId, prev.origen);
-          return prev;
-        });
-        Swal.fire({ icon: 'success', title: 'Incidente cerrado', text: data.detail || 'Máquinas liberadas.', timer: 2000, showConfirmButton: false });
+      if (!r.ok) {
+        Swal.fire('Error', `No se pudieron cerrar los partes (código: ${r.status}).`, 'error');
+        return;
+      }
+      // 2) Cambiar el estado del incidente a "Cerrado" (backend de incidentes).
+      const rEstado = await fetch(`/api/v1/mobile/hi-incidents/${incidenteActivo.id}/`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Token ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cer' }),
+      });
+
+      // Refrescos locales.
+      cargarCosteosGuardados(incidenteActivo.id);
+      setNuevoRecurso(prev => {
+        if (prev.marcaId) cargarModelosCat(prev.marcaId, prev.origen);
+        return prev;
+      });
+
+      if (rEstado.ok) {
+        // Actualiza el badge en la lista sin recargar.
+        setIncidentes(prev => prev.map(i => i.id === incidenteActivo.id ? { ...i, estado: 'cer' } : i));
+        setIncidenteActivo(prev => prev ? { ...prev, estado: 'cer' } : prev);
+        Swal.fire({ icon: 'success', title: 'Incidencia cerrada', text: 'Partes cerrados, máquinas liberadas y estado actualizado.', timer: 2200, showConfirmButton: false });
       } else {
-        Swal.fire('Error', `No se pudo cerrar el incidente (código: ${r.status}).`, 'error');
+        // Los partes se cerraron, pero el estado no se pudo cambiar.
+        Swal.fire('Parcial', `Los partes se cerraron, pero no se pudo cambiar el estado de la incidencia (código: ${rEstado.status}). Revisa manualmente.`, 'warning');
       }
     } catch (e) {
       Swal.fire('Error', 'Fallo de conexión.', 'error');
@@ -921,7 +985,15 @@ function Incidentes() {
                       <div className="tbl-col"><label className="tbl-form-label">Vale N°</label><input type="text" className="tbl-form-control" value={nuevoRecurso.vale} onChange={e => setNuevoRecurso({...nuevoRecurso, vale: e.target.value})} /></div>
                     </div>
                     <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col"><label className="tbl-form-label">Actividades Realizadas <span style={{color:'red'}}>*</span></label><input type="text" className="tbl-form-control" placeholder="Ej. Descolmatación..." value={nuevoRecurso.actividad} onChange={e => setNuevoRecurso({...nuevoRecurso, actividad: e.target.value})} /></div>
+                      <div className="tbl-col"><label className="tbl-form-label">Actividades Realizadas <span style={{color:'red'}}>*</span></label>
+                        <select className="tbl-form-select" value={nuevoRecurso.actividad} onChange={e => onCambiaActividad(e.target.value)}>
+                          <option value="">— Seleccionar actividad —</option>
+                          {catActividades.map(a => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
+                          {/* Si la actividad actual no está en el catálogo (viene de un parte viejo), la mostramos igual */}
+                          {nuevoRecurso.actividad && !catActividades.some(a => a.nombre === nuevoRecurso.actividad) && <option value={nuevoRecurso.actividad}>{nuevoRecurso.actividad}</option>}
+                          <option value="__OTRO__">➕ Otro (agregar nueva)...</option>
+                        </select>
+                      </div>
                       <div className="tbl-col"><label className="tbl-form-label">Observaciones</label><input type="text" className="tbl-form-control" placeholder="Condiciones del terreno, clima..." value={nuevoRecurso.observaciones} onChange={e => setNuevoRecurso({...nuevoRecurso, observaciones: e.target.value})} /></div>
                     </div>
                   </div>
@@ -1012,8 +1084,10 @@ function Incidentes() {
               <div className="tbl-modal-footer" style={{flexWrap:'wrap',gap:'8px'}}>
                 <div className="tbl-text-start tbl-text-muted">Costo Total: <span style={{fontSize: '1.25rem', color: '#1e293b', fontWeight: 'bold'}}>S/ {costoTotalIncidente.toFixed(2)}</span></div>
                 <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
-                  {recursos.some(r => r.tipo === 'Maquinaria' && r.guardadoEnDB && !r.cerrado) && (
-                    <button className="tbl-btn" onClick={cerrarIncidenteCompleto} style={{background:'#d97706',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Cierra todos los partes y libera todas las máquinas"><FaCheckCircle/> Cerrar incidente</button>
+                  {incidenteActivo?.estado === 'cer' ? (
+                    <span style={{background:'#dcfce7',color:'#15803d',padding:'6px 14px',borderRadius:'4px',fontSize:'13px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px'}}><FaCheckCircle/> Incidencia cerrada</span>
+                  ) : (
+                    <button className="tbl-btn" onClick={cerrarIncidenteCompleto} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Cierra los partes, libera las máquinas y marca la incidencia como cerrada"><FaCheckCircle/> Cerrar incidencia</button>
                   )}
                   <button className="tbl-btn" onClick={exportarPDF} style={{background:'#d63939',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar PDF"><FaFilePdf/> PDF</button>
                   <button className="tbl-btn" onClick={exportarExcel} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar Excel"><FaFileExcel/> Excel</button>
