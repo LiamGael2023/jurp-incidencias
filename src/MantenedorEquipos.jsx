@@ -15,7 +15,7 @@ import Swal from 'sweetalert2';
 import { FaPlus, FaEdit, FaTrash, FaTimes, FaChevronRight, FaSync } from 'react-icons/fa';
 import './MantenedorEquipos.css';
 
-const API = '/api/v1/mobile/operations';
+const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
 // Cabeceras con token si existe (tu API usa AllowAny en operations, pero por si acaso).
 function headers(json = true) {

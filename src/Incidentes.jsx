@@ -70,7 +70,8 @@ function Incidentes() {
   const [nuevoRecurso, setNuevoRecurso] = useState(estadoInicialRecurso);
 
   // ── Carga de catálogos (equipos/marcas/modelos) ──────────────────────────
-  const API_OPS = '/api/v1/mobile/operations';
+  // Mismo backend que el resto del módulo operations.
+  const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
   const authHeaders = () => {
     const t = localStorage.getItem('userToken');
     return t ? { 'Authorization': `Token ${t}` } : {};

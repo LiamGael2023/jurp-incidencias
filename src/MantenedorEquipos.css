@@ -4,7 +4,7 @@
 .mnt-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: 100000;
   background: rgba(15, 23, 42, 0.55);
   display: flex;
   align-items: center;
@@ -162,3 +162,6 @@
   .mnt-cols { grid-template-columns: 1fr; }
   .mnt-modal { max-height: 92vh; }
 }
+
+/* SweetAlert debe salir por encima del mantenedor (que está en 100000). */
+.swal2-container { z-index: 200000 !important; }
