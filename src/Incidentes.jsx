@@ -10,12 +10,19 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
 import logo from './assets/jurp.png';
+import MantenedorEquipos from './MantenedorEquipos';
 
 function Incidentes() {
   const [incidentes, setIncidentes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [paginaActual, setPaginaActual] = useState(1);
   const itemsPorPagina = 8;
+
+  // --- CATÁLOGOS (mantenedores) ---
+  const [catEquipos, setCatEquipos] = useState([]);
+  const [catMarcas, setCatMarcas] = useState([]);
+  const [catModelos, setCatModelos] = useState([]);
+  const [mantenedorAbierto, setMantenedorAbierto] = useState(false);
 
   // --- ESTADOS DEL MODAL PRINCIPAL ---
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -53,14 +60,63 @@ function Incidentes() {
     fechaParte: getFechaHoy(), 
     turno: 'Día', zonaTrabajo: '',
     proveedor: '', operador: '',
-    equipo: 'TRACTOR', equipoOtro: '', 
-    marca: 'CAT', marcaOtro: '', 
-    placa: '', 
+    equipoId: '', equipo: '',
+    marcaId: '', marca: '',
+    modeloId: '', placa: '',
     hmInicio: '', hmFin: '', combustible: '', vale: '', fotoVale: null,
     actividad: '', observaciones: '', fotoParte: null,
     incluirMetrado: false, longitud: '', altura: '', anchoSup: '', anchoInf: ''
   };
   const [nuevoRecurso, setNuevoRecurso] = useState(estadoInicialRecurso);
+
+  // ── Carga de catálogos (equipos/marcas/modelos) ──────────────────────────
+  const API_OPS = '/api/v1/mobile/operations';
+  const authHeaders = () => {
+    const t = localStorage.getItem('userToken');
+    return t ? { 'Authorization': `Token ${t}` } : {};
+  };
+
+  const cargarEquiposCat = async () => {
+    try {
+      const r = await fetch(`${API_OPS}/equipos/?activo=true`, { headers: authHeaders() });
+      if (r.ok) setCatEquipos(await r.json());
+    } catch (e) { console.error(e); }
+  };
+  const cargarMarcasCat = async (equipoId) => {
+    if (!equipoId) { setCatMarcas([]); return; }
+    try {
+      const r = await fetch(`${API_OPS}/marcas/?activo=true&equipo=${equipoId}`, { headers: authHeaders() });
+      if (r.ok) setCatMarcas(await r.json());
+    } catch (e) { console.error(e); }
+  };
+  const cargarModelosCat = async (marcaId) => {
+    if (!marcaId) { setCatModelos([]); return; }
+    try {
+      const r = await fetch(`${API_OPS}/modelos/?activo=true&marca=${marcaId}`, { headers: authHeaders() });
+      if (r.ok) setCatModelos(await r.json());
+    } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => { cargarEquiposCat(); }, []);
+
+  // Handlers de los selects encadenados.
+  const onCambiaEquipo = (id) => {
+    const eq = catEquipos.find(e => String(e.id) === String(id));
+    setNuevoRecurso(prev => ({ ...prev, equipoId: id, equipo: eq?.nombre || '', marcaId: '', marca: '', modeloId: '', placa: '' }));
+    setCatMarcas([]); setCatModelos([]);
+    cargarMarcasCat(id);
+  };
+  const onCambiaMarca = (id) => {
+    const ma = catMarcas.find(m => String(m.id) === String(id));
+    setNuevoRecurso(prev => ({ ...prev, marcaId: id, marca: ma?.nombre || '', modeloId: '', placa: '' }));
+    setCatModelos([]);
+    cargarModelosCat(id);
+  };
+  const onCambiaModelo = (id) => {
+    const mo = catModelos.find(m => String(m.id) === String(id));
+    const etiqueta = mo ? (mo.placa ? `${mo.nombre} / ${mo.placa}` : mo.nombre) : '';
+    setNuevoRecurso(prev => ({ ...prev, modeloId: id, placa: etiqueta }));
+  };
 
   const obtenerIncidentes = async () => {
     const token = localStorage.getItem('userToken'); 
@@ -207,8 +263,9 @@ function Incidentes() {
       cantFinal = parseFloat(horasMaquina) || 0;
       if (cantFinal <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Horómetro Final debe ser mayor al Inicial' });
       if (!nuevoRecurso.numeroParte) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Número de Parte es obligatorio' });
-      const equipoFinal = nuevoRecurso.equipo === 'OTRO' ? nuevoRecurso.equipoOtro : nuevoRecurso.equipo;
-      const marcaFinal = nuevoRecurso.marca === 'OTRO' ? nuevoRecurso.marcaOtro : nuevoRecurso.marca;
+      if (!nuevoRecurso.equipo) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un equipo' });
+      const equipoFinal = nuevoRecurso.equipo;
+      const marcaFinal = nuevoRecurso.marca;
       descFinal = `Parte N° ${nuevoRecurso.numeroParte} | ${equipoFinal} ${marcaFinal} (${nuevoRecurso.placa})\n`;
       descFinal += `Zona: ${nuevoRecurso.zonaTrabajo} | Op: ${nuevoRecurso.operador} | Prov: ${nuevoRecurso.proveedor}\n`;
       descFinal += `HM: ${nuevoRecurso.hmInicio} a ${nuevoRecurso.hmFin} | Comb: ${nuevoRecurso.combustible || 0} Gls (Vale: ${nuevoRecurso.vale})\n`;
@@ -496,8 +553,8 @@ function Incidentes() {
           formData.append('part_number', r.numeroParte); formData.append('date', r.fechaParte);
           formData.append('shift', r.turno); formData.append('work_zone_text', r.zonaTrabajo);
           formData.append('provider', r.proveedor); formData.append('operator', r.operador);
-          formData.append('equipment_name', r.equipo === 'OTRO' ? r.equipoOtro : r.equipo);
-          formData.append('brand_name', r.marca === 'OTRO' ? r.marcaOtro : r.marca);
+          formData.append('equipment_name', r.equipo);
+          formData.append('brand_name', r.marca);
           formData.append('model_plate', r.placa); formData.append('start_horometer', r.hmInicio);
           formData.append('end_horometer', r.hmFin); formData.append('fuel_gallons', r.combustible || 0);
           formData.append('fuel_voucher', r.vale); formData.append('activities', r.actividad);
@@ -640,9 +697,27 @@ function Incidentes() {
                       <div className="tbl-col"><label className="tbl-form-label">Operador</label><input type="text" className="tbl-form-control" placeholder="Nombre del operador" value={nuevoRecurso.operador} onChange={e => setNuevoRecurso({...nuevoRecurso, operador: e.target.value})} /></div>
                     </div>
                     <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col-3"><label className="tbl-form-label">Equipo</label><select className="tbl-form-select" value={nuevoRecurso.equipo} onChange={e => setNuevoRecurso({...nuevoRecurso, equipo: e.target.value})}><option value="TRACTOR">TRACTOR</option><option value="EXCAVADORA">EXCAVADORA</option><option value="RETROEXCAVADORA">RETROEXCAVADORA</option><option value="VOLQUETE">VOLQUETE</option><option value="MOTONIVELADORA">MOTONIVELADORA</option><option value="CAMIONETA">CAMIONETA</option><option value="OTRO">Otro...</option></select>{nuevoRecurso.equipo === 'OTRO' && (<input type="text" className="tbl-form-control tbl-mt-2" placeholder="Especificar equipo" value={nuevoRecurso.equipoOtro} onChange={e => setNuevoRecurso({...nuevoRecurso, equipoOtro: e.target.value})} />)}</div>
-                      <div className="tbl-col-3"><label className="tbl-form-label">Marca</label><select className="tbl-form-select" value={nuevoRecurso.marca} onChange={e => setNuevoRecurso({...nuevoRecurso, marca: e.target.value})}><option value="CAT">CAT</option><option value="KOMATSU">KOMATSU</option><option value="DOOSAN">DOOSAN</option><option value="JOHN DEERE">JOHN DEERE</option><option value="VOLVO">VOLVO</option><option value="OTRO">Otro...</option></select>{nuevoRecurso.marca === 'OTRO' && (<input type="text" className="tbl-form-control tbl-mt-2" placeholder="Especificar marca" value={nuevoRecurso.marcaOtro} onChange={e => setNuevoRecurso({...nuevoRecurso, marcaOtro: e.target.value})} />)}</div>
-                      <div className="tbl-col-3"><label className="tbl-form-label">Modelo / Placa</label><input type="text" className="tbl-form-control" placeholder="Ej. 320 / CAN737" value={nuevoRecurso.placa} onChange={e => setNuevoRecurso({...nuevoRecurso, placa: e.target.value})} /></div>
+                      <div className="tbl-col-3">
+                        <label className="tbl-form-label">Equipo <button type="button" onClick={() => setMantenedorAbierto(true)} title="Gestionar catálogos" style={{ background:'none', border:'none', color:'#206bc4', cursor:'pointer', fontSize:'11px', padding:'0 0 0 4px' }}><FaPlus /> gestionar</button></label>
+                        <select className="tbl-form-select" value={nuevoRecurso.equipoId} onChange={e => onCambiaEquipo(e.target.value)}>
+                          <option value="">— Seleccionar —</option>
+                          {catEquipos.map(eq => <option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
+                        </select>
+                      </div>
+                      <div className="tbl-col-3">
+                        <label className="tbl-form-label">Marca</label>
+                        <select className="tbl-form-select" value={nuevoRecurso.marcaId} onChange={e => onCambiaMarca(e.target.value)} disabled={!nuevoRecurso.equipoId}>
+                          <option value="">{nuevoRecurso.equipoId ? '— Seleccionar —' : 'Elige equipo primero'}</option>
+                          {catMarcas.map(ma => <option key={ma.id} value={ma.id}>{ma.nombre}</option>)}
+                        </select>
+                      </div>
+                      <div className="tbl-col-3">
+                        <label className="tbl-form-label">Modelo / Placa</label>
+                        <select className="tbl-form-select" value={nuevoRecurso.modeloId} onChange={e => onCambiaModelo(e.target.value)} disabled={!nuevoRecurso.marcaId}>
+                          <option value="">{nuevoRecurso.marcaId ? '— Seleccionar —' : 'Elige marca primero'}</option>
+                          {catModelos.map(mo => <option key={mo.id} value={mo.id}>{mo.nombre}{mo.placa ? ` / ${mo.placa}` : ''}</option>)}
+                        </select>
+                      </div>
                       <div className="tbl-col-3"><label className="tbl-form-label">Precio Unit. (S/ HE)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
                     </div>
                     <div className="tbl-row tbl-mb-3">
@@ -792,6 +867,12 @@ function Incidentes() {
           )}
         </div>
       )}
+
+      {/* ── Mantenedor de catálogos (Equipos/Marcas/Modelos) ─────────────── */}
+      <MantenedorEquipos
+        abierto={mantenedorAbierto}
+        onClose={() => { setMantenedorAbierto(false); cargarEquiposCat(); if (nuevoRecurso.equipoId) cargarMarcasCat(nuevoRecurso.equipoId); if (nuevoRecurso.marcaId) cargarModelosCat(nuevoRecurso.marcaId); }}
+      />
 
     </div>
   );
