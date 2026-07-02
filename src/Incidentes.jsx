@@ -322,9 +322,12 @@ function Incidentes() {
       const r = await fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/${fila.dbId}/cerrar/`, { method: 'POST' });
       if (r.ok) {
         if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
-        // Refresca las placas disponibles para que la máquina liberada
-        // reaparezca en el select sin recargar la página.
-        if (nuevoRecurso.marcaId) cargarModelosCat(nuevoRecurso.marcaId, nuevoRecurso.origen);
+        // Refresca el combo de placas leyendo el estado más reciente (evita
+        // closures viejos). Si hay marca seleccionada, recarga sus placas.
+        setNuevoRecurso(prev => {
+          if (prev.marcaId) cargarModelosCat(prev.marcaId, prev.origen);
+          return prev;
+        });
         Swal.fire({ icon: 'success', title: 'Parte cerrado', text: 'La máquina fue liberada.', timer: 1500, showConfirmButton: false });
       } else {
         Swal.fire('Error', `No se pudo cerrar el parte (código: ${r.status}).`, 'error');
@@ -350,7 +353,10 @@ function Incidentes() {
       if (r.ok) {
         const data = await r.json();
         if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
-        if (nuevoRecurso.marcaId) cargarModelosCat(nuevoRecurso.marcaId, nuevoRecurso.origen);
+        setNuevoRecurso(prev => {
+          if (prev.marcaId) cargarModelosCat(prev.marcaId, prev.origen);
+          return prev;
+        });
         Swal.fire({ icon: 'success', title: 'Incidente cerrado', text: data.detail || 'Máquinas liberadas.', timer: 2000, showConfirmButton: false });
       } else {
         Swal.fire('Error', `No se pudo cerrar el incidente (código: ${r.status}).`, 'error');
