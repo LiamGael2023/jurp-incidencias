@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
-  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload
+  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash
 } from 'react-icons/fa';
 import './Incidentes.css';
 import Swal from 'sweetalert2';
@@ -156,7 +156,7 @@ function Incidentes() {
           return {
             id: inc.id, codigo: inc.code || 'Sin Código', lugar: inc.location_text || '-',
             tipo: tipoNombre, gravedad: inc.severity || 'lev', estado: inc.status || 'pat',
-            usuario: inc.user?.username || inc.username || 'Sistema',
+            usuario: inc.user?.username || 'Sistema',
             fecha: new Date(inc.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' }),
             imagesCount: inc.images_count || 0, videosCount: inc.videos_count || 0,
             imagenUrl: inc.thumbnail || inc.image || null 
@@ -250,9 +250,9 @@ function Incidentes() {
       const listMat = Array.isArray(dataMat) ? dataMat : (dataMat.results || []);
       const listMaq = Array.isArray(dataMaq) ? dataMaq : (dataMaq.results || []);
       const idStr = String(incidenteId);
-      const formatPers = listPers.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-pers-${i.id}`, tipo: 'Personal', descripcionResumen: i.description, cantidad: parseFloat(i.quantity_hours), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity_hours) * parseFloat(i.unit_price), guardadoEnDB: true }));
-      const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, tipo: 'Insumo', descripcionResumen: i.description, cantidad: parseFloat(i.quantity), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity) * parseFloat(i.unit_price), guardadoEnDB: true }));
-      const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-maq-${i.id}`, dbId: i.id, tipo: 'Maquinaria', descripcionResumen: `Parte N° ${i.part_number} | ${i.equipment_name}\nActividad: ${i.activities}`, cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)), precioUnitario: parseFloat(i.unit_price), total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price), guardadoEnDB: true }));
+      const formatPers = listPers.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-pers-${i.id}`, dbId: i.id, endpoint: 'incident-personnels', tipo: 'Personal', descripcionResumen: i.description, cantidad: parseFloat(i.quantity_hours), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity_hours) * parseFloat(i.unit_price), guardadoEnDB: true }));
+      const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', descripcionResumen: i.description, cantidad: parseFloat(i.quantity), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity) * parseFloat(i.unit_price), guardadoEnDB: true }));
+      const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-maq-${i.id}`, dbId: i.id, endpoint: 'daily-part-heavy-equipments', tipo: 'Maquinaria', descripcionResumen: `Parte N° ${i.part_number} | ${i.equipment_name}\nActividad: ${i.activities}`, cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)), precioUnitario: parseFloat(i.unit_price), total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price), guardadoEnDB: true }));
       setRecursos([...formatPers, ...formatMat, ...formatMaq]);
     } catch (error) { console.error("❌ Error al obtener los recursos guardados:", error); }
   };
@@ -271,6 +271,43 @@ function Incidentes() {
     const url = `https://gideonstudio.duckdns.org/api/v1/mobile/operations/daily-part-heavy-equipments/${dbId}/pdf/`;
     setPdfUrlActivo(url);
     setModalPdfAbierto(true);
+  };
+
+  // Elimina de la BASE DE DATOS uno o varios registros (para filas agrupadas).
+  const eliminarRecursoGuardado = async (fila) => {
+    // fila.registros = lista de {dbId, endpoint} que componen la fila agrupada.
+    const registros = fila.registros || [{ dbId: fila.dbId, endpoint: fila.endpoint }];
+    const cuantos = registros.length;
+    const conf = await Swal.fire({
+      title: '¿Eliminar?',
+      text: cuantos > 1
+        ? `Se eliminarán ${cuantos} registros de "${fila.descripcionResumen}" de forma permanente.`
+        : `Se eliminará este recurso de forma permanente.`,
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33',
+      confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar',
+    });
+    if (!conf.isConfirmed) return;
+
+    const BASE_URL = 'https://gideonstudio.duckdns.org';
+    const token = localStorage.getItem('userToken');
+    try {
+      const resultados = await Promise.all(registros.map(reg =>
+        fetch(`${BASE_URL}/api/v1/mobile/operations/${reg.endpoint}/${reg.dbId}/`, {
+          method: 'DELETE',
+          headers: token ? { 'Authorization': `Token ${token}` } : {},
+        })
+      ));
+      const okAll = resultados.every(r => r.ok || r.status === 204);
+      if (okAll) {
+        // Refresca desde la base para reflejar el estado real.
+        if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
+        Swal.fire({ icon: 'success', title: 'Eliminado', timer: 1200, showConfirmButton: false });
+      } else {
+        Swal.fire('Error', 'No se pudieron eliminar todos los registros.', 'error');
+      }
+    } catch (e) {
+      Swal.fire('Error', 'Fallo de conexión al eliminar.', 'error');
+    }
   };
 
   const horasMaquina = (nuevoRecurso.hmFin && nuevoRecurso.hmInicio) ? Math.max(0, (parseFloat(nuevoRecurso.hmFin) - parseFloat(nuevoRecurso.hmInicio))).toFixed(1) : 0;
@@ -325,7 +362,39 @@ function Incidentes() {
   };
 
   const eliminarRecurso = (idLocal) => setRecursos(recursos.filter(r => r.idLocal !== idLocal));
+  // Elimina del estado local varios recursos (fila agrupada no guardada).
+  const eliminarRecursosLocales = (idsLocales) => setRecursos(recursos.filter(r => !idsLocales.includes(r.idLocal)));
   const costoTotalIncidente = recursos.reduce((sum, item) => sum + item.total, 0);
+
+  // Agrupa recursos idénticos (mismo tipo + detalle + precio) en una sola fila.
+  // Maquinaria NO se agrupa: cada parte es único (tiene su PDF y horómetro propio).
+  const recursosAgrupados = (() => {
+    const grupos = new Map();
+    for (const r of recursos) {
+      const detalle = r.descripcionResumen || r.descripcion || '';
+      // Maquinaria y los no-guardados quedan como filas individuales.
+      const clave = r.tipo === 'Maquinaria'
+        ? `maq-${r.idLocal}`
+        : `${r.tipo}|${detalle}|${r.precioUnitario}|${r.guardadoEnDB}`;
+      if (!grupos.has(clave)) {
+        grupos.set(clave, {
+          ...r,
+          cantidadTotal: 0,
+          totalSum: 0,
+          count: 0,
+          registros: [],   // {dbId, endpoint} de cada registro guardado del grupo
+          idsLocales: [],  // idLocal de cada uno (para eliminar no-guardados)
+        });
+      }
+      const g = grupos.get(clave);
+      g.cantidadTotal += r.cantidad;
+      g.totalSum += r.total;
+      g.count += 1;
+      if (r.guardadoEnDB && r.dbId) g.registros.push({ dbId: r.dbId, endpoint: r.endpoint });
+      g.idsLocales.push(r.idLocal);
+    }
+    return Array.from(grupos.values());
+  })();
 
   // ── Helper: convertir imagen importada a base64 ────────────────────────
   const imgToBase64 = (src) => new Promise((resolve) => {
@@ -686,7 +755,10 @@ function Incidentes() {
                   </div>
                   <div className="tbl-card-footer">
                     <div className="tbl-media-icons">{inc.imagesCount > 0 && <span title="Fotos"><FaImage /> {inc.imagesCount}</span>}{inc.videosCount > 0 && <span title="Videos"><FaVideo /> {inc.videosCount}</span>}</div>
-                    <div className="tbl-avatar-group"><span className="tbl-avatar-text">{inc.usuario}</span></div>
+                    <div className="tbl-avatar-group" title={`Registrado por ${inc.usuario}`}>
+                      <FaUser style={{ fontSize: '11px', color: '#64748b', marginRight: '5px' }} />
+                      <span className="tbl-avatar-text">{inc.usuario}</span>
+                    </div>
                   </div>
                   <div className="tbl-card-btn-bottom" onClick={() => abrirModal(inc)}><FaEye /> Gestionar / Parte Diario</div>
                 </div>
@@ -841,20 +913,24 @@ function Incidentes() {
                     <thead><tr><th>Tipo</th><th>Detalle (Resumen)</th><th className="tbl-text-end">Cantidad</th><th className="tbl-text-end">P. Unit.</th><th className="tbl-text-end">Total</th><th></th></tr></thead>
                     <tbody>
                       {recursos.length === 0 ? <tr><td colSpan="6" className="tbl-text-center tbl-text-muted py-4">Aún no hay registros para este incidente.</td></tr> : (
-                        recursos.map(r => (
+                        recursosAgrupados.map(r => (
                           <tr key={r.idLocal}>
                             <td><span className="tbl-badge bg-secondary-lt">{r.tipo}</span></td>
-                            <td style={{fontSize: '11px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>{r.descripcionResumen || r.descripcion}</td>
-                            <td className="tbl-text-end font-bold">{r.cantidad} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.'}</span></td>
+                            <td style={{fontSize: '11px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>
+                              {r.descripcionResumen || r.descripcion}
+                              {r.count > 1 && <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>}
+                            </td>
+                            <td className="tbl-text-end font-bold">{r.cantidadTotal.toFixed(r.tipo==='Personal'?1:2)} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.'}</span></td>
                             <td className="tbl-text-end">S/ {parseFloat(r.precioUnitario).toFixed(2)}</td>
-                            <td className="tbl-text-end text-blue font-bold">S/ {r.total.toFixed(2)}</td>
+                            <td className="tbl-text-end text-blue font-bold">S/ {r.totalSum.toFixed(2)}</td>
                             <td>
                               {r.guardadoEnDB ? (
                                 <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-                                  <span className="tbl-badge bg-green-lt">Guardado</span>
+                                  <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>
                                   {r.tipo === 'Maquinaria' && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
+                                  <button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>
                                 </div>
-                              ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecurso(r.idLocal)} title="Eliminar"><FaTimes/></button>)}
+                              ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
                             </td>
                           </tr>
                         ))
