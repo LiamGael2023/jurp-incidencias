@@ -10,6 +10,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
 import logo from './assets/jurp.png';
+import refAltura from './assets/ref_altura.png';
+import refAncho from './assets/ref_ancho.png';
 import MantenedorEquipos from './MantenedorEquipos';
 
 function Incidentes() {
@@ -34,6 +36,7 @@ function Incidentes() {
   // --- ESTADOS DEL MODAL PDF ---
   const [modalPdfAbierto, setModalPdfAbierto] = useState(false);
   const [pdfUrlActivo, setPdfUrlActivo] = useState(null);
+  const [imgRefModal, setImgRefModal] = useState(null);   // {src, titulo} o null
 
   // --- ESTADOS DEL MODAL DE EVIDENCIAS (GALERÍA) ---
   const [modalMediaAbierto, setModalMediaAbierto] = useState(false);
@@ -949,7 +952,6 @@ function Incidentes() {
                     <div className="tbl-row tbl-mb-3">
                       <div className="tbl-col-4"><label className="tbl-form-label">Licencia</label><input type="text" className="tbl-form-control" placeholder="N° de licencia" value={nuevoRecurso.licencia} onChange={e => setNuevoRecurso({...nuevoRecurso, licencia: e.target.value})} /></div>
                       <div className="tbl-col-4"><label className="tbl-form-label">Categoría</label><input type="text" className="tbl-form-control" placeholder="Ej. A-IIIb" value={nuevoRecurso.categoria} onChange={e => setNuevoRecurso({...nuevoRecurso, categoria: e.target.value})} /></div>
-                      <div className="tbl-col-4"><label className="tbl-form-label">Longitud (m)</label><input type="number" step="0.01" className="tbl-form-control" placeholder="Metros de avance" value={nuevoRecurso.longitud} onChange={e => setNuevoRecurso({...nuevoRecurso, longitud: e.target.value})} /></div>
                     </div>
                     <div className="tbl-row tbl-mb-3">
                       <div className="tbl-col-3">
@@ -1002,6 +1004,54 @@ function Incidentes() {
                         </select>
                       </div>
                       <div className="tbl-col"><label className="tbl-form-label">Observaciones</label><input type="text" className="tbl-form-control" placeholder="Condiciones del terreno, clima..." value={nuevoRecurso.observaciones} onChange={e => setNuevoRecurso({...nuevoRecurso, observaciones: e.target.value})} /></div>
+                    </div>
+
+                    {/* ── Cálculo de metrado (opcional) ──────────────────────── */}
+                    <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'14px', marginTop:'4px' }}>
+                      <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontWeight:600, color:'#1e293b' }}>
+                        <input type="checkbox" checked={nuevoRecurso.incluirMetrado} onChange={e => setNuevoRecurso({...nuevoRecurso, incluirMetrado: e.target.checked})} />
+                        Incluir cálculo de metrado (volumen extraído)
+                      </label>
+
+                      {nuevoRecurso.incluirMetrado && (
+                        <div style={{ marginTop:'14px' }}>
+                          <div className="tbl-row tbl-mb-3">
+                            {/* Longitud */}
+                            <div className="tbl-col-3">
+                              <label className="tbl-form-label">Longitud L (m)</label>
+                              <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.longitud} onChange={e => setNuevoRecurso({...nuevoRecurso, longitud: e.target.value})} />
+                            </div>
+                            {/* Altura con thumbnail */}
+                            <div className="tbl-col-3">
+                              <label className="tbl-form-label" style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                                Altura H (m)
+                                <img src={refAltura} alt="Ref. altura" onClick={() => setImgRefModal({src: refAltura, titulo: 'Referencia: Altura (H)'})} style={{height:'24px',width:'40px',objectFit:'cover',borderRadius:'3px',cursor:'pointer',border:'1px solid #cbd5e1'}} title="Ver referencia de altura" />
+                              </label>
+                              <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.altura} onChange={e => setNuevoRecurso({...nuevoRecurso, altura: e.target.value})} />
+                            </div>
+                            {/* Ancho Superior con thumbnail */}
+                            <div className="tbl-col-3">
+                              <label className="tbl-form-label" style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                                Ancho Sup. Ws (m)
+                                <img src={refAncho} alt="Ref. ancho" onClick={() => setImgRefModal({src: refAncho, titulo: 'Referencia: Ancho Superior (Ws) - Ancho Inferior (Wi)'})} style={{height:'24px',width:'40px',objectFit:'cover',borderRadius:'3px',cursor:'pointer',border:'1px solid #cbd5e1'}} title="Ver referencia de anchos" />
+                              </label>
+                              <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.anchoSup} onChange={e => setNuevoRecurso({...nuevoRecurso, anchoSup: e.target.value})} />
+                            </div>
+                            {/* Ancho Inferior con thumbnail */}
+                            <div className="tbl-col-3">
+                              <label className="tbl-form-label" style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                                Ancho Inf. Wi (m)
+                                <img src={refAncho} alt="Ref. ancho" onClick={() => setImgRefModal({src: refAncho, titulo: 'Referencia: Ancho Superior (Ws) - Ancho Inferior (Wi)'})} style={{height:'24px',width:'40px',objectFit:'cover',borderRadius:'3px',cursor:'pointer',border:'1px solid #cbd5e1'}} title="Ver referencia de anchos" />
+                              </label>
+                              <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.anchoInf} onChange={e => setNuevoRecurso({...nuevoRecurso, anchoInf: e.target.value})} />
+                            </div>
+                          </div>
+                          <div style={{ display:'flex', alignItems:'center', gap:'10px', background:'#f0f9ff', borderRadius:'6px', padding:'10px 14px', fontSize:'13px' }}>
+                            <span style={{color:'#64748b'}}>Fórmula: V = (Ws + Wi) / 2 × H × L</span>
+                            <span style={{marginLeft:'auto', fontWeight:'bold', color:'#0284c7', fontSize:'15px'}}>Volumen extraído: {volumenMetrado} m³</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : nuevoRecurso.tipo === 'Personal' ? (
@@ -1108,6 +1158,21 @@ function Incidentes() {
       )}
 
       {/* ── MODAL PDF ──────────────────────────────────────────────────── */}
+      {/* ── Modal de imagen de referencia (metrado) ────────────────────── */}
+      {imgRefModal && (
+        <div onClick={() => setImgRefModal(null)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:'10px', overflow:'hidden', maxWidth:'1000px', width:'100%', maxHeight:'90vh', display:'flex', flexDirection:'column' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
+              <h5 style={{ margin:0, fontSize:'15px', color:'#1e293b' }}>{imgRefModal.titulo}</h5>
+              <button onClick={() => setImgRefModal(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'18px', display:'flex' }}><FaTimes /></button>
+            </div>
+            <div style={{ padding:'16px', overflow:'auto', textAlign:'center' }}>
+              <img src={imgRefModal.src} alt={imgRefModal.titulo} style={{ maxWidth:'100%', height:'auto' }} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {modalPdfAbierto && (
         <div className="tbl-modal-backdrop" onClick={() => setModalPdfAbierto(false)} style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.75)' }}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '850px', height: '90vh', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10000, marginTop: '2vh' }}>
