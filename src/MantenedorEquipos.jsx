@@ -11,16 +11,16 @@ import { useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
 import { FaPlus, FaEdit, FaTrash, FaTimes, FaChevronRight, FaSync, FaCircle } from 'react-icons/fa';
 import './MantenedorEquipos.css';
-
+ 
 const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
-
+ 
 // Endpoints AllowAny; no enviamos token (uno vencido daría 401).
 function headers(json = true) {
   const h = {};
   if (json) h['Content-Type'] = 'application/json';
   return h;
 }
-
+ 
 export default function MantenedorEquipos({ abierto, onClose }) {
   const [equipos, setEquipos] = useState([]);
   const [marcas, setMarcas] = useState([]);
@@ -29,7 +29,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
   const [origenSel, setOrigenSel] = useState('JURP');   // JURP | EXTERNA
   const [marcaSel, setMarcaSel] = useState(null);
   const [cargando, setCargando] = useState(false);
-
+ 
   // ── Cargas ──────────────────────────────────────────────────────────────
   const cargarEquipos = useCallback(async () => {
     setCargando(true);
@@ -38,7 +38,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
       if (r.ok) setEquipos(await r.json());
     } catch (e) { console.error(e); } finally { setCargando(false); }
   }, []);
-
+ 
   const cargarMarcas = useCallback(async (equipoId) => {
     if (!equipoId) { setMarcas([]); return; }
     try {
@@ -46,7 +46,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
       if (r.ok) setMarcas(await r.json());
     } catch (e) { console.error(e); }
   }, []);
-
+ 
   // Placas filtradas por marca + origen seleccionado.
   const cargarPlacas = useCallback(async (marcaId, origen) => {
     if (!marcaId) { setPlacas([]); return; }
@@ -55,11 +55,11 @@ export default function MantenedorEquipos({ abierto, onClose }) {
       if (r.ok) setPlacas(await r.json());
     } catch (e) { console.error(e); }
   }, []);
-
+ 
   useEffect(() => { if (abierto) cargarEquipos(); }, [abierto, cargarEquipos]);
   useEffect(() => { cargarMarcas(equipoSel?.id); setMarcaSel(null); setPlacas([]); }, [equipoSel, cargarMarcas]);
   useEffect(() => { cargarPlacas(marcaSel?.id, origenSel); }, [marcaSel, origenSel, cargarPlacas]);
-
+ 
   // ── CRUD genérico ─────────────────────────────────────────────────────────
   const crear = async (recurso, body, recargar) => {
     try {
@@ -94,7 +94,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
     if (e?.placa) return Array.isArray(e.placa) ? e.placa[0] : e.placa;
     return Object.entries(e).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' · ');
   };
-
+ 
   // ── Equipos ────────────────────────────────────────────────────────────
   const nuevoEquipo = async () => {
     const { value } = await Swal.fire({ title: 'Nuevo equipo', input: 'text', inputPlaceholder: 'Ej. TRACTOR', showCancelButton: true, confirmButtonText: 'Crear', inputValidator: v => !v && 'Escribe un nombre' });
@@ -104,7 +104,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
     const { value } = await Swal.fire({ title: 'Editar equipo', input: 'text', inputValue: eq.nombre, showCancelButton: true, confirmButtonText: 'Guardar' });
     if (value && value !== eq.nombre) editar('equipos', eq.id, { nombre: value.toUpperCase().trim() }, cargarEquipos);
   };
-
+ 
   // ── Marcas ─────────────────────────────────────────────────────────────
   const nuevaMarca = async () => {
     if (!equipoSel) return;
@@ -115,36 +115,49 @@ export default function MantenedorEquipos({ abierto, onClose }) {
     const { value } = await Swal.fire({ title: 'Editar marca', input: 'text', inputValue: ma.nombre, showCancelButton: true, confirmButtonText: 'Guardar' });
     if (value && value !== ma.nombre) editar('marcas', ma.id, { nombre: value.toUpperCase().trim() }, () => cargarMarcas(equipoSel.id));
   };
-
+ 
   // ── Placas (máquinas) ──────────────────────────────────────────────────
   const nuevaPlaca = async () => {
     if (!marcaSel) return;
     const origenTxt = origenSel === 'JURP' ? 'JURP (propia)' : 'Externa';
-    const { value: placa } = await Swal.fire({
-      title: `Nueva placa · ${origenTxt}`,
-      html: `<p style="font-size:13px;color:#64748b;margin:0 0 8px">Equipo: <b>${equipoSel.nombre}</b> · Marca: <b>${marcaSel.nombre}</b><br>El código se generará automáticamente.</p>`,
-      input: 'text', inputPlaceholder: 'Placa (ej. ABC-123)',
-      showCancelButton: true, confirmButtonText: 'Crear',
-      inputValidator: v => !v && 'Escribe la placa',
+    const { value: form } = await Swal.fire({
+      title: `Nueva máquina · ${origenTxt}`,
+      html:
+        `<p style="font-size:13px;color:#64748b;margin:0 0 10px">Equipo: <b>${equipoSel.nombre}</b> · Marca: <b>${marcaSel.nombre}</b><br>El código se generará automáticamente.</p>` +
+        '<input id="sw-modelo" class="swal2-input" placeholder="Modelo (ej. D8T, 320)">' +
+        '<input id="sw-placa" class="swal2-input" placeholder="Placa (ej. ABC-123)">',
+      focusConfirm: false, showCancelButton: true, confirmButtonText: 'Crear',
+      preConfirm: () => {
+        const placa = document.getElementById('sw-placa').value.trim();
+        if (!placa) { Swal.showValidationMessage('La placa es obligatoria'); return false; }
+        return { modelo: document.getElementById('sw-modelo').value.trim(), placa };
+      },
     });
-    if (placa) crear('modelos', { marca: marcaSel.id, origen: origenSel, placa: placa.toUpperCase().trim() }, () => cargarPlacas(marcaSel.id, origenSel));
+    if (form) crear('modelos', { marca: marcaSel.id, origen: origenSel, modelo: form.modelo.toUpperCase() || null, placa: form.placa.toUpperCase() }, () => cargarPlacas(marcaSel.id, origenSel));
   };
   const editarPlaca = async (mo) => {
-    const { value: placa } = await Swal.fire({
-      title: `Editar placa · ${mo.codigo}`,
-      input: 'text', inputValue: mo.placa, showCancelButton: true, confirmButtonText: 'Guardar',
-      inputValidator: v => !v && 'Escribe la placa',
+    const { value: form } = await Swal.fire({
+      title: `Editar máquina · ${mo.codigo}`,
+      html:
+        `<input id="sw-modelo" class="swal2-input" placeholder="Modelo" value="${mo.modelo || ''}">` +
+        `<input id="sw-placa" class="swal2-input" placeholder="Placa" value="${mo.placa || ''}">`,
+      focusConfirm: false, showCancelButton: true, confirmButtonText: 'Guardar',
+      preConfirm: () => {
+        const placa = document.getElementById('sw-placa').value.trim();
+        if (!placa) { Swal.showValidationMessage('La placa es obligatoria'); return false; }
+        return { modelo: document.getElementById('sw-modelo').value.trim(), placa };
+      },
     });
-    if (placa && placa.toUpperCase().trim() !== mo.placa) editar('modelos', mo.id, { placa: placa.toUpperCase().trim() }, () => cargarPlacas(marcaSel.id, origenSel));
+    if (form) editar('modelos', mo.id, { modelo: form.modelo.toUpperCase() || null, placa: form.placa.toUpperCase() }, () => cargarPlacas(marcaSel.id, origenSel));
   };
   // Alterna estado 0 (disponible) ⇄ 1 (no disponible).
   const toggleEstado = async (mo) => {
     const nuevo = mo.estado === 0 ? 1 : 0;
     editar('modelos', mo.id, { estado: nuevo }, () => cargarPlacas(marcaSel.id, origenSel));
   };
-
+ 
   if (!abierto) return null;
-
+ 
   return (
     <div className="mnt-overlay" onClick={onClose}>
       <div className="mnt-modal" onClick={e => e.stopPropagation()}>
@@ -152,7 +165,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
           <h3>Mantenedor de maquinaria</h3>
           <button className="mnt-btn-x" onClick={onClose}><FaTimes /></button>
         </div>
-
+ 
         <div className="mnt-cols">
           {/* ── Equipos ─────────────────────────────────────────────────── */}
           <div className="mnt-col">
@@ -175,7 +188,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
               ))}
             </div>
           </div>
-
+ 
           {/* ── Marcas (con selector de origen arriba) ──────────────────── */}
           <div className="mnt-col">
             <div className="mnt-col-head">
@@ -202,7 +215,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
               ))}
             </div>
           </div>
-
+ 
           {/* ── Placas ──────────────────────────────────────────────────── */}
           <div className="mnt-col">
             <div className="mnt-col-head">
@@ -216,7 +229,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
                 <div key={mo.id} className="mnt-item mnt-item-placa">
                   <span className="mnt-item-name">
                     <span className={`mnt-codigo ${mo.origen === 'JURP' ? 'jurp' : 'ext'}`}>{mo.codigo}</span>
-                    <span className="mnt-placa-txt">{mo.placa}</span>
+                    <span className="mnt-placa-txt">{mo.modelo ? `${mo.modelo} · ${mo.placa}` : mo.placa}</span>
                   </span>
                   <span className="mnt-item-actions always">
                     <button
@@ -234,7 +247,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
             </div>
           </div>
         </div>
-
+ 
         <div className="mnt-footer">
           <span className="mnt-hint">Código automático: JURP001… (propia) · EX01… (externa). Placa única. Se crea disponible.</span>
           <button className="mnt-btn-cerrar" onClick={onClose}>Cerrar</button>
@@ -243,3 +256,4 @@ export default function MantenedorEquipos({ abierto, onClose }) {
     </div>
   );
 }
+ 

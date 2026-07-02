@@ -65,7 +65,7 @@ function Incidentes() {
     equipoId: '', equipo: '',
     origen: 'JURP',
     marcaId: '', marca: '',
-    modeloId: '', placa: '', codigoMaquina: '',
+    modeloId: '', placa: '', modeloMaquina: '', codigoMaquina: '',
     hmInicio: '', hmFin: '', combustible: '', vale: '', fotoVale: null,
     actividad: '', observaciones: '', fotoParte: null,
     incluirMetrado: false, longitud: '', altura: '', anchoSup: '', anchoInf: ''
@@ -145,7 +145,7 @@ function Incidentes() {
   };
   const onCambiaModelo = (id) => {
     const mo = catModelos.find(m => String(m.id) === String(id));
-    setNuevoRecurso(prev => ({ ...prev, modeloId: id, placa: mo?.placa || '', codigoMaquina: mo?.codigo || '' }));
+    setNuevoRecurso(prev => ({ ...prev, modeloId: id, placa: mo?.placa || '', modeloMaquina: mo?.modelo || '', codigoMaquina: mo?.codigo || '' }));
   };
 
   // Maneja el combo de actividad. Si elige "__OTRO__", pide el nombre, lo
@@ -444,7 +444,7 @@ function Incidentes() {
       if (!nuevoRecurso.equipo) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un equipo' });
       const equipoFinal = nuevoRecurso.equipo;
       const marcaFinal = nuevoRecurso.marca;
-      descFinal = `Parte N° ${nuevoRecurso.numeroParte} | ${nuevoRecurso.codigoMaquina} · ${equipoFinal} ${marcaFinal} (${nuevoRecurso.placa})\n`;
+      descFinal = `Parte N° ${nuevoRecurso.numeroParte} | ${nuevoRecurso.codigoMaquina} · ${equipoFinal} ${marcaFinal} ${nuevoRecurso.modeloMaquina || ''} (${nuevoRecurso.placa})\n`;
       descFinal += `Zona: ${nuevoRecurso.zonaTrabajo} | Op: ${nuevoRecurso.operador} | Prov: ${nuevoRecurso.proveedor}\n`;
       descFinal += `HM: ${nuevoRecurso.hmInicio} a ${nuevoRecurso.hmFin} | Comb: ${nuevoRecurso.combustible || 0} Gls (Vale: ${nuevoRecurso.vale})\n`;
       descFinal += `Actividad: ${nuevoRecurso.actividad}`;
@@ -789,7 +789,7 @@ function Incidentes() {
           formData.append('provider', r.proveedor); formData.append('operator', r.operador);
           formData.append('equipment_name', r.equipo);
           formData.append('brand_name', r.marca);
-          formData.append('model_plate', r.placa); formData.append('start_horometer', r.hmInicio);
+          formData.append('model_plate', r.modeloMaquina ? `${r.modeloMaquina} / ${r.placa}` : r.placa); formData.append('start_horometer', r.hmInicio);
           formData.append('end_horometer', r.hmFin); formData.append('fuel_gallons', r.combustible || 0);
           formData.append('fuel_voucher', r.vale); formData.append('activities', r.actividad);
           formData.append('observations', r.observaciones); formData.append('unit_price', r.precioUnitario);
@@ -970,7 +970,7 @@ function Incidentes() {
                         <label className="tbl-form-label">Placa {nuevoRecurso.codigoMaquina && <span style={{color:'#1a5aa8',fontWeight:700,fontSize:'11px'}}>· {nuevoRecurso.codigoMaquina}</span>}</label>
                         <select className="tbl-form-select" value={nuevoRecurso.modeloId} onChange={e => onCambiaModelo(e.target.value)} disabled={!nuevoRecurso.marcaId}>
                           <option value="">{nuevoRecurso.marcaId ? '— Seleccionar —' : 'Elige marca'}</option>
-                          {catModelos.map(mo => <option key={mo.id} value={mo.id}>{mo.codigo} · {mo.placa}</option>)}
+                          {catModelos.map(mo => <option key={mo.id} value={mo.id}>{mo.codigo} · {mo.modelo ? `${mo.modelo} · ` : ''}{mo.placa}</option>)}
                         </select>
                       </div>
                     </div>
