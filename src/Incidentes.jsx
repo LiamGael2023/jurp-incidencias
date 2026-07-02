@@ -56,6 +56,7 @@ function Incidentes() {
   const estadoInicialRecurso = {
     tipo: 'Personal', descripcion: '', cantidad: 1, precioUnitario: 0,
     numPersonas: 1, horasTrabajo: 8, horasExtras: 0, 
+    horasEfectivas: '', obsReduccion: '',
     numeroParte: generarCorrelativo(), 
     fechaParte: getFechaHoy(), 
     turno: 'Día', zonaTrabajo: '',
@@ -295,10 +296,25 @@ function Incidentes() {
       const pers = parseInt(nuevoRecurso.numPersonas) || 0;
       const hrs = parseFloat(nuevoRecurso.horasTrabajo) || 0;
       const ext = parseFloat(nuevoRecurso.horasExtras) || 0;
-      cantFinal = pers * (hrs + ext);
+      const totalTeorico = pers * (hrs + ext);
+      // Horas efectivas: si está vacío, usa el total teórico; si se editó, ese valor.
+      const efectivas = nuevoRecurso.horasEfectivas === '' || nuevoRecurso.horasEfectivas === null
+        ? totalTeorico
+        : parseFloat(nuevoRecurso.horasEfectivas) || 0;
       if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa el cargo (Ej. Peón)' });
-      if (cantFinal <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa la cantidad de personas y horas' });
-      descFinal = `${nuevoRecurso.descripcion}\n(Cuadrilla: ${pers} persona(s) x ${hrs}h normales + ${ext}h extras)`;
+      if (totalTeorico <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa la cantidad de personas y horas' });
+      if (efectivas < 0 || efectivas > totalTeorico) return Swal.fire({ icon: 'warning', title: 'Atención', text: `Las Horas Efectivas deben estar entre 0 y ${totalTeorico}` });
+      // Si hubo reducción, la observación es obligatoria.
+      if (efectivas < totalTeorico && !nuevoRecurso.obsReduccion.trim()) {
+        return Swal.fire({ icon: 'warning', title: 'Observación requerida', text: 'Detalla el motivo de la reducción de horas efectivas.' });
+      }
+      cantFinal = efectivas;   // el costo se calcula sobre las horas efectivas
+      descFinal = `${nuevoRecurso.descripcion}\n(Cuadrilla: ${pers} persona(s) x ${hrs}h normales + ${ext}h extras = ${totalTeorico} HH)`;
+      if (efectivas < totalTeorico) {
+        descFinal += `\nHoras efectivas: ${efectivas} HH (reducción). Motivo: ${nuevoRecurso.obsReduccion.trim()}`;
+      } else {
+        descFinal += `\nHoras efectivas: ${efectivas} HH`;
+      }
     } else {
       if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa una descripción' });
     }
@@ -564,6 +580,14 @@ function Incidentes() {
           formData.append('description', r.descripcionResumen || r.descripcion); 
           formData.append('quantity_hours', r.cantidad);
           formData.append('unit_price', r.precioUnitario);
+          // Campos separados para reportería
+          const totalTeoricoP = (parseInt(r.numPersonas)||0) * ((parseFloat(r.horasTrabajo)||0) + (parseFloat(r.horasExtras)||0));
+          const efectivasP = (r.horasEfectivas === '' || r.horasEfectivas == null) ? totalTeoricoP : (parseFloat(r.horasEfectivas)||0);
+          formData.append('num_personas', parseInt(r.numPersonas)||0);
+          formData.append('horas_normales', parseFloat(r.horasTrabajo)||0);
+          formData.append('horas_extras', parseFloat(r.horasExtras)||0);
+          formData.append('horas_efectivas', efectivasP);
+          formData.append('obs_reduccion', r.obsReduccion || '');
         } else if (r.tipo === 'Insumo') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-materials/`;
           formData.append('description', r.descripcion);
@@ -763,14 +787,44 @@ function Incidentes() {
                     </div>
                   </div>
                 ) : nuevoRecurso.tipo === 'Personal' ? (
+                  <>
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col-3"><label className="tbl-form-label">Cargo</label><input type="text" className="tbl-form-control" placeholder="Ej. Peón, Operario..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">N° Personas</label><input type="number" min="1" className="tbl-form-control" value={nuevoRecurso.numPersonas} onChange={e => setNuevoRecurso({...nuevoRecurso, numPersonas: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">H. Normales</label><input type="number" min="0" className="tbl-form-control" value={nuevoRecurso.horasTrabajo} onChange={e => setNuevoRecurso({...nuevoRecurso, horasTrabajo: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">H. Extras</label><input type="number" min="0" className="tbl-form-control" value={nuevoRecurso.horasExtras} onChange={e => setNuevoRecurso({...nuevoRecurso, horasExtras: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">S/ por HH</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
-                    <div className="tbl-col-1"><label className="tbl-form-label">Total</label><input type="text" className="tbl-form-control" disabled value={(nuevoRecurso.numPersonas * ((parseFloat(nuevoRecurso.horasTrabajo)||0) + (parseFloat(nuevoRecurso.horasExtras)||0))) || 0} style={{backgroundColor: '#e0f2fe', color: '#0284c7', fontWeight: 'bold'}} title="Total HH" /></div>
+                    <div className="tbl-col-1"><label className="tbl-form-label">Total</label><input type="text" className="tbl-form-control" disabled value={((parseInt(nuevoRecurso.numPersonas)||0) * ((parseFloat(nuevoRecurso.horasTrabajo)||0) + (parseFloat(nuevoRecurso.horasExtras)||0))) || 0} style={{backgroundColor: '#e0f2fe', color: '#0284c7', fontWeight: 'bold'}} title="Total HH teóricas" /></div>
                   </div>
+                  {(() => {
+                    const totalTeorico = (parseInt(nuevoRecurso.numPersonas)||0) * ((parseFloat(nuevoRecurso.horasTrabajo)||0) + (parseFloat(nuevoRecurso.horasExtras)||0));
+                    const efectivas = nuevoRecurso.horasEfectivas === '' ? totalTeorico : parseFloat(nuevoRecurso.horasEfectivas)||0;
+                    const hayReduccion = efectivas < totalTeorico;
+                    return (
+                      <div className="tbl-row tbl-mb-3">
+                        <div className="tbl-col-2">
+                          <label className="tbl-form-label">Horas Efectivas</label>
+                          <input type="number" min="0" max={totalTeorico} step="0.5" className="tbl-form-control"
+                            placeholder={String(totalTeorico)}
+                            value={nuevoRecurso.horasEfectivas}
+                            onChange={e => setNuevoRecurso({...nuevoRecurso, horasEfectivas: e.target.value})}
+                            style={hayReduccion ? {borderColor:'#f59e0b', backgroundColor:'#fffbeb', fontWeight:'bold'} : {fontWeight:'bold'}}
+                            title="Por defecto = Total. Edítalo si se trabajaron menos horas." />
+                        </div>
+                        <div className="tbl-col">
+                          <label className="tbl-form-label">
+                            Observación {hayReduccion ? <span style={{color:'#d97706',fontSize:'11px',fontWeight:600}}>· requerida (reducción de {(totalTeorico - efectivas)} HH)</span> : <span style={{color:'#94a3b8',fontSize:'11px'}}>· opcional</span>}
+                          </label>
+                          <input type="text" className="tbl-form-control"
+                            placeholder={hayReduccion ? 'Detalla el motivo de la reducción de horas...' : 'Sin observaciones'}
+                            value={nuevoRecurso.obsReduccion}
+                            onChange={e => setNuevoRecurso({...nuevoRecurso, obsReduccion: e.target.value})}
+                            style={hayReduccion && !nuevoRecurso.obsReduccion.trim() ? {borderColor:'#f59e0b', backgroundColor:'#fffbeb'} : {}} />
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  </>
                 ) : (
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col"><label className="tbl-form-label">Descripción del Insumo</label><input type="text" className="tbl-form-control" placeholder="Ej. Piedra chancada, Cemento..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
