@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
-  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash
+  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash, FaCheckCircle
 } from 'react-icons/fa';
 import './Incidentes.css';
 import Swal from 'sweetalert2';
@@ -252,7 +252,7 @@ function Incidentes() {
       const idStr = String(incidenteId);
       const formatPers = listPers.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-pers-${i.id}`, dbId: i.id, endpoint: 'incident-personnels', tipo: 'Personal', descripcionResumen: i.description, cantidad: parseFloat(i.quantity_hours), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity_hours) * parseFloat(i.unit_price), guardadoEnDB: true }));
       const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', descripcionResumen: i.description, cantidad: parseFloat(i.quantity), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity) * parseFloat(i.unit_price), guardadoEnDB: true }));
-      const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-maq-${i.id}`, dbId: i.id, endpoint: 'daily-part-heavy-equipments', tipo: 'Maquinaria', descripcionResumen: `Parte N° ${i.part_number} | ${i.equipment_name}\nActividad: ${i.activities}`, cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)), precioUnitario: parseFloat(i.unit_price), total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price), guardadoEnDB: true }));
+      const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-maq-${i.id}`, dbId: i.id, endpoint: 'daily-part-heavy-equipments', cerrado: i.cerrado || false, tipo: 'Maquinaria', descripcionResumen: `Parte N° ${i.part_number} | ${i.equipment_name}\nActividad: ${i.activities}`, cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)), precioUnitario: parseFloat(i.unit_price), total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price), guardadoEnDB: true }));
       setRecursos([...formatPers, ...formatMat, ...formatMaq]);
     } catch (error) { console.error("❌ Error al obtener los recursos guardados:", error); }
   };
@@ -297,7 +297,6 @@ function Incidentes() {
       ));
       const okAll = resultados.every(r => r.ok || r.status === 204);
       if (okAll) {
-        // Refresca desde la base para reflejar el estado real.
         if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
         Swal.fire({ icon: 'success', title: 'Eliminado', timer: 1200, showConfirmButton: false });
       } else {
@@ -306,6 +305,54 @@ function Incidentes() {
       }
     } catch (e) {
       Swal.fire('Error', 'Fallo de conexión al eliminar.', 'error');
+    }
+  };
+
+  // Cierra un parte diario individual: libera su máquina y lo bloquea.
+  const cerrarParteDiario = async (fila) => {
+    const conf = await Swal.fire({
+      title: '¿Finalizar actividades?',
+      html: `Se cerrará este parte diario.<br>La máquina quedará <b>disponible</b> para otros partes y el parte <b>no podrá editarse</b>.`,
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#206bc4',
+      confirmButtonText: 'Sí, finalizar', cancelButtonText: 'Cancelar',
+    });
+    if (!conf.isConfirmed) return;
+    const BASE_URL = 'https://gideonstudio.duckdns.org';
+    try {
+      const r = await fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/${fila.dbId}/cerrar/`, { method: 'POST' });
+      if (r.ok) {
+        if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
+        Swal.fire({ icon: 'success', title: 'Parte cerrado', text: 'La máquina fue liberada.', timer: 1500, showConfirmButton: false });
+      } else {
+        Swal.fire('Error', `No se pudo cerrar el parte (código: ${r.status}).`, 'error');
+      }
+    } catch (e) {
+      Swal.fire('Error', 'Fallo de conexión al cerrar.', 'error');
+    }
+  };
+
+  // Cierra TODOS los partes del incidente y libera todas sus máquinas.
+  const cerrarIncidenteCompleto = async () => {
+    if (!incidenteActivo) return;
+    const conf = await Swal.fire({
+      title: '¿Cerrar todo el incidente?',
+      html: `Se cerrarán <b>todos los partes diarios</b> de este incidente y se liberarán todas sus máquinas.`,
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#d97706',
+      confirmButtonText: 'Sí, cerrar incidente', cancelButtonText: 'Cancelar',
+    });
+    if (!conf.isConfirmed) return;
+    const BASE_URL = 'https://gideonstudio.duckdns.org';
+    try {
+      const r = await fetch(`${BASE_URL}/api/v1/mobile/operations/incidentes/${incidenteActivo.id}/cerrar-partes/`, { method: 'POST' });
+      if (r.ok) {
+        const data = await r.json();
+        if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
+        Swal.fire({ icon: 'success', title: 'Incidente cerrado', text: data.detail || 'Máquinas liberadas.', timer: 2000, showConfirmButton: false });
+      } else {
+        Swal.fire('Error', `No se pudo cerrar el incidente (código: ${r.status}).`, 'error');
+      }
+    } catch (e) {
+      Swal.fire('Error', 'Fallo de conexión.', 'error');
     }
   };
 
@@ -678,6 +725,17 @@ function Incidentes() {
         }
         const res = await fetch(endpoint, { method: 'POST', body: formData });
         if (!res.ok) throw new Error(`Error al guardar el registro de ${r.tipo}`);
+        // Si es maquinaria y se eligió una placa del catálogo, marcarla como
+        // NO disponible (estado=1) para que no aparezca en otros partes.
+        if (r.tipo === 'Maquinaria' && r.modeloId) {
+          try {
+            await fetch(`${BASE_URL}/api/v1/mobile/operations/modelos/${r.modeloId}/`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ estado: 1 }),
+            });
+          } catch (e) { console.error('No se pudo actualizar disponibilidad de la máquina', e); }
+        }
       }
       Swal.fire({ icon: 'success', title: 'Éxito', text: 'Se guardó correctamente', confirmButtonColor: '#206bc4' });
       setRecursos([]); setModalAbierto(false); 
@@ -924,10 +982,13 @@ function Incidentes() {
                             <td className="tbl-text-end text-blue font-bold">S/ {r.totalSum.toFixed(2)}</td>
                             <td>
                               {r.guardadoEnDB ? (
-                                <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-                                  <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>
+                                <div style={{display: 'flex', gap: '6px', alignItems: 'center', flexWrap:'wrap'}}>
+                                  {r.tipo === 'Maquinaria' && r.cerrado
+                                    ? <span className="tbl-badge" style={{backgroundColor:'#e2e8f0', color:'#475569'}}>Cerrado</span>
+                                    : <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>}
                                   {r.tipo === 'Maquinaria' && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
-                                  <button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>
+                                  {r.tipo === 'Maquinaria' && !r.cerrado && (<button type="button" onClick={() => cerrarParteDiario(r)} className="tbl-btn-action" title="Finalizar actividades (libera la máquina)" style={{padding: '4px 10px', backgroundColor: '#dcfce7', color:'#15803d', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:'600'}}><FaCheckCircle size={13} /> Finalizar</button>)}
+                                  {!(r.tipo === 'Maquinaria' && r.cerrado) && (<button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>)}
                                 </div>
                               ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
                             </td>
@@ -941,6 +1002,9 @@ function Incidentes() {
               <div className="tbl-modal-footer" style={{flexWrap:'wrap',gap:'8px'}}>
                 <div className="tbl-text-start tbl-text-muted">Costo Total: <span style={{fontSize: '1.25rem', color: '#1e293b', fontWeight: 'bold'}}>S/ {costoTotalIncidente.toFixed(2)}</span></div>
                 <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
+                  {recursos.some(r => r.tipo === 'Maquinaria' && r.guardadoEnDB && !r.cerrado) && (
+                    <button className="tbl-btn" onClick={cerrarIncidenteCompleto} style={{background:'#d97706',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Cierra todos los partes y libera todas las máquinas"><FaCheckCircle/> Cerrar incidente</button>
+                  )}
                   <button className="tbl-btn" onClick={exportarPDF} style={{background:'#d63939',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar PDF"><FaFilePdf/> PDF</button>
                   <button className="tbl-btn" onClick={exportarExcel} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar Excel"><FaFileExcel/> Excel</button>
                   <button className="tbl-btn tbl-btn-link" onClick={() => setModalAbierto(false)}>Cerrar</button>
