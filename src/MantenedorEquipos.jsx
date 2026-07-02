@@ -17,12 +17,12 @@ import './MantenedorEquipos.css';
 
 const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
-// Cabeceras con token si existe (tu API usa AllowAny en operations, pero por si acaso).
+// Cabeceras. Los endpoints de operations son AllowAny; NO enviamos token
+// porque un token vencido en localStorage provoca 401 (la maquinaria del
+// módulo tampoco manda Authorization). Solo enviamos Content-Type al escribir.
 function headers(json = true) {
-  const t = localStorage.getItem('userToken');
   const h = {};
   if (json) h['Content-Type'] = 'application/json';
-  if (t) h['Authorization'] = `Token ${t}`;
   return h;
 }
 
