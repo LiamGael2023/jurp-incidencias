@@ -61,7 +61,7 @@ function Incidentes() {
     numeroParte: generarCorrelativo(), 
     fechaParte: getFechaHoy(), 
     turno: 'Día', zonaTrabajo: '',
-    proveedor: '', operador: '',
+    proveedor: '', operador: '', licencia: '', categoria: '', longitud: '',
     equipoId: '', equipo: '',
     origen: 'JURP',
     marcaId: '', marca: '',
@@ -787,6 +787,8 @@ function Incidentes() {
           formData.append('part_number', r.numeroParte); formData.append('date', r.fechaParte);
           formData.append('shift', r.turno); formData.append('work_zone_text', r.zonaTrabajo);
           formData.append('provider', r.proveedor); formData.append('operator', r.operador);
+          formData.append('licencia', r.licencia || ''); formData.append('categoria', r.categoria || '');
+          if (r.longitud !== '' && r.longitud != null) formData.append('longitud', r.longitud);
           formData.append('equipment_name', r.equipo);
           formData.append('brand_name', r.marca);
           formData.append('model_plate', r.modeloMaquina ? `${r.modeloMaquina} / ${r.placa}` : r.placa); formData.append('start_horometer', r.hmInicio);
@@ -943,6 +945,11 @@ function Incidentes() {
                     <div className="tbl-row tbl-mb-3">
                       <div className="tbl-col"><label className="tbl-form-label">Proveedor</label><input type="text" className="tbl-form-control" placeholder="Nombre de empresa" value={nuevoRecurso.proveedor} onChange={e => setNuevoRecurso({...nuevoRecurso, proveedor: e.target.value})} /></div>
                       <div className="tbl-col"><label className="tbl-form-label">Operador</label><input type="text" className="tbl-form-control" placeholder="Nombre del operador" value={nuevoRecurso.operador} onChange={e => setNuevoRecurso({...nuevoRecurso, operador: e.target.value})} /></div>
+                    </div>
+                    <div className="tbl-row tbl-mb-3">
+                      <div className="tbl-col-4"><label className="tbl-form-label">Licencia</label><input type="text" className="tbl-form-control" placeholder="N° de licencia" value={nuevoRecurso.licencia} onChange={e => setNuevoRecurso({...nuevoRecurso, licencia: e.target.value})} /></div>
+                      <div className="tbl-col-4"><label className="tbl-form-label">Categoría</label><input type="text" className="tbl-form-control" placeholder="Ej. A-IIIb" value={nuevoRecurso.categoria} onChange={e => setNuevoRecurso({...nuevoRecurso, categoria: e.target.value})} /></div>
+                      <div className="tbl-col-4"><label className="tbl-form-label">Longitud (m)</label><input type="number" step="0.01" className="tbl-form-control" placeholder="Metros de avance" value={nuevoRecurso.longitud} onChange={e => setNuevoRecurso({...nuevoRecurso, longitud: e.target.value})} /></div>
                     </div>
                     <div className="tbl-row tbl-mb-3">
                       <div className="tbl-col-3">

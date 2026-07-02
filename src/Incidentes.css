@@ -28,6 +28,7 @@
 .tbl-col-auto { flex: 0 0 auto; }
 .tbl-col-2 { flex: 0 0 16.666%; }
 .tbl-col-3 { flex: 0 0 25%; }
+.tbl-col-4 { flex: 0 0 33.333%; }
 
 .tbl-page-pretitle {
   font-size: .75rem;
