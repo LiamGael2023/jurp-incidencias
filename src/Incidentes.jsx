@@ -70,30 +70,28 @@ function Incidentes() {
   const [nuevoRecurso, setNuevoRecurso] = useState(estadoInicialRecurso);
 
   // ── Carga de catálogos (equipos/marcas/modelos) ──────────────────────────
-  // Mismo backend que el resto del módulo operations.
+  // Mismo backend que el resto del módulo operations. Sin token: los endpoints
+  // son AllowAny, y mandar un token vencido provoca 401 (igual que la maquinaria,
+  // que también llama sin Authorization).
   const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
-  const authHeaders = () => {
-    const t = localStorage.getItem('userToken');
-    return t ? { 'Authorization': `Token ${t}` } : {};
-  };
 
   const cargarEquiposCat = async () => {
     try {
-      const r = await fetch(`${API_OPS}/equipos/?activo=true`, { headers: authHeaders() });
+      const r = await fetch(`${API_OPS}/equipos/?activo=true`);
       if (r.ok) setCatEquipos(await r.json());
     } catch (e) { console.error(e); }
   };
   const cargarMarcasCat = async (equipoId) => {
     if (!equipoId) { setCatMarcas([]); return; }
     try {
-      const r = await fetch(`${API_OPS}/marcas/?activo=true&equipo=${equipoId}`, { headers: authHeaders() });
+      const r = await fetch(`${API_OPS}/marcas/?activo=true&equipo=${equipoId}`);
       if (r.ok) setCatMarcas(await r.json());
     } catch (e) { console.error(e); }
   };
   const cargarModelosCat = async (marcaId) => {
     if (!marcaId) { setCatModelos([]); return; }
     try {
-      const r = await fetch(`${API_OPS}/modelos/?activo=true&marca=${marcaId}`, { headers: authHeaders() });
+      const r = await fetch(`${API_OPS}/modelos/?activo=true&marca=${marcaId}`);
       if (r.ok) setCatModelos(await r.json());
     } catch (e) { console.error(e); }
   };
