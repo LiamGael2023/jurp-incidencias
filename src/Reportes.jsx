@@ -10,7 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Swal from 'sweetalert2';
-import { FaFilePdf, FaUpload, FaEye, FaSyncAlt, FaFolderOpen, FaSpinner } from 'react-icons/fa';
+import { FaFilePdf, FaUpload, FaEye, FaSyncAlt, FaFolderOpen, FaSpinner, FaTimes, FaDownload } from 'react-icons/fa';
 
 // Ruta relativa: el proxy /api la redirige al backend de incidentes.
 const BASE_URL = '/api/v1/mobile/hi-report-files';
@@ -21,6 +21,7 @@ export default function Reportes() {
   const [cargando, setCargando] = useState(true);
   const [subiendo, setSubiendo] = useState(false);
   const [puedeSubir, setPuedeSubir] = useState(false);
+  const [pdfModal, setPdfModal] = useState(null);   // { url, nombre } o null
   const fileInputRef = useRef(null);
 
   const authHeaders = () => {
@@ -111,7 +112,7 @@ export default function Reportes() {
     }
   };
 
-  // Descarga el detalle (base64), reconstruye el PDF y lo abre.
+  // Descarga el detalle (base64), reconstruye el PDF y lo muestra en un modal.
   const abrirPdf = async (id, name) => {
     Swal.fire({ title: 'Descargando…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
@@ -123,16 +124,21 @@ export default function Reportes() {
       Swal.close();
       if (!base64) { Swal.fire('Vacío', 'El documento no tiene contenido en el servidor.', 'warning'); return; }
 
-      // base64 → Blob → URL para abrir/descargar.
+      // base64 → Blob → URL para el iframe del modal.
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       const blob = new Blob([bytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setPdfModal({ url, nombre: name || `Reporte #${id}` });
     } catch (e) {
       Swal.close();
       Swal.fire('Error', 'Tiempo de espera agotado o error de red.', 'error');
     }
+  };
+
+  // Cierra el modal y libera la URL del blob.
+  const cerrarPdfModal = () => {
+    if (pdfModal?.url) URL.revokeObjectURL(pdfModal.url);
+    setPdfModal(null);
   };
 
   const formatoFecha = (iso) => {
@@ -197,6 +203,28 @@ export default function Reportes() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Modal visor de PDF (igual que el parte diario) ─────────────── */}
+      {pdfModal && (
+        <div onClick={cerrarPdfModal} style={{ position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2vh 16px' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '900px', height: '92vh', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: '10px', overflow: 'hidden', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', padding: '14px 18px', backgroundColor: '#f8fafc' }}>
+              <h5 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <FaFilePdf color="#dc2626" /> {pdfModal.nombre}
+              </h5>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                <a href={pdfModal.url} download={`${pdfModal.nombre}.pdf`} style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#206bc4', color: '#fff', textDecoration: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '13px', fontWeight: 600 }} title="Descargar">
+                  <FaDownload size={13} /> Descargar
+                </a>
+                <button onClick={cerrarPdfModal} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: '18px', display: 'flex' }} title="Cerrar"><FaTimes /></button>
+              </div>
+            </div>
+            <div style={{ flex: 1, backgroundColor: '#525659' }}>
+              <iframe src={pdfModal.url} style={{ width: '100%', height: '100%', border: 'none' }} title="Visor PDF" />
+            </div>
+          </div>
         </div>
       )}
     </div>
