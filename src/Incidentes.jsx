@@ -47,10 +47,10 @@ function Incidentes() {
   };
 
   const generarCorrelativo = () => {
+    // Placeholder mientras el backend responde con el correlativo real.
     const fecha = new Date();
     const strFecha = `${fecha.getFullYear()}${String(fecha.getMonth()+1).padStart(2,'0')}${String(fecha.getDate()).padStart(2,'0')}`;
-    const random = Math.floor(1000 + Math.random() * 9000); 
-    return `PD-${strFecha}-${random}`;
+    return `PD-____-${strFecha}`;
   };
   
   const estadoInicialRecurso = {
@@ -99,6 +99,20 @@ function Incidentes() {
   };
 
   useEffect(() => { cargarEquiposCat(); }, []);
+
+  // Pide al backend el siguiente N° de parte (PD-XXXX-AAAAMMDD, reinicia por año).
+  const obtenerCorrelativoParte = async () => {
+    try {
+      const r = await fetch(`${API_OPS}/daily-part-heavy-equipments/siguiente-correlativo/`);
+      if (r.ok) {
+        const data = await r.json();
+        if (data?.numero_parte) {
+          setNuevoRecurso(prev => ({ ...prev, numeroParte: data.numero_parte }));
+        }
+      }
+    } catch (e) { console.error(e); }
+  };
+  useEffect(() => { obtenerCorrelativoParte(); }, []);
 
   // Handlers de los selects encadenados.
   const onCambiaEquipo = (id) => {
@@ -247,6 +261,7 @@ function Incidentes() {
   const abrirModal = (inc) => {
     setIncidenteActivo(inc); setRecursos([]); 
     setNuevoRecurso({...estadoInicialRecurso, numeroParte: generarCorrelativo()});
+    obtenerCorrelativoParte();
     setModalAbierto(true);
     cargarCosteosGuardados(inc.id); 
   };
@@ -290,6 +305,7 @@ function Incidentes() {
     const recursoCalculado = { ...nuevoRecurso, idLocal: Date.now(), descripcionResumen: descFinal, cantidad: cantFinal, precioUnitario: parseFloat(nuevoRecurso.precioUnitario) || 0, total: cantFinal * (parseFloat(nuevoRecurso.precioUnitario) || 0), guardadoEnDB: false };
     setRecursos([...recursos, recursoCalculado]);
     setNuevoRecurso({...estadoInicialRecurso, numeroParte: generarCorrelativo()});
+    obtenerCorrelativoParte();
   };
 
   const eliminarRecurso = (idLocal) => setRecursos(recursos.filter(r => r.idLocal !== idLocal));
