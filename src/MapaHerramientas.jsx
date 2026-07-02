@@ -490,9 +490,6 @@ export function BarraHerramientas({ herramienta, setHerramienta, onCaptura, onCo
         {capturando ? <FaSpinner className="icon-spin" /> : <FaCamera />}
       </button>
       <button className="jurp-tool-btn" title="Compartir imagen" onClick={onCompartir} disabled={capturando}><FaShareAlt /></button>
-      <div className="jurp-tool-sep" />
-      {btn('elevacion', <FaChartArea />, 'Perfil de elevación')}
-      {btn('streetview', <FaStreetView />, 'Street View (clic en el mapa)')}
     </div>
   );
 }

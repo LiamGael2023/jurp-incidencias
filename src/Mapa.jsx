@@ -18,8 +18,7 @@ import logo from './assets/logo1.png';
 
 // ── Herramientas del visor (minimapa, medición, perfil, street view, captura) ─
 import {
-  BarraHerramientas, MiniMapa, HerramientaMedicion,
-  StreetViewPicker, PerfilElevacion, useCapturaMapa,
+  BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa,
 } from './MapaHerramientas';
 import './MapaHerramientas.css';
 
@@ -461,8 +460,6 @@ function MapaChavimochic() {
           modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null}
           onFinish={() => {}}
         />
-        <StreetViewPicker activo={herramienta === 'streetview'} onDone={() => setHerramienta(null)} />
-        <PerfilElevacion activo={herramienta === 'elevacion'} onClose={() => setHerramienta(null)} />
         
         {miUbicacion && <Marker position={miUbicacion} icon={iconoGPS}><Popup>Estás aquí</Popup></Marker>}
         {capas.Canales && <><GeoJSON data={geoCanalMadre} style={estiloCanales}/><GeoJSON data={geoLateral10} style={estiloCanales}/><GeoJSON data={geoRedes} style={estiloCanales}/></>}
