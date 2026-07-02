@@ -1,0 +1,217 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   MapaHerramientas.css — estilos de las herramientas del visor JURP
+   Paleta JURP: azul #1971c2 · morado #722380 · rosa #E72276 · verde #6CA43A
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Barra de herramientas lateral ─────────────────────────────────────────── */
+.jurp-toolbar {
+  position: absolute;
+  top: 130px;
+  left: 10px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+.jurp-tool-btn {
+  width: 38px;
+  height: 38px;
+  border: none;
+  background: #fff;
+  color: #495057;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.jurp-tool-btn:hover:not(:disabled) { background: #f1f5f9; color: #1971c2; }
+.jurp-tool-btn.activo { background: #1971c2; color: #fff; }
+.jurp-tool-btn:disabled { opacity: 0.5; cursor: default; }
+.jurp-tool-sep { height: 1px; background: #e2e8f0; margin: 2px 6px; }
+
+/* ── Minimapa (esquina inferior derecha) ───────────────────────────────────── */
+.jurp-minimapa-wrap {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 200px;
+  z-index: 1000;
+  border: 2px solid #fff;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  transition: height 0.2s ease;
+  background: #cbd5e1;
+}
+.jurp-minimapa-toggle {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 1001;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #475569;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.jurp-minimapa-toggle:hover { background: #fff; }
+
+/* ── Tooltips de medición ──────────────────────────────────────────────────── */
+.jurp-med-tooltip span {
+  display: inline-block;
+  background: #1d273b;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, -160%);
+}
+
+/* ── Perfil de elevación: ayuda flotante ───────────────────────────────────── */
+.jurp-perfil-hint {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1002;
+  background: #1971c2;
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.25);
+}
+.jurp-perfil-hint-btn {
+  background: #fff;
+  color: #1971c2;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.jurp-perfil-hint-x {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: #fff;
+  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Perfil de elevación: panel de resultados ──────────────────────────────── */
+.jurp-perfil-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1003;
+  background: #fff;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+  border-radius: 10px 10px 0 0;
+  overflow: hidden;
+  animation: jurpSlideUp 0.25s ease;
+}
+@keyframes jurpSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+.jurp-perfil-header {
+  background: linear-gradient(90deg, #1a4d8f, #1971c2);
+  color: #fff;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.jurp-perfil-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.jurp-perfil-title span { font-weight: 400; opacity: 0.8; font-size: 13px; }
+.jurp-perfil-actions { display: flex; gap: 8px; }
+.jurp-perfil-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #fff;
+}
+.jurp-perfil-btn.pdf { background: #d6336c; }
+.jurp-perfil-btn.png { background: #495057; }
+.jurp-perfil-btn.x { background: rgba(255, 255, 255, 0.2); }
+.jurp-perfil-btn:disabled { opacity: 0.5; cursor: default; }
+
+.jurp-perfil-loading,
+.jurp-perfil-error {
+  padding: 24px;
+  text-align: center;
+  color: #475569;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.jurp-perfil-error { color: #c92a2a; }
+.jurp-perfil-error button {
+  margin-left: 8px;
+  background: #c92a2a;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.jurp-perfil-body { display: flex; gap: 12px; padding: 14px 16px; height: 260px; }
+.jurp-perfil-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 170px;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+.jurp-stat {
+  border-left: 3px solid #1971c2;
+  background: #f8fafc;
+  padding: 6px 10px;
+  border-radius: 0 4px 4px 0;
+}
+.jurp-stat-label { font-size: 10px; color: #94a3b8; font-weight: 600; letter-spacing: 0.3px; }
+.jurp-stat-val { font-size: 16px; font-weight: 700; color: #1d273b; }
+.jurp-stat-sub { font-size: 11px; font-weight: 400; color: #94a3b8; }
+.jurp-perfil-chart { flex: 1; min-width: 0; }
+
+/* ── Responsive (móvil) ────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .jurp-perfil-body { flex-direction: column; height: auto; }
+  .jurp-perfil-stats { width: 100%; flex-direction: row; flex-wrap: wrap; }
+  .jurp-stat { flex: 1 1 30%; }
+  .jurp-perfil-chart { height: 200px; }
+  .jurp-minimapa-wrap { width: 120px; }
+}

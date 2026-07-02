@@ -16,6 +16,13 @@ import geoLateral10 from './data/Lateral_10.json';
 import geoRedes from './data/Redes_Presurizado.json';
 import logo from './assets/logo1.png';
 
+// ── Herramientas del visor (minimapa, medición, perfil, street view, captura) ─
+import {
+  BarraHerramientas, MiniMapa, HerramientaMedicion,
+  StreetViewPicker, PerfilElevacion, useCapturaMapa,
+} from './MapaHerramientas';
+import './MapaHerramientas.css';
+
 // ── Simbología hidráulica ───────────────────────────────────────────────────
 import icoBocatoma        from './assets/simbologia/bocatoma.png';
 import icoEntrega         from './assets/simbologia/entrega.png';
@@ -231,6 +238,9 @@ function MapaChavimochic() {
   const [modalMedia, setModalMedia] = useState(null); // { src, type: 'image'|'video' }
 
   const mapRef = useRef(null);
+  const contenedorRef = useRef(null);           // div del mapa (para captura)
+  const [herramienta, setHerramienta] = useState(null); // 'distancia'|'area'|'elevacion'|'streetview'|null
+  const { ocupado: capturando, descargar, compartir } = useCapturaMapa(contenedorRef);
 
   // ── Estadísticas ──────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -391,7 +401,16 @@ function MapaChavimochic() {
   const incidentesFiltrados = filtroTiempo===0 ? incidentesAPI : incidentesAPI.filter(i=>i.timestamp>=tiempoLimite);
 
   return (
-    <div style={{ height:'100%',width:'100%',position:'relative' }}>
+    <div ref={contenedorRef} style={{ height:'100%',width:'100%',position:'relative' }}>
+      {/* ── Barra de herramientas del visor ────────────────────────────── */}
+      <BarraHerramientas
+        herramienta={herramienta}
+        setHerramienta={setHerramienta}
+        onCaptura={descargar}
+        onCompartir={compartir}
+        capturando={capturando}
+      />
+
       {/* ── Barra de búsqueda ──────────────────────────────────────────── */}
       <div style={{ position:'absolute',top:'20px',left:'50%',transform:'translateX(-50%)',zIndex:1001,width:'340px' }}>
         <div style={{ position:'relative' }}>
@@ -422,6 +441,15 @@ function MapaChavimochic() {
         <VolarAUbicacion posicion={miUbicacion || flyTarget} />
         <BotonEncuadreGeneral centro={centroMapa} />
         <CoordenadasUTM />
+
+        {/* ── Herramientas (dentro del mapa) ───────────────────────────── */}
+        <MiniMapa tileUrl={obtenerUrlMapa()} />
+        <HerramientaMedicion
+          modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null}
+          onFinish={() => {}}
+        />
+        <StreetViewPicker activo={herramienta === 'streetview'} onDone={() => setHerramienta(null)} />
+        <PerfilElevacion activo={herramienta === 'elevacion'} onClose={() => setHerramienta(null)} />
         
         {miUbicacion && <Marker position={miUbicacion} icon={iconoGPS}><Popup>Estás aquí</Popup></Marker>}
         {capas.Canales && <><GeoJSON data={geoCanalMadre} style={estiloCanales}/><GeoJSON data={geoLateral10} style={estiloCanales}/><GeoJSON data={geoRedes} style={estiloCanales}/></>}
