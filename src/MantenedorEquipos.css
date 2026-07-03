@@ -166,6 +166,19 @@
 /* SweetAlert debe salir por encima del mantenedor (que está en 100000). */
 .swal2-container { z-index: 200000 !important; }
 
+/* ── Barra global de origen (paso 1) ───────────────────────────────────────── */
+.mnt-origen-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 24px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+.mnt-origen-lbl { font-size: 13px; font-weight: 600; color: #334155; margin-right: 6px; padding-left: 2px; }
+.mnt-origen-bar .mnt-origen-btn { flex: 0 0 auto; padding: 7px 18px; }
+
 /* ── Selector de origen (JURP / Externa) ───────────────────────────────────── */
 .mnt-origen {
   display: flex;
