@@ -508,6 +508,10 @@ function Incidentes() {
         // Se ignora el N° de parte (único) y el estado de cierre. Texto normalizado.
         const detalleSinParte = detalle.replace(/Parte N° [^|]*\|/i, '').trim();
         clave = `maq|${normalizar(detalleSinParte)}|${r.precioUnitario}`;
+      } else if (r.tipo === 'Personal') {
+        // Agrupar personal por cargo + personas + horas + precio (ignora el motivo).
+        const cargo = normalizar(r.descripcion);
+        clave = `pers|${cargo}|${r.numPersonas}|${r.horasTrabajo}|${r.horasExtras}|${r.cantidad}|${r.precioUnitario}|${r.guardadoEnDB}`;
       } else {
         clave = `${r.tipo}|${normalizar(detalle)}|${r.precioUnitario}|${r.guardadoEnDB}`;
       }
@@ -1138,6 +1142,8 @@ function Incidentes() {
                             <td style={{fontSize: '11px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>
                               {r.tipo === 'Maquinaria' && r.count > 1
                                 ? (r.descripcionResumen || '').replace(/Parte N° [^|]*\|\s*/i, '').trim()
+                                : r.tipo === 'Personal' && r.count > 1
+                                ? `${r.descripcion} (Cuadrilla: ${r.numPersonas} persona(s) x ${r.horasTrabajo}h normales + ${r.horasExtras}h extras)`
                                 : (r.descripcionResumen || r.descripcion)}
                               {r.count > 1 && <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>}
                             </td>
