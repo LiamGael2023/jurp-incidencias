@@ -81,9 +81,9 @@ function Incidentes() {
   // que también llama sin Authorization).
   const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
-  const cargarEquiposCat = async () => {
+  const cargarEquiposCat = async (origen) => {
     try {
-      const r = await fetch(`${API_OPS}/equipos/?activo=true`);
+      const r = await fetch(`${API_OPS}/equipos/?activo=true&origen=${origen}`);
       if (r.ok) setCatEquipos(await r.json());
     } catch (e) { console.error(e); }
   };
@@ -94,16 +94,17 @@ function Incidentes() {
       if (r.ok) setCatMarcas(await r.json());
     } catch (e) { console.error(e); }
   };
-  const cargarModelosCat = async (marcaId, origen) => {
+  const cargarModelosCat = async (marcaId) => {
     if (!marcaId) { setCatModelos([]); return; }
     try {
       // Solo placas disponibles (estado=0) para el parte diario.
-      const r = await fetch(`${API_OPS}/modelos/?activo=true&estado=0&marca=${marcaId}&origen=${origen}`);
+      const r = await fetch(`${API_OPS}/modelos/?activo=true&estado=0&marca=${marcaId}`);
       if (r.ok) setCatModelos(await r.json());
     } catch (e) { console.error(e); }
   };
 
-  useEffect(() => { cargarEquiposCat(); }, []);
+  // Al montar, carga los equipos del origen inicial (JURP).
+  useEffect(() => { cargarEquiposCat(nuevoRecurso.origen); }, []);
 
   // Carga el catálogo de actividades (para el combo del parte diario).
   const cargarActividades = async () => {
@@ -128,23 +129,24 @@ function Incidentes() {
   };
   useEffect(() => { obtenerCorrelativoParte(); }, []);
 
-  // Handlers de los selects encadenados.
+  // Handlers de los selects encadenados: Origen → Equipo → Marca → Placa.
+  const onCambiaOrigen = (origen) => {
+    // El origen es el primer filtro: recarga equipos y limpia toda la cadena.
+    setNuevoRecurso(prev => ({ ...prev, origen, equipoId: '', equipo: '', marcaId: '', marca: '', modeloId: '', placa: '', modeloMaquina: '', codigoMaquina: '' }));
+    setCatMarcas([]); setCatModelos([]);
+    cargarEquiposCat(origen);
+  };
   const onCambiaEquipo = (id) => {
     const eq = catEquipos.find(e => String(e.id) === String(id));
-    setNuevoRecurso(prev => ({ ...prev, equipoId: id, equipo: eq?.nombre || '', marcaId: '', marca: '', modeloId: '', placa: '', codigoMaquina: '' }));
+    setNuevoRecurso(prev => ({ ...prev, equipoId: id, equipo: eq?.nombre || '', marcaId: '', marca: '', modeloId: '', placa: '', modeloMaquina: '', codigoMaquina: '' }));
     setCatMarcas([]); setCatModelos([]);
     cargarMarcasCat(id);
   };
-  const onCambiaOrigen = (origen) => {
-    setNuevoRecurso(prev => ({ ...prev, origen, modeloId: '', placa: '', codigoMaquina: '' }));
-    setCatModelos([]);
-    if (nuevoRecurso.marcaId) cargarModelosCat(nuevoRecurso.marcaId, origen);
-  };
   const onCambiaMarca = (id) => {
     const ma = catMarcas.find(m => String(m.id) === String(id));
-    setNuevoRecurso(prev => ({ ...prev, marcaId: id, marca: ma?.nombre || '', modeloId: '', placa: '', codigoMaquina: '' }));
+    setNuevoRecurso(prev => ({ ...prev, marcaId: id, marca: ma?.nombre || '', modeloId: '', placa: '', modeloMaquina: '', codigoMaquina: '' }));
     setCatModelos([]);
-    cargarModelosCat(id, nuevoRecurso.origen);
+    cargarModelosCat(id);
   };
   const onCambiaModelo = (id) => {
     const mo = catModelos.find(m => String(m.id) === String(id));
@@ -373,7 +375,7 @@ function Incidentes() {
         // Refresca el combo de placas leyendo el estado más reciente (evita
         // closures viejos). Si hay marca seleccionada, recarga sus placas.
         setNuevoRecurso(prev => {
-          if (prev.marcaId) cargarModelosCat(prev.marcaId, prev.origen);
+          if (prev.marcaId) cargarModelosCat(prev.marcaId);
           return prev;
         });
         Swal.fire({ icon: 'success', title: 'Parte cerrado', text: 'La máquina fue liberada.', timer: 1500, showConfirmButton: false });
@@ -415,7 +417,7 @@ function Incidentes() {
       // Refrescos locales.
       cargarCosteosGuardados(incidenteActivo.id);
       setNuevoRecurso(prev => {
-        if (prev.marcaId) cargarModelosCat(prev.marcaId, prev.origen);
+        if (prev.marcaId) cargarModelosCat(prev.marcaId);
         return prev;
       });
 
@@ -788,7 +790,7 @@ function Incidentes() {
           if (r.longitud !== '' && r.longitud != null) formData.append('longitud', r.longitud);
           formData.append('equipment_name', r.equipo);
           formData.append('brand_name', r.marca);
-          formData.append('model_plate', r.modeloMaquina ? `${r.modeloMaquina} / ${r.placa}` : r.placa); formData.append('start_horometer', r.hmInicio);
+          formData.append('model_plate', r.placa ? `${r.modeloMaquina || ''} / ${r.placa}`.trim() : (r.modeloMaquina || '')); formData.append('start_horometer', r.hmInicio);
           formData.append('end_horometer', r.hmFin); formData.append('fuel_gallons', r.combustible || 0);
           formData.append('fuel_voucher', r.vale); formData.append('activities', r.actividad);
           formData.append('observations', r.observaciones); formData.append('unit_price', r.precioUnitario);
@@ -949,17 +951,17 @@ function Incidentes() {
                     </div>
                     <div className="tbl-row tbl-mb-3">
                       <div className="tbl-col-3">
-                        <label className="tbl-form-label">Equipo <button type="button" onClick={() => setMantenedorAbierto(true)} title="Gestionar catálogos" style={{ background:'none', border:'none', color:'#206bc4', cursor:'pointer', fontSize:'11px', padding:'0 0 0 4px' }}><FaPlus /> gestionar</button></label>
-                        <select className="tbl-form-select" value={nuevoRecurso.equipoId} onChange={e => onCambiaEquipo(e.target.value)}>
-                          <option value="">— Seleccionar —</option>
-                          {catEquipos.map(eq => <option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
+                        <label className="tbl-form-label">Origen <button type="button" onClick={() => setMantenedorAbierto(true)} title="Gestionar catálogos" style={{ background:'none', border:'none', color:'#206bc4', cursor:'pointer', fontSize:'11px', padding:'0 0 0 4px' }}><FaPlus /> gestionar</button></label>
+                        <select className="tbl-form-select" value={nuevoRecurso.origen} onChange={e => onCambiaOrigen(e.target.value)}>
+                          <option value="JURP">JURP (propia)</option>
+                          <option value="EXTERNA">Externa</option>
                         </select>
                       </div>
                       <div className="tbl-col-3">
-                        <label className="tbl-form-label">Origen</label>
-                        <select className="tbl-form-select" value={nuevoRecurso.origen} onChange={e => onCambiaOrigen(e.target.value)} disabled={!nuevoRecurso.equipoId}>
-                          <option value="JURP">JURP (propia)</option>
-                          <option value="EXTERNA">Externa</option>
+                        <label className="tbl-form-label">Equipo</label>
+                        <select className="tbl-form-select" value={nuevoRecurso.equipoId} onChange={e => onCambiaEquipo(e.target.value)}>
+                          <option value="">— Seleccionar —</option>
+                          {catEquipos.map(eq => <option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
                         </select>
                       </div>
                       <div className="tbl-col-3">
@@ -970,10 +972,10 @@ function Incidentes() {
                         </select>
                       </div>
                       <div className="tbl-col-3">
-                        <label className="tbl-form-label">Placa {nuevoRecurso.codigoMaquina && <span style={{color:'#1a5aa8',fontWeight:700,fontSize:'11px'}}>· {nuevoRecurso.codigoMaquina}</span>}</label>
+                        <label className="tbl-form-label">Modelo/Placa {nuevoRecurso.codigoMaquina && <span style={{color:'#1a5aa8',fontWeight:700,fontSize:'11px'}}>· {nuevoRecurso.codigoMaquina}</span>}</label>
                         <select className="tbl-form-select" value={nuevoRecurso.modeloId} onChange={e => onCambiaModelo(e.target.value)} disabled={!nuevoRecurso.marcaId}>
                           <option value="">{nuevoRecurso.marcaId ? '— Seleccionar —' : 'Elige marca'}</option>
-                          {catModelos.map(mo => <option key={mo.id} value={mo.id}>{mo.codigo} · {mo.modelo ? `${mo.modelo} · ` : ''}{mo.placa}</option>)}
+                          {catModelos.map(mo => <option key={mo.id} value={mo.id}>{mo.codigo} · {mo.placa ? `${mo.modelo || ''} · ${mo.placa}` : (mo.modelo || 's/modelo')}</option>)}
                         </select>
                       </div>
                     </div>
@@ -1244,7 +1246,7 @@ function Incidentes() {
       {/* ── Mantenedor de catálogos (Equipos/Marcas/Modelos) ─────────────── */}
       <MantenedorEquipos
         abierto={mantenedorAbierto}
-        onClose={() => { setMantenedorAbierto(false); cargarEquiposCat(); if (nuevoRecurso.equipoId) cargarMarcasCat(nuevoRecurso.equipoId); if (nuevoRecurso.marcaId) cargarModelosCat(nuevoRecurso.marcaId, nuevoRecurso.origen); }}
+        onClose={() => { setMantenedorAbierto(false); cargarEquiposCat(nuevoRecurso.origen); if (nuevoRecurso.equipoId) cargarMarcasCat(nuevoRecurso.equipoId); if (nuevoRecurso.marcaId) cargarModelosCat(nuevoRecurso.marcaId); }}
       />
 
     </div>

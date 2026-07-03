@@ -11,16 +11,16 @@ import { useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
 import { FaPlus, FaEdit, FaTrash, FaTimes, FaChevronRight, FaSync, FaCircle } from 'react-icons/fa';
 import './MantenedorEquipos.css';
- 
+
 const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
- 
+
 // Endpoints AllowAny; no enviamos token (uno vencido daría 401).
 function headers(json = true) {
   const h = {};
   if (json) h['Content-Type'] = 'application/json';
   return h;
 }
- 
+
 export default function MantenedorEquipos({ abierto, onClose }) {
   const [equipos, setEquipos] = useState([]);
   const [marcas, setMarcas] = useState([]);
@@ -29,16 +29,17 @@ export default function MantenedorEquipos({ abierto, onClose }) {
   const [origenSel, setOrigenSel] = useState('JURP');   // JURP | EXTERNA
   const [marcaSel, setMarcaSel] = useState(null);
   const [cargando, setCargando] = useState(false);
- 
+
   // ── Cargas ──────────────────────────────────────────────────────────────
-  const cargarEquipos = useCallback(async () => {
+  // Equipos filtrados por el origen seleccionado (JURP / Externa).
+  const cargarEquipos = useCallback(async (origen) => {
     setCargando(true);
     try {
-      const r = await fetch(`${API}/equipos/`);
+      const r = await fetch(`${API}/equipos/?origen=${origen}`);
       if (r.ok) setEquipos(await r.json());
     } catch (e) { console.error(e); } finally { setCargando(false); }
   }, []);
- 
+
   const cargarMarcas = useCallback(async (equipoId) => {
     if (!equipoId) { setMarcas([]); return; }
     try {
@@ -46,20 +47,23 @@ export default function MantenedorEquipos({ abierto, onClose }) {
       if (r.ok) setMarcas(await r.json());
     } catch (e) { console.error(e); }
   }, []);
- 
-  // Placas filtradas por marca + origen seleccionado.
-  const cargarPlacas = useCallback(async (marcaId, origen) => {
+
+  // Placas de la marca (el origen ya viene heredado del equipo).
+  const cargarPlacas = useCallback(async (marcaId) => {
     if (!marcaId) { setPlacas([]); return; }
     try {
-      const r = await fetch(`${API}/modelos/?marca=${marcaId}&origen=${origen}`);
+      const r = await fetch(`${API}/modelos/?marca=${marcaId}`);
       if (r.ok) setPlacas(await r.json());
     } catch (e) { console.error(e); }
   }, []);
- 
-  useEffect(() => { if (abierto) cargarEquipos(); }, [abierto, cargarEquipos]);
+
+  // Al abrir o cambiar el origen: recargar equipos y limpiar toda la cadena.
+  useEffect(() => {
+    if (abierto) { cargarEquipos(origenSel); setEquipoSel(null); setMarcaSel(null); setMarcas([]); setPlacas([]); }
+  }, [abierto, origenSel, cargarEquipos]);
   useEffect(() => { cargarMarcas(equipoSel?.id); setMarcaSel(null); setPlacas([]); }, [equipoSel, cargarMarcas]);
-  useEffect(() => { cargarPlacas(marcaSel?.id, origenSel); }, [marcaSel, origenSel, cargarPlacas]);
- 
+  useEffect(() => { cargarPlacas(marcaSel?.id); }, [marcaSel, cargarPlacas]);
+
   // ── CRUD genérico ─────────────────────────────────────────────────────────
   const crear = async (recurso, body, recargar) => {
     try {
@@ -94,17 +98,42 @@ export default function MantenedorEquipos({ abierto, onClose }) {
     if (e?.placa) return Array.isArray(e.placa) ? e.placa[0] : e.placa;
     return Object.entries(e).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' · ');
   };
- 
+
   // ── Equipos ────────────────────────────────────────────────────────────
   const nuevoEquipo = async () => {
-    const { value } = await Swal.fire({ title: 'Nuevo equipo', input: 'text', inputPlaceholder: 'Ej. TRACTOR', showCancelButton: true, confirmButtonText: 'Crear', inputValidator: v => !v && 'Escribe un nombre' });
-    if (value) crear('equipos', { nombre: value.toUpperCase().trim(), activo: true }, cargarEquipos);
+    const origenTxt = origenSel === 'JURP' ? 'JURP (propia)' : 'Externa';
+    const { value: form } = await Swal.fire({
+      title: `Nuevo equipo · ${origenTxt}`,
+      html:
+        '<input id="sw-nombre" class="swal2-input" placeholder="Ej. CAMIONETA, TRACTOR S/ORUGAS">' +
+        '<label style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:12px;font-size:14px;cursor:pointer">' +
+        '<input type="checkbox" id="sw-placa-chk" style="width:16px;height:16px"> ¿Este equipo tiene placa? (camioneta, cama baja)</label>',
+      focusConfirm: false, showCancelButton: true, confirmButtonText: 'Crear',
+      preConfirm: () => {
+        const nombre = document.getElementById('sw-nombre').value.trim();
+        if (!nombre) { Swal.showValidationMessage('Escribe un nombre'); return false; }
+        return { nombre, requiere_placa: document.getElementById('sw-placa-chk').checked };
+      },
+    });
+    if (form) crear('equipos', { nombre: form.nombre.toUpperCase(), origen: origenSel, requiere_placa: form.requiere_placa, activo: true }, () => cargarEquipos(origenSel));
   };
   const editarEquipo = async (eq) => {
-    const { value } = await Swal.fire({ title: 'Editar equipo', input: 'text', inputValue: eq.nombre, showCancelButton: true, confirmButtonText: 'Guardar' });
-    if (value && value !== eq.nombre) editar('equipos', eq.id, { nombre: value.toUpperCase().trim() }, cargarEquipos);
+    const { value: form } = await Swal.fire({
+      title: 'Editar equipo',
+      html:
+        `<input id="sw-nombre" class="swal2-input" placeholder="Nombre" value="${eq.nombre}">` +
+        `<label style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:12px;font-size:14px;cursor:pointer">` +
+        `<input type="checkbox" id="sw-placa-chk" ${eq.requiere_placa ? 'checked' : ''} style="width:16px;height:16px"> ¿Este equipo tiene placa?</label>`,
+      focusConfirm: false, showCancelButton: true, confirmButtonText: 'Guardar',
+      preConfirm: () => {
+        const nombre = document.getElementById('sw-nombre').value.trim();
+        if (!nombre) { Swal.showValidationMessage('Escribe un nombre'); return false; }
+        return { nombre, requiere_placa: document.getElementById('sw-placa-chk').checked };
+      },
+    });
+    if (form) editar('equipos', eq.id, { nombre: form.nombre.toUpperCase(), requiere_placa: form.requiere_placa }, () => cargarEquipos(origenSel));
   };
- 
+
   // ── Marcas ─────────────────────────────────────────────────────────────
   const nuevaMarca = async () => {
     if (!equipoSel) return;
@@ -115,49 +144,61 @@ export default function MantenedorEquipos({ abierto, onClose }) {
     const { value } = await Swal.fire({ title: 'Editar marca', input: 'text', inputValue: ma.nombre, showCancelButton: true, confirmButtonText: 'Guardar' });
     if (value && value !== ma.nombre) editar('marcas', ma.id, { nombre: value.toUpperCase().trim() }, () => cargarMarcas(equipoSel.id));
   };
- 
+
   // ── Placas (máquinas) ──────────────────────────────────────────────────
   const nuevaPlaca = async () => {
     if (!marcaSel) return;
     const origenTxt = origenSel === 'JURP' ? 'JURP (propia)' : 'Externa';
+    const pidePlaca = !!equipoSel?.requiere_placa;
     const { value: form } = await Swal.fire({
       title: `Nueva máquina · ${origenTxt}`,
       html:
         `<p style="font-size:13px;color:#64748b;margin:0 0 10px">Equipo: <b>${equipoSel.nombre}</b> · Marca: <b>${marcaSel.nombre}</b><br>El código se generará automáticamente.</p>` +
         '<input id="sw-modelo" class="swal2-input" placeholder="Modelo (ej. D8T, 320)">' +
-        '<input id="sw-placa" class="swal2-input" placeholder="Placa (ej. ABC-123)">',
+        (pidePlaca ? '<input id="sw-placa" class="swal2-input" placeholder="Placa (ej. ABC-123)">' : ''),
       focusConfirm: false, showCancelButton: true, confirmButtonText: 'Crear',
       preConfirm: () => {
-        const placa = document.getElementById('sw-placa').value.trim();
-        if (!placa) { Swal.showValidationMessage('La placa es obligatoria'); return false; }
-        return { modelo: document.getElementById('sw-modelo').value.trim(), placa };
+        const modelo = document.getElementById('sw-modelo').value.trim();
+        if (!modelo) { Swal.showValidationMessage('El modelo es obligatorio'); return false; }
+        if (pidePlaca) {
+          const placa = document.getElementById('sw-placa').value.trim();
+          if (!placa) { Swal.showValidationMessage('La placa es obligatoria para este equipo'); return false; }
+          return { modelo, placa };
+        }
+        return { modelo, placa: '' };
       },
     });
-    if (form) crear('modelos', { marca: marcaSel.id, origen: origenSel, modelo: form.modelo.toUpperCase() || null, placa: form.placa.toUpperCase() }, () => cargarPlacas(marcaSel.id, origenSel));
+    if (form) crear('modelos', { marca: marcaSel.id, origen: equipoSel?.origen || origenSel, modelo: form.modelo.toUpperCase(), placa: form.placa ? form.placa.toUpperCase() : null }, () => cargarPlacas(marcaSel.id));
   };
   const editarPlaca = async (mo) => {
+    const pidePlaca = !!equipoSel?.requiere_placa;
     const { value: form } = await Swal.fire({
       title: `Editar máquina · ${mo.codigo}`,
       html:
         `<input id="sw-modelo" class="swal2-input" placeholder="Modelo" value="${mo.modelo || ''}">` +
-        `<input id="sw-placa" class="swal2-input" placeholder="Placa" value="${mo.placa || ''}">`,
+        (pidePlaca ? `<input id="sw-placa" class="swal2-input" placeholder="Placa" value="${mo.placa || ''}">` : ''),
       focusConfirm: false, showCancelButton: true, confirmButtonText: 'Guardar',
       preConfirm: () => {
-        const placa = document.getElementById('sw-placa').value.trim();
-        if (!placa) { Swal.showValidationMessage('La placa es obligatoria'); return false; }
-        return { modelo: document.getElementById('sw-modelo').value.trim(), placa };
+        const modelo = document.getElementById('sw-modelo').value.trim();
+        if (!modelo) { Swal.showValidationMessage('El modelo es obligatorio'); return false; }
+        if (pidePlaca) {
+          const placa = document.getElementById('sw-placa').value.trim();
+          if (!placa) { Swal.showValidationMessage('La placa es obligatoria para este equipo'); return false; }
+          return { modelo, placa };
+        }
+        return { modelo, placa: '' };
       },
     });
-    if (form) editar('modelos', mo.id, { modelo: form.modelo.toUpperCase() || null, placa: form.placa.toUpperCase() }, () => cargarPlacas(marcaSel.id, origenSel));
+    if (form) editar('modelos', mo.id, { modelo: form.modelo.toUpperCase(), placa: form.placa ? form.placa.toUpperCase() : null }, () => cargarPlacas(marcaSel.id));
   };
   // Alterna estado 0 (disponible) ⇄ 1 (no disponible).
   const toggleEstado = async (mo) => {
     const nuevo = mo.estado === 0 ? 1 : 0;
-    editar('modelos', mo.id, { estado: nuevo }, () => cargarPlacas(marcaSel.id, origenSel));
+    editar('modelos', mo.id, { estado: nuevo }, () => cargarPlacas(marcaSel.id));
   };
- 
+
   if (!abierto) return null;
- 
+
   return (
     <div className="mnt-overlay" onClick={onClose}>
       <div className="mnt-modal" onClick={e => e.stopPropagation()}>
@@ -165,40 +206,42 @@ export default function MantenedorEquipos({ abierto, onClose }) {
           <h3>Mantenedor de maquinaria</h3>
           <button className="mnt-btn-x" onClick={onClose}><FaTimes /></button>
         </div>
- 
+
+        {/* ── Paso 1: Origen (filtra toda la jerarquía) ──────────────────── */}
+        <div className="mnt-origen-bar">
+          <span className="mnt-origen-lbl">1 · Selecciona el origen:</span>
+          <button className={`mnt-origen-btn ${origenSel === 'JURP' ? 'on' : ''}`} onClick={() => setOrigenSel('JURP')}>JURP (propia)</button>
+          <button className={`mnt-origen-btn ${origenSel === 'EXTERNA' ? 'on ext' : ''}`} onClick={() => setOrigenSel('EXTERNA')}>Externa</button>
+        </div>
+
         <div className="mnt-cols">
           {/* ── Equipos ─────────────────────────────────────────────────── */}
           <div className="mnt-col">
             <div className="mnt-col-head">
-              <span>Equipos</span>
+              <span>2 · Equipos <small>{origenSel === 'JURP' ? 'JURP' : 'Externa'}</small></span>
               <button className="mnt-btn-add" onClick={nuevoEquipo}><FaPlus /> Nuevo</button>
             </div>
             <div className="mnt-list">
               {cargando && <div className="mnt-empty"><FaSync className="mnt-spin" /> Cargando…</div>}
-              {!cargando && equipos.length === 0 && <div className="mnt-empty">Sin equipos. Crea el primero.</div>}
+              {!cargando && equipos.length === 0 && <div className="mnt-empty">Sin equipos {origenSel === 'JURP' ? 'propios' : 'externos'}. Crea el primero.</div>}
               {equipos.map(eq => (
                 <div key={eq.id} className={`mnt-item ${equipoSel?.id === eq.id ? 'sel' : ''}`} onClick={() => setEquipoSel(eq)}>
                   <span className="mnt-item-name">{eq.nombre}</span>
                   <span className="mnt-item-actions">
                     <button onClick={e => { e.stopPropagation(); editarEquipo(eq); }} title="Editar"><FaEdit /></button>
-                    <button onClick={e => { e.stopPropagation(); eliminar('equipos', eq.id, cargarEquipos, eq.nombre); }} title="Eliminar" className="del"><FaTrash /></button>
+                    <button onClick={e => { e.stopPropagation(); eliminar('equipos', eq.id, () => cargarEquipos(origenSel), eq.nombre); }} title="Eliminar" className="del"><FaTrash /></button>
                     <FaChevronRight className="mnt-item-arrow" />
                   </span>
                 </div>
               ))}
             </div>
           </div>
- 
-          {/* ── Marcas (con selector de origen arriba) ──────────────────── */}
+
+          {/* ── Marcas ──────────────────────────────────────────────────── */}
           <div className="mnt-col">
             <div className="mnt-col-head">
-              <span>Marcas {equipoSel && <small>de {equipoSel.nombre}</small>}</span>
+              <span>3 · Marcas {equipoSel && <small>de {equipoSel.nombre}</small>}</span>
               <button className="mnt-btn-add" onClick={nuevaMarca} disabled={!equipoSel}><FaPlus /> Nueva</button>
-            </div>
-            {/* Selector JURP / Externa */}
-            <div className="mnt-origen">
-              <button className={`mnt-origen-btn ${origenSel === 'JURP' ? 'on' : ''}`} onClick={() => setOrigenSel('JURP')}>JURP</button>
-              <button className={`mnt-origen-btn ${origenSel === 'EXTERNA' ? 'on ext' : ''}`} onClick={() => setOrigenSel('EXTERNA')}>Externa</button>
             </div>
             <div className="mnt-list">
               {!equipoSel && <div className="mnt-empty">Selecciona un equipo →</div>}
@@ -215,11 +258,11 @@ export default function MantenedorEquipos({ abierto, onClose }) {
               ))}
             </div>
           </div>
- 
+
           {/* ── Placas ──────────────────────────────────────────────────── */}
           <div className="mnt-col">
             <div className="mnt-col-head">
-              <span>Placas {marcaSel && <small>· {origenSel === 'JURP' ? 'JURP' : 'Externa'}</small>}</span>
+              <span>4 · Placas {marcaSel && <small>· {origenSel === 'JURP' ? 'JURP' : 'Externa'}</small>}</span>
               <button className="mnt-btn-add" onClick={nuevaPlaca} disabled={!marcaSel}><FaPlus /> Nueva</button>
             </div>
             <div className="mnt-list">
@@ -229,7 +272,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
                 <div key={mo.id} className="mnt-item mnt-item-placa">
                   <span className="mnt-item-name">
                     <span className={`mnt-codigo ${mo.origen === 'JURP' ? 'jurp' : 'ext'}`}>{mo.codigo}</span>
-                    <span className="mnt-placa-txt">{mo.modelo ? `${mo.modelo} · ${mo.placa}` : mo.placa}</span>
+                    <span className="mnt-placa-txt">{mo.placa ? `${mo.modelo || ''} · ${mo.placa}` : (mo.modelo || 's/modelo')}</span>
                   </span>
                   <span className="mnt-item-actions always">
                     <button
@@ -240,14 +283,14 @@ export default function MantenedorEquipos({ abierto, onClose }) {
                       <FaCircle /> {mo.estado === 0 ? 'Disponible' : 'No disp.'}
                     </button>
                     <button onClick={() => editarPlaca(mo)} title="Editar placa"><FaEdit /></button>
-                    <button onClick={() => eliminar('modelos', mo.id, () => cargarPlacas(marcaSel.id, origenSel), mo.codigo)} title="Eliminar" className="del"><FaTrash /></button>
+                    <button onClick={() => eliminar('modelos', mo.id, () => cargarPlacas(marcaSel.id), mo.codigo)} title="Eliminar" className="del"><FaTrash /></button>
                   </span>
                 </div>
               ))}
             </div>
           </div>
         </div>
- 
+
         <div className="mnt-footer">
           <span className="mnt-hint">Código automático: JURP001… (propia) · EX01… (externa). Placa única. Se crea disponible.</span>
           <button className="mnt-btn-cerrar" onClick={onClose}>Cerrar</button>
@@ -256,4 +299,3 @@ export default function MantenedorEquipos({ abierto, onClose }) {
     </div>
   );
 }
- 
