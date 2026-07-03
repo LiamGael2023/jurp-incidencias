@@ -441,40 +441,38 @@ function Incidentes() {
     let descFinal = nuevoRecurso.descripcion;
     let cantFinal = parseFloat(nuevoRecurso.cantidad) || 0;
     if (nuevoRecurso.tipo === 'Maquinaria') {
-      cantFinal = parseFloat(horasMaquina) || 0;
-      if (cantFinal <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Horómetro Final debe ser mayor al Inicial' });
+      const totalHM = parseFloat(horasMaquina) || 0;   // HM Fin - HM Inicio
+      if (totalHM <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Horómetro Final debe ser mayor al Inicial' });
       if (!nuevoRecurso.numeroParte) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Número de Parte es obligatorio' });
       if (!nuevoRecurso.equipo) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un equipo' });
+      // Horas efectivas: por defecto = total del horómetro; editable.
+      const efectivas = (nuevoRecurso.horasEfectivas === '' || nuevoRecurso.horasEfectivas === null)
+        ? totalHM
+        : parseFloat(nuevoRecurso.horasEfectivas) || 0;
+      if (efectivas < 0 || efectivas > totalHM) return Swal.fire({ icon: 'warning', title: 'Atención', text: `Las Horas Efectivas deben estar entre 0 y ${totalHM}` });
+      // Si hubo reducción, la observación es obligatoria.
+      if (efectivas < totalHM && !nuevoRecurso.obsReduccion.trim()) {
+        return Swal.fire({ icon: 'warning', title: 'Observación requerida', text: 'Detalla el motivo de la reducción de horas efectivas.' });
+      }
+      cantFinal = efectivas;   // el costo se calcula sobre las horas efectivas
       const equipoFinal = nuevoRecurso.equipo;
       const marcaFinal = nuevoRecurso.marca;
       descFinal = `Parte N° ${nuevoRecurso.numeroParte} | ${nuevoRecurso.codigoMaquina} · ${equipoFinal} ${marcaFinal} ${nuevoRecurso.modeloMaquina || ''} (${nuevoRecurso.placa})\n`;
       descFinal += `Zona: ${nuevoRecurso.zonaTrabajo} | Op: ${nuevoRecurso.operador} | Prov: ${nuevoRecurso.proveedor}\n`;
-      descFinal += `HM: ${nuevoRecurso.hmInicio} a ${nuevoRecurso.hmFin} | Comb: ${nuevoRecurso.combustible || 0} Gls (Vale: ${nuevoRecurso.vale})\n`;
+      descFinal += `HM: ${nuevoRecurso.hmInicio} a ${nuevoRecurso.hmFin} (${totalHM} HE) | Comb: ${nuevoRecurso.combustible || 0} Gls (Vale: ${nuevoRecurso.vale})\n`;
       descFinal += `Actividad: ${nuevoRecurso.actividad}`;
+      if (efectivas < totalHM) {
+        descFinal += `\nHoras efectivas: ${efectivas} HE (reducción de ${(totalHM - efectivas).toFixed(1)}). Motivo: ${nuevoRecurso.obsReduccion.trim()}`;
+      }
       if (nuevoRecurso.incluirMetrado) descFinal += `\nVol. Extraído: ${volumenMetrado} m3`;
     } else if (nuevoRecurso.tipo === 'Personal') {
       const pers = parseInt(nuevoRecurso.numPersonas) || 0;
       const hrs = parseFloat(nuevoRecurso.horasTrabajo) || 0;
       const ext = parseFloat(nuevoRecurso.horasExtras) || 0;
-      const totalTeorico = pers * (hrs + ext);
-      // Horas efectivas: si está vacío, usa el total teórico; si se editó, ese valor.
-      const efectivas = nuevoRecurso.horasEfectivas === '' || nuevoRecurso.horasEfectivas === null
-        ? totalTeorico
-        : parseFloat(nuevoRecurso.horasEfectivas) || 0;
+      cantFinal = pers * (hrs + ext);
       if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa el cargo (Ej. Peón)' });
-      if (totalTeorico <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa la cantidad de personas y horas' });
-      if (efectivas < 0 || efectivas > totalTeorico) return Swal.fire({ icon: 'warning', title: 'Atención', text: `Las Horas Efectivas deben estar entre 0 y ${totalTeorico}` });
-      // Si hubo reducción, la observación es obligatoria.
-      if (efectivas < totalTeorico && !nuevoRecurso.obsReduccion.trim()) {
-        return Swal.fire({ icon: 'warning', title: 'Observación requerida', text: 'Detalla el motivo de la reducción de horas efectivas.' });
-      }
-      cantFinal = efectivas;   // el costo se calcula sobre las horas efectivas
-      descFinal = `${nuevoRecurso.descripcion}\n(Cuadrilla: ${pers} persona(s) x ${hrs}h normales + ${ext}h extras = ${totalTeorico} HH)`;
-      if (efectivas < totalTeorico) {
-        descFinal += `\nHoras efectivas: ${efectivas} HH (reducción). Motivo: ${nuevoRecurso.obsReduccion.trim()}`;
-      } else {
-        descFinal += `\nHoras efectivas: ${efectivas} HH`;
-      }
+      if (cantFinal <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa la cantidad de personas y horas' });
+      descFinal = `${nuevoRecurso.descripcion}\n(Cuadrilla: ${pers} persona(s) x ${hrs}h normales + ${ext}h extras)`;
     } else {
       if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa una descripción' });
     }
@@ -772,14 +770,10 @@ function Incidentes() {
           formData.append('description', r.descripcionResumen || r.descripcion); 
           formData.append('quantity_hours', r.cantidad);
           formData.append('unit_price', r.precioUnitario);
-          // Campos separados para reportería
-          const totalTeoricoP = (parseInt(r.numPersonas)||0) * ((parseFloat(r.horasTrabajo)||0) + (parseFloat(r.horasExtras)||0));
-          const efectivasP = (r.horasEfectivas === '' || r.horasEfectivas == null) ? totalTeoricoP : (parseFloat(r.horasEfectivas)||0);
+          // Desglose de la cuadrilla
           formData.append('num_personas', parseInt(r.numPersonas)||0);
           formData.append('horas_normales', parseFloat(r.horasTrabajo)||0);
           formData.append('horas_extras', parseFloat(r.horasExtras)||0);
-          formData.append('horas_efectivas', efectivasP);
-          formData.append('obs_reduccion', r.obsReduccion || '');
         } else if (r.tipo === 'Insumo') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-materials/`;
           formData.append('description', r.descripcion);
@@ -993,6 +987,34 @@ function Incidentes() {
                       <div className="tbl-col"><label className="tbl-form-label">Combustible (Gls)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.combustible} onChange={e => setNuevoRecurso({...nuevoRecurso, combustible: e.target.value})} /></div>
                       <div className="tbl-col"><label className="tbl-form-label">Vale N°</label><input type="text" className="tbl-form-control" value={nuevoRecurso.vale} onChange={e => setNuevoRecurso({...nuevoRecurso, vale: e.target.value})} /></div>
                     </div>
+                    {(() => {
+                      const totalHM = parseFloat(horasMaquina) || 0;
+                      const efectivas = nuevoRecurso.horasEfectivas === '' ? totalHM : parseFloat(nuevoRecurso.horasEfectivas)||0;
+                      const hayReduccion = efectivas < totalHM;
+                      return (
+                        <div className="tbl-row tbl-mb-3">
+                          <div className="tbl-col-3">
+                            <label className="tbl-form-label">Horas Efectivas (HE)</label>
+                            <input type="number" min="0" max={totalHM} step="0.1" className="tbl-form-control"
+                              placeholder={String(totalHM)}
+                              value={nuevoRecurso.horasEfectivas}
+                              onChange={e => setNuevoRecurso({...nuevoRecurso, horasEfectivas: e.target.value})}
+                              style={hayReduccion ? {borderColor:'#f59e0b', backgroundColor:'#fffbeb', fontWeight:'bold'} : {fontWeight:'bold'}}
+                              title="Por defecto = horas del horómetro. Edítalo si fueron menos." />
+                          </div>
+                          <div className="tbl-col">
+                            <label className="tbl-form-label">
+                              Observación {hayReduccion ? <span style={{color:'#d97706',fontSize:'11px',fontWeight:600}}>· requerida (reducción de {(totalHM - efectivas).toFixed(1)} HE)</span> : <span style={{color:'#94a3b8',fontSize:'11px'}}>· opcional</span>}
+                            </label>
+                            <input type="text" className="tbl-form-control"
+                              placeholder={hayReduccion ? 'Detalla el motivo de la reducción de horas...' : 'Sin observaciones de reducción'}
+                              value={nuevoRecurso.obsReduccion}
+                              onChange={e => setNuevoRecurso({...nuevoRecurso, obsReduccion: e.target.value})}
+                              style={hayReduccion && !nuevoRecurso.obsReduccion.trim() ? {borderColor:'#f59e0b', backgroundColor:'#fffbeb'} : {}} />
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div className="tbl-row tbl-mb-3">
                       <div className="tbl-col"><label className="tbl-form-label">Actividades Realizadas <span style={{color:'red'}}>*</span></label>
                         <select className="tbl-form-select" value={nuevoRecurso.actividad} onChange={e => onCambiaActividad(e.target.value)}>
@@ -1064,34 +1086,6 @@ function Incidentes() {
                     <div className="tbl-col-2"><label className="tbl-form-label">S/ por HH</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
                     <div className="tbl-col-1"><label className="tbl-form-label">Total</label><input type="text" className="tbl-form-control" disabled value={((parseInt(nuevoRecurso.numPersonas)||0) * ((parseFloat(nuevoRecurso.horasTrabajo)||0) + (parseFloat(nuevoRecurso.horasExtras)||0))) || 0} style={{backgroundColor: '#e0f2fe', color: '#0284c7', fontWeight: 'bold'}} title="Total HH teóricas" /></div>
                   </div>
-                  {(() => {
-                    const totalTeorico = (parseInt(nuevoRecurso.numPersonas)||0) * ((parseFloat(nuevoRecurso.horasTrabajo)||0) + (parseFloat(nuevoRecurso.horasExtras)||0));
-                    const efectivas = nuevoRecurso.horasEfectivas === '' ? totalTeorico : parseFloat(nuevoRecurso.horasEfectivas)||0;
-                    const hayReduccion = efectivas < totalTeorico;
-                    return (
-                      <div className="tbl-row tbl-mb-3">
-                        <div className="tbl-col-2">
-                          <label className="tbl-form-label">Horas Efectivas</label>
-                          <input type="number" min="0" max={totalTeorico} step="0.5" className="tbl-form-control"
-                            placeholder={String(totalTeorico)}
-                            value={nuevoRecurso.horasEfectivas}
-                            onChange={e => setNuevoRecurso({...nuevoRecurso, horasEfectivas: e.target.value})}
-                            style={hayReduccion ? {borderColor:'#f59e0b', backgroundColor:'#fffbeb', fontWeight:'bold'} : {fontWeight:'bold'}}
-                            title="Por defecto = Total. Edítalo si se trabajaron menos horas." />
-                        </div>
-                        <div className="tbl-col">
-                          <label className="tbl-form-label">
-                            Observación {hayReduccion ? <span style={{color:'#d97706',fontSize:'11px',fontWeight:600}}>· requerida (reducción de {(totalTeorico - efectivas)} HH)</span> : <span style={{color:'#94a3b8',fontSize:'11px'}}>· opcional</span>}
-                          </label>
-                          <input type="text" className="tbl-form-control"
-                            placeholder={hayReduccion ? 'Detalla el motivo de la reducción de horas...' : 'Sin observaciones'}
-                            value={nuevoRecurso.obsReduccion}
-                            onChange={e => setNuevoRecurso({...nuevoRecurso, obsReduccion: e.target.value})}
-                            style={hayReduccion && !nuevoRecurso.obsReduccion.trim() ? {borderColor:'#f59e0b', backgroundColor:'#fffbeb'} : {}} />
-                        </div>
-                      </div>
-                    );
-                  })()}
                   </>
                 ) : (
                   <div className="tbl-row tbl-mb-3">
