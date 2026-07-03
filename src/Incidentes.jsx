@@ -491,18 +491,25 @@ function Incidentes() {
 
   // Agrupa recursos idénticos (mismo tipo + detalle + precio) en una sola fila.
   // Maquinaria NO se agrupa: cada parte es único (tiene su PDF y horómetro propio).
+  // Normaliza texto para comparar: minúsculas, sin tildes, espacios colapsados.
+  const normalizar = (txt) => (txt || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // quita tildes
+    .replace(/\s+/g, ' ')
+    .trim();
+
   const recursosAgrupados = (() => {
     const grupos = new Map();
     for (const r of recursos) {
       const detalle = r.descripcionResumen || r.descripcion || '';
       let clave;
       if (r.tipo === 'Maquinaria') {
-        // Agrupar maquinaria idéntica: misma máquina + actividad + precio + estado.
-        // Se ignora el N° de parte (único por registro) para poder agrupar.
+        // Agrupar maquinaria idéntica: misma máquina + actividad + precio.
+        // Se ignora el N° de parte (único) y el estado de cierre. Texto normalizado.
         const detalleSinParte = detalle.replace(/Parte N° [^|]*\|/i, '').trim();
-        clave = `maq|${detalleSinParte}|${r.precioUnitario}|${r.cerrado}|${r.guardadoEnDB}`;
+        clave = `maq|${normalizar(detalleSinParte)}|${r.precioUnitario}`;
       } else {
-        clave = `${r.tipo}|${detalle}|${r.precioUnitario}|${r.guardadoEnDB}`;
+        clave = `${r.tipo}|${normalizar(detalle)}|${r.precioUnitario}|${r.guardadoEnDB}`;
       }
       if (!grupos.has(clave)) {
         grupos.set(clave, {
@@ -1129,7 +1136,9 @@ function Incidentes() {
                           <tr key={r.idLocal}>
                             <td><span className="tbl-badge bg-secondary-lt">{r.tipo}</span></td>
                             <td style={{fontSize: '11px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>
-                              {r.descripcionResumen || r.descripcion}
+                              {r.tipo === 'Maquinaria' && r.count > 1
+                                ? (r.descripcionResumen || '').replace(/Parte N° [^|]*\|\s*/i, '').trim()
+                                : (r.descripcionResumen || r.descripcion)}
                               {r.count > 1 && <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>}
                             </td>
                             <td className="tbl-text-end font-bold">{r.cantidadTotal.toFixed(r.tipo==='Personal'?1:2)} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.'}</span></td>
@@ -1138,7 +1147,13 @@ function Incidentes() {
                             <td>
                               {r.guardadoEnDB ? (
                                 <div style={{display: 'flex', gap: '6px', alignItems: 'center', flexWrap:'wrap'}}>
-                                  {r.tipo === 'Maquinaria' && r.cerrado
+                                  {r.tipo === 'Maquinaria' && r.count > 1
+                                    ? (() => {
+                                        const cerrados = r.partesMaq.filter(p => p.cerrado).length;
+                                        const activos = r.count - cerrados;
+                                        return <span className="tbl-badge" style={{backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:600}}>{activos > 0 ? `${activos} activo${activos>1?'s':''}` : ''}{activos > 0 && cerrados > 0 ? ' · ' : ''}{cerrados > 0 ? `${cerrados} cerrado${cerrados>1?'s':''}` : ''}</span>;
+                                      })()
+                                    : r.tipo === 'Maquinaria' && r.cerrado
                                     ? <span className="tbl-badge" style={{backgroundColor:'#e2e8f0', color:'#475569'}}>Cerrado</span>
                                     : <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>}
                                   {r.tipo === 'Maquinaria' && r.count === 1 && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
