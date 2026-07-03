@@ -262,7 +262,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
           {/* ── Placas ──────────────────────────────────────────────────── */}
           <div className="mnt-col">
             <div className="mnt-col-head">
-              <span>4 · Placas {marcaSel && <small>· {origenSel === 'JURP' ? 'JURP' : 'Externa'}</small>}</span>
+              <span>4 · Modelo / Placa {marcaSel && <small>· {origenSel === 'JURP' ? 'JURP' : 'Externa'}</small>}</span>
               <button className="mnt-btn-add" onClick={nuevaPlaca} disabled={!marcaSel}><FaPlus /> Nueva</button>
             </div>
             <div className="mnt-list">

@@ -796,10 +796,19 @@ function Incidentes() {
           formData.append('observations', r.observaciones); formData.append('unit_price', r.precioUnitario);
           if (r.fotoParte) formData.append('part_photo', r.fotoParte);
           if (r.fotoVale) formData.append('voucher_photo', r.fotoVale);
-          if (r.incluirMetrado) { formData.append('width_top', r.anchoSup); formData.append('width_bottom', r.anchoInf); formData.append('height', r.altura); formData.append('length', r.longitud); }
+          if (r.incluirMetrado) {
+            if (r.anchoSup !== '' && r.anchoSup != null) formData.append('width_top', r.anchoSup);
+            if (r.anchoInf !== '' && r.anchoInf != null) formData.append('width_bottom', r.anchoInf);
+            if (r.altura !== '' && r.altura != null) formData.append('height', r.altura);
+            if (r.longitud !== '' && r.longitud != null) formData.append('length', r.longitud);
+          }
         }
         const res = await fetch(endpoint, { method: 'POST', body: formData });
-        if (!res.ok) throw new Error(`Error al guardar el registro de ${r.tipo}`);
+        if (!res.ok) {
+          let detalle = '';
+          try { detalle = JSON.stringify(await res.json()); } catch (e) { detalle = `código ${res.status}`; }
+          throw new Error(`Error al guardar ${r.tipo}: ${detalle}`);
+        }
         // Si es maquinaria y se eligió una placa del catálogo, marcarla como
         // NO disponible (estado=1) para que no aparezca en otros partes.
         if (r.tipo === 'Maquinaria' && r.modeloId) {
@@ -816,7 +825,7 @@ function Incidentes() {
       setRecursos([]); setModalAbierto(false); 
     } catch (error) {
       console.error(error);
-      Swal.fire({ icon: 'error', title: 'Error', text: 'Hubo un error al guardar en la base de datos.' });
+      Swal.fire({ icon: 'error', title: 'Error al guardar', text: error.message || 'Hubo un error al guardar en la base de datos.' });
     } finally { setGuardando(false); }
   };
 
@@ -1071,7 +1080,7 @@ function Incidentes() {
                             </div>
                           </div>
                           <div style={{ display:'flex', alignItems:'center', gap:'10px', background:'#f0f9ff', borderRadius:'6px', padding:'10px 14px', fontSize:'13px' }}>
-                            <span style={{color:'#64748b'}}>Fórmula: V = (Ws + Wi) / 2 × H × L</span>
+                            <span style={{color:'#64748b'}}>Fórmula: V = (Ws + Wi / 2) × H × L</span>
                             <span style={{marginLeft:'auto', fontWeight:'bold', color:'#0284c7', fontSize:'15px'}}>Volumen extraído: {volumenMetrado} m³</span>
                           </div>
                         </div>
