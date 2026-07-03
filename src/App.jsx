@@ -6,7 +6,8 @@ import Incidentes from './Incidentes';
 import Estadisticas from './Estadisticas';
 import Vigilancia from './Vigilancia';
 import Reportes from './Reportes';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf } from 'react-icons/fa';
+import Maquinaria from './Maquinaria';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
 function App() {
@@ -83,6 +84,13 @@ function App() {
               {menuLateralAbierto && <span className="tbl-nav-title">Reportes</span>}
             </div>
           </li>
+
+          <li className={`tbl-nav-item ${vistaActual === 'maquinaria' ? 'active' : ''}`} onClick={() => setVistaActual('maquinaria')}>
+            <div className="tbl-nav-link">
+              <span className="tbl-nav-icon"><FaTruck /></span>
+              {menuLateralAbierto && <span className="tbl-nav-title">Maquinaria</span>}
+            </div>
+          </li>
         </ul>
       </aside>
 
@@ -122,6 +130,7 @@ function App() {
           {vistaActual === 'vigilancia' && <Vigilancia />}
           {vistaActual === 'estadisticas' && <Estadisticas />}
           {vistaActual === 'reportes' && <Reportes />}
+          {vistaActual === 'maquinaria' && <Maquinaria />}
         </div>
       </div>
     </div>
