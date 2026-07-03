@@ -495,10 +495,15 @@ function Incidentes() {
     const grupos = new Map();
     for (const r of recursos) {
       const detalle = r.descripcionResumen || r.descripcion || '';
-      // Maquinaria y los no-guardados quedan como filas individuales.
-      const clave = r.tipo === 'Maquinaria'
-        ? `maq-${r.idLocal}`
-        : `${r.tipo}|${detalle}|${r.precioUnitario}|${r.guardadoEnDB}`;
+      let clave;
+      if (r.tipo === 'Maquinaria') {
+        // Agrupar maquinaria idéntica: misma máquina + actividad + precio + estado.
+        // Se ignora el N° de parte (único por registro) para poder agrupar.
+        const detalleSinParte = detalle.replace(/Parte N° [^|]*\|/i, '').trim();
+        clave = `maq|${detalleSinParte}|${r.precioUnitario}|${r.cerrado}|${r.guardadoEnDB}`;
+      } else {
+        clave = `${r.tipo}|${detalle}|${r.precioUnitario}|${r.guardadoEnDB}`;
+      }
       if (!grupos.has(clave)) {
         grupos.set(clave, {
           ...r,
@@ -507,6 +512,7 @@ function Incidentes() {
           count: 0,
           registros: [],   // {dbId, endpoint} de cada registro guardado del grupo
           idsLocales: [],  // idLocal de cada uno (para eliminar no-guardados)
+          partesMaq: [],   // maquinaria: lista completa de partes del grupo (para PDF/Finalizar individual)
         });
       }
       const g = grupos.get(clave);
@@ -515,6 +521,11 @@ function Incidentes() {
       g.count += 1;
       if (r.guardadoEnDB && r.dbId) g.registros.push({ dbId: r.dbId, endpoint: r.endpoint });
       g.idsLocales.push(r.idLocal);
+      if (r.tipo === 'Maquinaria') {
+        // Extraer el N° de parte del resumen para mostrarlo en cada botón.
+        const mp = (r.descripcionResumen || '').match(/Parte N° ([^\s|]+)/i);
+        g.partesMaq.push({ dbId: r.dbId, idLocal: r.idLocal, cerrado: r.cerrado, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, numeroParte: mp ? mp[1] : (r.numeroParte || ''), registro: r });
+      }
     }
     return Array.from(grupos.values());
   })();
@@ -1130,8 +1141,19 @@ function Incidentes() {
                                   {r.tipo === 'Maquinaria' && r.cerrado
                                     ? <span className="tbl-badge" style={{backgroundColor:'#e2e8f0', color:'#475569'}}>Cerrado</span>
                                     : <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>}
-                                  {r.tipo === 'Maquinaria' && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
-                                  {r.tipo === 'Maquinaria' && !r.cerrado && (<button type="button" onClick={() => cerrarParteDiario(r)} className="tbl-btn-action" title="Finalizar actividades (libera la máquina)" style={{padding: '4px 10px', backgroundColor: '#dcfce7', color:'#15803d', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:'600'}}><FaCheckCircle size={13} /> Finalizar</button>)}
+                                  {r.tipo === 'Maquinaria' && r.count === 1 && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
+                                  {r.tipo === 'Maquinaria' && r.count === 1 && !r.cerrado && (<button type="button" onClick={() => cerrarParteDiario(r)} className="tbl-btn-action" title="Finalizar actividades (libera la máquina)" style={{padding: '4px 10px', backgroundColor: '#dcfce7', color:'#15803d', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:'600'}}><FaCheckCircle size={13} /> Finalizar</button>)}
+                                  {r.tipo === 'Maquinaria' && r.count > 1 && (
+                                    <div style={{display:'flex', flexDirection:'column', gap:'4px', width:'100%'}}>
+                                      {r.partesMaq.map((p, idx) => (
+                                        <div key={p.idLocal || idx} style={{display:'flex', alignItems:'center', gap:'4px', justifyContent:'flex-end'}}>
+                                          <span style={{fontSize:'11px', color:'#64748b', marginRight:'auto'}}>{p.numeroParte}{p.cerrado && <span style={{color:'#15803d', fontWeight:600}}> · Cerrado</span>}</span>
+                                          {p.dbId && <button type="button" onClick={() => abrirModalPdf(p.dbId)} title="Ver PDF" style={{padding:'3px 7px', backgroundColor:'#e0f2fe', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaFilePdf size={14} /></button>}
+                                          {!p.cerrado && <button type="button" onClick={() => cerrarParteDiario(p.registro)} title="Finalizar este parte" style={{padding:'3px 8px', backgroundColor:'#dcfce7', color:'#15803d', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'3px', fontSize:'11px', fontWeight:600}}><FaCheckCircle size={11} /> Finalizar</button>}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                   {!(r.tipo === 'Maquinaria' && r.cerrado) && (<button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>)}
                                 </div>
                               ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
