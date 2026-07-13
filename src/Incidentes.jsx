@@ -1021,7 +1021,8 @@ function Incidentes() {
                       <div className="tbl-col"><label className="tbl-form-label">Observaciones</label><input type="text" className="tbl-form-control" placeholder="Condiciones del terreno, clima..." value={nuevoRecurso.observaciones} onChange={e => setNuevoRecurso({...nuevoRecurso, observaciones: e.target.value})} /></div>
                     </div>
                     {/* ── Metrado por actividad (con imagen de referencia) ────── */}
-                    {tieneMetradoActividad ? (
+                    {/* ── Metrado por actividad (con imagen de referencia) ────── */}
+                    {tieneMetradoActividad && (
                       <div style={{ background:'#f0f6ff', padding:'14px', borderRadius:'4px', border:'1px solid #bfdbfe', marginTop:'4px' }}>
                         <div style={{ display:'flex', gap:'14px', alignItems:'flex-start' }}>
                           <div style={{ flexShrink:0, width:'160px' }}>
@@ -1038,48 +1039,6 @@ function Incidentes() {
                           <span style={{ fontSize:'16px', fontWeight:'700', color: volCalc.val > 0 ? '#1463A5' : '#94a3b8' }}>{volumenMetrado} {volCalc.unit}</span>
                         </div>
                       </div>
-                    ) : (
-                    <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'14px', marginTop:'4px' }}>
-                      <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontWeight:600, color:'#1e293b' }}>
-                        <input type="checkbox" checked={nuevoRecurso.incluirMetrado} onChange={e => setNuevoRecurso({...nuevoRecurso, incluirMetrado: e.target.checked})} />
-                        Incluir cálculo de metrado (volumen extraído)
-                      </label>
-                      {nuevoRecurso.incluirMetrado && (
-                        <div style={{ marginTop:'14px' }}>
-                          <div className="tbl-row tbl-mb-3">
-                            <div className="tbl-col-3">
-                              <label className="tbl-form-label">Longitud L (m)</label>
-                              <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.longitud} onChange={e => setNuevoRecurso({...nuevoRecurso, longitud: e.target.value})} />
-                            </div>
-                            <div className="tbl-col-3">
-                              <label className="tbl-form-label" style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                                Altura H (m)
-                                <img src={refAltura} alt="Ref. altura" onClick={() => setImgRefModal({src: refAltura, titulo: 'Referencia: Altura (H)'})} style={{height:'24px',width:'40px',objectFit:'cover',borderRadius:'3px',cursor:'pointer',border:'1px solid #cbd5e1'}} title="Ver referencia de altura" />
-                              </label>
-                              <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.altura} onChange={e => setNuevoRecurso({...nuevoRecurso, altura: e.target.value})} />
-                            </div>
-                            <div className="tbl-col-3">
-                              <label className="tbl-form-label" style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                                Ancho Sup. Ws (m)
-                                <img src={refAncho} alt="Ref. ancho" onClick={() => setImgRefModal({src: refAncho, titulo: 'Referencia: Ancho Superior (Ws) - Ancho Inferior (Wi)'})} style={{height:'24px',width:'40px',objectFit:'cover',borderRadius:'3px',cursor:'pointer',border:'1px solid #cbd5e1'}} title="Ver referencia de anchos" />
-                              </label>
-                              <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.anchoSup} onChange={e => setNuevoRecurso({...nuevoRecurso, anchoSup: e.target.value})} />
-                            </div>
-                            <div className="tbl-col-3">
-                              <label className="tbl-form-label" style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                                Ancho Inf. Wi (m)
-                                <img src={refAncho} alt="Ref. ancho" onClick={() => setImgRefModal({src: refAncho, titulo: 'Referencia: Ancho Superior (Ws) - Ancho Inferior (Wi)'})} style={{height:'24px',width:'40px',objectFit:'cover',borderRadius:'3px',cursor:'pointer',border:'1px solid #cbd5e1'}} title="Ver referencia de anchos" />
-                              </label>
-                              <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.anchoInf} onChange={e => setNuevoRecurso({...nuevoRecurso, anchoInf: e.target.value})} />
-                            </div>
-                          </div>
-                          <div style={{ display:'flex', alignItems:'center', gap:'10px', background:'#f0f9ff', borderRadius:'6px', padding:'10px 14px', fontSize:'13px' }}>
-                            <span style={{color:'#64748b'}}>Fórmula: V = (Ws + Wi / 2) × H × L</span>
-                            <span style={{marginLeft:'auto', fontWeight:'bold', color:'#0284c7', fontSize:'15px'}}>Volumen extraído: {volumenMetrado} m3</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
                     )}
                   </div>
                 ) : nuevoRecurso.tipo === 'Personal' ? (
