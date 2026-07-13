@@ -641,7 +641,7 @@ function Incidentes() {
 
       {/* ── MODAL PRINCIPAL (GESTIÓN) ──────────────────────────────────── */}
       {modalAbierto && incidenteActivo && (
-        <div className="tbl-modal-backdrop" onClick={() => setModalAbierto(false)}>
+        <div className="tbl-modal-backdrop">
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{maxWidth: '960px'}}>
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
