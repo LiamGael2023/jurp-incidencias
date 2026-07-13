@@ -220,23 +220,23 @@ function MapaChavimochic() {
     const skip = new Set(['name', 'folder', 'FID', 'nro_ord', 'N_', 'Nº', 'Label', 'Field', '_tipo']);
     const lm = { NOMBRE: 'Nombre', PROGRESIVA: 'Progresiva', ESTADO: 'Estado', TRAMO: 'Tramo', ESTRUCTURA: 'Estructura', COD_EST: 'Canal/Sistema', ESTE: 'Este', NORTE: 'Norte' };
     const rows = Object.entries(props).filter(([k, v]) => !skip.has(k) && v && String(v).trim()).map(([k, v]) => `<tr><td style="color:#64748b;padding:3px 8px 3px 0;font-size:11px">${lm[k] || k}</td><td style="font-weight:500;font-size:11px;color:#e2e8f0">${v}</td></tr>`).join('');
-    return `<div style="font-family:system-ui;min-width:200px;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:10px"><div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid #334155;padding-bottom:6px;margin-bottom:6px">${iconUrl ? `<img src="${iconUrl}" style="width:24px;height:24px"/>` : ''}<div><div style="font-weight:700;font-size:13px">${props.name || ''}</div><div style="font-size:10px;color:#64748b">${label}</div></div></div>${rows ? `<table style="border-collapse:collapse;width:100%">${rows}</table>` : '<span style="font-size:11px;color:#475569">Sin datos</span>'}</div>`;
+    return `<div style="font-family:system-ui;min-width:200px;background:#fff;color:#1d273b;border-radius:6px;padding:10px"><div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:6px">${iconUrl ? `<img src="${iconUrl}" style="width:24px;height:24px"/>` : ''}<div><div style="font-weight:700;font-size:13px">${props.name || ''}</div><div style="font-size:10px;color:#64748b">${label}</div></div></div>${rows ? `<table style="border-collapse:collapse;width:100%">${rows}</table>` : '<span style="font-size:11px;color:#475569">Sin datos</span>'}</div>`;
   }, []);
 
   return (
     <div className="dash" ref={contenedorRef}>
       {/* ── KPI Bar ──────────────────────────────────────────────────── */}
       <div className="dash-kpi-bar">
-        <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#0ea5e9' }}>🏗️</div><div><div className="dash-kpi-label">Infraestructura</div><div className="dash-kpi-value">{totalKMZ.toLocaleString()}</div><div className="dash-kpi-sub">elementos registrados</div></div></div>
+        <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#1463A5' }}>🏗️</div><div><div className="dash-kpi-label">Infraestructura</div><div className="dash-kpi-value">{totalKMZ.toLocaleString()}</div><div className="dash-kpi-sub">elementos registrados</div></div></div>
         <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#f59f00' }}>⚠️</div><div><div className="dash-kpi-label">Incidentes</div><div className="dash-kpi-value">{incidentesAPI.length}</div><div className="dash-kpi-sub">{incPend} pendientes · {incAte} atención</div></div></div>
         <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#22c55e' }}>🌧️</div><div><div className="dash-kpi-label">Estaciones</div><div className="dash-kpi-value">{lluviasAPI.length}</div><div className="dash-kpi-sub">pluviómetros activos</div></div></div>
         <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#06b6d4' }}><FaTint /></div><div><div className="dash-kpi-label">Lluvia Máx 24h</div><div className="dash-kpi-value">{lluviaMax.toFixed(1)} <span style={{ fontSize: '12px', color: '#64748b' }}>mm</span></div><div className="dash-kpi-sub">acumulado mayor</div></div></div>
         <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#a855f7' }}>🛡️</div><div><div className="dash-kpi-label">Garitas</div><div className="dash-kpi-value">{(geoGaritasJURP?.features?.length || 0) + (geoGaritasOtros?.features?.length || 0)}</div><div className="dash-kpi-sub">puntos de vigilancia</div></div></div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <select value={mapaBase} onChange={e => setMapaBase(e.target.value)} style={{ background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: '4px', padding: '4px 8px', fontSize: '11px', fontFamily: 'inherit' }}>
+          <select value={mapaBase} onChange={e => setMapaBase(e.target.value)} style={{ background: '#f8fafc', color: '#626976', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '4px 8px', fontSize: '11px', fontFamily: 'inherit' }}>
             <option value="satelite">Satélite</option><option value="calles">Calles</option><option value="topografico">Topográfico</option><option value="oscuro">Oscuro</option>
           </select>
-          <button onClick={obtenerDatosDeApis} style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}><FaSyncAlt className={cargandoAPIs ? 'icon-spin' : ''} /> {cargandoAPIs ? '...' : 'Actualizar'}</button>
+          <button onClick={obtenerDatosDeApis} style={{ background: '#1463A5', color: '#fff', border: 'none', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}><FaSyncAlt className={cargandoAPIs ? 'icon-spin' : ''} /> {cargandoAPIs ? '...' : 'Actualizar'}</button>
         </div>
       </div>
 
@@ -254,7 +254,7 @@ function MapaChavimochic() {
               <input value={busqueda} onChange={e => handleBusqueda(e.target.value)} onFocus={() => resultadosBusqueda.length && setMostrarResultados(true)} placeholder="Buscar estructura, progresiva..." />
               {busqueda && <button onClick={() => { setBusqueda(''); setResultadosBusqueda([]); setMostrarResultados(false); }} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#475569', cursor: 'pointer' }}>✕</button>}
               {mostrarResultados && resultadosBusqueda.length > 0 && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1e293b', border: '1px solid #334155', borderRadius: '0 0 6px 6px', maxHeight: '200px', overflowY: 'auto' }}>
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0 0 6px 6px', maxHeight: '200px', overflowY: 'auto' }}>
                   {resultadosBusqueda.map((r, i) => (
                     <div key={i} onClick={() => seleccionarResultado(r)} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #0f172a', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px' }} onMouseEnter={e => { e.currentTarget.style.background = '#0f172a'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                       {r.icon && <img src={r.icon} alt="" style={{ width: '18px', height: '18px' }} />}
@@ -268,7 +268,7 @@ function MapaChavimochic() {
             {/* Map controls */}
             <div className="dash-map-controls" style={{ top: '50px' }}>
               <button className="dash-map-btn" onClick={() => mapRef.current?.flyTo(centroMapa, 10, { duration: 1 })} title="Vista general"><FaGlobe /></button>
-              <button className="dash-map-btn" onClick={() => setShowLayers(v => !v)} title="Capas" style={showLayers ? { borderColor: '#0ea5e9', color: '#0ea5e9' } : {}}><FaLayerGroup /></button>
+              <button className="dash-map-btn" onClick={() => setShowLayers(v => !v)} title="Capas" style={showLayers ? { borderColor: '#1463A5', color: '#1463A5' } : {}}><FaLayerGroup /></button>
               <button className="dash-map-btn" onClick={() => { navigator.geolocation.getCurrentPosition(p => setMiUbicacion([p.coords.latitude, p.coords.longitude])); }} title="Mi ubicación"><FaLocationArrow /></button>
             </div>
 
@@ -283,26 +283,26 @@ function MapaChavimochic() {
                     <div className="dash-layer-item"><label><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={() => { toggleCapa('Incidentes_Atencion'); toggleCapa('Incidentes_Nuevos'); }} /> Incidentes</label></div>
                     <div className="dash-layer-item"><label><input type="checkbox" checked={capas.Lluvias} onChange={() => toggleCapa('Lluvias')} /> Pluviómetros</label></div>
                     {(capas.Incidentes_Nuevos || capas.Incidentes_Atencion) && (
-                      <select value={filtroTiempo} onChange={e => setFiltroTiempo(Number(e.target.value))} style={{ width: '100%', margin: '4px 0', background: '#0f172a', color: '#94a3b8', border: '1px solid #1e293b', borderRadius: '4px', padding: '3px 6px', fontSize: '10px' }}>
+                      <select value={filtroTiempo} onChange={e => setFiltroTiempo(Number(e.target.value))} style={{ width: '100%', margin: '4px 0', background: '#f8fafc', color: '#626976', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '3px 6px', fontSize: '10px' }}>
                         <option value={1}>24 horas</option><option value={7}>7 días</option><option value={30}>30 días</option><option value={0}>Todo</option>
                       </select>
                     )}
                   </div>
                   <div className="dash-layer-group">
                     <div className="dash-layer-group-title">Filtros</div>
-                    <select value={filtroTramo} onChange={e => setFiltroTramo(e.target.value)} style={{ width: '100%', margin: '2px 0', background: '#0f172a', color: '#94a3b8', border: '1px solid #1e293b', borderRadius: '4px', padding: '3px 6px', fontSize: '10px' }}>
+                    <select value={filtroTramo} onChange={e => setFiltroTramo(e.target.value)} style={{ width: '100%', margin: '2px 0', background: '#f8fafc', color: '#626976', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '3px 6px', fontSize: '10px' }}>
                       <option value="">Todos los tramos</option>{tramosUnicos.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
-                    <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={{ width: '100%', margin: '2px 0', background: '#0f172a', color: '#94a3b8', border: '1px solid #1e293b', borderRadius: '4px', padding: '3px 6px', fontSize: '10px' }}>
+                    <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={{ width: '100%', margin: '2px 0', background: '#f8fafc', color: '#626976', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '3px 6px', fontSize: '10px' }}>
                       <option value="">Todo estado</option>{estadosUnicos.map(e2 => <option key={e2} value={e2}>{e2}</option>)}
                     </select>
-                    {(filtroTramo || filtroEstado) && <button onClick={() => { setFiltroTramo(''); setFiltroEstado(''); }} style={{ background: 'none', border: 'none', color: '#0ea5e9', cursor: 'pointer', fontSize: '10px', padding: '2px 0' }}>✕ Limpiar</button>}
+                    {(filtroTramo || filtroEstado) && <button onClick={() => { setFiltroTramo(''); setFiltroEstado(''); }} style={{ background: 'none', border: 'none', color: '#1463A5', cursor: 'pointer', fontSize: '10px', padding: '2px 0' }}>✕ Limpiar</button>}
                   </div>
                   <div className="dash-layer-group">
                     <div className="dash-layer-group-title">Infraestructura ({totalKMZ})</div>
                     <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
-                      <button onClick={() => setCapasKMZ(Object.fromEntries(KMZ_CONFIG.map(c => [c.key, true])))} style={{ flex: 1, background: '#0f172a', border: '1px solid #1e293b', color: '#0ea5e9', borderRadius: '4px', padding: '2px', fontSize: '10px', cursor: 'pointer' }}>Todas</button>
-                      <button onClick={() => setCapasKMZ(KMZ_CAPAS_DEFAULT)} style={{ flex: 1, background: '#0f172a', border: '1px solid #1e293b', color: '#64748b', borderRadius: '4px', padding: '2px', fontSize: '10px', cursor: 'pointer' }}>Ninguna</button>
+                      <button onClick={() => setCapasKMZ(Object.fromEntries(KMZ_CONFIG.map(c => [c.key, true])))} style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#1463A5', borderRadius: '4px', padding: '2px', fontSize: '10px', cursor: 'pointer' }}>Todas</button>
+                      <button onClick={() => setCapasKMZ(KMZ_CAPAS_DEFAULT)} style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b', borderRadius: '4px', padding: '2px', fontSize: '10px', cursor: 'pointer' }}>Ninguna</button>
                     </div>
                     {KMZ_CONFIG.map(c => (
                       <div key={c.key} className="dash-layer-item">
@@ -327,7 +327,7 @@ function MapaChavimochic() {
               <HerramientaMedicion modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null} onFinish={() => {}} />
 
               {miUbicacion && <Marker position={miUbicacion} icon={iconoGPS}><Popup>Mi ubicación</Popup></Marker>}
-              {capas.Canales && <><GeoJSON data={geoCanalMadre} style={{ color: '#0ea5e9', weight: 3, opacity: 0.7 }} /><GeoJSON data={geoLateral10} style={{ color: '#0ea5e9', weight: 3, opacity: 0.7 }} /><GeoJSON data={geoRedes} style={{ color: '#0ea5e9', weight: 3, opacity: 0.7 }} /></>}
+              {capas.Canales && <><GeoJSON data={geoCanalMadre} style={{ color: '#1463A5', weight: 3, opacity: 0.7 }} /><GeoJSON data={geoLateral10} style={{ color: '#1463A5', weight: 3, opacity: 0.7 }} /><GeoJSON data={geoRedes} style={{ color: '#1463A5', weight: 3, opacity: 0.7 }} /></>}
 
               {KMZ_CONFIG.map(cfg => {
                 if (!capasKMZ[cfg.key]) return null;
@@ -347,17 +347,17 @@ function MapaChavimochic() {
                 return (
                   <Marker key={inc.id} position={[inc.lat, inc.lng]} icon={crearIconoIncidente(inc.gravedad)} eventHandlers={{ click: () => cargarDetalleIncidente(inc.id) }}>
                     <Popup minWidth={260} maxWidth={300}>
-                      <div style={{ fontFamily: 'system-ui', background: '#1e293b', color: '#e2e8f0', borderRadius: '6px', padding: '10px', margin: '-14px -19px' }}>
+                      <div style={{ fontFamily: 'system-ui', background: '#f8fafc', color: '#e2e8f0', borderRadius: '6px', padding: '10px', margin: '-14px -19px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #334155', paddingBottom: '6px', marginBottom: '8px' }}><b>{inc.tipo}</b><span className={`dash-badge dash-badge-${inc.estado === 'pat' ? 'orange' : inc.estado === 'ate' ? 'blue' : 'green'}`}>{tx}</span></div>
-                        {cargandoDetalle ? <div style={{ textAlign: 'center', padding: '16px', color: '#0ea5e9' }}><FaSyncAlt className="icon-spin" /></div>
+                        {cargandoDetalle ? <div style={{ textAlign: 'center', padding: '16px', color: '#1463A5' }}><FaSyncAlt className="icon-spin" /></div>
                         : detalleActivo && detalleActivo.id === inc.id ? (
                           <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', marginBottom: '8px' }}>
-                            {detalleActivo.images?.map((it, j) => { const s = it.content?.startsWith('http') ? it.content : `data:image/jpeg;base64,${it.content}`; return <div key={j} onClick={() => setModalMedia({ src: s, type: 'image' })} style={{ flexShrink: 0, cursor: 'pointer' }}><img src={s} alt="" style={{ width: '100px', height: '80px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #334155' }} /></div>; })}
+                            {detalleActivo.images?.map((it, j) => { const s = it.content?.startsWith('http') ? it.content : `data:image/jpeg;base64,${it.content}`; return <div key={j} onClick={() => setModalMedia({ src: s, type: 'image' })} style={{ flexShrink: 0, cursor: 'pointer' }}><img src={s} alt="" style={{ width: '100px', height: '80px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #e2e8f0' }} /></div>; })}
                           </div>
                         ) : inc.imagenUrl && <div onClick={() => setModalMedia({ src: inc.imagenUrl, type: 'image' })} style={{ cursor: 'pointer', marginBottom: '8px' }}><img src={inc.imagenUrl} alt="" style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '4px' }} /></div>}
-                        <div style={{ fontSize: '11px', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div><b style={{ color: '#0ea5e9' }}>{inc.codigo}</b> · {inc.lugar}</div>
-                          <div style={{ background: '#0f172a', padding: '6px', borderRadius: '4px' }}>{inc.descripcion || 'Sin descripción'}</div>
+                        <div style={{ fontSize: '11px', color: '#626976', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div><b style={{ color: '#1463A5' }}>{inc.codigo}</b> · {inc.lugar}</div>
+                          <div style={{ background: '#f8fafc', padding: '6px', borderRadius: '4px' }}>{inc.descripcion || 'Sin descripción'}</div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569', fontSize: '10px' }}>👤 {inc.usuario} · 🕒 {inc.fecha}</div>
                         </div>
                       </div>
@@ -376,19 +376,19 @@ function MapaChavimochic() {
           <div className="dash-panel">
             <div className="dash-panel-title"><span className="accent">📈</span> Evolución de Incidentes</div>
             <ResponsiveContainer width="100%" height={140}>
-              <LineChart data={incMes}><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" /><XAxis dataKey="mes" tick={{ fontSize: 10 }} stroke="#334155" /><YAxis allowDecimals={false} tick={{ fontSize: 10 }} stroke="#334155" width={25} /><Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', fontSize: '11px' }} /><Line type="monotone" dataKey="cant" stroke="#0ea5e9" strokeWidth={2} dot={{ fill: '#0ea5e9', r: 3 }} name="Incidentes" /></LineChart>
+              <LineChart data={incMes}><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" /><XAxis dataKey="mes" tick={{ fontSize: 10 }} stroke="#334155" /><YAxis allowDecimals={false} tick={{ fontSize: 10 }} stroke="#334155" width={25} /><Tooltip contentStyle={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '11px' }} /><Line type="monotone" dataKey="cant" stroke="#0ea5e9" strokeWidth={2} dot={{ fill: '#0ea5e9', r: 3 }} name="Incidentes" /></LineChart>
             </ResponsiveContainer>
           </div>
           <div className="dash-panel">
             <div className="dash-panel-title"><span className="accent">🎯</span> Incidentes por Tipo</div>
             <ResponsiveContainer width="100%" height={160}>
-              <PieChart><Pie data={incPorTipo} cx="50%" cy="50%" innerRadius={35} outerRadius={60} dataKey="value" paddingAngle={2}>{incPorTipo.map((d, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', fontSize: '11px' }} /><Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={v => <span style={{ color: '#94a3b8' }}>{v}</span>} /></PieChart>
+              <PieChart><Pie data={incPorTipo} cx="50%" cy="50%" innerRadius={35} outerRadius={60} dataKey="value" paddingAngle={2}>{incPorTipo.map((d, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip contentStyle={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '11px' }} /><Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={v => <span style={{ color: '#626976' }}>{v}</span>} /></PieChart>
             </ResponsiveContainer>
           </div>
           <div className="dash-panel">
             <div className="dash-panel-title"><span className="accent">🏗️</span> Infraestructura por Tipo</div>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={porTipoInfra} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" /><XAxis type="number" tick={{ fontSize: 10 }} stroke="#334155" /><YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} stroke="#334155" width={90} /><Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', fontSize: '11px' }} /><Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16}>{porTipoInfra.map((d, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
+              <BarChart data={porTipoInfra} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" /><XAxis type="number" tick={{ fontSize: 10 }} stroke="#334155" /><YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} stroke="#334155" width={90} /><Tooltip contentStyle={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '11px' }} /><Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16}>{porTipoInfra.map((d, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
             </ResponsiveContainer>
           </div>
           <div className="dash-panel" style={{ flex: 1, minHeight: '160px' }}>
