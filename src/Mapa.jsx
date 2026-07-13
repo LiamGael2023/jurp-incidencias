@@ -153,6 +153,7 @@ function MapaChavimochic() {
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
   const [modalMedia, setModalMedia] = useState(null);
   const [herramienta, setHerramienta] = useState(null);
+  const [costeos, setCosteos] = useState({}); // { incidentId: { personal, maquinaria, insumos, total } }
 
   const mapRef = useRef(null);
   const contenedorRef = useRef(null);
@@ -201,6 +202,26 @@ function MapaChavimochic() {
     } catch(e) { console.error(e); } finally { setCargandoAPIs(false); }
   };
   useEffect(() => { obtenerDatosDeApis(); }, []);
+
+  // ── Cargar costeos de gestión ──────────────────────────────────────────
+  const cargarCosteos = async () => {
+    const BASE = 'https://gideonstudio.duckdns.org';
+    try {
+      const [rP, rM, rQ] = await Promise.all([
+        fetch(`${BASE}/api/v1/mobile/operations/incident-personnels/`),
+        fetch(`${BASE}/api/v1/mobile/operations/incident-materials/`),
+        fetch(`${BASE}/api/v1/mobile/operations/daily-part-heavy-equipments/`),
+      ]);
+      const parse = async (r) => { if (!r.ok) return []; const d = await r.json(); return Array.isArray(d) ? d : d.results || []; };
+      const [pers, mats, maqs] = await Promise.all([parse(rP), parse(rM), parse(rQ)]);
+      const resumen = {};
+      for (const p of pers) { const id = String(p.incident_report); if (!resumen[id]) resumen[id] = { personal: 0, maquinaria: 0, insumos: 0, total: 0, items: 0 }; const sub = parseFloat(p.quantity_hours || 0) * parseFloat(p.unit_price || 0); resumen[id].personal += sub; resumen[id].total += sub; resumen[id].items++; }
+      for (const m of mats) { const id = String(m.incident_report); if (!resumen[id]) resumen[id] = { personal: 0, maquinaria: 0, insumos: 0, total: 0, items: 0 }; const sub = parseFloat(m.quantity || 0) * parseFloat(m.unit_price || 0); resumen[id].insumos += sub; resumen[id].total += sub; resumen[id].items++; }
+      for (const q of maqs) { const id = String(q.incident_report); if (!resumen[id]) resumen[id] = { personal: 0, maquinaria: 0, insumos: 0, total: 0, items: 0 }; const hrs = Math.max(0, parseFloat(q.end_horometer || 0) - parseFloat(q.start_horometer || 0)); const sub = hrs * parseFloat(q.unit_price || 0); resumen[id].maquinaria += sub; resumen[id].total += sub; resumen[id].items++; }
+      setCosteos(resumen);
+    } catch(e) { console.error('Costeos:', e); }
+  };
+  useEffect(() => { cargarCosteos(); }, []);
 
   const cargarDetalleIncidente = async (id) => { setDetalleActivo(null); setCargandoDetalle(true); const tk = localStorage.getItem('userToken'); try { const r = await fetch(`/api/v1/mobile/hi-incidents/${id}/`, { headers: { 'Authorization': `Token ${tk}` } }); if (r.ok) { const j = await r.json(); setDetalleActivo(j.data || j); } } catch(e) {} finally { setCargandoDetalle(false); } };
 
@@ -391,13 +412,39 @@ function MapaChavimochic() {
               <BarChart data={porTipoInfra} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" /><XAxis type="number" tick={{ fontSize: 10 }} stroke="#334155" /><YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} stroke="#334155" width={90} /><Tooltip contentStyle={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '11px' }} /><Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16}>{porTipoInfra.map((d, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="dash-panel" style={{ flex: 1, minHeight: '160px' }}>
-            <div className="dash-panel-title"><span className="accent">📋</span> Registros Recientes</div>
-            <div style={{ overflowY: 'auto', maxHeight: '200px' }}>
-              <table className="dash-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Ubicación</th><th>Estado</th></tr></thead><tbody>
-                {incidentesAPI.slice(0, 8).map((i, j) => { const [, tx] = badge(i.estado); return <tr key={j}><td style={{ whiteSpace: 'nowrap', fontSize: '10px' }}>{i.fecha}</td><td>{i.tipo}</td><td style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.lugar}</td><td><span className={`dash-badge dash-badge-${i.estado === 'pat' ? 'orange' : i.estado === 'ate' ? 'blue' : 'green'}`}>{tx}</span></td></tr>; })}
-                {incidentesAPI.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: '#475569', padding: '20px' }}>Sin incidentes</td></tr>}
-              </tbody></table>
+          <div className="dash-panel" style={{ flex: 1, minHeight: '180px' }}>
+            <div className="dash-panel-title"><span className="accent">📋</span> Gestión de Incidentes</div>
+            <div style={{ overflowY: 'auto', maxHeight: '240px' }}>
+              {incidentesAPI.length === 0 ? <div style={{ textAlign: 'center', color: '#626976', padding: '20px', fontSize: '12px' }}>Sin incidentes registrados</div> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {incidentesAPI.slice(0, 6).map((inc, j) => {
+                    const c = costeos[String(inc.id)] || { personal: 0, maquinaria: 0, insumos: 0, total: 0, items: 0 };
+                    const [, tx] = badge(inc.estado);
+                    return (
+                      <div key={j} style={{ background: '#f8fafc', borderRadius: '6px', padding: '10px 12px', border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>{inc.tipo}</div>
+                            <div style={{ fontSize: '10px', color: '#626976' }}>{inc.codigo} · {inc.fecha}</div>
+                          </div>
+                          <span className={`dash-badge dash-badge-${inc.estado === 'pat' ? 'orange' : inc.estado === 'ate' ? 'blue' : 'green'}`}>{tx}</span>
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#626976', marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.lugar}</div>
+                        {c.items > 0 ? (
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            {c.personal > 0 && <span style={{ background: '#dbeafe', color: '#1463A5', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>👷 S/ {c.personal.toFixed(0)}</span>}
+                            {c.maquinaria > 0 && <span style={{ background: '#fef3c7', color: '#b45309', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>🚜 S/ {c.maquinaria.toFixed(0)}</span>}
+                            {c.insumos > 0 && <span style={{ background: '#d1fae5', color: '#047857', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>📦 S/ {c.insumos.toFixed(0)}</span>}
+                            <span style={{ marginLeft: 'auto', fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>S/ {c.total.toFixed(2)}</span>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>Sin costeo registrado</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
