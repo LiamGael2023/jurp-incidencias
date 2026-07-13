@@ -395,9 +395,9 @@ function MapaChavimochic() {
 
         {/* ── Charts Column ───────────────────────────────────────────── */}
         <div className="dash-charts-col">
-          <div className="dash-panel" style={{ flex: 1, minHeight: '180px' }}>
+          <div className="dash-panel" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div className="dash-panel-title"><span className="accent">📋</span> Gestión de Incidentes</div>
-            <div style={{ overflowY: 'auto', maxHeight: '240px' }}>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
               {incidentesAPI.length === 0 ? <div style={{ textAlign: 'center', color: '#626976', padding: '20px', fontSize: '12px' }}>Sin incidentes registrados</div> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {incidentesAPI.slice(0, 6).map((inc, j) => {
