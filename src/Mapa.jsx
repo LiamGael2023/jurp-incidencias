@@ -5,125 +5,217 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import './MapaDashboard.css';
-import { FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint } from 'react-icons/fa';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
-// ── Herramientas del visor ───────────────────────────────────────────────────
-import { BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
-import './MapaHerramientas.css';
+import { 
+  FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, 
+  FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt,
+  FaSearch, FaChartBar, FaFilter
+} from 'react-icons/fa';
 
 import geoCanalMadre from './data/Canal_Madre.json';
 import geoLateral10 from './data/Lateral_10.json';
 import geoRedes from './data/Redes_Presurizado.json';
 import logo from './assets/logo1.png';
 
-import icoBocatoma from './assets/simbologia/bocatoma.png';
-import icoEntrega from './assets/simbologia/entrega.png';
-import icoToma from './assets/simbologia/toma.png';
-import icoCanoa from './assets/simbologia/canoa.png';
-import icoAlcantarilla from './assets/simbologia/alcantarilla.png';
-import icoPaseVehicular from './assets/simbologia/pase_vehicular.png';
-import icoPasePeatonal from './assets/simbologia/pase_peatonal.png';
-import icoAliviadero from './assets/simbologia/aliviadero.png';
-import icoDesarenador from './assets/simbologia/desarenador.png';
-import icoRapida from './assets/simbologia/rapida.png';
-import icoCanalMadre from './assets/simbologia/canal_madre.png';
-import icoCanalRect from './assets/simbologia/canal_rectangular.png';
-import icoConducCubierto from './assets/simbologia/conducto_cubierto.png';
-import icoCaida from './assets/simbologia/caida.png';
-import icoCanalTrap from './assets/simbologia/canal_trapezoidal.png';
-import icoAcueducto from './assets/simbologia/acueducto.png';
-import icoGaritaJURP from './assets/simbologia/garita_jurp.png';
-import icoGaritaOtros from './assets/simbologia/garita_otros.png';
+// ── Herramientas del visor (minimapa, medición, perfil, street view, captura) ─
+import {
+  BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa,
+} from './MapaHerramientas';
+import './MapaHerramientas.css';
 
-import kmzEntrega from './data/kmz/Entrega.json';
-import kmzPuentePeatonal from './data/kmz/Puente_Peatonal.json';
+// ── Simbología hidráulica ───────────────────────────────────────────────────
+import icoBocatoma        from './assets/simbologia/bocatoma.png';
+import icoEntrega         from './assets/simbologia/entrega.png';
+import icoToma            from './assets/simbologia/toma.png';
+import icoCanoa           from './assets/simbologia/canoa.png';
+import icoAlcantarilla    from './assets/simbologia/alcantarilla.png';
+import icoPaseVehicular   from './assets/simbologia/pase_vehicular.png';
+import icoPasePeatonal    from './assets/simbologia/pase_peatonal.png';
+import icoAliviadero      from './assets/simbologia/aliviadero.png';
+import icoDesarenador     from './assets/simbologia/desarenador.png';
+import icoRapida          from './assets/simbologia/rapida.png';
+import icoCanalMadre      from './assets/simbologia/canal_madre.png';
+import icoCanalRect       from './assets/simbologia/canal_rectangular.png';
+import icoConducCubierto  from './assets/simbologia/conducto_cubierto.png';
+import icoCaida           from './assets/simbologia/caida.png';
+import icoCanalTrap       from './assets/simbologia/canal_trapezoidal.png';
+import icoAcueducto       from './assets/simbologia/acueducto.png';
+
+// ── KMZ layers ──────────────────────────────────────────────────────────────
+import kmzEntrega         from './data/kmz/Entrega.json';
+import kmzPuentePeatonal  from './data/kmz/Puente_Peatonal.json';
 import kmzPuenteVehicular from './data/kmz/Puente_Vehicular.json';
-import kmzBocatoma from './data/kmz/Bocatoma.json';
-import kmzAliviadero from './data/kmz/Aliviadero.json';
-import kmzToma from './data/kmz/Toma.json';
-import kmzCanoa from './data/kmz/Canoa.json';
-import kmzAlcantarilla from './data/kmz/Alcantarilla.json';
+import kmzBocatoma        from './data/kmz/Bocatoma.json';
+import kmzAliviadero      from './data/kmz/Aliviadero.json';
+import kmzToma            from './data/kmz/Toma.json';
+import kmzCanoa           from './data/kmz/Canoa.json';
+import kmzAlcantarilla    from './data/kmz/Alcantarilla.json';
 import kmzEstacionControl from './data/kmz/Estacion_Control.json';
-import kmzRapida from './data/kmz/Rapida.json';
-import kmzCanalMadre from './data/kmz/Canal_Madre.json';
-import kmzLateral10 from './data/kmz/Lateral_10.json';
-import kmzCajaHidraulica from './data/kmz/Caja_Hidraulica.json';
-import kmzCamaraRP from './data/kmz/Camara_Rompepresion.json';
-import kmzDesarenador from './data/kmz/Desarenador.json';
-import kmzEvacuador from './data/kmz/Evacuador.json';
-import kmzPartidor from './data/kmz/Partidor.json';
-import kmzPaseTuberias from './data/kmz/Pase_de_Tuberias.json';
+import kmzRapida          from './data/kmz/Rapida.json';
+import kmzCanalMadre      from './data/kmz/Canal_Madre.json';
+import kmzLateral10       from './data/kmz/Lateral_10.json';
+import kmzCajaHidraulica  from './data/kmz/Caja_Hidraulica.json';
+import kmzCamaraRP        from './data/kmz/Camara_Rompepresion.json';
+import kmzDesarenador     from './data/kmz/Desarenador.json';
+import kmzEvacuador       from './data/kmz/Evacuador.json';
+import kmzPartidor        from './data/kmz/Partidor.json';
+import kmzPaseTuberias    from './data/kmz/Pase_de_Tuberias.json';
 import kmzRedesPresurizado from './data/kmz/Redes_Presurizado.json';
-import geoGaritasJURP from './data/garitas/GARITAS_JURP.json';
-import geoGaritasOtros from './data/garitas/GARITAS_OTROS.json';
-import geoCaminosServ from './data/garitas/CAMINOS_DE_SERVICIO.json';
-import geoViasAcceso from './data/garitas/VIAS_DE_ACCESO.json';
-import geoViaAuxiliar from './data/garitas/VIA_AUXILIAR.json';
-import geoRedNacional from './data/garitas/RED_NACIONAL.json';
+
+// ── Garitas y Vías ──────────────────────────────────────────────────────────
+import geoGaritasJURP    from './data/garitas/GARITAS_JURP.json';
+import geoGaritasOtros   from './data/garitas/GARITAS_OTROS.json';
+import geoCaminosServ    from './data/garitas/CAMINOS_DE_SERVICIO.json';
+import geoViasAcceso     from './data/garitas/VIAS_DE_ACCESO.json';
+import geoViaAuxiliar    from './data/garitas/VIA_AUXILIAR.json';
+import geoRedNacional    from './data/garitas/RED_NACIONAL.json';
+import icoGaritaJURP     from './assets/simbologia/garita_jurp.png';
+import icoGaritaOtros    from './assets/simbologia/garita_otros.png';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-const crearIconoSimbologia = (url, sz = 28) => L.icon({ iconUrl: url, iconSize: [sz, sz], iconAnchor: [sz/2, sz/2], popupAnchor: [0, -(sz/2)] });
+const crearIconoSimbologia = (iconUrl, size = 28) => L.icon({ iconUrl, iconSize: [size, size], iconAnchor: [size/2, size/2], popupAnchor: [0, -(size/2)] });
+
 function latLngToUTM(lat, lng) {
-  const zone = Math.floor((lng + 180) / 6) + 1, k0 = 0.9996, a = 6378137, e2 = 0.00669437999014, ep2 = e2 / (1 - e2);
-  const latR = lat * Math.PI / 180, lngR = lng * Math.PI / 180, lngO = ((zone - 1) * 6 - 180 + 3) * Math.PI / 180;
-  const N = a / Math.sqrt(1 - e2 * Math.sin(latR) ** 2), T = Math.tan(latR) ** 2, C = ep2 * Math.cos(latR) ** 2, A = Math.cos(latR) * (lngR - lngO);
+  const zone = Math.floor((lng + 180) / 6) + 1;
+  const k0 = 0.9996, a = 6378137, e2 = 0.00669437999014;
+  const ep2 = e2 / (1 - e2);
+  const latR = lat * Math.PI / 180, lngR = lng * Math.PI / 180;
+  const lngO = ((zone - 1) * 6 - 180 + 3) * Math.PI / 180;
+  const N = a / Math.sqrt(1 - e2 * Math.sin(latR) ** 2);
+  const T = Math.tan(latR) ** 2, C = ep2 * Math.cos(latR) ** 2;
+  const A = Math.cos(latR) * (lngR - lngO);
   const M = a * ((1 - e2/4 - 3*e2*e2/64) * latR - (3*e2/8 + 3*e2*e2/32) * Math.sin(2*latR) + (15*e2*e2/256) * Math.sin(4*latR));
   const easting = k0 * N * (A + (1-T+C)*A**3/6 + (5-18*T+T*T)*A**5/120) + 500000;
   let northing = k0 * (M + N * Math.tan(latR) * (A*A/2 + (5-T+9*C+4*C*C)*A**4/24));
   if (lat < 0) northing += 10000000;
-  return { e: easting.toFixed(1), n: northing.toFixed(1), z: `${zone}S` };
+  return { e: easting.toFixed(2), n: northing.toFixed(2), z: `${zone}S` };
 }
-const COLORS = ['#0ea5e9','#22c55e','#f59f00','#ef4444','#a855f7','#ec4899','#f97316','#06b6d4'];
 
 // ── Config KMZ ──────────────────────────────────────────────────────────────
 const KMZ_CONFIG = [
-  { key:'KMZ_CanalMadre', label:'Canal Madre', color:'#1971c2', data:kmzCanalMadre, tipo:'poly', icon:icoCanalMadre },
-  { key:'KMZ_Lateral10', label:'Lateral 10', color:'#4dabf7', data:kmzLateral10, tipo:'poly', icon:icoCanalTrap },
-  { key:'KMZ_RedesPresurizado', label:'Redes Presurizado', color:'#74c0fc', data:kmzRedesPresurizado, tipo:'poly', icon:icoConducCubierto },
-  { key:'KMZ_Evacuador', label:'Evacuador', color:'#a5d8ff', data:kmzEvacuador, tipo:'poly', icon:icoAcueducto },
-  { key:'KMZ_Bocatoma', label:'Bocatoma', color:'#206bc4', data:kmzBocatoma, tipo:'point', icon:icoBocatoma },
-  { key:'KMZ_Entrega', label:'Entrega', color:'#2f9e44', data:kmzEntrega, tipo:'point', icon:icoEntrega },
-  { key:'KMZ_Toma', label:'Toma', color:'#f59f00', data:kmzToma, tipo:'point', icon:icoToma },
-  { key:'KMZ_Canoa', label:'Canoa', color:'#f76707', data:kmzCanoa, tipo:'point', icon:icoCanoa },
-  { key:'KMZ_Alcantarilla', label:'Alcantarilla', color:'#7048e8', data:kmzAlcantarilla, tipo:'point', icon:icoAlcantarilla },
-  { key:'KMZ_PuenteVehicular', label:'Puente Vehicular', color:'#8a6d3b', data:kmzPuenteVehicular, tipo:'point', icon:icoPaseVehicular },
-  { key:'KMZ_PuentePeatonal', label:'Puente Peatonal', color:'#e8590c', data:kmzPuentePeatonal, tipo:'point', icon:icoPasePeatonal },
-  { key:'KMZ_Aliviadero', label:'Aliviadero', color:'#c92a2a', data:kmzAliviadero, tipo:'point', icon:icoAliviadero },
-  { key:'KMZ_CajaHidraulica', label:'Caja Hidráulica', color:'#495057', data:kmzCajaHidraulica, tipo:'point', icon:icoCanalRect },
-  { key:'KMZ_Desarenador', label:'Desarenador', color:'#a0522d', data:kmzDesarenador, tipo:'point', icon:icoDesarenador },
-  { key:'KMZ_EstacionControl', label:'Estación Control', color:'#fd7e14', data:kmzEstacionControl, tipo:'point', icon:icoBocatoma },
-  { key:'KMZ_Partidor', label:'Partidor', color:'#9c36b5', data:kmzPartidor, tipo:'point', icon:icoCanalTrap },
-  { key:'KMZ_PaseTuberias', label:'Pase Tuberías', color:'#5c7cfa', data:kmzPaseTuberias, tipo:'point', icon:icoConducCubierto },
-  { key:'KMZ_CamaraRP', label:'Cámara Rompepresión', color:'#e67700', data:kmzCamaraRP, tipo:'point', icon:icoCaida },
-  { key:'KMZ_Rapida', label:'Rápida', color:'#f03e3e', data:kmzRapida, tipo:'point', icon:icoRapida },
-  { key:'GAR_JURP', label:'Garitas JURP', color:'#1098ad', data:geoGaritasJURP, tipo:'point', icon:icoGaritaJURP },
-  { key:'GAR_Otros', label:'Garitas Otros', color:'#9c36b5', data:geoGaritasOtros, tipo:'point', icon:icoGaritaOtros },
-  { key:'VIA_CaminosServ', label:'Caminos de Servicio', color:'#e67700', data:geoCaminosServ, tipo:'line', icon:null },
-  { key:'VIA_Acceso', label:'Vías de Acceso', color:'#d6336c', data:geoViasAcceso, tipo:'line', icon:null },
-  { key:'VIA_Auxiliar', label:'Vía Auxiliar', color:'#ae3ec9', data:geoViaAuxiliar, tipo:'line', icon:null },
-  { key:'VIA_RedNacional', label:'Red Nacional', color:'#d63939', data:geoRedNacional, tipo:'line', icon:null },
+  { key: 'KMZ_CanalMadre',       label: 'Canal Madre',        color: '#1971c2', data: kmzCanalMadre,       tipo: 'poly', icon: icoCanalMadre },
+  { key: 'KMZ_Lateral10',        label: 'Lateral 10',         color: '#4dabf7', data: kmzLateral10,        tipo: 'poly', icon: icoCanalTrap },
+  { key: 'KMZ_RedesPresurizado', label: 'Redes Presurizado',  color: '#74c0fc', data: kmzRedesPresurizado, tipo: 'poly', icon: icoConducCubierto },
+  { key: 'KMZ_Evacuador',        label: 'Evacuador',          color: '#a5d8ff', data: kmzEvacuador,        tipo: 'poly', icon: icoAcueducto },
+  { key: 'KMZ_Bocatoma',         label: 'Bocatoma',           color: '#206bc4', data: kmzBocatoma,         tipo: 'point', icon: icoBocatoma },
+  { key: 'KMZ_Entrega',          label: 'Entrega',            color: '#2f9e44', data: kmzEntrega,          tipo: 'point', icon: icoEntrega },
+  { key: 'KMZ_Toma',             label: 'Toma',               color: '#f59f00', data: kmzToma,             tipo: 'point', icon: icoToma },
+  { key: 'KMZ_Canoa',            label: 'Canoa',              color: '#f76707', data: kmzCanoa,            tipo: 'point', icon: icoCanoa },
+  { key: 'KMZ_Alcantarilla',     label: 'Alcantarilla',       color: '#7048e8', data: kmzAlcantarilla,     tipo: 'point', icon: icoAlcantarilla },
+  { key: 'KMZ_PuenteVehicular',  label: 'Puente Vehicular',   color: '#8a6d3b', data: kmzPuenteVehicular,  tipo: 'point', icon: icoPaseVehicular },
+  { key: 'KMZ_PuentePeatonal',   label: 'Puente Peatonal',    color: '#e8590c', data: kmzPuentePeatonal,   tipo: 'point', icon: icoPasePeatonal },
+  { key: 'KMZ_Aliviadero',       label: 'Aliviadero',         color: '#c92a2a', data: kmzAliviadero,       tipo: 'point', icon: icoAliviadero },
+  { key: 'KMZ_CajaHidraulica',   label: 'Caja Hidráulica',    color: '#495057', data: kmzCajaHidraulica,   tipo: 'point', icon: icoCanalRect },
+  { key: 'KMZ_Desarenador',      label: 'Desarenador',        color: '#a0522d', data: kmzDesarenador,      tipo: 'point', icon: icoDesarenador },
+  { key: 'KMZ_EstacionControl',  label: 'Estación Control',   color: '#fd7e14', data: kmzEstacionControl,  tipo: 'point', icon: icoBocatoma },
+  { key: 'KMZ_Partidor',         label: 'Partidor',           color: '#9c36b5', data: kmzPartidor,         tipo: 'point', icon: icoCanalTrap },
+  { key: 'KMZ_PaseTuberias',     label: 'Pase Tuberías',      color: '#5c7cfa', data: kmzPaseTuberias,     tipo: 'point', icon: icoConducCubierto },
+  { key: 'KMZ_CamaraRP',         label: 'Cámara Rompepresión',color: '#e67700', data: kmzCamaraRP,         tipo: 'point', icon: icoCaida },
+  { key: 'KMZ_Rapida',           label: 'Rápida',             color: '#f03e3e', data: kmzRapida,           tipo: 'point', icon: icoRapida },
+  // Garitas
+  { key: 'GAR_JURP',             label: 'Garitas JURP',       color: '#1098ad', data: geoGaritasJURP,     tipo: 'point', icon: icoGaritaJURP },
+  { key: 'GAR_Otros',            label: 'Garitas Otros',      color: '#9c36b5', data: geoGaritasOtros,    tipo: 'point', icon: icoGaritaOtros },
+  // Vías
+  { key: 'VIA_CaminosServ',      label: 'Caminos de Servicio',color: '#e67700', data: geoCaminosServ,     tipo: 'line', icon: null },
+  { key: 'VIA_Acceso',           label: 'Vías de Acceso',     color: '#d6336c', data: geoViasAcceso,      tipo: 'line', icon: null },
+  { key: 'VIA_Auxiliar',         label: 'Vía Auxiliar',       color: '#ae3ec9', data: geoViaAuxiliar,     tipo: 'line', icon: null },
+  { key: 'VIA_RedNacional',      label: 'Red Nacional',       color: '#d63939', data: geoRedNacional,     tipo: 'line', icon: null },
 ];
+
 const KMZ_CAPAS_DEFAULT = Object.fromEntries(KMZ_CONFIG.map(c => [c.key, false]));
-const SEARCH_INDEX = KMZ_CONFIG.flatMap(cfg => (cfg.data?.features || []).filter(f => f.geometry?.type === 'Point' && f.properties?.name).map(f => ({ name: f.properties.name, tipo: cfg.label, tramo: f.properties.TRAMO || '', progresiva: f.properties.PROGRESIVA || '', coords: f.geometry.coordinates, icon: cfg.icon, color: cfg.color })));
 
-// ── Sub-componentes ─────────────────────────────────────────────────────────
-function ZoomDerecha() { const map = useMap(); useEffect(() => { const zc = L.control.zoom({ position: 'topright' }); zc.addTo(map); return () => zc.remove(); }, [map]); return null; }
-function UTMDisplay() { const [c, setC] = useState(null); useMapEvents({ mousemove(e) { setC(latLngToUTM(e.latlng.lat, e.latlng.lng)); }, mouseout() { setC(null); } }); return c ? <div className="dash-utm">UTM {c.z} E {c.e} N {c.n}</div> : null; }
-function FlyToComp({ pos }) { const map = useMap(); useEffect(() => { if (pos) map.flyTo(pos, 16, { duration: 1.5 }); }, [pos, map]); return null; }
+// ── Indice de búsqueda (pre-computado) ──────────────────────────────────────
+const SEARCH_INDEX = KMZ_CONFIG.flatMap(cfg =>
+  (cfg.data?.features || [])
+    .filter(f => f.geometry?.type === 'Point' && f.properties?.name)
+    .map(f => ({
+      name: f.properties.name,
+      tipo: cfg.label,
+      tramo: f.properties.TRAMO || '',
+      progresiva: f.properties.PROGRESIVA || '',
+      coords: f.geometry.coordinates,
+      icon: cfg.icon,
+      color: cfg.color,
+    }))
+);
 
+// ── Componentes auxiliares ───────────────────────────────────────────────────
+// Control de zoom (+/−) recolocado en la esquina superior derecha, para dejar
+// libre toda la columna izquierda a los botones del visor.
+function ZoomDerecha() {
+  const map = useMap();
+  useEffect(() => {
+    const zc = L.control.zoom({ position: 'topright' });
+    zc.addTo(map);
+    return () => zc.remove();
+  }, [map]);
+  return null;
+}
+
+function BotonEncuadreGeneral({ centro }) {
+  const map = useMap();
+  return (
+    <div className="leaflet-top leaflet-left" style={{ top: '10px', left: '10px', position: 'absolute', zIndex: 1000 }}>
+      <div className="leaflet-control leaflet-bar">
+        <a href="#" role="button" title="Centrar todo el mapa"
+          onClick={(e) => { e.preventDefault(); map.flyTo(centro, 10, { animate: true, duration: 1.5 }); }}
+          style={{ display:'flex',justifyContent:'center',alignItems:'center',fontSize:'18px',width:'34px',height:'34px',backgroundColor:'#fff',color:'#206bc4' }}>
+          <FaGlobe />
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function VolarAUbicacion({ posicion }) {
+  const map = useMap();
+  useEffect(() => { if (posicion) map.flyTo(posicion, 16, { animate: true, duration: 1.5 }); }, [posicion, map]);
+  return null;
+}
+
+function CoordenadasUTM() {
+  const [coords, setCoords] = useState(null);
+  useMapEvents({
+    mousemove(e) { setCoords(latLngToUTM(e.latlng.lat, e.latlng.lng)); },
+    mouseout() { setCoords(null); }
+  });
+  if (!coords) return null;
+  return (
+    <div style={{ position:'absolute', bottom:'8px', left:'50%', transform:'translateX(-50%)', zIndex:1000, background:'rgba(0,0,0,0.75)', color:'#fff', padding:'4px 12px', borderRadius:'4px', fontSize:'11px', fontFamily:'monospace', pointerEvents:'none', whiteSpace:'nowrap' }}>
+      UTM {coords.z} &nbsp; E {coords.e} &nbsp; N {coords.n}
+    </div>
+  );
+}
+
+// ── Cluster layer (imperativo) ──────────────────────────────────────────────
 function ClusteredLayer({ data, icon, color, label, buildPopup }) {
   const map = useMap();
   useEffect(() => {
     if (!data?.features?.length) return;
     const points = data.features.filter(f => f.geometry?.type === 'Point');
     if (!points.length) return;
-    const cluster = L.markerClusterGroup({ maxClusterRadius: 50, spiderfyOnMaxZoom: true, showCoverageOnHover: false,
-      iconCreateFunction: (cl) => { const n = cl.getChildCount(), sz = n > 50 ? 40 : n > 20 ? 34 : 28;
-        return L.divIcon({ html: `<div style="background:${color};color:#fff;border-radius:50%;width:${sz}px;height:${sz}px;display:flex;align-items:center;justify-content:center;font-size:${sz > 34 ? 13 : 11}px;font-weight:700;border:2px solid rgba(255,255,255,0.3);box-shadow:0 0 12px ${color}55">${n}</div>`, className: 'icono-vacio', iconSize: [sz+4, sz+4], iconAnchor: [(sz+4)/2, (sz+4)/2] }); }
+
+    const cluster = L.markerClusterGroup({
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      iconCreateFunction: (cl) => {
+        const n = cl.getChildCount();
+        const sz = n > 50 ? 40 : n > 20 ? 34 : 28;
+        return L.divIcon({
+          html: `<div style="background:${color};color:#fff;border-radius:50%;width:${sz}px;height:${sz}px;display:flex;align-items:center;justify-content:center;font-size:${sz > 34 ? 13 : 11}px;font-weight:700;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.35)">${n}</div>`,
+          className: 'icono-vacio', iconSize: [sz+4, sz+4], iconAnchor: [(sz+4)/2, (sz+4)/2]
+        });
+      }
     });
+
     const leafIcon = crearIconoSimbologia(icon);
-    for (const f of points) { const [lng, lat] = f.geometry.coordinates; const m = L.marker([lat, lng], { icon: leafIcon }); m.bindTooltip(f.properties.name || '', { direction: 'top', offset: [0, -14], className: 'tooltip-infra' }); m.bindPopup(buildPopup(f.properties, icon, label), { maxWidth: 320 }); cluster.addLayer(m); }
+    for (const f of points) {
+      const [lng, lat] = f.geometry.coordinates;
+      const marker = L.marker([lat, lng], { icon: leafIcon });
+      marker.bindTooltip(f.properties.name || '', { direction: 'top', offset: [0, -14], className: 'tooltip-infra' });
+      marker.bindPopup(buildPopup(f.properties, icon, label), { maxWidth: 320 });
+      cluster.addLayer(marker);
+    }
     map.addLayer(cluster);
     return () => { map.removeLayer(cluster); };
   }, [data, map, icon, color, label, buildPopup]);
@@ -133,15 +225,17 @@ function ClusteredLayer({ data, icon, color, label, buildPopup }) {
 // ── Componente principal ────────────────────────────────────────────────────
 function MapaChavimochic() {
   const centroMapa = [-8.4186, -78.7533];
+  const [leyendaExpandida, setLeyendaExpandida] = useState(true);
   const [mapaBase, setMapaBase] = useState('satelite');
   const [filtroTiempo, setFiltroTiempo] = useState(30);
+  const [seccionKMZ, setSeccionKMZ] = useState(false);
+  const [seccionStats, setSeccionStats] = useState(false);
   const [filtroTramo, setFiltroTramo] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const [resultadosBusqueda, setResultadosBusqueda] = useState([]);
   const [mostrarResultados, setMostrarResultados] = useState(false);
   const [flyTarget, setFlyTarget] = useState(null);
-  const [showLayers, setShowLayers] = useState(false);
 
   const [capas, setCapas] = useState({ Incidentes_Nuevos: true, Incidentes_Atencion: true, Lluvias: true, Canales: true });
   const [capasKMZ, setCapasKMZ] = useState(KMZ_CAPAS_DEFAULT);
@@ -149,273 +243,413 @@ function MapaChavimochic() {
   const [lluviasAPI, setLluviasAPI] = useState([]);
   const [cargandoAPIs, setCargandoAPIs] = useState(false);
   const [miUbicacion, setMiUbicacion] = useState(null);
+  const [buscandoGPS, setBuscandoGPS] = useState(false);
   const [detalleActivo, setDetalleActivo] = useState(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
-  const [modalMedia, setModalMedia] = useState(null);
-  const [herramienta, setHerramienta] = useState(null);
+  const [modalMedia, setModalMedia] = useState(null); // { src, type: 'image'|'video' }
 
   const mapRef = useRef(null);
-  const contenedorRef = useRef(null);
+  const contenedorRef = useRef(null);           // div del mapa (para captura)
+  const [herramienta, setHerramienta] = useState(null); // 'distancia'|'area'|'elevacion'|'streetview'|null
   const { ocupado: capturando, descargar, compartir } = useCapturaMapa(contenedorRef);
 
-  // ── Stats ─────────────────────────────────────────────────────────────
+  // ── Estadísticas ──────────────────────────────────────────────────────
   const stats = useMemo(() => {
-    const all = KMZ_CONFIG.flatMap(c => (c.data?.features || []).map(f => ({ ...f.properties, _tipo: c.label })));
-    const tramos = {}, estados = {}, tipos = {};
-    for (const f of all) { const t = f.TRAMO || 'Sin Tramo'; const e = f.ESTADO || 'Sin dato'; tramos[t] = (tramos[t] || 0) + 1; estados[e] = (estados[e] || 0) + 1; tipos[f._tipo] = (tipos[f._tipo] || 0) + 1; }
-    return { tramos, estados, tipos, total: all.length };
+    const allFeatures = KMZ_CONFIG.flatMap(c => (c.data?.features || []).map(f => ({ ...f.properties, _tipo: c.label })));
+    const tramos = {}; const estados = {}; const tipos = {};
+    for (const f of allFeatures) {
+      const t = f.TRAMO || 'Sin Tramo';
+      const e = f.ESTADO || 'Sin dato';
+      const tp = f._tipo;
+      tramos[t] = (tramos[t] || 0) + 1;
+      estados[e] = (estados[e] || 0) + 1;
+      tipos[tp] = (tipos[tp] || 0) + 1;
+    }
+    return { tramos, estados, tipos, total: allFeatures.length };
   }, []);
+
   const tramosUnicos = useMemo(() => Object.keys(stats.tramos).sort(), [stats]);
   const estadosUnicos = useMemo(() => Object.keys(stats.estados).filter(e => e !== 'Sin dato').sort(), [stats]);
-  const totalKMZ = KMZ_CONFIG.reduce((a, c) => a + (c.data?.features?.length || 0), 0);
+
+  const totalKMZ = KMZ_CONFIG.reduce((acc, c) => acc + (c.data?.features?.length || 0), 0);
   const activasKMZ = KMZ_CONFIG.filter(c => capasKMZ[c.key]).length;
 
-  // Chart data
-  const porTipoInfra = useMemo(() => Object.entries(stats.tipos).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, value]) => ({ name, value })), [stats]);
-  const incPorTipo = useMemo(() => { const m = {}; for (const i of incidentesAPI) m[i.tipo] = (m[i.tipo] || 0) + 1; return Object.entries(m).map(([name, value]) => ({ name, value })); }, [incidentesAPI]);
-  const incMes = useMemo(() => { const now = new Date(), m = {}; for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); m[`${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`] = 0; } for (const x of incidentesAPI) { const d = new Date(x.timestamp); const k = `${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`; if (k in m) m[k]++; } return Object.entries(m).map(([mes, cant]) => ({ mes, cant })); }, [incidentesAPI]);
-
-  // Filtered
-  const getFilteredData = (cfg) => { if (!cfg.data?.features?.length || (!filtroTramo && !filtroEstado)) return cfg.data; return { ...cfg.data, features: cfg.data.features.filter(f => { const p = f.properties || {}; if (filtroTramo && (p.TRAMO || '') !== filtroTramo) return false; if (filtroEstado && (p.ESTADO || '') !== filtroEstado) return false; return true; }) }; };
-  const tiempoLimite = Date.now() - (filtroTiempo * 864e5);
-  const incFiltrados = filtroTiempo === 0 ? incidentesAPI : incidentesAPI.filter(i => i.timestamp >= tiempoLimite);
-  const incPend = incidentesAPI.filter(i => i.estado === 'pat').length;
-  const incAte = incidentesAPI.filter(i => i.estado === 'ate').length;
-  const lluviaMax = lluviasAPI.length ? Math.max(...lluviasAPI.map(l => l.totalRain)) : 0;
-
-  // ── Search ────────────────────────────────────────────────────────────
-  const handleBusqueda = (val) => { setBusqueda(val); if (val.length < 2) { setResultadosBusqueda([]); setMostrarResultados(false); return; } const q = val.toLowerCase(); setResultadosBusqueda(SEARCH_INDEX.filter(it => it.name.toLowerCase().includes(q) || it.progresiva.toLowerCase().includes(q) || it.tipo.toLowerCase().includes(q)).slice(0, 6)); setMostrarResultados(true); };
-  const seleccionarResultado = (item) => { const [lng, lat] = item.coords; setFlyTarget([lat, lng]); setMostrarResultados(false); setBusqueda(item.name); setTimeout(() => setFlyTarget(null), 2000); };
-
-  // ── APIs ───────────────────────────────────────────────────────────────
-  const obtenerDatosDeApis = async () => {
-    const token = localStorage.getItem('userToken'); if (!token) return; setCargandoAPIs(true);
-    try {
-      const resInc = await fetch('/api/v1/mobile/hi-incidents/list/', { headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` } });
-      if (resInc.ok) { const dataInc = await resInc.json(); const tm = { '1': 'Deslizamiento', '2': 'Obstrucción', '3': 'Falla Mecánica', '4': 'Robo', '5': 'Daño Estructural', '6': 'Otro' };
-        setIncidentesAPI((dataInc.results || []).map(inc => { const lat = parseFloat(inc.latitude_marker || inc.latitude), lng = parseFloat(inc.longitude_marker || inc.longitude); let tp = tm[inc.type?.toString()] || 'Incidente'; const at = inc.another_type || inc.location_text; if (at && (tp === 'Otro' || tp === 'Otros')) tp = `Otro (${at.trim()})`; return { id: inc.id, lat, lng, tipo: tp, estado: inc.status || 'pat', gravedad: inc.severity || 'lev', descripcion: inc.description || '', usuario: inc.user?.username || '', lugar: inc.location_text || '', fecha: new Date(inc.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }), timestamp: new Date(inc.created_at).getTime(), imagenUrl: inc.thumbnail || inc.image || null, codigo: inc.code || 'Sin Código' }; }).filter(i => !isNaN(i.lat) && !isNaN(i.lng) && i.lat !== 0)); }
-      const resD = await fetch('/api/v1/mobile/devices/?device_type=pluviometro', { headers: { 'Authorization': `Token ${token}` } });
-      if (resD.ok) { const dd = await resD.json(); const now = new Date(), p24 = new Date(now.getTime() - 864e5), fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; const nd = [];
-        for (const eq of (dd.results || [])) { const la = parseFloat(eq.latitude), lo = parseFloat(eq.longitude); if (isNaN(la) || isNaN(lo)) continue; let rain = 0; try { const rr = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(p24)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=rainfall_mm`, { headers: { 'Authorization': `Token ${token}` } }); if (rr.ok) { const rd = await rr.json(); for (const rec of (rd.data || [])) rain += parseFloat(rec.value) || 0; } } catch(e) {} nd.push({ id: eq.id, name: eq.nombre || 'Pluviómetro', lat: la, lng: lo, totalRain: rain, isCritical: rain > 20 }); }
-        setLluviasAPI(nd); }
-    } catch(e) { console.error(e); } finally { setCargandoAPIs(false); }
+  // ── Filtrado de datos KMZ por tramo/estado ────────────────────────────
+  const getFilteredData = (cfg) => {
+    if (!cfg.data?.features?.length) return cfg.data;
+    if (!filtroTramo && !filtroEstado) return cfg.data;
+    const filtered = cfg.data.features.filter(f => {
+      const p = f.properties || {};
+      if (filtroTramo && (p.TRAMO || '') !== filtroTramo) return false;
+      if (filtroEstado && (p.ESTADO || '') !== filtroEstado) return false;
+      return true;
+    });
+    return { ...cfg.data, features: filtered };
   };
+
+  // ── Búsqueda ──────────────────────────────────────────────────────────
+  const handleBusqueda = (val) => {
+    setBusqueda(val);
+    if (val.length < 2) { setResultadosBusqueda([]); setMostrarResultados(false); return; }
+    const q = val.toLowerCase();
+    const res = SEARCH_INDEX.filter(it =>
+      it.name.toLowerCase().includes(q) ||
+      it.progresiva.toLowerCase().includes(q) ||
+      it.tramo.toLowerCase().includes(q) ||
+      it.tipo.toLowerCase().includes(q)
+    ).slice(0, 8);
+    setResultadosBusqueda(res);
+    setMostrarResultados(true);
+  };
+
+  const seleccionarResultado = (item) => {
+    const [lng, lat] = item.coords;
+    setFlyTarget([lat, lng]);
+    setMostrarResultados(false);
+    setBusqueda(item.name);
+    setTimeout(() => setFlyTarget(null), 2000);
+  };
+
+  // ── Zoom a capa ───────────────────────────────────────────────────────
+  const zoomACapa = (cfg) => {
+    if (!mapRef.current || !cfg.data?.features?.length) return;
+    const map = mapRef.current;
+    const bounds = L.geoJSON(cfg.data).getBounds();
+    if (bounds.isValid()) map.flyToBounds(bounds, { padding: [40, 40], maxZoom: 15, duration: 1 });
+  };
+
+  // ── APIs ──────────────────────────────────────────────────────────────
+  const obtenerDatosDeApis = async () => {
+    const token = localStorage.getItem('userToken');
+    if (!token) return;
+    setCargandoAPIs(true);
+    try {
+      const resInc = await fetch('/api/v1/mobile/hi-incidents/list/', { headers: { 'Content-Type':'application/json', 'Authorization':`Token ${token}` } });
+      if (resInc.ok) {
+        const dataInc = await resInc.json();
+        const tiposMapa = { '1':'Deslizamiento','2':'Obstrucción','3':'Falla Mecánica','4':'Robo','5':'Daño Estructural','6':'Otro' };
+        const incidentesMapeados = (dataInc.results||[]).map(inc => {
+          const lat = parseFloat(inc.latitude_marker||inc.latitude), lng = parseFloat(inc.longitude_marker||inc.longitude);
+          let tipoNombre = tiposMapa[inc.type?.toString()]||'Incidente';
+          const anotherTypeStr = inc.another_type||inc.location_text;
+          if (anotherTypeStr && (tipoNombre==='Otro'||tipoNombre==='Otros')) tipoNombre = `Otro (${anotherTypeStr.trim()})`;
+          return { id:inc.id, lat, lng, tipo:tipoNombre, estado:inc.status||'pat', gravedad:inc.severity||'lev', descripcion:inc.description||'Sin descripción.', usuario:inc.user?.username||inc.username||'Usuario', lugar:inc.location_text||'Coordenada de Campo', fecha:new Date(inc.created_at).toLocaleString('es-PE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}), timestamp:new Date(inc.created_at).getTime(), imagenUrl:inc.thumbnail||inc.image||null, codigo:inc.code||'Sin Código' };
+        }).filter(inc => !isNaN(inc.lat)&&!isNaN(inc.lng)&&inc.lat!==0&&inc.lng!==0);
+        setIncidentesAPI(incidentesMapeados);
+      }
+      const resDevices = await fetch('/api/v1/mobile/devices/?device_type=pluviometro', { headers: { 'Content-Type':'application/json', 'Authorization':`Token ${token}` } });
+      if (resDevices.ok) {
+        const devicesData = await resDevices.json(); const pluviometros = devicesData.results||[];
+        const now = new Date(); const past24h = new Date(now.getTime()-24*60*60*1000);
+        const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const nd = [];
+        for (let eq of pluviometros) {
+          const lat=parseFloat(eq.latitude), lng=parseFloat(eq.longitude); if(isNaN(lat)||isNaN(lng)) continue;
+          let totalRain=0;
+          try { const r=await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(past24h)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=rainfall_mm`,{headers:{'Content-Type':'application/json','Authorization':`Token ${token}`}}); if(r.ok){const d=await r.json();for(let rec of(d.data||[]))totalRain+=parseFloat(rec.value)||0;} } catch(e){console.error(e);}
+          nd.push({id:eq.id,name:eq.nombre||"Pluviómetro",lat,lng,totalRain,isCritical:totalRain>20});
+        }
+        setLluviasAPI(nd);
+      }
+    } catch(error){console.error(error)} finally{setCargandoAPIs(false)}
+  };
+
   useEffect(() => { obtenerDatosDeApis(); }, []);
 
-  const cargarDetalleIncidente = async (id) => { setDetalleActivo(null); setCargandoDetalle(true); const tk = localStorage.getItem('userToken'); try { const r = await fetch(`/api/v1/mobile/hi-incidents/${id}/`, { headers: { 'Authorization': `Token ${tk}` } }); if (r.ok) { const j = await r.json(); setDetalleActivo(j.data || j); } } catch(e) {} finally { setCargandoDetalle(false); } };
+  const cargarDetalleIncidente = async (id) => {
+    setDetalleActivo(null); setCargandoDetalle(true);
+    const token = localStorage.getItem('userToken');
+    try { const res = await fetch(`/api/v1/mobile/hi-incidents/${id}/`,{headers:{'Authorization':`Token ${token}`,'Content-Type':'application/json'}}); if(res.ok){ const json = await res.json(); setDetalleActivo(json.data || json); } } catch(e){console.error(e)} finally{setCargandoDetalle(false)}
+  };
 
-  // ── Handlers ──────────────────────────────────────────────────────────
-  const toggleCapa = (n) => setCapas(p => ({ ...p, [n]: !p[n] }));
-  const toggleCapaKMZ = (key) => { const v = !capasKMZ[key]; setCapasKMZ(p => ({ ...p, [key]: v })); if (v) { const cfg = KMZ_CONFIG.find(c => c.key === key); if (cfg?.data?.features?.length && mapRef.current) { const b = L.geoJSON(cfg.data).getBounds(); if (b.isValid()) mapRef.current.flyToBounds(b, { padding: [40, 40], maxZoom: 15, duration: 1 }); } } };
+  const toggleCapa = (n) => setCapas(p=>({...p,[n]:!p[n]}));
+  const toggleCapaKMZ = (key) => {
+    const newVal = !capasKMZ[key];
+    setCapasKMZ(p => ({...p, [key]: newVal}));
+    if (newVal) {
+      const cfg = KMZ_CONFIG.find(c => c.key === key);
+      if (cfg) zoomACapa(cfg);
+    }
+  };
+  const activarTodasKMZ = () => setCapasKMZ(Object.fromEntries(KMZ_CONFIG.map(c=>[c.key,true])));
+  const desactivarTodasKMZ = () => setCapasKMZ(KMZ_CAPAS_DEFAULT);
 
-  const obtenerUrlMapa = () => ({ satelite: "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", calles: "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", topografico: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", oscuro: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" })[mapaBase] || "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}";
+  const obtenerMiUbicacion = () => {
+    setBuscandoGPS(true);
+    navigator.geolocation.getCurrentPosition(
+      p=>{setMiUbicacion([p.coords.latitude,p.coords.longitude]);setBuscandoGPS(false);},
+      ()=>{alert("Error GPS.");setBuscandoGPS(false);},{enableHighAccuracy:true}
+    );
+  };
+
+  const obtenerUrlMapa = () => {
+    switch(mapaBase) {
+      case 'calles': return "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}";
+      case 'topografico': return "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png";
+      case 'oscuro': return "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+      default: return "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}";
+    }
+  };
 
   // ── Iconos ────────────────────────────────────────────────────────────
-  const crearIconoIncidente = (g) => { let c = '#f59f00'; if (g === 'mod') c = '#f76707'; if (g === 'gra') c = '#ef4444'; return divIcon({ className: 'icono-vacio', html: `<div style="position:relative;width:20px;height:20px"><div style="position:absolute;inset:0;background:${c};opacity:0.4;border-radius:50%;animation:pulse 1.5s infinite"></div><div style="position:absolute;top:4px;left:4px;width:12px;height:12px;background:${c};border:2px solid rgba(0,0,0,0.3);border-radius:50%;box-shadow:0 0 8px ${c}88"></div></div>`, iconSize: [20, 20], iconAnchor: [10, 10] }); };
-  const iconoGPS = divIcon({ className: 'icono-vacio', html: '<div style="background:#0ea5e9;border:3px solid #fff;width:16px;height:16px;border-radius:50%;box-shadow:0 0 12px #0ea5e988"></div>', iconSize: [22, 22], iconAnchor: [11, 11] });
-  const crearIconoLluvia = (r, cr) => divIcon({ className: 'icono-vacio', html: `<div style="display:flex;flex-direction:column;align-items:center;margin-top:-30px"><div style="background:${cr?'#1e293b':'#111827'};border:1px solid ${cr?'#ef4444':'#0ea5e9'};color:${cr?'#ef4444':'#0ea5e9'};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${r.toFixed(1)} mm</div><div style="font-size:22px;line-height:1;margin-top:2px">🌧️</div></div>`, iconSize: [60, 60], iconAnchor: [30, 45] });
-  const badge = (e) => ({ pat: ['#f59f00', 'Pendiente'], ate: ['#0ea5e9', 'En Atención'], cer: ['#22c55e', 'Cerrado'] }[e] || ['#64748b', e]);
+  const crearIconoIncidente = (g) => { let cc='#f59f00',cb='#e67e22'; if(g==='mod'){cc='#f76707';cb='#d9480f'} if(g==='gra'){cc='#d63939';cb='#c92a2a'} return divIcon({className:'icono-vacio',html:`<div style="position:relative;width:20px;height:20px"><div style="position:absolute;top:0;left:0;width:20px;height:20px;background:${cc};opacity:0.4;border-radius:50%;animation:pulse 1.5s infinite"></div><div style="position:absolute;top:4px;left:4px;width:12px;height:12px;background:${cc};border:2px solid ${cb};border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,0.4)"></div></div>`,iconSize:[20,20],iconAnchor:[10,10]}); };
+  const estiloCanales = { color:'#206bc4',weight:4,opacity:0.8 };
+  const crearEstiloKMZ = (c) => ({color:c,weight:2,opacity:0.85,fillOpacity:0.3,fillColor:c});
+  const iconoGPS = divIcon({className:'icono-vacio',html:`<div style="background:#206bc4;border:3px solid white;width:16px;height:16px;border-radius:50%;box-shadow:0 0 10px rgba(0,0,0,0.5)"></div>`,iconSize:[22,22],iconAnchor:[11,11]});
+  const crearIconoLluvia = (r,c) => divIcon({className:'icono-vacio',html:`<div style="display:flex;flex-direction:column;align-items:center;margin-top:-30px"><div style="background:white;border:1px solid ${c?'#d63939':'#206bc4'};color:${c?'#d63939':'#206bc4'};font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;box-shadow:0 2px 4px rgba(0,0,0,0.1);white-space:nowrap">${r.toFixed(1)} mm</div><div style="font-size:26px;line-height:1;margin-top:2px">🌧️</div></div>`,iconSize:[60,60],iconAnchor:[30,45]});
 
+  const getEstadoBadge = (e) => { const m={'pat':['#f59f00','Pendiente'],'ate':['#206bc4','En Atención'],'cer':['#2fb344','Cerrado']}; const [bg,t]=m[e]||['#6c7a89',e]; return <span style={{backgroundColor:bg,color:'#fff',padding:'2px 6px',borderRadius:'4px',fontSize:'10px',fontWeight:'bold'}}>{t}</span>; };
+
+  // ── Popup builder KMZ ─────────────────────────────────────────────────
   const buildPopup = useMemo(() => (props, iconUrl, label) => {
-    const skip = new Set(['name', 'folder', 'FID', 'nro_ord', 'N_', 'Nº', 'Label', 'Field', '_tipo']);
-    const lm = { NOMBRE: 'Nombre', PROGRESIVA: 'Progresiva', ESTADO: 'Estado', TRAMO: 'Tramo', ESTRUCTURA: 'Estructura', COD_EST: 'Canal/Sistema', ESTE: 'Este', NORTE: 'Norte' };
-    const rows = Object.entries(props).filter(([k, v]) => !skip.has(k) && v && String(v).trim()).map(([k, v]) => `<tr><td style="color:#64748b;padding:3px 8px 3px 0;font-size:11px">${lm[k] || k}</td><td style="font-weight:500;font-size:11px;color:#e2e8f0">${v}</td></tr>`).join('');
-    return `<div style="font-family:system-ui;min-width:200px;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:10px"><div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid #334155;padding-bottom:6px;margin-bottom:6px">${iconUrl ? `<img src="${iconUrl}" style="width:24px;height:24px"/>` : ''}<div><div style="font-weight:700;font-size:13px">${props.name || ''}</div><div style="font-size:10px;color:#64748b">${label}</div></div></div>${rows ? `<table style="border-collapse:collapse;width:100%">${rows}</table>` : '<span style="font-size:11px;color:#475569">Sin datos</span>'}</div>`;
+    const skip = new Set(['name','folder','FID','nro_ord','N_','Nº','Label','Field','_tipo']);
+    const labelMap = {NOMBRE:'Nombre',PROGRESIVA:'Progresiva',ESTADO:'Estado',TRAMO:'Tramo',ESTRUCTURA:'Estructura',COD_EST:'Canal/Sistema',ESTE:'Este (UTM)',NORTE:'Norte (UTM)',MARGEN:'Margen',EMPRESA:'Empresa',LONGITUD:'Longitud',TIPO_EST:'Tipo',Nombre_del_Canal:'Canal',NRO:'Nro.'};
+    const rows = Object.entries(props).filter(([k,v])=>!skip.has(k)&&v&&v.toString().trim()).map(([k,v])=>`<tr><td style="color:#64748b;padding:3px 8px 3px 0;font-size:11px;white-space:nowrap">${labelMap[k]||k}</td><td style="font-weight:500;padding:3px 0;font-size:11px">${v}</td></tr>`).join('');
+    return `<div style="font-family:system-ui,sans-serif;min-width:200px"><div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:6px"><img src="${iconUrl}" style="width:24px;height:24px"/><div><div style="font-weight:700;font-size:13px;color:#1d273b">${props.name||'Sin nombre'}</div><div style="font-size:10px;color:#64748b">${label}</div></div></div>${rows?`<table style="border-collapse:collapse;width:100%">${rows}</table>`:'<span style="font-size:11px;color:#94a3b8">Sin datos adicionales</span>'}</div>`;
   }, []);
 
+  const tiempoLimite = Date.now() - (filtroTiempo*24*60*60*1000);
+  const incidentesFiltrados = filtroTiempo===0 ? incidentesAPI : incidentesAPI.filter(i=>i.timestamp>=tiempoLimite);
+
   return (
-    <div className="dash" ref={contenedorRef}>
-      {/* ── KPI Bar ──────────────────────────────────────────────────── */}
-      <div className="dash-kpi-bar">
-        <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#0ea5e9' }}>🏗️</div><div><div className="dash-kpi-label">Infraestructura</div><div className="dash-kpi-value">{totalKMZ.toLocaleString()}</div><div className="dash-kpi-sub">elementos registrados</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#f59f00' }}>⚠️</div><div><div className="dash-kpi-label">Incidentes</div><div className="dash-kpi-value">{incidentesAPI.length}</div><div className="dash-kpi-sub">{incPend} pendientes · {incAte} atención</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#22c55e' }}>🌧️</div><div><div className="dash-kpi-label">Estaciones</div><div className="dash-kpi-value">{lluviasAPI.length}</div><div className="dash-kpi-sub">pluviómetros activos</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#06b6d4' }}><FaTint /></div><div><div className="dash-kpi-label">Lluvia Máx 24h</div><div className="dash-kpi-value">{lluviaMax.toFixed(1)} <span style={{ fontSize: '12px', color: '#64748b' }}>mm</span></div><div className="dash-kpi-sub">acumulado mayor</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#a855f7' }}>🛡️</div><div><div className="dash-kpi-label">Garitas</div><div className="dash-kpi-value">{(geoGaritasJURP?.features?.length || 0) + (geoGaritasOtros?.features?.length || 0)}</div><div className="dash-kpi-sub">puntos de vigilancia</div></div></div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <select value={mapaBase} onChange={e => setMapaBase(e.target.value)} style={{ background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: '4px', padding: '4px 8px', fontSize: '11px', fontFamily: 'inherit' }}>
-            <option value="satelite">Satélite</option><option value="calles">Calles</option><option value="topografico">Topográfico</option><option value="oscuro">Oscuro</option>
-          </select>
-          <button onClick={obtenerDatosDeApis} style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}><FaSyncAlt className={cargandoAPIs ? 'icon-spin' : ''} /> {cargandoAPIs ? '...' : 'Actualizar'}</button>
+    <div ref={contenedorRef} style={{ height:'100%',width:'100%',position:'relative' }}>
+      {/* ── Barra de herramientas del visor ────────────────────────────── */}
+      <BarraHerramientas
+        herramienta={herramienta}
+        setHerramienta={setHerramienta}
+        onCaptura={descargar}
+        onCompartir={compartir}
+        capturando={capturando}
+      />
+
+      {/* ── Barra de búsqueda ──────────────────────────────────────────── */}
+      <div style={{ position:'absolute',top:'20px',left:'50%',transform:'translateX(-50%)',zIndex:1001,width:'340px' }}>
+        <div style={{ position:'relative' }}>
+          <FaSearch style={{ position:'absolute',left:'10px',top:'50%',transform:'translateY(-50%)',color:'#94a3b8',fontSize:'13px' }} />
+          <input type="text" value={busqueda} onChange={e=>handleBusqueda(e.target.value)} onFocus={()=>resultadosBusqueda.length&&setMostrarResultados(true)}
+            placeholder="Buscar estructura, progresiva, tramo..."
+            style={{ width:'100%',padding:'8px 12px 8px 32px',border:'1px solid rgba(98,105,118,0.16)',borderRadius:'4px',fontSize:'13px',background:'#fff',boxShadow:'0 2px 8px rgba(0,0,0,0.12)',fontFamily:'inherit',outline:'none' }} />
+          {busqueda && <button onClick={()=>{setBusqueda('');setResultadosBusqueda([]);setMostrarResultados(false);}} style={{position:'absolute',right:'8px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:'14px'}}>✕</button>}
         </div>
-      </div>
-
-      {/* ── Body ─────────────────────────────────────────────────────── */}
-      <div className="dash-body">
-        {/* ── Map Column ──────────────────────────────────────────────── */}
-        <div className="dash-map-col">
-          <div className="dash-map-wrap">
-            {/* Toolbar */}
-            <BarraHerramientas herramienta={herramienta} setHerramienta={setHerramienta} onCaptura={descargar} onCompartir={compartir} capturando={capturando} />
-
-            {/* Search */}
-            <div className="dash-search">
-              <FaSearch style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#475569', fontSize: '12px', zIndex: 1 }} />
-              <input value={busqueda} onChange={e => handleBusqueda(e.target.value)} onFocus={() => resultadosBusqueda.length && setMostrarResultados(true)} placeholder="Buscar estructura, progresiva..." />
-              {busqueda && <button onClick={() => { setBusqueda(''); setResultadosBusqueda([]); setMostrarResultados(false); }} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#475569', cursor: 'pointer' }}>✕</button>}
-              {mostrarResultados && resultadosBusqueda.length > 0 && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1e293b', border: '1px solid #334155', borderRadius: '0 0 6px 6px', maxHeight: '200px', overflowY: 'auto' }}>
-                  {resultadosBusqueda.map((r, i) => (
-                    <div key={i} onClick={() => seleccionarResultado(r)} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #0f172a', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px' }} onMouseEnter={e => { e.currentTarget.style.background = '#0f172a'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                      {r.icon && <img src={r.icon} alt="" style={{ width: '18px', height: '18px' }} />}
-                      <div style={{ flex: 1 }}><div style={{ fontWeight: 600, color: '#e2e8f0' }}>{r.name}</div><div style={{ color: '#475569', fontSize: '10px' }}>{r.tipo} · {r.progresiva}</div></div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Map controls */}
-            <div className="dash-map-controls" style={{ top: '50px' }}>
-              <button className="dash-map-btn" onClick={() => mapRef.current?.flyTo(centroMapa, 10, { duration: 1 })} title="Vista general"><FaGlobe /></button>
-              <button className="dash-map-btn" onClick={() => setShowLayers(v => !v)} title="Capas" style={showLayers ? { borderColor: '#0ea5e9', color: '#0ea5e9' } : {}}><FaLayerGroup /></button>
-              <button className="dash-map-btn" onClick={() => { navigator.geolocation.getCurrentPosition(p => setMiUbicacion([p.coords.latitude, p.coords.longitude])); }} title="Mi ubicación"><FaLocationArrow /></button>
-            </div>
-
-            {/* Layer panel */}
-            {showLayers && (
-              <div className="dash-layers">
-                <div className="dash-layers-header"><span>Capas</span><button onClick={() => setShowLayers(false)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}><FaTimes size={12} /></button></div>
-                <div className="dash-layers-body">
-                  <div className="dash-layer-group">
-                    <div className="dash-layer-group-title">General</div>
-                    <div className="dash-layer-item"><label><input type="checkbox" checked={capas.Canales} onChange={() => toggleCapa('Canales')} /> Trazado Canales</label></div>
-                    <div className="dash-layer-item"><label><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={() => { toggleCapa('Incidentes_Atencion'); toggleCapa('Incidentes_Nuevos'); }} /> Incidentes</label></div>
-                    <div className="dash-layer-item"><label><input type="checkbox" checked={capas.Lluvias} onChange={() => toggleCapa('Lluvias')} /> Pluviómetros</label></div>
-                    {(capas.Incidentes_Nuevos || capas.Incidentes_Atencion) && (
-                      <select value={filtroTiempo} onChange={e => setFiltroTiempo(Number(e.target.value))} style={{ width: '100%', margin: '4px 0', background: '#0f172a', color: '#94a3b8', border: '1px solid #1e293b', borderRadius: '4px', padding: '3px 6px', fontSize: '10px' }}>
-                        <option value={1}>24 horas</option><option value={7}>7 días</option><option value={30}>30 días</option><option value={0}>Todo</option>
-                      </select>
-                    )}
-                  </div>
-                  <div className="dash-layer-group">
-                    <div className="dash-layer-group-title">Filtros</div>
-                    <select value={filtroTramo} onChange={e => setFiltroTramo(e.target.value)} style={{ width: '100%', margin: '2px 0', background: '#0f172a', color: '#94a3b8', border: '1px solid #1e293b', borderRadius: '4px', padding: '3px 6px', fontSize: '10px' }}>
-                      <option value="">Todos los tramos</option>{tramosUnicos.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={{ width: '100%', margin: '2px 0', background: '#0f172a', color: '#94a3b8', border: '1px solid #1e293b', borderRadius: '4px', padding: '3px 6px', fontSize: '10px' }}>
-                      <option value="">Todo estado</option>{estadosUnicos.map(e2 => <option key={e2} value={e2}>{e2}</option>)}
-                    </select>
-                    {(filtroTramo || filtroEstado) && <button onClick={() => { setFiltroTramo(''); setFiltroEstado(''); }} style={{ background: 'none', border: 'none', color: '#0ea5e9', cursor: 'pointer', fontSize: '10px', padding: '2px 0' }}>✕ Limpiar</button>}
-                  </div>
-                  <div className="dash-layer-group">
-                    <div className="dash-layer-group-title">Infraestructura ({totalKMZ})</div>
-                    <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
-                      <button onClick={() => setCapasKMZ(Object.fromEntries(KMZ_CONFIG.map(c => [c.key, true])))} style={{ flex: 1, background: '#0f172a', border: '1px solid #1e293b', color: '#0ea5e9', borderRadius: '4px', padding: '2px', fontSize: '10px', cursor: 'pointer' }}>Todas</button>
-                      <button onClick={() => setCapasKMZ(KMZ_CAPAS_DEFAULT)} style={{ flex: 1, background: '#0f172a', border: '1px solid #1e293b', color: '#64748b', borderRadius: '4px', padding: '2px', fontSize: '10px', cursor: 'pointer' }}>Ninguna</button>
-                    </div>
-                    {KMZ_CONFIG.map(c => (
-                      <div key={c.key} className="dash-layer-item">
-                        <label><input type="checkbox" checked={capasKMZ[c.key]} onChange={() => toggleCapaKMZ(c.key)} />
-                          {c.icon ? <img src={c.icon} alt="" style={{ width: '14px', height: '14px' }} /> : <span style={{ display: 'inline-block', width: '14px', height: c.tipo === 'line' ? '3px' : '14px', background: c.color, borderRadius: c.tipo === 'line' ? '2px' : '50%' }} />}
-                          <span style={{ fontSize: '11px' }}>{c.label}</span>
-                        </label>
-                        <span className="dash-layer-badge">{c.data?.features?.length || 0}</span>
-                      </div>
-                    ))}
-                  </div>
+        {mostrarResultados && resultadosBusqueda.length > 0 && (
+          <div style={{ position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:'1px solid rgba(98,105,118,0.16)',borderRadius:'0 0 4px 4px',boxShadow:'0 4px 12px rgba(0,0,0,0.1)',maxHeight:'260px',overflowY:'auto' }}>
+            {resultadosBusqueda.map((r,i) => (
+              <div key={i} onClick={()=>seleccionarResultado(r)} style={{ padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',gap:'8px',fontSize:'12px' }}
+                onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                <img src={r.icon} alt="" style={{width:'20px',height:'20px'}} />
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:600,color:'#1d273b',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name}</div>
+                  <div style={{color:'#64748b',fontSize:'11px'}}>{r.tipo} · {r.tramo} · Prog. {r.progresiva}</div>
                 </div>
               </div>
-            )}
-
-            <MapContainer center={centroMapa} zoom={10} style={{ height: '100%', width: '100%' }} ref={mapRef} zoomControl={false}>
-              <ZoomDerecha />
-              <TileLayer url={obtenerUrlMapa()} maxZoom={20} />
-              <FlyToComp pos={miUbicacion || flyTarget} />
-              <UTMDisplay />
-              <MiniMapa tileUrl={obtenerUrlMapa()} />
-              <HerramientaMedicion modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null} onFinish={() => {}} />
-
-              {miUbicacion && <Marker position={miUbicacion} icon={iconoGPS}><Popup>Mi ubicación</Popup></Marker>}
-              {capas.Canales && <><GeoJSON data={geoCanalMadre} style={{ color: '#0ea5e9', weight: 3, opacity: 0.7 }} /><GeoJSON data={geoLateral10} style={{ color: '#0ea5e9', weight: 3, opacity: 0.7 }} /><GeoJSON data={geoRedes} style={{ color: '#0ea5e9', weight: 3, opacity: 0.7 }} /></>}
-
-              {KMZ_CONFIG.map(cfg => {
-                if (!capasKMZ[cfg.key]) return null;
-                const data = getFilteredData(cfg);
-                if (!data?.features?.length) return null;
-                if (cfg.tipo === 'poly' || cfg.tipo === 'line') {
-                  const st = cfg.tipo === 'line' ? () => ({ color: cfg.color, weight: 3, opacity: 0.8, dashArray: '8 4' }) : () => ({ color: cfg.color, weight: 2, opacity: 0.8, fillOpacity: 0.25, fillColor: cfg.color });
-                  return <GeoJSON key={cfg.key + filtroTramo + filtroEstado} data={data} style={st} onEachFeature={(f, l) => { l.bindTooltip(f.properties?.name || '', { direction: 'top', className: 'tooltip-infra' }); l.bindPopup(buildPopup(f.properties, cfg.icon, cfg.label), { maxWidth: 320 }); }} />;
-                }
-                return <ClusteredLayer key={cfg.key + filtroTramo + filtroEstado} data={data} icon={cfg.icon} color={cfg.color} label={cfg.label} buildPopup={buildPopup} />;
-              })}
-
-              {(capas.Incidentes_Nuevos || capas.Incidentes_Atencion) && incFiltrados.map(inc => {
-                if (!capas.Incidentes_Nuevos && inc.estado !== 'eat') return null;
-                if (!capas.Incidentes_Atencion && inc.estado === 'eat') return null;
-                const [bg, tx] = badge(inc.estado);
-                return (
-                  <Marker key={inc.id} position={[inc.lat, inc.lng]} icon={crearIconoIncidente(inc.gravedad)} eventHandlers={{ click: () => cargarDetalleIncidente(inc.id) }}>
-                    <Popup minWidth={260} maxWidth={300}>
-                      <div style={{ fontFamily: 'system-ui', background: '#1e293b', color: '#e2e8f0', borderRadius: '6px', padding: '10px', margin: '-14px -19px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #334155', paddingBottom: '6px', marginBottom: '8px' }}><b>{inc.tipo}</b><span className={`dash-badge dash-badge-${inc.estado === 'pat' ? 'orange' : inc.estado === 'ate' ? 'blue' : 'green'}`}>{tx}</span></div>
-                        {cargandoDetalle ? <div style={{ textAlign: 'center', padding: '16px', color: '#0ea5e9' }}><FaSyncAlt className="icon-spin" /></div>
-                        : detalleActivo && detalleActivo.id === inc.id ? (
-                          <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', marginBottom: '8px' }}>
-                            {detalleActivo.images?.map((it, j) => { const s = it.content?.startsWith('http') ? it.content : `data:image/jpeg;base64,${it.content}`; return <div key={j} onClick={() => setModalMedia({ src: s, type: 'image' })} style={{ flexShrink: 0, cursor: 'pointer' }}><img src={s} alt="" style={{ width: '100px', height: '80px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #334155' }} /></div>; })}
-                          </div>
-                        ) : inc.imagenUrl && <div onClick={() => setModalMedia({ src: inc.imagenUrl, type: 'image' })} style={{ cursor: 'pointer', marginBottom: '8px' }}><img src={inc.imagenUrl} alt="" style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '4px' }} /></div>}
-                        <div style={{ fontSize: '11px', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div><b style={{ color: '#0ea5e9' }}>{inc.codigo}</b> · {inc.lugar}</div>
-                          <div style={{ background: '#0f172a', padding: '6px', borderRadius: '4px' }}>{inc.descripcion || 'Sin descripción'}</div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569', fontSize: '10px' }}>👤 {inc.usuario} · 🕒 {inc.fecha}</div>
-                        </div>
-                      </div>
-                    </Popup>
-                  </Marker>
-                );
-              })}
-
-              {capas.Lluvias && lluviasAPI.map(p => <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical)}><Popup><b style={{ color: '#e2e8f0' }}>{p.name}</b></Popup></Marker>)}
-            </MapContainer>
+            ))}
           </div>
+        )}
+      </div>
+
+      <MapContainer center={centroMapa} zoom={10} style={{height:'100%',width:'100%',zIndex:0}} ref={mapRef} zoomControl={false} zoomControlOptions={{position:'topright'}}>
+        <ZoomDerecha />
+        <TileLayer url={obtenerUrlMapa()} maxZoom={20} attribution="&copy; JURP Maps" />
+        <VolarAUbicacion posicion={miUbicacion || flyTarget} />
+        <BotonEncuadreGeneral centro={centroMapa} />
+        <CoordenadasUTM />
+
+        {/* ── Herramientas (dentro del mapa) ───────────────────────────── */}
+        <MiniMapa tileUrl={obtenerUrlMapa()} />
+        <HerramientaMedicion
+          modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null}
+          onFinish={() => {}}
+        />
+        
+        {miUbicacion && <Marker position={miUbicacion} icon={iconoGPS}><Popup>Estás aquí</Popup></Marker>}
+        {capas.Canales && <><GeoJSON data={geoCanalMadre} style={estiloCanales}/><GeoJSON data={geoLateral10} style={estiloCanales}/><GeoJSON data={geoRedes} style={estiloCanales}/></>}
+
+        {/* ── Capas KMZ con clustering ─────────────────────────────────── */}
+        {KMZ_CONFIG.map(cfg => {
+          if (!capasKMZ[cfg.key]) return null;
+          const data = getFilteredData(cfg);
+          if (!data?.features?.length) return null;
+
+          if (cfg.tipo === 'poly' || cfg.tipo === 'line') {
+            const style = cfg.tipo === 'line' 
+              ? () => ({color:cfg.color, weight:3, opacity:0.8, dashArray: cfg.tipo === 'line' ? '8 4' : null})
+              : () => crearEstiloKMZ(cfg.color);
+            return (
+              <GeoJSON key={cfg.key + filtroTramo + filtroEstado} data={data} style={style}
+                onEachFeature={(f,layer) => {
+                  layer.bindTooltip(f.properties?.name||'', {direction:'top',className:'tooltip-infra'});
+                  layer.bindPopup(buildPopup(f.properties,cfg.icon,cfg.label),{maxWidth:320});
+                }}
+              />
+            );
+          }
+          return (
+            <ClusteredLayer key={cfg.key + filtroTramo + filtroEstado} data={data} icon={cfg.icon} color={cfg.color} label={cfg.label} buildPopup={buildPopup} />
+          );
+        })}
+
+        {/* Incidentes */}
+        {(capas.Incidentes_Nuevos||capas.Incidentes_Atencion)&&incidentesFiltrados.map(inc => {
+          if(!capas.Incidentes_Nuevos&&inc.estado!=='eat') return null;
+          if(!capas.Incidentes_Atencion&&inc.estado==='eat') return null;
+          return (
+            <Marker key={inc.id} position={[inc.lat,inc.lng]} icon={crearIconoIncidente(inc.gravedad)} eventHandlers={{click:()=>cargarDetalleIncidente(inc.id)}}>
+              <Popup minWidth={280} maxWidth={320} className="popup-incidente-custom">
+                <div style={{padding:'2px',fontFamily:'system-ui,sans-serif'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid #e2e8f0',paddingBottom:'6px',marginBottom:'8px'}}>
+                    <h4 style={{margin:0,color:'#1d273b',fontSize:'15px',fontWeight:'bold'}}>{inc.tipo}</h4>{getEstadoBadge(inc.estado)}
+                  </div>
+                  {cargandoDetalle ? <div style={{textAlign:'center',padding:'20px 0',color:'#206bc4'}}><FaSyncAlt className="icon-spin"/><span style={{fontSize:'12px',marginLeft:'5px'}}>Cargando...</span></div>
+                  : detalleActivo&&detalleActivo.id===inc.id ? (
+                    <div style={{display:'flex',overflowX:'auto',gap:'8px',paddingBottom:'8px',marginBottom:'8px'}}>
+                      {detalleActivo.images?.map((it,i)=>{ const src = it.content?.startsWith('http') ? it.content : `data:image/jpeg;base64,${it.content}`; return <div key={i} onClick={()=>setModalMedia({src,type:'image'})} style={{flexShrink:0,cursor:'pointer'}}><img src={src} alt="" style={{width:'120px',height:'100px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0'}}/></div>; })}
+                      {detalleActivo.videos?.map((it,i)=>{ const src = it.content?.startsWith('http') ? it.content : `data:video/mp4;base64,${it.content}`; return <div key={i} onClick={()=>setModalMedia({src,type:'video'})} style={{flexShrink:0,cursor:'pointer',position:'relative'}}><video src={src} style={{width:'150px',height:'100px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',background:'#000'}} preload="metadata"/><div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'rgba(0,0,0,0.5)',borderRadius:'50%',width:'32px',height:'32px',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:'16px'}}>▶</div></div>; })}
+                      {(!detalleActivo.images?.length&&!detalleActivo.videos?.length&&inc.imagenUrl)&&<div onClick={()=>setModalMedia({src:inc.imagenUrl,type:'image'})} style={{cursor:'pointer'}}><img src={inc.imagenUrl} alt="" style={{width:'100%',height:'140px',objectFit:'cover',borderRadius:'6px'}}/></div>}
+                    </div>
+                  ) : inc.imagenUrl&&<div onClick={()=>setModalMedia({src:inc.imagenUrl,type:'image'})} style={{width:'100%',height:'140px',overflow:'hidden',borderRadius:'6px',marginBottom:'10px',background:'#f8fafc',border:'1px solid #e2e8f0',cursor:'pointer'}}><img src={inc.imagenUrl} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/></div>}
+                  <div style={{fontSize:'12px',color:'#475569',display:'flex',flexDirection:'column',gap:'6px'}}>
+                    <div><strong>Código:</strong> <span style={{color:'#206bc4',fontWeight:'bold'}}>{inc.codigo}</span></div>
+                    <div><strong>Ubicación:</strong> {inc.lugar}</div>
+                    <div style={{background:'#f1f5f9',padding:'8px',borderRadius:'4px',border:'1px solid #e2e8f0',maxHeight:'100px',overflowY:'auto'}}><strong style={{color:'#1e293b'}}>Descripción:</strong><br/><span style={{color:'#334155',lineHeight:'1.4',display:'block',marginTop:'4px'}}>{inc.descripcion}</span></div>
+                    <div style={{display:'flex',justifyContent:'space-between',borderTop:'1px dashed #cbd5e1',paddingTop:'8px',marginTop:'2px',fontSize:'11px'}}><span>👤 <b>{inc.usuario}</b></span><span>🕒 {inc.fecha}</span></div>
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+        {capas.Lluvias && lluviasAPI.map(p=><Marker key={p.id} position={[p.lat,p.lng]} icon={crearIconoLluvia(p.totalRain,p.isCritical)}><Popup><b>{p.name}</b></Popup></Marker>)}
+      </MapContainer>
+
+      {/* ── Panel de Control ────────────────────────────────────────────── */}
+      <div className={`panel-control-avanzado ${leyendaExpandida?'':'colapsado'}`}>
+        <div className="pca-cabecera">
+          <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+            <img src={logo} alt="Logo" style={{height:'30px',width:'auto'}} />
+            {leyendaExpandida&&<span style={{color:'#1d273b',fontWeight:'600',fontSize:'0.875rem'}}>Panel de Control</span>}
+          </div>
+          <button className="pca-btn-icon" onClick={()=>setLeyendaExpandida(!leyendaExpandida)}>{leyendaExpandida?<FaChevronLeft size={10}/>:<FaChevronRight size={10}/>}</button>
         </div>
 
-        {/* ── Charts Column ───────────────────────────────────────────── */}
-        <div className="dash-charts-col">
-          <div className="dash-panel">
-            <div className="dash-panel-title"><span className="accent">📈</span> Evolución de Incidentes</div>
-            <ResponsiveContainer width="100%" height={140}>
-              <LineChart data={incMes}><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" /><XAxis dataKey="mes" tick={{ fontSize: 10 }} stroke="#334155" /><YAxis allowDecimals={false} tick={{ fontSize: 10 }} stroke="#334155" width={25} /><Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', fontSize: '11px' }} /><Line type="monotone" dataKey="cant" stroke="#0ea5e9" strokeWidth={2} dot={{ fill: '#0ea5e9', r: 3 }} name="Incidentes" /></LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="dash-panel">
-            <div className="dash-panel-title"><span className="accent">🎯</span> Incidentes por Tipo</div>
-            <ResponsiveContainer width="100%" height={160}>
-              <PieChart><Pie data={incPorTipo} cx="50%" cy="50%" innerRadius={35} outerRadius={60} dataKey="value" paddingAngle={2}>{incPorTipo.map((d, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', fontSize: '11px' }} /><Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={v => <span style={{ color: '#94a3b8' }}>{v}</span>} /></PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="dash-panel">
-            <div className="dash-panel-title"><span className="accent">🏗️</span> Infraestructura por Tipo</div>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={porTipoInfra} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" /><XAxis type="number" tick={{ fontSize: 10 }} stroke="#334155" /><YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} stroke="#334155" width={90} /><Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', fontSize: '11px' }} /><Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16}>{porTipoInfra.map((d, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="dash-panel" style={{ flex: 1, minHeight: '160px' }}>
-            <div className="dash-panel-title"><span className="accent">📋</span> Registros Recientes</div>
-            <div style={{ overflowY: 'auto', maxHeight: '200px' }}>
-              <table className="dash-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Ubicación</th><th>Estado</th></tr></thead><tbody>
-                {incidentesAPI.slice(0, 8).map((i, j) => { const [, tx] = badge(i.estado); return <tr key={j}><td style={{ whiteSpace: 'nowrap', fontSize: '10px' }}>{i.fecha}</td><td>{i.tipo}</td><td style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.lugar}</td><td><span className={`dash-badge dash-badge-${i.estado === 'pat' ? 'orange' : i.estado === 'ate' ? 'blue' : 'green'}`}>{tx}</span></td></tr>; })}
-                {incidentesAPI.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: '#475569', padding: '20px' }}>Sin incidentes</td></tr>}
-              </tbody></table>
+        {leyendaExpandida && (
+          <div className="pca-cuerpo">
+            <div className="pca-seccion">
+              <div className="pca-label">Mapa Base</div>
+              <select className="pca-select" value={mapaBase} onChange={e=>setMapaBase(e.target.value)}>
+                <option value="satelite">Google Satélite</option><option value="calles">Google Calles</option><option value="topografico">Topográfico</option><option value="oscuro">Modo Oscuro</option>
+              </select>
+            </div>
+
+            <hr className="pca-divider" style={{marginTop:'15px'}}/>
+            <div className="pca-switches">
+              <label className="pca-switch-row"><div className="pca-switch-container"><input type="checkbox" checked={capas.Canales} onChange={()=>toggleCapa('Canales')}/><span className="pca-slider-round"></span></div><div style={{width:'12px',height:'12px',borderRadius:'50%',backgroundColor:'#206bc4'}}></div><span>Trazado de Canales</span></label>
+              <label className="pca-switch-row"><div className="pca-switch-container"><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={()=>{toggleCapa('Incidentes_Atencion');toggleCapa('Incidentes_Nuevos');}}/><span className="pca-slider-round"></span></div><FaExclamationTriangle color="#d63939"/><span>Alertas de Incidentes</span></label>
+              {(capas.Incidentes_Nuevos||capas.Incidentes_Atencion)&&<div style={{paddingLeft:'40px',marginTop:'-5px',marginBottom:'10px'}}><select className="pca-select" style={{fontSize:'11px',padding:'2px 4px',height:'auto'}} value={filtroTiempo} onChange={e=>setFiltroTiempo(Number(e.target.value))}><option value={1}>Últimas 24 horas</option><option value={7}>Últimos 7 días</option><option value={30}>Últimos 30 días</option><option value={0}>Histórico Completo</option></select></div>}
+              <label className="pca-switch-row"><div className="pca-switch-container"><input type="checkbox" checked={capas.Lluvias} onChange={()=>toggleCapa('Lluvias')}/><span className="pca-slider-round"></span></div><FaCloudShowersHeavy color="#206bc4"/><span>Estaciones Pluviómetros</span></label>
+            </div>
+
+            {/* ── Filtros ──────────────────────────────────────────────────── */}
+            <hr className="pca-divider"/>
+            <div className="pca-seccion">
+              <div className="pca-label"><FaFilter style={{marginRight:'4px'}}/>Filtros Infraestructura</div>
+              <div style={{display:'flex',gap:'6px'}}>
+                <select className="pca-select" style={{fontSize:'11px',flex:1}} value={filtroTramo} onChange={e=>setFiltroTramo(e.target.value)}>
+                  <option value="">Todos los tramos</option>
+                  {tramosUnicos.map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+                <select className="pca-select" style={{fontSize:'11px',flex:1}} value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)}>
+                  <option value="">Todo estado</option>
+                  {estadosUnicos.map(e2=><option key={e2} value={e2}>{e2}</option>)}
+                </select>
+              </div>
+              {(filtroTramo||filtroEstado)&&<button onClick={()=>{setFiltroTramo('');setFiltroEstado('');}} style={{marginTop:'4px',background:'none',border:'none',color:'#206bc4',cursor:'pointer',fontSize:'11px',padding:0}}>✕ Limpiar filtros</button>}
+            </div>
+
+            {/* ── Infraestructura Hidráulica ────────────────────────────────── */}
+            <hr className="pca-divider"/>
+            <div className="pca-seccion">
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px',cursor:'pointer'}} onClick={()=>setSeccionKMZ(v=>!v)}>
+                <div className="pca-label" style={{margin:0}}>📂 Infraestructura Hidráulica</div>
+                <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                  <span className="pca-badge">{totalKMZ}</span>
+                  {activasKMZ>0&&<span style={{fontSize:'10px',background:'#206bc4',color:'#fff',padding:'1px 5px',borderRadius:'10px'}}>{activasKMZ}</span>}
+                  <span style={{fontSize:'10px',color:'#666'}}>{seccionKMZ?'▲':'▼'}</span>
+                </div>
+              </div>
+              {seccionKMZ&&<>
+                <div className="pca-action-buttons" style={{marginBottom:'6px'}}>
+                  <button onClick={activarTodasKMZ} className="pca-btn-action text-blue"><FaCheck/> Todas</button>
+                  <button onClick={desactivarTodasKMZ} className="pca-btn-action"><FaTimes/> Ninguna</button>
+                </div>
+                <div className="pca-label" style={{fontSize:'10px',color:'#888',marginBottom:'4px'}}>Polígonos (canales)</div>
+                <div className="pca-list">
+                  {KMZ_CONFIG.filter(c=>c.tipo==='poly').map(cfg=>(
+                    <label key={cfg.key} className="pca-list-item"><div className="pca-item-left"><input type="checkbox" checked={capasKMZ[cfg.key]} onChange={()=>toggleCapaKMZ(cfg.key)} className="pca-checkbox"/><span style={{display:'flex',alignItems:'center',gap:'4px'}}><img src={cfg.icon} alt="" style={{width:'18px',height:'18px'}}/>{cfg.label}</span></div><span className="pca-badge">{cfg.data?.features?.length||0}</span></label>
+                  ))}
+                </div>
+                <div className="pca-label" style={{fontSize:'10px',color:'#888',marginBottom:'4px',marginTop:'8px'}}>Puntos (infraestructura)</div>
+                <div className="pca-list">
+                  {KMZ_CONFIG.filter(c=>c.tipo==='point' && !c.key.startsWith('GAR_')).map(cfg=>(
+                    <label key={cfg.key} className="pca-list-item"><div className="pca-item-left"><input type="checkbox" checked={capasKMZ[cfg.key]} onChange={()=>toggleCapaKMZ(cfg.key)} className="pca-checkbox"/><span style={{display:'flex',alignItems:'center',gap:'4px'}}><img src={cfg.icon} alt="" style={{width:'18px',height:'18px'}}/>{cfg.label}</span></div><span className="pca-badge">{cfg.data?.features?.filter(f=>f.geometry?.type==='Point').length||0}</span></label>
+                  ))}
+                </div>
+                <div className="pca-label" style={{fontSize:'10px',color:'#888',marginBottom:'4px',marginTop:'8px'}}>🏠 Garitas de Vigilancia</div>
+                <div className="pca-list">
+                  {KMZ_CONFIG.filter(c=>c.key.startsWith('GAR_')).map(cfg=>(
+                    <label key={cfg.key} className="pca-list-item"><div className="pca-item-left"><input type="checkbox" checked={capasKMZ[cfg.key]} onChange={()=>toggleCapaKMZ(cfg.key)} className="pca-checkbox"/><span style={{display:'flex',alignItems:'center',gap:'4px'}}><img src={cfg.icon} alt="" style={{width:'18px',height:'18px'}}/>{cfg.label}</span></div><span className="pca-badge">{cfg.data?.features?.length||0}</span></label>
+                  ))}
+                </div>
+                <div className="pca-label" style={{fontSize:'10px',color:'#888',marginBottom:'4px',marginTop:'8px'}}>🛣️ Vías y Caminos</div>
+                <div className="pca-list">
+                  {KMZ_CONFIG.filter(c=>c.tipo==='line').map(cfg=>(
+                    <label key={cfg.key} className="pca-list-item"><div className="pca-item-left"><input type="checkbox" checked={capasKMZ[cfg.key]} onChange={()=>toggleCapaKMZ(cfg.key)} className="pca-checkbox"/><span style={{display:'flex',alignItems:'center',gap:'4px'}}><span style={{display:'inline-block',width:'18px',height:'3px',backgroundColor:cfg.color,borderRadius:'2px'}}></span>{cfg.label}</span></div><span className="pca-badge">{cfg.data?.features?.length||0}</span></label>
+                  ))}
+                </div>
+              </>}
+            </div>
+
+            {/* ── Estadísticas ─────────────────────────────────────────────── */}
+            <hr className="pca-divider"/>
+            <div className="pca-seccion">
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px',cursor:'pointer'}} onClick={()=>setSeccionStats(v=>!v)}>
+                <div className="pca-label" style={{margin:0}}><FaChartBar style={{marginRight:'4px'}}/>Estadísticas</div>
+                <span style={{fontSize:'10px',color:'#666'}}>{seccionStats?'▲':'▼'}</span>
+              </div>
+              {seccionStats&&<div style={{fontSize:'11px',color:'#475569'}}>
+                <div style={{marginBottom:'8px'}}><strong>Por Tipo:</strong>
+                  {Object.entries(stats.tipos).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(
+                    <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'2px 0'}}><span>{k}</span><span className="pca-badge">{v}</span></div>
+                  ))}
+                </div>
+                <div style={{marginBottom:'8px'}}><strong>Por Estado:</strong>
+                  {Object.entries(stats.estados).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=>(
+                    <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'2px 0'}}><span>{k}</span><span className="pca-badge">{v}</span></div>
+                  ))}
+                </div>
+                <div><strong>Por Tramo:</strong>
+                  {Object.entries(stats.tramos).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,v])=>(
+                    <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'2px 0'}}><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'160px'}}>{k}</span><span className="pca-badge">{v}</span></div>
+                  ))}
+                </div>
+                <div style={{marginTop:'6px',textAlign:'right',fontWeight:600}}>Total: {stats.total} elementos</div>
+              </div>}
             </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* ── Footer ───────────────────────────────────────────────────── */}
-      <div className="dash-footer">
-        <span><span className="dot" /> Sistema Activo</span>
-        <span>Última actualización: {new Date().toLocaleString('es-PE')}</span>
-        <span style={{ marginLeft: 'auto' }}>Sistema Integrado de Monitoreo — JURP</span>
-      </div>
+      <button onClick={obtenerDatosDeApis} className="btn-flotante-actualizar">{cargandoAPIs?'Actualizando...':'Actualizar Datos'}</button>
+      <button onClick={obtenerMiUbicacion} disabled={buscandoGPS} className="btn-flotante-gps"><FaLocationArrow/></button>
 
-      {/* ── Modal ────────────────────────────────────────────────────── */}
+      {/* ── Modal Fullscreen ───────────────────────────────────────────── */}
       {modalMedia && (
-        <div onClick={() => setModalMedia(null)} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}>
-          <button onClick={() => setModalMedia(null)} style={{ position: 'absolute', top: '16px', right: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-          {modalMedia.type === 'image' ? <img src={modalMedia.src} alt="" onClick={e => e.stopPropagation()} style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px' }} />
-          : <video src={modalMedia.src} onClick={e => e.stopPropagation()} controls autoPlay style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: '8px', background: '#000' }} />}
+        <div onClick={() => setModalMedia(null)} style={{ position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9999,background:'rgba(0,0,0,0.9)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'zoom-out' }}>
+          <button onClick={() => setModalMedia(null)} style={{ position:'absolute',top:'20px',right:'20px',background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',fontSize:'24px',cursor:'pointer',borderRadius:'50%',width:'40px',height:'40px',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10000 }}>✕</button>
+          {modalMedia.type === 'image' ? (
+            <img src={modalMedia.src} alt="Evidencia" onClick={e => e.stopPropagation()} style={{ maxWidth:'90vw',maxHeight:'90vh',objectFit:'contain',borderRadius:'8px',cursor:'default' }} />
+          ) : (
+            <video src={modalMedia.src} onClick={e => e.stopPropagation()} controls autoPlay style={{ maxWidth:'90vw',maxHeight:'90vh',borderRadius:'8px',cursor:'default',background:'#000' }} />
+          )}
         </div>
       )}
     </div>
