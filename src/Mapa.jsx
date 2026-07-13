@@ -274,7 +274,7 @@ function MapaChavimochic() {
 
             {/* Layer panel */}
             {showLayers && (
-              <div className="dash-layers">
+              <div className="dash-layers" style={{ left: '50px' }}>
                 <div className="dash-layers-header"><span>Capas</span><button onClick={() => setShowLayers(false)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}><FaTimes size={12} /></button></div>
                 <div className="dash-layers-body">
                   <div className="dash-layer-group">

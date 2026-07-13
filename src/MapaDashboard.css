@@ -63,7 +63,7 @@
 
 /* ── Layer panel (floating on map) ───────────────────────────── */
 .dash-layers { 
-  position:absolute; top:10px; right:10px; z-index:1000; width:260px; 
+  position:absolute; top:10px; left:10px; z-index:1000; width:260px; 
   background:rgba(255,255,255,0.97); border:1px solid #e2e8f0; border-radius:6px; 
   backdrop-filter:blur(12px); max-height:calc(100% - 20px); overflow-y:auto;
   box-shadow:0 4px 16px rgba(0,0,0,0.08);
