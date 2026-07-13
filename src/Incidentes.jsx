@@ -10,6 +10,21 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
 import logo from './assets/logo1.png';
+// ── Imágenes de referencia metrado ──────────────────────────────────────────
+import imgExcavacion from './assets/metrado/excavacion.png';
+import imgCarguio from './assets/metrado/carguio.png';
+import imgDescolmatacion from './assets/metrado/descolmatacion.png';
+import imgEliminacion from './assets/metrado/eliminacion.png';
+import imgConformacion from './assets/metrado/conformacion.png';
+import imgEnrocado from './assets/metrado/enrocado.png';
+import imgPerfilado from './assets/metrado/perfilado.png';
+import imgHabilitacion from './assets/metrado/habilitacion.png';
+const IMG_METRADO = {
+  'EXCAVACION DE MATERIAL': imgExcavacion, 'CARGUIO DE MATERIAL': imgCarguio,
+  'DESCOLMATACION DE CAUCE': imgDescolmatacion, 'ELIMINACION': imgEliminacion,
+  'CONFORMACION DE DIQUE': imgConformacion, 'ENROCADO': imgEnrocado,
+  'PERFILADO DE TALUD': imgPerfilado, 'HABILITACION DE ACCESO': imgHabilitacion,
+};
 
 function Incidentes() {
   const [incidentes, setIncidentes] = useState([]);
@@ -693,7 +708,15 @@ function Incidentes() {
                     {/* ── Campos de metrado según actividad ──────────────────── */}
                     {nuevoRecurso.actividad && (
                       <div style={{ background:'#f0f6ff', padding:'14px', borderRadius:'4px', border:'1px solid #bfdbfe', marginBottom:'15px' }}>
-                        <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px' }}>📐 Metrado — {nuevoRecurso.actividad}</div>
+                        <div style={{ display:'flex', gap:'14px', alignItems:'flex-start' }}>
+                          {/* Imagen de referencia */}
+                          <div style={{ flexShrink:0, width:'160px' }}>
+                            <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5', marginBottom:'6px' }}>📐 Referencia</div>
+                            {IMG_METRADO[nuevoRecurso.actividad] && <img src={IMG_METRADO[nuevoRecurso.actividad]} alt={nuevoRecurso.actividad} style={{ width:'100%', borderRadius:'4px', border:'1px solid #bfdbfe' }} />}
+                          </div>
+                          {/* Campos de medición */}
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5', marginBottom:'10px' }}>{nuevoRecurso.actividad}</div>
                         <div className="tbl-row tbl-mb-2" style={{ gap:'8px' }}>
                           {/* EXCAVACION / ENROCADO: B, b, h, L */}
                           {(nuevoRecurso.actividad === 'EXCAVACION DE MATERIAL' || nuevoRecurso.actividad === 'ENROCADO') && (<>
@@ -736,6 +759,8 @@ function Incidentes() {
                           {nuevoRecurso.actividad === 'HABILITACION DE ACCESO' && (
                             <div className="tbl-col-4"><label className="tbl-form-label">Longitud L (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.longitud} onChange={e => setNuevoRecurso({...nuevoRecurso, longitud: e.target.value})} /></div>
                           )}
+                        </div>
+                          </div>
                         </div>
                         {/* Resultado del cálculo */}
                         <div style={{ marginTop:'8px', padding:'8px 12px', background:'#fff', borderRadius:'4px', border:'1px solid #bfdbfe', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
