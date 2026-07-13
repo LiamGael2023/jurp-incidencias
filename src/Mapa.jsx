@@ -215,9 +215,10 @@ function MapaChavimochic() {
       const parse = async (r) => { if (!r.ok) return []; const d = await r.json(); return Array.isArray(d) ? d : d.results || []; };
       const [pers, mats, maqs] = await Promise.all([parse(rP), parse(rM), parse(rQ)]);
       const resumen = {};
-      for (const p of pers) { const id = String(p.incident_report); if (!resumen[id]) resumen[id] = { personal: 0, maquinaria: 0, insumos: 0, total: 0, items: 0 }; const sub = parseFloat(p.quantity_hours || 0) * parseFloat(p.unit_price || 0); resumen[id].personal += sub; resumen[id].total += sub; resumen[id].items++; }
-      for (const m of mats) { const id = String(m.incident_report); if (!resumen[id]) resumen[id] = { personal: 0, maquinaria: 0, insumos: 0, total: 0, items: 0 }; const sub = parseFloat(m.quantity || 0) * parseFloat(m.unit_price || 0); resumen[id].insumos += sub; resumen[id].total += sub; resumen[id].items++; }
-      for (const q of maqs) { const id = String(q.incident_report); if (!resumen[id]) resumen[id] = { personal: 0, maquinaria: 0, insumos: 0, total: 0, items: 0 }; const hrs = Math.max(0, parseFloat(q.end_horometer || 0) - parseFloat(q.start_horometer || 0)); const sub = hrs * parseFloat(q.unit_price || 0); resumen[id].maquinaria += sub; resumen[id].total += sub; resumen[id].items++; }
+      const initR = (id) => { if (!resumen[id]) resumen[id] = { personal: 0, maquinaria: 0, insumos: 0, total: 0, items: 0, equipos: [] }; };
+      for (const p of pers) { const id = String(p.incident_report); initR(id); const sub = parseFloat(p.quantity_hours || 0) * parseFloat(p.unit_price || 0); resumen[id].personal += sub; resumen[id].total += sub; resumen[id].items++; }
+      for (const m of mats) { const id = String(m.incident_report); initR(id); const sub = parseFloat(m.quantity || 0) * parseFloat(m.unit_price || 0); resumen[id].insumos += sub; resumen[id].total += sub; resumen[id].items++; }
+      for (const q of maqs) { const id = String(q.incident_report); initR(id); const hrs = Math.max(0, parseFloat(q.end_horometer || 0) - parseFloat(q.start_horometer || 0)); const sub = hrs * parseFloat(q.unit_price || 0); resumen[id].maquinaria += sub; resumen[id].total += sub; resumen[id].items++; resumen[id].equipos.push({ nombre: q.equipment_name || 'Equipo', marca: q.brand_name || '', placa: q.model_plate || '', operador: q.operator || '', horas: hrs.toFixed(1), enUso: hrs === 0 }); }
       setCosteos(resumen);
     } catch(e) { console.error('Costeos:', e); }
   };
@@ -425,12 +426,29 @@ function MapaChavimochic() {
                         </div>
                         <div style={{ fontSize: '10px', color: '#626976', marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.lugar}</div>
                         {c.items > 0 ? (
-                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                            {c.personal > 0 && <span style={{ background: '#dbeafe', color: '#1463A5', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>👷 S/ {c.personal.toFixed(0)}</span>}
-                            {c.maquinaria > 0 && <span style={{ background: '#fef3c7', color: '#b45309', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>🚜 S/ {c.maquinaria.toFixed(0)}</span>}
-                            {c.insumos > 0 && <span style={{ background: '#d1fae5', color: '#047857', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>📦 S/ {c.insumos.toFixed(0)}</span>}
-                            <span style={{ marginLeft: 'auto', fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>S/ {c.total.toFixed(2)}</span>
-                          </div>
+                          <>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginBottom: c.equipos?.length ? '6px' : 0 }}>
+                              {c.personal > 0 && <span style={{ background: '#dbeafe', color: '#1463A5', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>👷 S/ {c.personal.toFixed(0)}</span>}
+                              {c.maquinaria > 0 && <span style={{ background: '#fef3c7', color: '#b45309', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>🚜 S/ {c.maquinaria.toFixed(0)}</span>}
+                              {c.insumos > 0 && <span style={{ background: '#d1fae5', color: '#047857', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>📦 S/ {c.insumos.toFixed(0)}</span>}
+                              <span style={{ marginLeft: 'auto', fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>S/ {c.total.toFixed(2)}</span>
+                            </div>
+                            {c.equipos?.length > 0 && (
+                              <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: '5px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                {c.equipos.map((eq, k) => {
+                                  const usado = inc.estado !== 'cer' && eq.enUso;
+                                  return (
+                                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px' }}>
+                                      <span style={{ background: usado ? '#dcfce7' : '#f1f5f9', color: usado ? '#16a34a' : '#626976', padding: '1px 6px', borderRadius: '3px', fontWeight: 600, fontSize: '9px' }}>{usado ? '🟢 En uso' : '✅ Disponible'}</span>
+                                      <span style={{ fontWeight: 600, color: '#1d273b' }}>{eq.nombre}</span>
+                                      <span style={{ color: '#626976' }}>{eq.marca} {eq.placa}</span>
+                                      <span style={{ marginLeft: 'auto', color: '#626976' }}>{eq.horas}h</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </>
                         ) : (
                           <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>Sin costeo registrado</div>
                         )}
