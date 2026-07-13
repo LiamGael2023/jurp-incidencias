@@ -2,30 +2,20 @@ import { useState, useEffect } from 'react';
 import { 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
-  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash, FaCheckCircle
+  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload
 } from 'react-icons/fa';
 import './Incidentes.css';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
-import logo from './assets/jurp.png';
-import refAltura from './assets/ref_altura.png';
-import refAncho from './assets/ref_ancho.png';
-import MantenedorEquipos from './MantenedorEquipos';
+import logo from './assets/logo1.png';
 
 function Incidentes() {
   const [incidentes, setIncidentes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [paginaActual, setPaginaActual] = useState(1);
   const itemsPorPagina = 8;
-
-  // --- CATÁLOGOS (mantenedores) ---
-  const [catEquipos, setCatEquipos] = useState([]);
-  const [catMarcas, setCatMarcas] = useState([]);
-  const [catModelos, setCatModelos] = useState([]);
-  const [catActividades, setCatActividades] = useState([]);
-  const [mantenedorAbierto, setMantenedorAbierto] = useState(false);
 
   // --- ESTADOS DEL MODAL PRINCIPAL ---
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -36,7 +26,6 @@ function Incidentes() {
   // --- ESTADOS DEL MODAL PDF ---
   const [modalPdfAbierto, setModalPdfAbierto] = useState(false);
   const [pdfUrlActivo, setPdfUrlActivo] = useState(null);
-  const [imgRefModal, setImgRefModal] = useState(null);   // {src, titulo} o null
 
   // --- ESTADOS DEL MODAL DE EVIDENCIAS (GALERÍA) ---
   const [modalMediaAbierto, setModalMediaAbierto] = useState(false);
@@ -51,142 +40,28 @@ function Incidentes() {
   };
 
   const generarCorrelativo = () => {
-    // Placeholder mientras el backend responde con el correlativo real.
     const fecha = new Date();
     const strFecha = `${fecha.getFullYear()}${String(fecha.getMonth()+1).padStart(2,'0')}${String(fecha.getDate()).padStart(2,'0')}`;
-    return `PD-____-${strFecha}`;
+    const random = Math.floor(1000 + Math.random() * 9000); 
+    return `PD-${strFecha}-${random}`;
   };
   
   const estadoInicialRecurso = {
     tipo: 'Personal', descripcion: '', cantidad: 1, precioUnitario: 0,
     numPersonas: 1, horasTrabajo: 8, horasExtras: 0, 
-    horasEfectivas: '', obsReduccion: '',
     numeroParte: generarCorrelativo(), 
     fechaParte: getFechaHoy(), 
     turno: 'Día', zonaTrabajo: '',
-    proveedor: '', operador: '', licencia: '', categoria: '', longitud: '',
-    equipoId: '', equipo: '',
-    origen: 'JURP',
-    marcaId: '', marca: '',
-    modeloId: '', placa: '', modeloMaquina: '', codigoMaquina: '',
+    proveedor: '', operador: '',
+    equipo: 'TRACTOR', equipoOtro: '', 
+    marca: 'CAT', marcaOtro: '', 
+    placa: '', 
     hmInicio: '', hmFin: '', combustible: '', vale: '', fotoVale: null,
     actividad: '', observaciones: '', fotoParte: null,
-    incluirMetrado: false, longitud: '', altura: '', anchoSup: '', anchoInf: ''
+    longitud: '', altura: '', anchoSup: '', anchoInf: '',
+    nViajes: '', volTolva: '', fe: '1.25', hPromedio: '', anchoBase: '', corona: '', talud: ''
   };
   const [nuevoRecurso, setNuevoRecurso] = useState(estadoInicialRecurso);
-
-  // ── Carga de catálogos (equipos/marcas/modelos) ──────────────────────────
-  // Mismo backend que el resto del módulo operations. Sin token: los endpoints
-  // son AllowAny, y mandar un token vencido provoca 401 (igual que la maquinaria,
-  // que también llama sin Authorization).
-  const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
-
-  const cargarEquiposCat = async (origen) => {
-    try {
-      const r = await fetch(`${API_OPS}/equipos/?activo=true&origen=${origen}`);
-      if (r.ok) setCatEquipos(await r.json());
-    } catch (e) { console.error(e); }
-  };
-  const cargarMarcasCat = async (equipoId) => {
-    if (!equipoId) { setCatMarcas([]); return; }
-    try {
-      const r = await fetch(`${API_OPS}/marcas/?activo=true&equipo=${equipoId}`);
-      if (r.ok) setCatMarcas(await r.json());
-    } catch (e) { console.error(e); }
-  };
-  const cargarModelosCat = async (marcaId) => {
-    if (!marcaId) { setCatModelos([]); return; }
-    try {
-      // Solo placas disponibles (estado=0) para el parte diario.
-      const r = await fetch(`${API_OPS}/modelos/?activo=true&estado=0&marca=${marcaId}`);
-      if (r.ok) setCatModelos(await r.json());
-    } catch (e) { console.error(e); }
-  };
-
-  // Al montar, carga los equipos del origen inicial (JURP).
-  useEffect(() => { cargarEquiposCat(nuevoRecurso.origen); }, []);
-
-  // Carga el catálogo de actividades (para el combo del parte diario).
-  const cargarActividades = async () => {
-    try {
-      const r = await fetch(`${API_OPS}/actividades/?activo=true`);
-      if (r.ok) setCatActividades(await r.json());
-    } catch (e) { console.error(e); }
-  };
-  useEffect(() => { cargarActividades(); }, []);
-
-  // Pide al backend el siguiente N° de parte (PD-XXXX-AAAAMMDD, reinicia por año).
-  const obtenerCorrelativoParte = async () => {
-    try {
-      const r = await fetch(`${API_OPS}/daily-part-heavy-equipments/siguiente-correlativo/`);
-      if (r.ok) {
-        const data = await r.json();
-        if (data?.numero_parte) {
-          setNuevoRecurso(prev => ({ ...prev, numeroParte: data.numero_parte }));
-        }
-      }
-    } catch (e) { console.error(e); }
-  };
-  useEffect(() => { obtenerCorrelativoParte(); }, []);
-
-  // Handlers de los selects encadenados: Origen → Equipo → Marca → Placa.
-  const onCambiaOrigen = (origen) => {
-    // El origen es el primer filtro: recarga equipos y limpia toda la cadena.
-    setNuevoRecurso(prev => ({ ...prev, origen, equipoId: '', equipo: '', marcaId: '', marca: '', modeloId: '', placa: '', modeloMaquina: '', codigoMaquina: '' }));
-    setCatMarcas([]); setCatModelos([]);
-    cargarEquiposCat(origen);
-  };
-  const onCambiaEquipo = (id) => {
-    const eq = catEquipos.find(e => String(e.id) === String(id));
-    setNuevoRecurso(prev => ({ ...prev, equipoId: id, equipo: eq?.nombre || '', marcaId: '', marca: '', modeloId: '', placa: '', modeloMaquina: '', codigoMaquina: '' }));
-    setCatMarcas([]); setCatModelos([]);
-    cargarMarcasCat(id);
-  };
-  const onCambiaMarca = (id) => {
-    const ma = catMarcas.find(m => String(m.id) === String(id));
-    setNuevoRecurso(prev => ({ ...prev, marcaId: id, marca: ma?.nombre || '', modeloId: '', placa: '', modeloMaquina: '', codigoMaquina: '' }));
-    setCatModelos([]);
-    cargarModelosCat(id);
-  };
-  const onCambiaModelo = (id) => {
-    const mo = catModelos.find(m => String(m.id) === String(id));
-    setNuevoRecurso(prev => ({ ...prev, modeloId: id, placa: mo?.placa || '', modeloMaquina: mo?.modelo || '', codigoMaquina: mo?.codigo || '' }));
-  };
-
-  // Maneja el combo de actividad. Si elige "__OTRO__", pide el nombre, lo
-  // guarda en el catálogo y lo selecciona.
-  const onCambiaActividad = async (valor) => {
-    if (valor === '__OTRO__') {
-      const { value: nombre } = await Swal.fire({
-        title: 'Nueva actividad',
-        input: 'text',
-        inputPlaceholder: 'Ej. RIEGO DE PLATAFORMA',
-        showCancelButton: true,
-        confirmButtonText: 'Agregar',
-        inputValidator: (v) => !v && 'Escribe el nombre de la actividad',
-      });
-      if (!nombre) return;
-      const limpio = nombre.toUpperCase().trim();
-      try {
-        const r = await fetch(`${API_OPS}/actividades/`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre: limpio, activo: true }),
-        });
-        if (r.ok) {
-          await cargarActividades();          // refresca el combo con la nueva
-          setNuevoRecurso(prev => ({ ...prev, actividad: limpio }));
-        } else {
-          const e = await r.json();
-          Swal.fire('Error', e.nombre ? e.nombre[0] : 'No se pudo crear la actividad.', 'error');
-        }
-      } catch (e) {
-        Swal.fire('Error', 'Fallo de conexión al crear la actividad.', 'error');
-      }
-    } else {
-      setNuevoRecurso(prev => ({ ...prev, actividad: valor }));
-    }
-  };
 
   const obtenerIncidentes = async () => {
     const token = localStorage.getItem('userToken'); 
@@ -206,7 +81,7 @@ function Incidentes() {
           return {
             id: inc.id, codigo: inc.code || 'Sin Código', lugar: inc.location_text || '-',
             tipo: tipoNombre, gravedad: inc.severity || 'lev', estado: inc.status || 'pat',
-            usuario: inc.user?.username || 'Sistema',
+            usuario: inc.user?.username || inc.username || 'Sistema',
             fecha: new Date(inc.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' }),
             imagesCount: inc.images_count || 0, videosCount: inc.videos_count || 0,
             imagenUrl: inc.thumbnail || inc.image || null 
@@ -300,9 +175,9 @@ function Incidentes() {
       const listMat = Array.isArray(dataMat) ? dataMat : (dataMat.results || []);
       const listMaq = Array.isArray(dataMaq) ? dataMaq : (dataMaq.results || []);
       const idStr = String(incidenteId);
-      const formatPers = listPers.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-pers-${i.id}`, dbId: i.id, endpoint: 'incident-personnels', tipo: 'Personal', descripcionResumen: i.description, cantidad: parseFloat(i.quantity_hours), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity_hours) * parseFloat(i.unit_price), guardadoEnDB: true }));
-      const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', descripcionResumen: i.description, cantidad: parseFloat(i.quantity), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity) * parseFloat(i.unit_price), guardadoEnDB: true }));
-      const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-maq-${i.id}`, dbId: i.id, endpoint: 'daily-part-heavy-equipments', cerrado: i.cerrado || false, tipo: 'Maquinaria', descripcionResumen: `Parte N° ${i.part_number} | ${i.equipment_name}\nActividad: ${i.activities}`, cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)), precioUnitario: parseFloat(i.unit_price), total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price), guardadoEnDB: true }));
+      const formatPers = listPers.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-pers-${i.id}`, tipo: 'Personal', descripcionResumen: i.description, cantidad: parseFloat(i.quantity_hours), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity_hours) * parseFloat(i.unit_price), guardadoEnDB: true }));
+      const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, tipo: 'Insumo', descripcionResumen: i.description, cantidad: parseFloat(i.quantity), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity) * parseFloat(i.unit_price), guardadoEnDB: true }));
+      const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-maq-${i.id}`, dbId: i.id, tipo: 'Maquinaria', descripcionResumen: `Parte N° ${i.part_number} | ${i.equipment_name}\nActividad: ${i.activities}`, cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)), precioUnitario: parseFloat(i.unit_price), total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price), guardadoEnDB: true }));
       setRecursos([...formatPers, ...formatMat, ...formatMaq]);
     } catch (error) { console.error("❌ Error al obtener los recursos guardados:", error); }
   };
@@ -312,7 +187,6 @@ function Incidentes() {
   const abrirModal = (inc) => {
     setIncidenteActivo(inc); setRecursos([]); 
     setNuevoRecurso({...estadoInicialRecurso, numeroParte: generarCorrelativo()});
-    obtenerCorrelativoParte();
     setModalAbierto(true);
     cargarCosteosGuardados(inc.id); 
   };
@@ -323,150 +197,45 @@ function Incidentes() {
     setModalPdfAbierto(true);
   };
 
-  // Elimina de la BASE DE DATOS uno o varios registros (para filas agrupadas).
-  const eliminarRecursoGuardado = async (fila) => {
-    // fila.registros = lista de {dbId, endpoint} que componen la fila agrupada.
-    const registros = fila.registros || [{ dbId: fila.dbId, endpoint: fila.endpoint }];
-    const cuantos = registros.length;
-    const conf = await Swal.fire({
-      title: '¿Eliminar?',
-      text: cuantos > 1
-        ? `Se eliminarán ${cuantos} registros de "${fila.descripcionResumen}" de forma permanente.`
-        : `Se eliminará este recurso de forma permanente.`,
-      icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33',
-      confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar',
-    });
-    if (!conf.isConfirmed) return;
-
-    const BASE_URL = 'https://gideonstudio.duckdns.org';
-    try {
-      const resultados = await Promise.all(registros.map(reg =>
-        fetch(`${BASE_URL}/api/v1/mobile/operations/${reg.endpoint}/${reg.dbId}/`, {
-          method: 'DELETE',
-        })
-      ));
-      const okAll = resultados.every(r => r.ok || r.status === 204);
-      if (okAll) {
-        if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
-        Swal.fire({ icon: 'success', title: 'Eliminado', timer: 1200, showConfirmButton: false });
-      } else {
-        const codigos = resultados.map(r => r.status).join(', ');
-        Swal.fire('Error', `No se pudieron eliminar todos los registros (código: ${codigos}).`, 'error');
-      }
-    } catch (e) {
-      Swal.fire('Error', 'Fallo de conexión al eliminar.', 'error');
-    }
-  };
-
-  // Cierra un parte diario individual: libera su máquina y lo bloquea.
-  const cerrarParteDiario = async (fila) => {
-    const conf = await Swal.fire({
-      title: '¿Finalizar actividades?',
-      html: `Se cerrará este parte diario.<br>La máquina quedará <b>disponible</b> para otros partes y el parte <b>no podrá editarse</b>.`,
-      icon: 'question', showCancelButton: true, confirmButtonColor: '#206bc4',
-      confirmButtonText: 'Sí, finalizar', cancelButtonText: 'Cancelar',
-    });
-    if (!conf.isConfirmed) return;
-    const BASE_URL = 'https://gideonstudio.duckdns.org';
-    try {
-      const r = await fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/${fila.dbId}/cerrar/`, { method: 'POST' });
-      if (r.ok) {
-        if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
-        // Refresca el combo de placas leyendo el estado más reciente (evita
-        // closures viejos). Si hay marca seleccionada, recarga sus placas.
-        setNuevoRecurso(prev => {
-          if (prev.marcaId) cargarModelosCat(prev.marcaId);
-          return prev;
-        });
-        Swal.fire({ icon: 'success', title: 'Parte cerrado', text: 'La máquina fue liberada.', timer: 1500, showConfirmButton: false });
-      } else {
-        Swal.fire('Error', `No se pudo cerrar el parte (código: ${r.status}).`, 'error');
-      }
-    } catch (e) {
-      Swal.fire('Error', 'Fallo de conexión al cerrar.', 'error');
-    }
-  };
-
-  // Cierra la incidencia: cierra los partes (libera máquinas) Y cambia el
-  // estado del incidente a "Cerrado" (status='cer').
-  const cerrarIncidenteCompleto = async () => {
-    if (!incidenteActivo) return;
-    const conf = await Swal.fire({
-      title: '¿Cerrar esta incidencia?',
-      html: `Se cerrarán <b>todos los partes diarios</b> y sus máquinas quedarán disponibles.<br>El estado de la incidencia cambiará a <b>Cerrado</b>.`,
-      icon: 'warning', showCancelButton: true, confirmButtonColor: '#2fb344',
-      confirmButtonText: 'Sí, cerrar incidencia', cancelButtonText: 'Cancelar',
-    });
-    if (!conf.isConfirmed) return;
-    const BASE_URL = 'https://gideonstudio.duckdns.org';
-    const token = localStorage.getItem('userToken');
-    try {
-      // 1) Cerrar los partes diarios y liberar máquinas (backend de operaciones).
-      const r = await fetch(`${BASE_URL}/api/v1/mobile/operations/incidentes/${incidenteActivo.id}/cerrar-partes/`, { method: 'POST' });
-      if (!r.ok) {
-        Swal.fire('Error', `No se pudieron cerrar los partes (código: ${r.status}).`, 'error');
-        return;
-      }
-      // 2) Cambiar el estado del incidente a "Cerrado" (backend de incidentes).
-      const rEstado = await fetch(`/api/v1/mobile/hi-incidents/${incidenteActivo.id}/`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Token ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'cer' }),
-      });
-
-      // Refrescos locales.
-      cargarCosteosGuardados(incidenteActivo.id);
-      setNuevoRecurso(prev => {
-        if (prev.marcaId) cargarModelosCat(prev.marcaId);
-        return prev;
-      });
-
-      if (rEstado.ok) {
-        // Actualiza el badge en la lista sin recargar.
-        setIncidentes(prev => prev.map(i => i.id === incidenteActivo.id ? { ...i, estado: 'cer' } : i));
-        setIncidenteActivo(prev => prev ? { ...prev, estado: 'cer' } : prev);
-        Swal.fire({ icon: 'success', title: 'Incidencia cerrada', text: 'Partes cerrados, máquinas liberadas y estado actualizado.', timer: 2200, showConfirmButton: false });
-      } else {
-        // Los partes se cerraron, pero el estado no se pudo cambiar.
-        Swal.fire('Parcial', `Los partes se cerraron, pero no se pudo cambiar el estado de la incidencia (código: ${rEstado.status}). Revisa manualmente.`, 'warning');
-      }
-    } catch (e) {
-      Swal.fire('Error', 'Fallo de conexión.', 'error');
-    }
-  };
-
   const horasMaquina = (nuevoRecurso.hmFin && nuevoRecurso.hmInicio) ? Math.max(0, (parseFloat(nuevoRecurso.hmFin) - parseFloat(nuevoRecurso.hmInicio))).toFixed(1) : 0;
 
-  const volumenMetrado = nuevoRecurso.incluirMetrado ? (((parseFloat(nuevoRecurso.anchoSup)||0 + parseFloat(nuevoRecurso.anchoInf)||0) / 2) * (parseFloat(nuevoRecurso.altura)||0) * (parseFloat(nuevoRecurso.longitud)||0)).toFixed(2) : 0;
+  // ── Cálculo de volumen según actividad ──────────────────────────────────
+  const calcVolumen = () => {
+    const r = nuevoRecurso;
+    const L = parseFloat(r.longitud) || 0, h = parseFloat(r.altura) || 0;
+    const B = parseFloat(r.anchoBase) || 0, b = parseFloat(r.corona) || 0;
+    const Ws = parseFloat(r.anchoSup) || 0, Wi = parseFloat(r.anchoInf) || 0;
+    const N = parseFloat(r.nViajes) || 0, vt = parseFloat(r.volTolva) || 0;
+    const fe = parseFloat(r.fe) || 1.25, Z = parseFloat(r.talud) || 0;
+    const hp = parseFloat(r.hPromedio) || 0, a = parseFloat(r.anchoSup) || 0;
+    switch (r.actividad) {
+      case 'EXCAVACION DE MATERIAL': return { val: ((B + b) / 2) * h * L, unit: 'm³' };
+      case 'CARGUIO DE MATERIAL': return { val: N * vt / fe, unit: 'm³' };
+      case 'DESCOLMATACION DE CAUCE': return { val: a * hp * L, unit: 'm³' };
+      case 'ELIMINACION': return { val: N * vt, unit: 'm³' };
+      case 'CONFORMACION DE DIQUE': { const Bc = b + 2 * Z * h; return { val: ((Bc + b) / 2) * h * L, unit: 'm³' }; }
+      case 'ENROCADO': return { val: ((B + b) / 2) * h * L, unit: 'm³' };
+      case 'PERFILADO DE TALUD': return { val: h * Math.sqrt(1 + Z * Z) * L, unit: 'm²' };
+      case 'HABILITACION DE ACCESO': return { val: L, unit: 'm' };
+      default: return { val: 0, unit: 'm³' };
+    }
+  };
+  const volCalc = calcVolumen();
 
   const agregarRecurso = () => {
     let descFinal = nuevoRecurso.descripcion;
     let cantFinal = parseFloat(nuevoRecurso.cantidad) || 0;
     if (nuevoRecurso.tipo === 'Maquinaria') {
-      const totalHM = parseFloat(horasMaquina) || 0;   // HM Fin - HM Inicio
-      if (totalHM <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Horómetro Final debe ser mayor al Inicial' });
+      cantFinal = parseFloat(horasMaquina) || 0;
+      if (cantFinal <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Horómetro Final debe ser mayor al Inicial' });
       if (!nuevoRecurso.numeroParte) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Número de Parte es obligatorio' });
-      if (!nuevoRecurso.equipo) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un equipo' });
-      // Horas efectivas: por defecto = total del horómetro; editable.
-      const efectivas = (nuevoRecurso.horasEfectivas === '' || nuevoRecurso.horasEfectivas === null)
-        ? totalHM
-        : parseFloat(nuevoRecurso.horasEfectivas) || 0;
-      if (efectivas < 0 || efectivas > totalHM) return Swal.fire({ icon: 'warning', title: 'Atención', text: `Las Horas Efectivas deben estar entre 0 y ${totalHM}` });
-      // Si hubo reducción, la observación es obligatoria.
-      if (efectivas < totalHM && !nuevoRecurso.obsReduccion.trim()) {
-        return Swal.fire({ icon: 'warning', title: 'Observación requerida', text: 'Detalla el motivo de la reducción de horas efectivas.' });
-      }
-      cantFinal = efectivas;   // el costo se calcula sobre las horas efectivas
-      const equipoFinal = nuevoRecurso.equipo;
-      const marcaFinal = nuevoRecurso.marca;
-      descFinal = `Parte N° ${nuevoRecurso.numeroParte} | ${nuevoRecurso.codigoMaquina} · ${equipoFinal} ${marcaFinal} ${nuevoRecurso.modeloMaquina || ''} (${nuevoRecurso.placa})\n`;
+      const equipoFinal = nuevoRecurso.equipo === 'OTRO' ? nuevoRecurso.equipoOtro : nuevoRecurso.equipo;
+      const marcaFinal = nuevoRecurso.marca === 'OTRO' ? nuevoRecurso.marcaOtro : nuevoRecurso.marca;
+      descFinal = `Parte N° ${nuevoRecurso.numeroParte} | ${equipoFinal} ${marcaFinal} (${nuevoRecurso.placa})\n`;
       descFinal += `Zona: ${nuevoRecurso.zonaTrabajo} | Op: ${nuevoRecurso.operador} | Prov: ${nuevoRecurso.proveedor}\n`;
-      descFinal += `HM: ${nuevoRecurso.hmInicio} a ${nuevoRecurso.hmFin} (${totalHM} HE) | Comb: ${nuevoRecurso.combustible || 0} Gls (Vale: ${nuevoRecurso.vale})\n`;
+      descFinal += `HM: ${nuevoRecurso.hmInicio} a ${nuevoRecurso.hmFin} | Comb: ${nuevoRecurso.combustible || 0} Gls (Vale: ${nuevoRecurso.vale})\n`;
       descFinal += `Actividad: ${nuevoRecurso.actividad}`;
-      if (efectivas < totalHM) {
-        descFinal += `\nHoras efectivas: ${efectivas} HE (reducción de ${(totalHM - efectivas).toFixed(1)}). Motivo: ${nuevoRecurso.obsReduccion.trim()}`;
-      }
-      if (nuevoRecurso.incluirMetrado) descFinal += `\nVol. Extraído: ${volumenMetrado} m3`;
+      if (nuevoRecurso.actividad && volCalc.val > 0) descFinal += `\nMetrado: ${volCalc.val.toFixed(2)} ${volCalc.unit}`;
     } else if (nuevoRecurso.tipo === 'Personal') {
       const pers = parseInt(nuevoRecurso.numPersonas) || 0;
       const hrs = parseFloat(nuevoRecurso.horasTrabajo) || 0;
@@ -481,65 +250,10 @@ function Incidentes() {
     const recursoCalculado = { ...nuevoRecurso, idLocal: Date.now(), descripcionResumen: descFinal, cantidad: cantFinal, precioUnitario: parseFloat(nuevoRecurso.precioUnitario) || 0, total: cantFinal * (parseFloat(nuevoRecurso.precioUnitario) || 0), guardadoEnDB: false };
     setRecursos([...recursos, recursoCalculado]);
     setNuevoRecurso({...estadoInicialRecurso, numeroParte: generarCorrelativo()});
-    obtenerCorrelativoParte();
   };
 
   const eliminarRecurso = (idLocal) => setRecursos(recursos.filter(r => r.idLocal !== idLocal));
-  // Elimina del estado local varios recursos (fila agrupada no guardada).
-  const eliminarRecursosLocales = (idsLocales) => setRecursos(recursos.filter(r => !idsLocales.includes(r.idLocal)));
   const costoTotalIncidente = recursos.reduce((sum, item) => sum + item.total, 0);
-
-  // Agrupa recursos idénticos (mismo tipo + detalle + precio) en una sola fila.
-  // Maquinaria NO se agrupa: cada parte es único (tiene su PDF y horómetro propio).
-  // Normaliza texto para comparar: minúsculas, sin tildes, espacios colapsados.
-  const normalizar = (txt) => (txt || '')
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // quita tildes
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const recursosAgrupados = (() => {
-    const grupos = new Map();
-    for (const r of recursos) {
-      const detalle = r.descripcionResumen || r.descripcion || '';
-      let clave;
-      if (r.tipo === 'Maquinaria') {
-        // Agrupar maquinaria idéntica: misma máquina + actividad + precio.
-        // Se ignora el N° de parte (único) y el estado de cierre. Texto normalizado.
-        const detalleSinParte = detalle.replace(/Parte N° [^|]*\|/i, '').trim();
-        clave = `maq|${normalizar(detalleSinParte)}|${r.precioUnitario}`;
-      } else if (r.tipo === 'Personal') {
-        // Agrupar personal por cargo + personas + horas + precio (ignora el motivo).
-        const cargo = normalizar(r.descripcion);
-        clave = `pers|${cargo}|${r.numPersonas}|${r.horasTrabajo}|${r.horasExtras}|${r.cantidad}|${r.precioUnitario}|${r.guardadoEnDB}`;
-      } else {
-        clave = `${r.tipo}|${normalizar(detalle)}|${r.precioUnitario}|${r.guardadoEnDB}`;
-      }
-      if (!grupos.has(clave)) {
-        grupos.set(clave, {
-          ...r,
-          cantidadTotal: 0,
-          totalSum: 0,
-          count: 0,
-          registros: [],   // {dbId, endpoint} de cada registro guardado del grupo
-          idsLocales: [],  // idLocal de cada uno (para eliminar no-guardados)
-          partesMaq: [],   // maquinaria: lista completa de partes del grupo (para PDF/Finalizar individual)
-        });
-      }
-      const g = grupos.get(clave);
-      g.cantidadTotal += r.cantidad;
-      g.totalSum += r.total;
-      g.count += 1;
-      if (r.guardadoEnDB && r.dbId) g.registros.push({ dbId: r.dbId, endpoint: r.endpoint });
-      g.idsLocales.push(r.idLocal);
-      if (r.tipo === 'Maquinaria') {
-        // Extraer el N° de parte del resumen para mostrarlo en cada botón.
-        const mp = (r.descripcionResumen || '').match(/Parte N° ([^\s|]+)/i);
-        g.partesMaq.push({ dbId: r.dbId, idLocal: r.idLocal, cerrado: r.cerrado, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, numeroParte: mp ? mp[1] : (r.numeroParte || ''), registro: r });
-      }
-    }
-    return Array.from(grupos.values());
-  })();
 
   // ── Helper: convertir imagen importada a base64 ────────────────────────
   const imgToBase64 = (src) => new Promise((resolve) => {
@@ -794,10 +508,6 @@ function Incidentes() {
           formData.append('description', r.descripcionResumen || r.descripcion); 
           formData.append('quantity_hours', r.cantidad);
           formData.append('unit_price', r.precioUnitario);
-          // Desglose de la cuadrilla
-          formData.append('num_personas', parseInt(r.numPersonas)||0);
-          formData.append('horas_normales', parseFloat(r.horasTrabajo)||0);
-          formData.append('horas_extras', parseFloat(r.horasExtras)||0);
         } else if (r.tipo === 'Insumo') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-materials/`;
           formData.append('description', r.descripcion);
@@ -808,46 +518,24 @@ function Incidentes() {
           formData.append('part_number', r.numeroParte); formData.append('date', r.fechaParte);
           formData.append('shift', r.turno); formData.append('work_zone_text', r.zonaTrabajo);
           formData.append('provider', r.proveedor); formData.append('operator', r.operador);
-          formData.append('licencia', r.licencia || ''); formData.append('categoria', r.categoria || '');
-          if (r.longitud !== '' && r.longitud != null) formData.append('longitud', r.longitud);
-          formData.append('equipment_name', r.equipo);
-          formData.append('brand_name', r.marca);
-          formData.append('model_plate', r.placa ? `${r.modeloMaquina || ''} / ${r.placa}`.trim() : (r.modeloMaquina || '')); formData.append('start_horometer', r.hmInicio);
+          formData.append('equipment_name', r.equipo === 'OTRO' ? r.equipoOtro : r.equipo);
+          formData.append('brand_name', r.marca === 'OTRO' ? r.marcaOtro : r.marca);
+          formData.append('model_plate', r.placa); formData.append('start_horometer', r.hmInicio);
           formData.append('end_horometer', r.hmFin); formData.append('fuel_gallons', r.combustible || 0);
           formData.append('fuel_voucher', r.vale); formData.append('activities', r.actividad);
           formData.append('observations', r.observaciones); formData.append('unit_price', r.precioUnitario);
           if (r.fotoParte) formData.append('part_photo', r.fotoParte);
           if (r.fotoVale) formData.append('voucher_photo', r.fotoVale);
-          if (r.incluirMetrado) {
-            if (r.anchoSup !== '' && r.anchoSup != null) formData.append('width_top', r.anchoSup);
-            if (r.anchoInf !== '' && r.anchoInf != null) formData.append('width_bottom', r.anchoInf);
-            if (r.altura !== '' && r.altura != null) formData.append('height', r.altura);
-            if (r.longitud !== '' && r.longitud != null) formData.append('length', r.longitud);
-          }
+          if (r.actividad) { formData.append('width_top', r.anchoSup || r.corona || ''); formData.append('width_bottom', r.anchoInf || r.anchoBase || ''); formData.append('height', r.altura); formData.append('length', r.longitud); }
         }
         const res = await fetch(endpoint, { method: 'POST', body: formData });
-        if (!res.ok) {
-          let detalle = '';
-          try { detalle = JSON.stringify(await res.json()); } catch (e) { detalle = `código ${res.status}`; }
-          throw new Error(`Error al guardar ${r.tipo}: ${detalle}`);
-        }
-        // Si es maquinaria y se eligió una placa del catálogo, marcarla como
-        // NO disponible (estado=1) para que no aparezca en otros partes.
-        if (r.tipo === 'Maquinaria' && r.modeloId) {
-          try {
-            await fetch(`${BASE_URL}/api/v1/mobile/operations/modelos/${r.modeloId}/`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ estado: 1 }),
-            });
-          } catch (e) { console.error('No se pudo actualizar disponibilidad de la máquina', e); }
-        }
+        if (!res.ok) throw new Error(`Error al guardar el registro de ${r.tipo}`);
       }
       Swal.fire({ icon: 'success', title: 'Éxito', text: 'Se guardó correctamente', confirmButtonColor: '#206bc4' });
       setRecursos([]); setModalAbierto(false); 
     } catch (error) {
       console.error(error);
-      Swal.fire({ icon: 'error', title: 'Error al guardar', text: error.message || 'Hubo un error al guardar en la base de datos.' });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Hubo un error al guardar en la base de datos.' });
     } finally { setGuardando(false); }
   };
 
@@ -918,10 +606,7 @@ function Incidentes() {
                   </div>
                   <div className="tbl-card-footer">
                     <div className="tbl-media-icons">{inc.imagesCount > 0 && <span title="Fotos"><FaImage /> {inc.imagesCount}</span>}{inc.videosCount > 0 && <span title="Videos"><FaVideo /> {inc.videosCount}</span>}</div>
-                    <div className="tbl-avatar-group" title={`Registrado por ${inc.usuario}`}>
-                      <FaUser style={{ fontSize: '11px', color: '#64748b', marginRight: '5px' }} />
-                      <span className="tbl-avatar-text">{inc.usuario}</span>
-                    </div>
+                    <div className="tbl-avatar-group"><span className="tbl-avatar-text">{inc.usuario}</span></div>
                   </div>
                   <div className="tbl-card-btn-bottom" onClick={() => abrirModal(inc)}><FaEye /> Gestionar / Parte Diario</div>
                 </div>
@@ -977,40 +662,9 @@ function Incidentes() {
                       <div className="tbl-col"><label className="tbl-form-label">Operador</label><input type="text" className="tbl-form-control" placeholder="Nombre del operador" value={nuevoRecurso.operador} onChange={e => setNuevoRecurso({...nuevoRecurso, operador: e.target.value})} /></div>
                     </div>
                     <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col-4"><label className="tbl-form-label">Licencia</label><input type="text" className="tbl-form-control" placeholder="N° de licencia" value={nuevoRecurso.licencia} onChange={e => setNuevoRecurso({...nuevoRecurso, licencia: e.target.value})} /></div>
-                      <div className="tbl-col-4"><label className="tbl-form-label">Categoría</label><input type="text" className="tbl-form-control" placeholder="Ej. A-IIIb" value={nuevoRecurso.categoria} onChange={e => setNuevoRecurso({...nuevoRecurso, categoria: e.target.value})} /></div>
-                    </div>
-                    <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col-3">
-                        <label className="tbl-form-label">Origen <button type="button" onClick={() => setMantenedorAbierto(true)} title="Gestionar catálogos" style={{ background:'none', border:'none', color:'#206bc4', cursor:'pointer', fontSize:'11px', padding:'0 0 0 4px' }}><FaPlus /> gestionar</button></label>
-                        <select className="tbl-form-select" value={nuevoRecurso.origen} onChange={e => onCambiaOrigen(e.target.value)}>
-                          <option value="JURP">JURP (propia)</option>
-                          <option value="EXTERNA">Externa</option>
-                        </select>
-                      </div>
-                      <div className="tbl-col-3">
-                        <label className="tbl-form-label">Equipo</label>
-                        <select className="tbl-form-select" value={nuevoRecurso.equipoId} onChange={e => onCambiaEquipo(e.target.value)}>
-                          <option value="">— Seleccionar —</option>
-                          {catEquipos.map(eq => <option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
-                        </select>
-                      </div>
-                      <div className="tbl-col-3">
-                        <label className="tbl-form-label">Marca</label>
-                        <select className="tbl-form-select" value={nuevoRecurso.marcaId} onChange={e => onCambiaMarca(e.target.value)} disabled={!nuevoRecurso.equipoId}>
-                          <option value="">{nuevoRecurso.equipoId ? '— Seleccionar —' : 'Elige equipo'}</option>
-                          {catMarcas.map(ma => <option key={ma.id} value={ma.id}>{ma.nombre}</option>)}
-                        </select>
-                      </div>
-                      <div className="tbl-col-3">
-                        <label className="tbl-form-label">Modelo/Placa {nuevoRecurso.codigoMaquina && <span style={{color:'#1a5aa8',fontWeight:700,fontSize:'11px'}}>· {nuevoRecurso.codigoMaquina}</span>}</label>
-                        <select className="tbl-form-select" value={nuevoRecurso.modeloId} onChange={e => onCambiaModelo(e.target.value)} disabled={!nuevoRecurso.marcaId}>
-                          <option value="">{nuevoRecurso.marcaId ? '— Seleccionar —' : 'Elige marca'}</option>
-                          {catModelos.map(mo => <option key={mo.id} value={mo.id}>{mo.codigo} · {mo.placa ? `${mo.modelo || ''} · ${mo.placa}` : (mo.modelo || 's/modelo')}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <div className="tbl-row tbl-mb-3">
+                      <div className="tbl-col-3"><label className="tbl-form-label">Equipo</label><select className="tbl-form-select" value={nuevoRecurso.equipo} onChange={e => setNuevoRecurso({...nuevoRecurso, equipo: e.target.value})}><option value="TRACTOR">TRACTOR</option><option value="EXCAVADORA">EXCAVADORA</option><option value="RETROEXCAVADORA">RETROEXCAVADORA</option><option value="VOLQUETE">VOLQUETE</option><option value="MOTONIVELADORA">MOTONIVELADORA</option><option value="CAMIONETA">CAMIONETA</option><option value="OTRO">Otro...</option></select>{nuevoRecurso.equipo === 'OTRO' && (<input type="text" className="tbl-form-control tbl-mt-2" placeholder="Especificar equipo" value={nuevoRecurso.equipoOtro} onChange={e => setNuevoRecurso({...nuevoRecurso, equipoOtro: e.target.value})} />)}</div>
+                      <div className="tbl-col-3"><label className="tbl-form-label">Marca</label><select className="tbl-form-select" value={nuevoRecurso.marca} onChange={e => setNuevoRecurso({...nuevoRecurso, marca: e.target.value})}><option value="CAT">CAT</option><option value="KOMATSU">KOMATSU</option><option value="DOOSAN">DOOSAN</option><option value="JOHN DEERE">JOHN DEERE</option><option value="VOLVO">VOLVO</option><option value="OTRO">Otro...</option></select>{nuevoRecurso.marca === 'OTRO' && (<input type="text" className="tbl-form-control tbl-mt-2" placeholder="Especificar marca" value={nuevoRecurso.marcaOtro} onChange={e => setNuevoRecurso({...nuevoRecurso, marcaOtro: e.target.value})} />)}</div>
+                      <div className="tbl-col-3"><label className="tbl-form-label">Modelo / Placa</label><input type="text" className="tbl-form-control" placeholder="Ej. 320 / CAN737" value={nuevoRecurso.placa} onChange={e => setNuevoRecurso({...nuevoRecurso, placa: e.target.value})} /></div>
                       <div className="tbl-col-3"><label className="tbl-form-label">Precio Unit. (S/ HE)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
                     </div>
                     <div className="tbl-row tbl-mb-3">
@@ -1020,106 +674,95 @@ function Incidentes() {
                       <div className="tbl-col"><label className="tbl-form-label">Combustible (Gls)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.combustible} onChange={e => setNuevoRecurso({...nuevoRecurso, combustible: e.target.value})} /></div>
                       <div className="tbl-col"><label className="tbl-form-label">Vale N°</label><input type="text" className="tbl-form-control" value={nuevoRecurso.vale} onChange={e => setNuevoRecurso({...nuevoRecurso, vale: e.target.value})} /></div>
                     </div>
-                    {(() => {
-                      const totalHM = parseFloat(horasMaquina) || 0;
-                      const efectivas = nuevoRecurso.horasEfectivas === '' ? totalHM : parseFloat(nuevoRecurso.horasEfectivas)||0;
-                      const hayReduccion = efectivas < totalHM;
-                      return (
-                        <div className="tbl-row tbl-mb-3">
-                          <div className="tbl-col-3">
-                            <label className="tbl-form-label">Horas Efectivas (HE)</label>
-                            <input type="number" min="0" max={totalHM} step="0.1" className="tbl-form-control"
-                              placeholder={String(totalHM)}
-                              value={nuevoRecurso.horasEfectivas}
-                              onChange={e => setNuevoRecurso({...nuevoRecurso, horasEfectivas: e.target.value})}
-                              style={hayReduccion ? {borderColor:'#f59e0b', backgroundColor:'#fffbeb', fontWeight:'bold'} : {fontWeight:'bold'}}
-                              title="Por defecto = horas del horómetro. Edítalo si fueron menos." />
-                          </div>
-                          <div className="tbl-col">
-                            <label className="tbl-form-label">
-                              Observación {hayReduccion ? <span style={{color:'#d97706',fontSize:'11px',fontWeight:600}}>· requerida (reducción de {(totalHM - efectivas).toFixed(1)} HE)</span> : <span style={{color:'#94a3b8',fontSize:'11px'}}>· opcional</span>}
-                            </label>
-                            <input type="text" className="tbl-form-control"
-                              placeholder={hayReduccion ? 'Detalla el motivo de la reducción de horas...' : 'Sin observaciones de reducción'}
-                              value={nuevoRecurso.obsReduccion}
-                              onChange={e => setNuevoRecurso({...nuevoRecurso, obsReduccion: e.target.value})}
-                              style={hayReduccion && !nuevoRecurso.obsReduccion.trim() ? {borderColor:'#f59e0b', backgroundColor:'#fffbeb'} : {}} />
-                          </div>
-                        </div>
-                      );
-                    })()}
                     <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col"><label className="tbl-form-label">Actividades Realizadas <span style={{color:'red'}}>*</span></label>
-                        <select className="tbl-form-select" value={nuevoRecurso.actividad} onChange={e => onCambiaActividad(e.target.value)}>
+                      <div className="tbl-col"><label className="tbl-form-label">Actividad Realizada <span style={{color:'red'}}>*</span></label>
+                        <select className="tbl-form-select" value={nuevoRecurso.actividad} onChange={e => setNuevoRecurso({...nuevoRecurso, actividad: e.target.value})}>
                           <option value="">— Seleccionar actividad —</option>
-                          {catActividades.map(a => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
-                          {/* Si la actividad actual no está en el catálogo (viene de un parte viejo), la mostramos igual */}
-                          {nuevoRecurso.actividad && !catActividades.some(a => a.nombre === nuevoRecurso.actividad) && <option value={nuevoRecurso.actividad}>{nuevoRecurso.actividad}</option>}
-                          <option value="__OTRO__">➕ Otro (agregar nueva)...</option>
+                          <option value="EXCAVACION DE MATERIAL">EXCAVACIÓN DE MATERIAL</option>
+                          <option value="CARGUIO DE MATERIAL">CARGUÍO DE MATERIAL</option>
+                          <option value="DESCOLMATACION DE CAUCE">DESCOLMATACIÓN DE CAUCE</option>
+                          <option value="ELIMINACION">ELIMINACIÓN DE MATERIAL</option>
+                          <option value="CONFORMACION DE DIQUE">CONFORMACIÓN DE DIQUE</option>
+                          <option value="ENROCADO">ENROCADO</option>
+                          <option value="PERFILADO DE TALUD">PERFILADO DE TALUD</option>
+                          <option value="HABILITACION DE ACCESO">HABILITACIÓN DE ACCESO</option>
                         </select>
                       </div>
                       <div className="tbl-col"><label className="tbl-form-label">Observaciones</label><input type="text" className="tbl-form-control" placeholder="Condiciones del terreno, clima..." value={nuevoRecurso.observaciones} onChange={e => setNuevoRecurso({...nuevoRecurso, observaciones: e.target.value})} /></div>
                     </div>
-
-                    {/* ── Cálculo de metrado (opcional) ──────────────────────── */}
-                    <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'14px', marginTop:'4px' }}>
-                      <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontWeight:600, color:'#1e293b' }}>
-                        <input type="checkbox" checked={nuevoRecurso.incluirMetrado} onChange={e => setNuevoRecurso({...nuevoRecurso, incluirMetrado: e.target.checked})} />
-                        Incluir cálculo de metrado (volumen extraído)
-                      </label>
-
-                      {nuevoRecurso.incluirMetrado && (
-                        <div style={{ marginTop:'14px' }}>
-                          <div className="tbl-row tbl-mb-3">
-                            {/* Longitud */}
-                            <div className="tbl-col-3">
-                              <label className="tbl-form-label">Longitud L (m)</label>
-                              <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.longitud} onChange={e => setNuevoRecurso({...nuevoRecurso, longitud: e.target.value})} />
-                            </div>
-                            {/* Altura con thumbnail */}
-                            <div className="tbl-col-3">
-                              <label className="tbl-form-label" style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                                Altura H (m)
-                                <img src={refAltura} alt="Ref. altura" onClick={() => setImgRefModal({src: refAltura, titulo: 'Referencia: Altura (H)'})} style={{height:'24px',width:'40px',objectFit:'cover',borderRadius:'3px',cursor:'pointer',border:'1px solid #cbd5e1'}} title="Ver referencia de altura" />
-                              </label>
-                              <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.altura} onChange={e => setNuevoRecurso({...nuevoRecurso, altura: e.target.value})} />
-                            </div>
-                            {/* Ancho Superior con thumbnail */}
-                            <div className="tbl-col-3">
-                              <label className="tbl-form-label" style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                                Ancho Sup. Ws (m)
-                                <img src={refAncho} alt="Ref. ancho" onClick={() => setImgRefModal({src: refAncho, titulo: 'Referencia: Ancho Superior (Ws) - Ancho Inferior (Wi)'})} style={{height:'24px',width:'40px',objectFit:'cover',borderRadius:'3px',cursor:'pointer',border:'1px solid #cbd5e1'}} title="Ver referencia de anchos" />
-                              </label>
-                              <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.anchoSup} onChange={e => setNuevoRecurso({...nuevoRecurso, anchoSup: e.target.value})} />
-                            </div>
-                            {/* Ancho Inferior con thumbnail */}
-                            <div className="tbl-col-3">
-                              <label className="tbl-form-label" style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                                Ancho Inf. Wi (m)
-                                <img src={refAncho} alt="Ref. ancho" onClick={() => setImgRefModal({src: refAncho, titulo: 'Referencia: Ancho Superior (Ws) - Ancho Inferior (Wi)'})} style={{height:'24px',width:'40px',objectFit:'cover',borderRadius:'3px',cursor:'pointer',border:'1px solid #cbd5e1'}} title="Ver referencia de anchos" />
-                              </label>
-                              <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.anchoInf} onChange={e => setNuevoRecurso({...nuevoRecurso, anchoInf: e.target.value})} />
-                            </div>
-                          </div>
-                          <div style={{ display:'flex', alignItems:'center', gap:'10px', background:'#f0f9ff', borderRadius:'6px', padding:'10px 14px', fontSize:'13px' }}>
-                            <span style={{color:'#64748b'}}>Fórmula: V = (Ws + Wi / 2) × H × L</span>
-                            <span style={{marginLeft:'auto', fontWeight:'bold', color:'#0284c7', fontSize:'15px'}}>Volumen extraído: {volumenMetrado} m³</span>
-                          </div>
+                    {/* ── Campos de metrado según actividad ──────────────────── */}
+                    {nuevoRecurso.actividad && (
+                      <div style={{ background:'#f0f6ff', padding:'14px', borderRadius:'4px', border:'1px solid #bfdbfe', marginBottom:'15px' }}>
+                        <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px' }}>📐 Metrado — {nuevoRecurso.actividad}</div>
+                        <div className="tbl-row tbl-mb-2" style={{ gap:'8px' }}>
+                          {/* EXCAVACION / ENROCADO: B, b, h, L */}
+                          {(nuevoRecurso.actividad === 'EXCAVACION DE MATERIAL' || nuevoRecurso.actividad === 'ENROCADO') && (<>
+                            <div className="tbl-col"><label className="tbl-form-label">Base B (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.anchoBase} onChange={e => setNuevoRecurso({...nuevoRecurso, anchoBase: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">Corona b (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.corona} onChange={e => setNuevoRecurso({...nuevoRecurso, corona: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">Altura h (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.altura} onChange={e => setNuevoRecurso({...nuevoRecurso, altura: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">Longitud L (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.longitud} onChange={e => setNuevoRecurso({...nuevoRecurso, longitud: e.target.value})} /></div>
+                          </>)}
+                          {/* CARGUIO: N viajes, Vol.tolva, Fe */}
+                          {nuevoRecurso.actividad === 'CARGUIO DE MATERIAL' && (<>
+                            <div className="tbl-col"><label className="tbl-form-label">N° Viajes</label><input type="number" className="tbl-form-control" value={nuevoRecurso.nViajes} onChange={e => setNuevoRecurso({...nuevoRecurso, nViajes: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">Vol. Tolva (m³)</label><input type="number" step="0.1" className="tbl-form-control" value={nuevoRecurso.volTolva} onChange={e => setNuevoRecurso({...nuevoRecurso, volTolva: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">Fe (esponj.)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.fe} onChange={e => setNuevoRecurso({...nuevoRecurso, fe: e.target.value})} /></div>
+                          </>)}
+                          {/* DESCOLMATACION: ancho a, h promedio, L */}
+                          {nuevoRecurso.actividad === 'DESCOLMATACION DE CAUCE' && (<>
+                            <div className="tbl-col"><label className="tbl-form-label">Ancho a (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.anchoSup} onChange={e => setNuevoRecurso({...nuevoRecurso, anchoSup: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">h promedio (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.hPromedio} onChange={e => setNuevoRecurso({...nuevoRecurso, hPromedio: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">Longitud L (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.longitud} onChange={e => setNuevoRecurso({...nuevoRecurso, longitud: e.target.value})} /></div>
+                          </>)}
+                          {/* ELIMINACION: N viajes, Vol.tolva */}
+                          {nuevoRecurso.actividad === 'ELIMINACION' && (<>
+                            <div className="tbl-col"><label className="tbl-form-label">N° Viajes</label><input type="number" className="tbl-form-control" value={nuevoRecurso.nViajes} onChange={e => setNuevoRecurso({...nuevoRecurso, nViajes: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">Vol. Tolva (m³)</label><input type="number" step="0.1" className="tbl-form-control" value={nuevoRecurso.volTolva} onChange={e => setNuevoRecurso({...nuevoRecurso, volTolva: e.target.value})} /></div>
+                          </>)}
+                          {/* CONFORMACION DE DIQUE: b (corona), h, Z (talud), L */}
+                          {nuevoRecurso.actividad === 'CONFORMACION DE DIQUE' && (<>
+                            <div className="tbl-col"><label className="tbl-form-label">Corona b (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.corona} onChange={e => setNuevoRecurso({...nuevoRecurso, corona: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">Altura h (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.altura} onChange={e => setNuevoRecurso({...nuevoRecurso, altura: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">Talud Z (H:V)</label><input type="number" step="0.1" className="tbl-form-control" value={nuevoRecurso.talud} onChange={e => setNuevoRecurso({...nuevoRecurso, talud: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">Longitud L (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.longitud} onChange={e => setNuevoRecurso({...nuevoRecurso, longitud: e.target.value})} /></div>
+                          </>)}
+                          {/* PERFILADO DE TALUD: h, Z, L */}
+                          {nuevoRecurso.actividad === 'PERFILADO DE TALUD' && (<>
+                            <div className="tbl-col"><label className="tbl-form-label">Altura h (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.altura} onChange={e => setNuevoRecurso({...nuevoRecurso, altura: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">Talud Z (H:V)</label><input type="number" step="0.1" className="tbl-form-control" value={nuevoRecurso.talud} onChange={e => setNuevoRecurso({...nuevoRecurso, talud: e.target.value})} /></div>
+                            <div className="tbl-col"><label className="tbl-form-label">Longitud L (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.longitud} onChange={e => setNuevoRecurso({...nuevoRecurso, longitud: e.target.value})} /></div>
+                          </>)}
+                          {/* HABILITACION DE ACCESO: solo L */}
+                          {nuevoRecurso.actividad === 'HABILITACION DE ACCESO' && (
+                            <div className="tbl-col-4"><label className="tbl-form-label">Longitud L (m)</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.longitud} onChange={e => setNuevoRecurso({...nuevoRecurso, longitud: e.target.value})} /></div>
+                          )}
                         </div>
-                      )}
-                    </div>
+                        {/* Resultado del cálculo */}
+                        <div style={{ marginTop:'8px', padding:'8px 12px', background:'#fff', borderRadius:'4px', border:'1px solid #bfdbfe', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                          <span style={{ fontSize:'11px', color:'#626976' }}>
+                            {nuevoRecurso.actividad === 'EXCAVACION DE MATERIAL' && 'V = ((B+b)/2) × h × L'}
+                            {nuevoRecurso.actividad === 'CARGUIO DE MATERIAL' && 'V = N × Vol.tolva / Fe'}
+                            {nuevoRecurso.actividad === 'DESCOLMATACION DE CAUCE' && 'V = a × h prom × L'}
+                            {nuevoRecurso.actividad === 'ELIMINACION' && 'V = N × Vol.tolva'}
+                            {nuevoRecurso.actividad === 'CONFORMACION DE DIQUE' && 'V = ((B+b)/2) × h × L, B=b+2Zh'}
+                            {nuevoRecurso.actividad === 'ENROCADO' && 'V = ((B+b)/2) × h × L'}
+                            {nuevoRecurso.actividad === 'PERFILADO DE TALUD' && 'A = h × √(1+Z²) × L'}
+                            {nuevoRecurso.actividad === 'HABILITACION DE ACCESO' && 'Metrado = L'}
+                          </span>
+                          <span style={{ fontSize:'16px', fontWeight:'700', color: volCalc.val > 0 ? '#1463A5' : '#94a3b8' }}>{volCalc.val.toFixed(2)} {volCalc.unit}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : nuevoRecurso.tipo === 'Personal' ? (
-                  <>
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col-3"><label className="tbl-form-label">Cargo</label><input type="text" className="tbl-form-control" placeholder="Ej. Peón, Operario..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">N° Personas</label><input type="number" min="1" className="tbl-form-control" value={nuevoRecurso.numPersonas} onChange={e => setNuevoRecurso({...nuevoRecurso, numPersonas: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">H. Normales</label><input type="number" min="0" className="tbl-form-control" value={nuevoRecurso.horasTrabajo} onChange={e => setNuevoRecurso({...nuevoRecurso, horasTrabajo: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">H. Extras</label><input type="number" min="0" className="tbl-form-control" value={nuevoRecurso.horasExtras} onChange={e => setNuevoRecurso({...nuevoRecurso, horasExtras: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">S/ por HH</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
-                    <div className="tbl-col-1"><label className="tbl-form-label">Total</label><input type="text" className="tbl-form-control" disabled value={((parseInt(nuevoRecurso.numPersonas)||0) * ((parseFloat(nuevoRecurso.horasTrabajo)||0) + (parseFloat(nuevoRecurso.horasExtras)||0))) || 0} style={{backgroundColor: '#e0f2fe', color: '#0284c7', fontWeight: 'bold'}} title="Total HH teóricas" /></div>
+                    <div className="tbl-col-1"><label className="tbl-form-label">Total</label><input type="text" className="tbl-form-control" disabled value={(nuevoRecurso.numPersonas * ((parseFloat(nuevoRecurso.horasTrabajo)||0) + (parseFloat(nuevoRecurso.horasExtras)||0))) || 0} style={{backgroundColor: '#e0f2fe', color: '#0284c7', fontWeight: 'bold'}} title="Total HH" /></div>
                   </div>
-                  </>
                 ) : (
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col"><label className="tbl-form-label">Descripción del Insumo</label><input type="text" className="tbl-form-control" placeholder="Ej. Piedra chancada, Cemento..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
@@ -1136,48 +779,20 @@ function Incidentes() {
                     <thead><tr><th>Tipo</th><th>Detalle (Resumen)</th><th className="tbl-text-end">Cantidad</th><th className="tbl-text-end">P. Unit.</th><th className="tbl-text-end">Total</th><th></th></tr></thead>
                     <tbody>
                       {recursos.length === 0 ? <tr><td colSpan="6" className="tbl-text-center tbl-text-muted py-4">Aún no hay registros para este incidente.</td></tr> : (
-                        recursosAgrupados.map(r => (
+                        recursos.map(r => (
                           <tr key={r.idLocal}>
                             <td><span className="tbl-badge bg-secondary-lt">{r.tipo}</span></td>
-                            <td style={{fontSize: '11px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>
-                              {r.tipo === 'Maquinaria' && r.count > 1
-                                ? (r.descripcionResumen || '').replace(/Parte N° [^|]*\|\s*/i, '').trim()
-                                : r.tipo === 'Personal' && r.count > 1
-                                ? `${r.descripcion} (Cuadrilla: ${r.numPersonas} persona(s) x ${r.horasTrabajo}h normales + ${r.horasExtras}h extras)`
-                                : (r.descripcionResumen || r.descripcion)}
-                              {r.count > 1 && <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>}
-                            </td>
-                            <td className="tbl-text-end font-bold">{r.cantidadTotal.toFixed(r.tipo==='Personal'?1:2)} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.'}</span></td>
+                            <td style={{fontSize: '11px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>{r.descripcionResumen || r.descripcion}</td>
+                            <td className="tbl-text-end font-bold">{r.cantidad} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.'}</span></td>
                             <td className="tbl-text-end">S/ {parseFloat(r.precioUnitario).toFixed(2)}</td>
-                            <td className="tbl-text-end text-blue font-bold">S/ {r.totalSum.toFixed(2)}</td>
+                            <td className="tbl-text-end text-blue font-bold">S/ {r.total.toFixed(2)}</td>
                             <td>
                               {r.guardadoEnDB ? (
-                                <div style={{display: 'flex', gap: '6px', alignItems: 'center', flexWrap:'wrap'}}>
-                                  {r.tipo === 'Maquinaria' && r.count > 1
-                                    ? (() => {
-                                        const cerrados = r.partesMaq.filter(p => p.cerrado).length;
-                                        const activos = r.count - cerrados;
-                                        return <span className="tbl-badge" style={{backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:600}}>{activos > 0 ? `${activos} activo${activos>1?'s':''}` : ''}{activos > 0 && cerrados > 0 ? ' · ' : ''}{cerrados > 0 ? `${cerrados} cerrado${cerrados>1?'s':''}` : ''}</span>;
-                                      })()
-                                    : r.tipo === 'Maquinaria' && r.cerrado
-                                    ? <span className="tbl-badge" style={{backgroundColor:'#e2e8f0', color:'#475569'}}>Cerrado</span>
-                                    : <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>}
-                                  {r.tipo === 'Maquinaria' && r.count === 1 && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
-                                  {r.tipo === 'Maquinaria' && r.count === 1 && !r.cerrado && (<button type="button" onClick={() => cerrarParteDiario(r)} className="tbl-btn-action" title="Finalizar actividades (libera la máquina)" style={{padding: '4px 10px', backgroundColor: '#dcfce7', color:'#15803d', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:'600'}}><FaCheckCircle size={13} /> Finalizar</button>)}
-                                  {r.tipo === 'Maquinaria' && r.count > 1 && (
-                                    <div style={{display:'flex', flexDirection:'column', gap:'4px', width:'100%'}}>
-                                      {r.partesMaq.map((p, idx) => (
-                                        <div key={p.idLocal || idx} style={{display:'flex', alignItems:'center', gap:'4px', justifyContent:'flex-end'}}>
-                                          <span style={{fontSize:'11px', color:'#64748b', marginRight:'auto'}}>{p.numeroParte}{p.cerrado && <span style={{color:'#15803d', fontWeight:600}}> · Cerrado</span>}</span>
-                                          {p.dbId && <button type="button" onClick={() => abrirModalPdf(p.dbId)} title="Ver PDF" style={{padding:'3px 7px', backgroundColor:'#e0f2fe', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaFilePdf size={14} /></button>}
-                                          {!p.cerrado && <button type="button" onClick={() => cerrarParteDiario(p.registro)} title="Finalizar este parte" style={{padding:'3px 8px', backgroundColor:'#dcfce7', color:'#15803d', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'3px', fontSize:'11px', fontWeight:600}}><FaCheckCircle size={11} /> Finalizar</button>}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {!(r.tipo === 'Maquinaria' && r.cerrado) && (<button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>)}
+                                <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+                                  <span className="tbl-badge bg-green-lt">Guardado</span>
+                                  {r.tipo === 'Maquinaria' && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
                                 </div>
-                              ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
+                              ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecurso(r.idLocal)} title="Eliminar"><FaTimes/></button>)}
                             </td>
                           </tr>
                         ))
@@ -1189,11 +804,6 @@ function Incidentes() {
               <div className="tbl-modal-footer" style={{flexWrap:'wrap',gap:'8px'}}>
                 <div className="tbl-text-start tbl-text-muted">Costo Total: <span style={{fontSize: '1.25rem', color: '#1e293b', fontWeight: 'bold'}}>S/ {costoTotalIncidente.toFixed(2)}</span></div>
                 <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
-                  {incidenteActivo?.estado === 'cer' ? (
-                    <span style={{background:'#dcfce7',color:'#15803d',padding:'6px 14px',borderRadius:'4px',fontSize:'13px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px'}}><FaCheckCircle/> Incidencia cerrada</span>
-                  ) : (
-                    <button className="tbl-btn" onClick={cerrarIncidenteCompleto} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Cierra los partes, libera las máquinas y marca la incidencia como cerrada"><FaCheckCircle/> Cerrar incidencia</button>
-                  )}
                   <button className="tbl-btn" onClick={exportarPDF} style={{background:'#d63939',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar PDF"><FaFilePdf/> PDF</button>
                   <button className="tbl-btn" onClick={exportarExcel} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar Excel"><FaFileExcel/> Excel</button>
                   <button className="tbl-btn tbl-btn-link" onClick={() => setModalAbierto(false)}>Cerrar</button>
@@ -1206,21 +816,6 @@ function Incidentes() {
       )}
 
       {/* ── MODAL PDF ──────────────────────────────────────────────────── */}
-      {/* ── Modal de imagen de referencia (metrado) ────────────────────── */}
-      {imgRefModal && (
-        <div onClick={() => setImgRefModal(null)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:'10px', overflow:'hidden', maxWidth:'1000px', width:'100%', maxHeight:'90vh', display:'flex', flexDirection:'column' }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
-              <h5 style={{ margin:0, fontSize:'15px', color:'#1e293b' }}>{imgRefModal.titulo}</h5>
-              <button onClick={() => setImgRefModal(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'18px', display:'flex' }}><FaTimes /></button>
-            </div>
-            <div style={{ padding:'16px', overflow:'auto', textAlign:'center' }}>
-              <img src={imgRefModal.src} alt={imgRefModal.titulo} style={{ maxWidth:'100%', height:'auto' }} />
-            </div>
-          </div>
-        </div>
-      )}
-
       {modalPdfAbierto && (
         <div className="tbl-modal-backdrop" onClick={() => setModalPdfAbierto(false)} style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.75)' }}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '850px', height: '90vh', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10000, marginTop: '2vh' }}>
@@ -1294,12 +889,6 @@ function Incidentes() {
           )}
         </div>
       )}
-
-      {/* ── Mantenedor de catálogos (Equipos/Marcas/Modelos) ─────────────── */}
-      <MantenedorEquipos
-        abierto={mantenedorAbierto}
-        onClose={() => { setMantenedorAbierto(false); cargarEquiposCat(nuevoRecurso.origen); if (nuevoRecurso.equipoId) cargarMarcasCat(nuevoRecurso.equipoId); if (nuevoRecurso.marcaId) cargarModelosCat(nuevoRecurso.marcaId); }}
-      />
 
     </div>
   );
