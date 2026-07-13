@@ -13,6 +13,21 @@ import logo from './assets/jurp.png';
 import refAltura from './assets/ref_altura.png';
 import refAncho from './assets/ref_ancho.png';
 import MantenedorEquipos from './MantenedorEquipos';
+// ── Imágenes de referencia metrado por actividad ─────────────────────────────
+import imgExcavacion from './assets/metrado/excavacion.png';
+import imgCarguio from './assets/metrado/carguio.png';
+import imgDescolmatacion from './assets/metrado/descolmatacion.png';
+import imgEliminacion from './assets/metrado/eliminacion.png';
+import imgConformacion from './assets/metrado/conformacion.png';
+import imgEnrocado from './assets/metrado/enrocado.png';
+import imgPerfilado from './assets/metrado/perfilado.png';
+import imgHabilitacion from './assets/metrado/habilitacion.png';
+const IMG_METRADO = {
+  'CARGUIO DE MATERIAL': imgCarguio, 'CONFORMACION DE DIQUE': imgConformacion,
+  'DESCOLMATACION DE CAUCE': imgDescolmatacion, 'ELIMINACION': imgEliminacion,
+  'ENROCADO': imgEnrocado, 'EXCAVACION DE MATERIAL': imgExcavacion,
+  'HABILITACION DE ACCESO': imgHabilitacion, 'PERFILADO DE TALUD': imgPerfilado,
+};
 
 function Incidentes() {
   const [incidentes, setIncidentes] = useState([]);
@@ -36,7 +51,7 @@ function Incidentes() {
   // --- ESTADOS DEL MODAL PDF ---
   const [modalPdfAbierto, setModalPdfAbierto] = useState(false);
   const [pdfUrlActivo, setPdfUrlActivo] = useState(null);
-  const [imgRefModal, setImgRefModal] = useState(null);   // {src, titulo} o null
+  const [imgRefModal, setImgRefModal] = useState(null);
 
   // --- ESTADOS DEL MODAL DE EVIDENCIAS (GALERÍA) ---
   const [modalMediaAbierto, setModalMediaAbierto] = useState(false);
@@ -51,7 +66,6 @@ function Incidentes() {
   };
 
   const generarCorrelativo = () => {
-    // Placeholder mientras el backend responde con el correlativo real.
     const fecha = new Date();
     const strFecha = `${fecha.getFullYear()}${String(fecha.getMonth()+1).padStart(2,'0')}${String(fecha.getDate()).padStart(2,'0')}`;
     return `PD-____-${strFecha}`;
@@ -64,21 +78,19 @@ function Incidentes() {
     numeroParte: generarCorrelativo(), 
     fechaParte: getFechaHoy(), 
     turno: 'Día', zonaTrabajo: '',
-    proveedor: '', operador: '', licencia: '', categoria: '', longitud: '',
+    proveedor: '', operador: '', licencia: '', categoria: '',
     equipoId: '', equipo: '',
     origen: 'JURP',
     marcaId: '', marca: '',
     modeloId: '', placa: '', modeloMaquina: '', codigoMaquina: '',
     hmInicio: '', hmFin: '', combustible: '', vale: '', fotoVale: null,
     actividad: '', observaciones: '', fotoParte: null,
-    incluirMetrado: false, longitud: '', altura: '', anchoSup: '', anchoInf: ''
+    incluirMetrado: false, longitud: '', altura: '', anchoSup: '', anchoInf: '',
+    nViajes: '', volTolva: '', fe: '1.25', hPromedio: '', anchoBase: '', corona: '', talud: ''
   };
   const [nuevoRecurso, setNuevoRecurso] = useState(estadoInicialRecurso);
 
   // ── Carga de catálogos (equipos/marcas/modelos) ──────────────────────────
-  // Mismo backend que el resto del módulo operations. Sin token: los endpoints
-  // son AllowAny, y mandar un token vencido provoca 401 (igual que la maquinaria,
-  // que también llama sin Authorization).
   const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
   const cargarEquiposCat = async (origen) => {
@@ -97,16 +109,12 @@ function Incidentes() {
   const cargarModelosCat = async (marcaId) => {
     if (!marcaId) { setCatModelos([]); return; }
     try {
-      // Solo placas disponibles (estado=0) para el parte diario.
       const r = await fetch(`${API_OPS}/modelos/?activo=true&estado=0&marca=${marcaId}`);
       if (r.ok) setCatModelos(await r.json());
     } catch (e) { console.error(e); }
   };
-
-  // Al montar, carga los equipos del origen inicial (JURP).
   useEffect(() => { cargarEquiposCat(nuevoRecurso.origen); }, []);
 
-  // Carga el catálogo de actividades (para el combo del parte diario).
   const cargarActividades = async () => {
     try {
       const r = await fetch(`${API_OPS}/actividades/?activo=true`);
@@ -115,7 +123,6 @@ function Incidentes() {
   };
   useEffect(() => { cargarActividades(); }, []);
 
-  // Pide al backend el siguiente N° de parte (PD-XXXX-AAAAMMDD, reinicia por año).
   const obtenerCorrelativoParte = async () => {
     try {
       const r = await fetch(`${API_OPS}/daily-part-heavy-equipments/siguiente-correlativo/`);
@@ -129,9 +136,7 @@ function Incidentes() {
   };
   useEffect(() => { obtenerCorrelativoParte(); }, []);
 
-  // Handlers de los selects encadenados: Origen → Equipo → Marca → Placa.
   const onCambiaOrigen = (origen) => {
-    // El origen es el primer filtro: recarga equipos y limpia toda la cadena.
     setNuevoRecurso(prev => ({ ...prev, origen, equipoId: '', equipo: '', marcaId: '', marca: '', modeloId: '', placa: '', modeloMaquina: '', codigoMaquina: '' }));
     setCatMarcas([]); setCatModelos([]);
     cargarEquiposCat(origen);
@@ -153,8 +158,6 @@ function Incidentes() {
     setNuevoRecurso(prev => ({ ...prev, modeloId: id, placa: mo?.placa || '', modeloMaquina: mo?.modelo || '', codigoMaquina: mo?.codigo || '' }));
   };
 
-  // Maneja el combo de actividad. Si elige "__OTRO__", pide el nombre, lo
-  // guarda en el catálogo y lo selecciona.
   const onCambiaActividad = async (valor) => {
     if (valor === '__OTRO__') {
       const { value: nombre } = await Swal.fire({
@@ -174,7 +177,7 @@ function Incidentes() {
           body: JSON.stringify({ nombre: limpio, activo: true }),
         });
         if (r.ok) {
-          await cargarActividades();          // refresca el combo con la nueva
+          await cargarActividades();
           setNuevoRecurso(prev => ({ ...prev, actividad: limpio }));
         } else {
           const e = await r.json();
@@ -218,13 +221,11 @@ function Incidentes() {
     } catch (error) { console.error(error); } finally { setCargando(false); }
   };
 
-  // ── Cargar thumbnails desde el detalle para cards sin imagen ───────────
   const cargarThumbnails = async (lista) => {
     const token = localStorage.getItem('userToken');
     if (!token) return;
     const sinThumb = lista.filter(i => !i.imagenUrl && (i.imagesCount > 0 || i.videosCount > 0));
     if (!sinThumb.length) return;
-
     const updates = {};
     await Promise.all(sinThumb.map(async (inc) => {
       try {
@@ -241,24 +242,20 @@ function Incidentes() {
         }
       } catch (e) { /* silencioso */ }
     }));
-
     if (Object.keys(updates).length > 0) {
       setIncidentes(prev => prev.map(i => updates[i.id] ? { ...i, imagenUrl: updates[i.id] } : i));
     }
   };
-
   useEffect(() => {
     if (incidentes.length > 0) cargarThumbnails(incidentes);
   }, [incidentes.length]);
 
-  // ── Cargar evidencias (imágenes y videos) de un incidente ──────────────
   const verEvidencias = async (inc) => {
     setGaleriaIncidente(inc);
     setGaleriaMedia([]);
     setGaleriaIndex(0);
     setCargandoMedia(true);
     setModalMediaAbierto(true);
-
     const token = localStorage.getItem('userToken');
     try {
       const res = await fetch(`/api/v1/mobile/hi-incidents/${inc.id}/`, {
@@ -283,7 +280,6 @@ function Incidentes() {
       }
     } catch (e) { console.error(e); } finally { setCargandoMedia(false); }
   };
-
   const galeriaAnterior = () => setGaleriaIndex(i => Math.max(0, i - 1));
   const galeriaSiguiente = () => setGaleriaIndex(i => Math.min(galeriaMedia.length - 1, i + 1));
 
@@ -306,7 +302,6 @@ function Incidentes() {
       setRecursos([...formatPers, ...formatMat, ...formatMaq]);
     } catch (error) { console.error("❌ Error al obtener los recursos guardados:", error); }
   };
-
   useEffect(() => { obtenerIncidentes(); }, []);
 
   const abrirModal = (inc) => {
@@ -316,16 +311,13 @@ function Incidentes() {
     setModalAbierto(true);
     cargarCosteosGuardados(inc.id); 
   };
-
   const abrirModalPdf = (dbId) => {
     const url = `https://gideonstudio.duckdns.org/api/v1/mobile/operations/daily-part-heavy-equipments/${dbId}/pdf/`;
     setPdfUrlActivo(url);
     setModalPdfAbierto(true);
   };
 
-  // Elimina de la BASE DE DATOS uno o varios registros (para filas agrupadas).
   const eliminarRecursoGuardado = async (fila) => {
-    // fila.registros = lista de {dbId, endpoint} que componen la fila agrupada.
     const registros = fila.registros || [{ dbId: fila.dbId, endpoint: fila.endpoint }];
     const cuantos = registros.length;
     const conf = await Swal.fire({
@@ -337,13 +329,10 @@ function Incidentes() {
       confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar',
     });
     if (!conf.isConfirmed) return;
-
     const BASE_URL = 'https://gideonstudio.duckdns.org';
     try {
       const resultados = await Promise.all(registros.map(reg =>
-        fetch(`${BASE_URL}/api/v1/mobile/operations/${reg.endpoint}/${reg.dbId}/`, {
-          method: 'DELETE',
-        })
+        fetch(`${BASE_URL}/api/v1/mobile/operations/${reg.endpoint}/${reg.dbId}/`, { method: 'DELETE' })
       ));
       const okAll = resultados.every(r => r.ok || r.status === 204);
       if (okAll) {
@@ -358,7 +347,6 @@ function Incidentes() {
     }
   };
 
-  // Cierra un parte diario individual: libera su máquina y lo bloquea.
   const cerrarParteDiario = async (fila) => {
     const conf = await Swal.fire({
       title: '¿Finalizar actividades?',
@@ -372,8 +360,6 @@ function Incidentes() {
       const r = await fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/${fila.dbId}/cerrar/`, { method: 'POST' });
       if (r.ok) {
         if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
-        // Refresca el combo de placas leyendo el estado más reciente (evita
-        // closures viejos). Si hay marca seleccionada, recarga sus placas.
         setNuevoRecurso(prev => {
           if (prev.marcaId) cargarModelosCat(prev.marcaId);
           return prev;
@@ -387,8 +373,6 @@ function Incidentes() {
     }
   };
 
-  // Cierra la incidencia: cierra los partes (libera máquinas) Y cambia el
-  // estado del incidente a "Cerrado" (status='cer').
   const cerrarIncidenteCompleto = async () => {
     if (!incidenteActivo) return;
     const conf = await Swal.fire({
@@ -401,33 +385,26 @@ function Incidentes() {
     const BASE_URL = 'https://gideonstudio.duckdns.org';
     const token = localStorage.getItem('userToken');
     try {
-      // 1) Cerrar los partes diarios y liberar máquinas (backend de operaciones).
       const r = await fetch(`${BASE_URL}/api/v1/mobile/operations/incidentes/${incidenteActivo.id}/cerrar-partes/`, { method: 'POST' });
       if (!r.ok) {
         Swal.fire('Error', `No se pudieron cerrar los partes (código: ${r.status}).`, 'error');
         return;
       }
-      // 2) Cambiar el estado del incidente a "Cerrado" (backend de incidentes).
       const rEstado = await fetch(`/api/v1/mobile/hi-incidents/${incidenteActivo.id}/`, {
         method: 'PATCH',
         headers: { 'Authorization': `Token ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'cer' }),
       });
-
-      // Refrescos locales.
       cargarCosteosGuardados(incidenteActivo.id);
       setNuevoRecurso(prev => {
         if (prev.marcaId) cargarModelosCat(prev.marcaId);
         return prev;
       });
-
       if (rEstado.ok) {
-        // Actualiza el badge en la lista sin recargar.
         setIncidentes(prev => prev.map(i => i.id === incidenteActivo.id ? { ...i, estado: 'cer' } : i));
         setIncidenteActivo(prev => prev ? { ...prev, estado: 'cer' } : prev);
         Swal.fire({ icon: 'success', title: 'Incidencia cerrada', text: 'Partes cerrados, máquinas liberadas y estado actualizado.', timer: 2200, showConfirmButton: false });
       } else {
-        // Los partes se cerraron, pero el estado no se pudo cambiar.
         Swal.fire('Parcial', `Los partes se cerraron, pero no se pudo cambiar el estado de la incidencia (código: ${rEstado.status}). Revisa manualmente.`, 'warning');
       }
     } catch (e) {
@@ -437,26 +414,47 @@ function Incidentes() {
 
   const horasMaquina = (nuevoRecurso.hmFin && nuevoRecurso.hmInicio) ? Math.max(0, (parseFloat(nuevoRecurso.hmFin) - parseFloat(nuevoRecurso.hmInicio))).toFixed(1) : 0;
 
-  const volumenMetrado = nuevoRecurso.incluirMetrado ? (((parseFloat(nuevoRecurso.anchoSup)||0 + parseFloat(nuevoRecurso.anchoInf)||0) / 2) * (parseFloat(nuevoRecurso.altura)||0) * (parseFloat(nuevoRecurso.longitud)||0)).toFixed(2) : 0;
+  // ── Cálculo de metrado según actividad ──────────────────────────────────
+  const calcVolumen = () => {
+    const r = nuevoRecurso;
+    const L = parseFloat(r.longitud)||0, h = parseFloat(r.altura)||0;
+    const B = parseFloat(r.anchoBase)||0, b = parseFloat(r.corona)||0;
+    const N = parseFloat(r.nViajes)||0, vt = parseFloat(r.volTolva)||0;
+    const fe = parseFloat(r.fe)||1.25, Z = parseFloat(r.talud)||0;
+    const hp = parseFloat(r.hPromedio)||0, a = parseFloat(r.anchoSup)||0;
+    const Ws = parseFloat(r.anchoSup)||0, Wi = parseFloat(r.anchoInf)||0;
+    switch (r.actividad) {
+      case 'EXCAVACION DE MATERIAL': return {val:((B+b)/2)*h*L, unit:'m³'};
+      case 'CARGUIO DE MATERIAL': return {val:N*vt/fe, unit:'m³'};
+      case 'DESCOLMATACION DE CAUCE': return {val:a*hp*L, unit:'m³'};
+      case 'ELIMINACION': return {val:N*vt, unit:'m³'};
+      case 'CONFORMACION DE DIQUE': {const Bc=b+2*Z*h; return {val:((Bc+b)/2)*h*L, unit:'m³'};}
+      case 'ENROCADO': return {val:((B+b)/2)*h*L, unit:'m³'};
+      case 'PERFILADO DE TALUD': return {val:h*Math.sqrt(1+Z*Z)*L, unit:'m²'};
+      case 'HABILITACION DE ACCESO': return {val:L, unit:'m'};
+      default: return {val:((Ws+Wi)/2)*h*L, unit:'m³'};
+    }
+  };
+  const volCalc = calcVolumen();
+  const volumenMetrado = volCalc.val.toFixed(2);
+  const tieneMetradoActividad = IMG_METRADO[nuevoRecurso.actividad] !== undefined;
 
   const agregarRecurso = () => {
     let descFinal = nuevoRecurso.descripcion;
     let cantFinal = parseFloat(nuevoRecurso.cantidad) || 0;
     if (nuevoRecurso.tipo === 'Maquinaria') {
-      const totalHM = parseFloat(horasMaquina) || 0;   // HM Fin - HM Inicio
+      const totalHM = parseFloat(horasMaquina) || 0;
       if (totalHM <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Horómetro Final debe ser mayor al Inicial' });
       if (!nuevoRecurso.numeroParte) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Número de Parte es obligatorio' });
       if (!nuevoRecurso.equipo) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un equipo' });
-      // Horas efectivas: por defecto = total del horómetro; editable.
       const efectivas = (nuevoRecurso.horasEfectivas === '' || nuevoRecurso.horasEfectivas === null)
         ? totalHM
         : parseFloat(nuevoRecurso.horasEfectivas) || 0;
       if (efectivas < 0 || efectivas > totalHM) return Swal.fire({ icon: 'warning', title: 'Atención', text: `Las Horas Efectivas deben estar entre 0 y ${totalHM}` });
-      // Si hubo reducción, la observación es obligatoria.
       if (efectivas < totalHM && !nuevoRecurso.obsReduccion.trim()) {
         return Swal.fire({ icon: 'warning', title: 'Observación requerida', text: 'Detalla el motivo de la reducción de horas efectivas.' });
       }
-      cantFinal = efectivas;   // el costo se calcula sobre las horas efectivas
+      cantFinal = efectivas;
       const equipoFinal = nuevoRecurso.equipo;
       const marcaFinal = nuevoRecurso.marca;
       descFinal = `Parte N° ${nuevoRecurso.numeroParte} | ${nuevoRecurso.codigoMaquina} · ${equipoFinal} ${marcaFinal} ${nuevoRecurso.modeloMaquina || ''} (${nuevoRecurso.placa})\n`;
@@ -466,7 +464,9 @@ function Incidentes() {
       if (efectivas < totalHM) {
         descFinal += `\nHoras efectivas: ${efectivas} HE (reducción de ${(totalHM - efectivas).toFixed(1)}). Motivo: ${nuevoRecurso.obsReduccion.trim()}`;
       }
-      if (nuevoRecurso.incluirMetrado) descFinal += `\nVol. Extraído: ${volumenMetrado} m3`;
+      if (nuevoRecurso.incluirMetrado || tieneMetradoActividad) {
+        if (volCalc.val > 0) descFinal += `\nMetrado: ${volumenMetrado} ${volCalc.unit}`;
+      }
     } else if (nuevoRecurso.tipo === 'Personal') {
       const pers = parseInt(nuevoRecurso.numPersonas) || 0;
       const hrs = parseFloat(nuevoRecurso.horasTrabajo) || 0;
@@ -485,16 +485,12 @@ function Incidentes() {
   };
 
   const eliminarRecurso = (idLocal) => setRecursos(recursos.filter(r => r.idLocal !== idLocal));
-  // Elimina del estado local varios recursos (fila agrupada no guardada).
   const eliminarRecursosLocales = (idsLocales) => setRecursos(recursos.filter(r => !idsLocales.includes(r.idLocal)));
   const costoTotalIncidente = recursos.reduce((sum, item) => sum + item.total, 0);
 
-  // Agrupa recursos idénticos (mismo tipo + detalle + precio) en una sola fila.
-  // Maquinaria NO se agrupa: cada parte es único (tiene su PDF y horómetro propio).
-  // Normaliza texto para comparar: minúsculas, sin tildes, espacios colapsados.
   const normalizar = (txt) => (txt || '')
     .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // quita tildes
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -504,12 +500,9 @@ function Incidentes() {
       const detalle = r.descripcionResumen || r.descripcion || '';
       let clave;
       if (r.tipo === 'Maquinaria') {
-        // Agrupar maquinaria idéntica: misma máquina + actividad + precio.
-        // Se ignora el N° de parte (único) y el estado de cierre. Texto normalizado.
         const detalleSinParte = detalle.replace(/Parte N° [^|]*\|/i, '').trim();
         clave = `maq|${normalizar(detalleSinParte)}|${r.precioUnitario}`;
       } else if (r.tipo === 'Personal') {
-        // Agrupar personal por cargo + personas + horas + precio (ignora el motivo).
         const cargo = normalizar(r.descripcion);
         clave = `pers|${cargo}|${r.numPersonas}|${r.horasTrabajo}|${r.horasExtras}|${r.cantidad}|${r.precioUnitario}|${r.guardadoEnDB}`;
       } else {
@@ -517,13 +510,8 @@ function Incidentes() {
       }
       if (!grupos.has(clave)) {
         grupos.set(clave, {
-          ...r,
-          cantidadTotal: 0,
-          totalSum: 0,
-          count: 0,
-          registros: [],   // {dbId, endpoint} de cada registro guardado del grupo
-          idsLocales: [],  // idLocal de cada uno (para eliminar no-guardados)
-          partesMaq: [],   // maquinaria: lista completa de partes del grupo (para PDF/Finalizar individual)
+          ...r, cantidadTotal: 0, totalSum: 0, count: 0,
+          registros: [], idsLocales: [], partesMaq: [],
         });
       }
       const g = grupos.get(clave);
@@ -533,7 +521,6 @@ function Incidentes() {
       if (r.guardadoEnDB && r.dbId) g.registros.push({ dbId: r.dbId, endpoint: r.endpoint });
       g.idsLocales.push(r.idLocal);
       if (r.tipo === 'Maquinaria') {
-        // Extraer el N° de parte del resumen para mostrarlo en cada botón.
         const mp = (r.descripcionResumen || '').match(/Parte N° ([^\s|]+)/i);
         g.partesMaq.push({ dbId: r.dbId, idLocal: r.idLocal, cerrado: r.cerrado, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, numeroParte: mp ? mp[1] : (r.numeroParte || ''), registro: r });
       }
@@ -541,7 +528,6 @@ function Incidentes() {
     return Array.from(grupos.values());
   })();
 
-  // ── Helper: convertir imagen importada a base64 ────────────────────────
   const imgToBase64 = (src) => new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -556,7 +542,6 @@ function Incidentes() {
     img.src = src;
   });
 
-  // ── Exportar PDF ──────────────────────────────────────────────────────
   const exportarPDF = async () => {
     if (!incidenteActivo) return;
     const doc = new jsPDF();
@@ -564,7 +549,6 @@ function Incidentes() {
     const estadoTexto = inc.estado === 'pat' ? 'Pendiente' : inc.estado === 'ate' ? 'En Atención' : inc.estado === 'cer' ? 'Cerrado' : inc.estado;
     const gravedadTexto = inc.gravedad === 'lev' ? 'Leve' : inc.gravedad === 'mod' ? 'Moderada' : inc.gravedad === 'gra' ? 'Grave' : inc.gravedad;
     const fechaGenerado = new Date().toLocaleString('es-PE');
-
     doc.setFillColor(20, 99, 165);
     doc.rect(0, 0, 210, 30, 'F');
     const logoBase64 = await imgToBase64(logo);
@@ -576,7 +560,6 @@ function Incidentes() {
     doc.text('Reporte de Gestión de Incidente', logoBase64 ? 38 : 14, 20);
     doc.setFontSize(8);
     doc.text(`Generado: ${fechaGenerado}`, 196, 26, { align: 'right' });
-
     let y = 40;
     doc.setTextColor(30, 41, 59); doc.setFontSize(14); doc.setFont(undefined, 'bold');
     doc.text(inc.tipo, 14, y); y += 9;
@@ -599,7 +582,6 @@ function Incidentes() {
     y += 5; doc.setDrawColor(226,232,240); doc.line(14,y,196,y); y += 8;
     doc.setFontSize(11); doc.setFont(undefined,'bold'); doc.setTextColor(30,41,59);
     doc.text('Detalle de Recursos y Costeo', 14, y); y += 5;
-
     if (recursos.length > 0) {
       autoTable(doc, {
         startY: y,
@@ -619,45 +601,28 @@ function Incidentes() {
     }
     const pageCount = doc.internal.getNumberOfPages();
     for (let i=1;i<=pageCount;i++){doc.setPage(i);doc.setFontSize(7);doc.setTextColor(150);doc.text(`Página ${i} de ${pageCount} — Sistema Integrado de Monitoreo — JURP`,105,290,{align:'center'});}
-
-    // Mostrar en modal
     const blobUrl = doc.output('bloburl');
     setPdfUrlActivo(blobUrl);
     setModalPdfAbierto(true);
   };
 
-  // ── Exportar Excel (con logo y headers azules) ────────────────────────
   const exportarExcel = async () => {
     if (!incidenteActivo) return;
     const inc = incidenteActivo;
     const estadoTexto = inc.estado === 'pat' ? 'Pendiente' : inc.estado === 'ate' ? 'En Atención' : inc.estado === 'cer' ? 'Cerrado' : inc.estado;
     const gravedadTexto = inc.gravedad === 'lev' ? 'Leve' : inc.gravedad === 'mod' ? 'Moderada' : inc.gravedad === 'gra' ? 'Grave' : inc.gravedad;
     const fechaGenerado = new Date().toLocaleString('es-PE');
-
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Reporte de Incidente');
-
-    // Anchos de columna
-    ws.columns = [
-      { width: 20 }, { width: 16 }, { width: 45 }, { width: 14 }, { width: 10 }, { width: 16 }, { width: 16 }
-    ];
-
+    ws.columns = [{ width: 20 }, { width: 16 }, { width: 45 }, { width: 14 }, { width: 10 }, { width: 16 }, { width: 16 }];
     const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1463A5' } };
     const azulClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E0F2FE' } };
     const grisClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9' } };
     const fuenteBlanca = { bold: true, color: { argb: 'FFFFFF' }, size: 12 };
     const fuenteBlancaSm = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
     const borde = { top:{style:'thin',color:{argb:'E2E8F0'}}, bottom:{style:'thin',color:{argb:'E2E8F0'}}, left:{style:'thin',color:{argb:'E2E8F0'}}, right:{style:'thin',color:{argb:'E2E8F0'}} };
-
-    // Header azul (filas 1-3)
-    for (let r = 1; r <= 3; r++) {
-      for (let c = 1; c <= 7; c++) { ws.getCell(r, c).fill = azul; }
-    }
-    ws.getRow(1).height = 28;
-    ws.getRow(2).height = 20;
-    ws.getRow(3).height = 18;
-
-    // Logo en A1 (ocupa A1:A3)
+    for (let r = 1; r <= 3; r++) { for (let c = 1; c <= 7; c++) { ws.getCell(r, c).fill = azul; } }
+    ws.getRow(1).height = 28; ws.getRow(2).height = 20; ws.getRow(3).height = 18;
     try {
       const logoB64 = await imgToBase64(logo);
       if (logoB64) {
@@ -665,45 +630,31 @@ function Incidentes() {
         ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 75, height: 65 } });
       }
     } catch(e) {}
-
-    // Título en C1 (después del logo)
     ws.mergeCells('C1:G1');
     ws.getCell('C1').value = 'JUNTA DE RIEGO PRESURIZADO';
     ws.getCell('C1').font = fuenteBlanca;
     ws.getCell('C1').alignment = { vertical: 'middle' };
-
     ws.mergeCells('C2:G2');
     ws.getCell('C2').value = 'Reporte de Gestión de Incidente';
     ws.getCell('C2').font = fuenteBlancaSm;
     ws.getCell('C2').alignment = { vertical: 'middle' };
-
     ws.mergeCells('C3:G3');
     ws.getCell('C3').value = `Generado: ${fechaGenerado}`;
     ws.getCell('C3').font = { italic: true, size: 9, color: { argb: 'D0D5DD' } };
     ws.getCell('C3').alignment = { vertical: 'middle' };
-
-    // Fila 4 vacía
     ws.getRow(4).height = 6;
-
-    // Sección: Datos del incidente
     ws.mergeCells('A5:G5');
     ws.getCell('A5').value = 'DATOS DEL INCIDENTE';
     ws.getCell('A5').font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
     ws.getCell('A5').fill = azul;
     ['B5','C5','D5','E5','F5','G5'].forEach(c => { ws.getCell(c).fill = azul; });
     ws.getRow(5).height = 22;
-
     const campos = [
-      ['Tipo de Incidente', inc.tipo],
-      ['Código', inc.codigo || 'Sin Código'],
-      ['Ubicación', inc.lugar || '-'],
-      ['Fecha', inc.fecha || '-'],
-      ['Estado', estadoTexto],
-      ['Gravedad', gravedadTexto],
-      ['Reportado por', inc.usuario || '-'],
+      ['Tipo de Incidente', inc.tipo], ['Código', inc.codigo || 'Sin Código'],
+      ['Ubicación', inc.lugar || '-'], ['Fecha', inc.fecha || '-'],
+      ['Estado', estadoTexto], ['Gravedad', gravedadTexto], ['Reportado por', inc.usuario || '-'],
     ];
     campos.forEach(([label, val], i) => {
-      const row = ws.getRow(6 + i);
       ws.getCell(`A${6+i}`).value = label;
       ws.getCell(`A${6+i}`).font = { bold: true, size: 9, color: { argb: '64748B' } };
       ws.getCell(`A${6+i}`).fill = grisClaro;
@@ -711,8 +662,6 @@ function Incidentes() {
       ws.getCell(`B${6+i}`).value = val;
       ws.getCell(`B${6+i}`).font = { size: 10 };
     });
-
-    // Sección: Recursos
     const rStart = 14;
     ws.mergeCells(`A${rStart}:G${rStart}`);
     ws.getCell(`A${rStart}`).value = 'DETALLE DE RECURSOS Y COSTEO';
@@ -720,8 +669,6 @@ function Incidentes() {
     ws.getCell(`A${rStart}`).fill = azul;
     ['B','C','D','E','F','G'].forEach(c => { ws.getCell(`${c}${rStart}`).fill = azul; });
     ws.getRow(rStart).height = 22;
-
-    // Header tabla
     const hRow = rStart + 1;
     ['N°','Tipo','Detalle','Cantidad','Unidad','P. Unit. (S/)','Total (S/)'].forEach((h, i) => {
       const cell = ws.getCell(hRow, i + 1);
@@ -731,19 +678,9 @@ function Incidentes() {
       cell.alignment = { horizontal: i >= 3 ? 'right' : 'left', vertical: 'middle' };
       cell.border = borde;
     });
-
-    // Filas de datos
     recursos.forEach((r, i) => {
       const rowNum = hRow + 1 + i;
-      const vals = [
-        i + 1,
-        r.tipo,
-        (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '),
-        r.cantidad,
-        r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.',
-        parseFloat(r.precioUnitario),
-        r.total,
-      ];
+      const vals = [i + 1, r.tipo, (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '), r.cantidad, r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.', parseFloat(r.precioUnitario), r.total];
       vals.forEach((v, j) => {
         const cell = ws.getCell(rowNum, j + 1);
         cell.value = v;
@@ -754,8 +691,6 @@ function Incidentes() {
         if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
       });
     });
-
-    // Fila total
     const totalRow = hRow + 1 + recursos.length + 1;
     ws.mergeCells(`A${totalRow}:E${totalRow}`);
     ws.getCell(`F${totalRow}`).value = 'COSTO TOTAL:';
@@ -766,8 +701,6 @@ function Incidentes() {
     ws.getCell(`G${totalRow}`).font = { bold: true, size: 11 };
     ws.getCell(`G${totalRow}`).numFmt = '"S/ "#,##0.00';
     ws.getCell(`G${totalRow}`).fill = azulClaro;
-
-    // Descargar
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
@@ -794,7 +727,6 @@ function Incidentes() {
           formData.append('description', r.descripcionResumen || r.descripcion); 
           formData.append('quantity_hours', r.cantidad);
           formData.append('unit_price', r.precioUnitario);
-          // Desglose de la cuadrilla
           formData.append('num_personas', parseInt(r.numPersonas)||0);
           formData.append('horas_normales', parseFloat(r.horasTrabajo)||0);
           formData.append('horas_extras', parseFloat(r.horasExtras)||0);
@@ -818,7 +750,7 @@ function Incidentes() {
           formData.append('observations', r.observaciones); formData.append('unit_price', r.precioUnitario);
           if (r.fotoParte) formData.append('part_photo', r.fotoParte);
           if (r.fotoVale) formData.append('voucher_photo', r.fotoVale);
-          if (r.incluirMetrado) {
+          if (r.incluirMetrado || IMG_METRADO[r.actividad]) {
             if (r.anchoSup !== '' && r.anchoSup != null) formData.append('width_top', r.anchoSup);
             if (r.anchoInf !== '' && r.anchoInf != null) formData.append('width_bottom', r.anchoInf);
             if (r.altura !== '' && r.altura != null) formData.append('height', r.altura);
@@ -831,8 +763,6 @@ function Incidentes() {
           try { detalle = JSON.stringify(await res.json()); } catch (e) { detalle = `código ${res.status}`; }
           throw new Error(`Error al guardar ${r.tipo}: ${detalle}`);
         }
-        // Si es maquinaria y se eligió una placa del catálogo, marcarla como
-        // NO disponible (estado=1) para que no aparezca en otros partes.
         if (r.tipo === 'Maquinaria' && r.modeloId) {
           try {
             await fetch(`${BASE_URL}/api/v1/mobile/operations/modelos/${r.modeloId}/`, {
@@ -865,7 +795,6 @@ function Incidentes() {
       default: return <span className="tbl-badge bg-secondary-lt">{estado}</span>;
     }
   };
-
   const getGravedadBadge = (gravedad) => {
     const base = {padding:'3px 10px',borderRadius:'4px',fontSize:'11px',fontWeight:'700',letterSpacing:'0.5px',textShadow:'0 1px 2px rgba(0,0,0,0.15)',border:'1px solid rgba(255,255,255,0.3)'};
     switch (gravedad) {
@@ -874,6 +803,36 @@ function Incidentes() {
       case 'gra': return <span style={{...base,backgroundColor:'#d63939',color:'#fff'}}>Grave</span>;
       default: return <span className="tbl-badge bg-secondary-lt">{gravedad}</span>;
     }
+  };
+
+  // Renderiza los campos de metrado según la actividad seleccionada.
+  const renderCamposMetrado = () => {
+    const act = nuevoRecurso.actividad;
+    const set = (campo, val) => setNuevoRecurso({...nuevoRecurso, [campo]: val});
+    const inp = (campo, label, step='0.01') => (
+      <div className="tbl-col"><label className="tbl-form-label">{label}</label><input type="number" step={step} className="tbl-form-control" placeholder="0.00" value={nuevoRecurso[campo]} onChange={e => set(campo, e.target.value)} /></div>
+    );
+    if (act === 'EXCAVACION DE MATERIAL' || act === 'ENROCADO')
+      return <>{inp('anchoBase','Base B (m)')}{inp('corona','Corona b (m)')}{inp('altura','Altura h (m)')}{inp('longitud','Longitud L (m)')}</>;
+    if (act === 'CARGUIO DE MATERIAL')
+      return <>{inp('nViajes','N° Viajes','1')}{inp('volTolva','Vol. Tolva (m³)','0.1')}{inp('fe','Fe (esponj.)')}</>;
+    if (act === 'DESCOLMATACION DE CAUCE')
+      return <>{inp('anchoSup','Ancho a (m)')}{inp('hPromedio','h promedio (m)')}{inp('longitud','Longitud L (m)')}</>;
+    if (act === 'ELIMINACION')
+      return <>{inp('nViajes','N° Viajes','1')}{inp('volTolva','Vol. Tolva (m³)','0.1')}</>;
+    if (act === 'CONFORMACION DE DIQUE')
+      return <>{inp('corona','Corona b (m)')}{inp('altura','Altura h (m)')}{inp('talud','Talud Z (H:V)','0.1')}{inp('longitud','Longitud L (m)')}</>;
+    if (act === 'PERFILADO DE TALUD')
+      return <>{inp('altura','Altura h (m)')}{inp('talud','Talud Z (H:V)','0.1')}{inp('longitud','Longitud L (m)')}</>;
+    if (act === 'HABILITACION DE ACCESO')
+      return <div className="tbl-col-4">{inp('longitud','Longitud L (m)')}</div>;
+    return null;
+  };
+  const formulaMetrado = {
+    'EXCAVACION DE MATERIAL':'V = ((B+b)/2) × h × L','CARGUIO DE MATERIAL':'V = N × Vol.tolva / Fe',
+    'DESCOLMATACION DE CAUCE':'V = a × h prom × L','ELIMINACION':'V = N × Vol.tolva',
+    'CONFORMACION DE DIQUE':'V = ((B+b)/2) × h × L, B=b+2Zh','ENROCADO':'V = ((B+b)/2) × h × L',
+    'PERFILADO DE TALUD':'A = h × √(1+Z²) × L','HABILITACION DE ACCESO':'Metrado = L',
   };
 
   return (
@@ -891,7 +850,6 @@ function Incidentes() {
           </div>
         </div>
       </div>
-
       <div className="tbl-page-body">
         {cargando ? <div className="tbl-empty">Cargando datos...</div> 
         : incidentes.length === 0 ? <div className="tbl-empty">No hay incidentes registrados.</div> 
@@ -937,10 +895,9 @@ function Incidentes() {
           </>
         )}
       </div>
-
-      {/* ── MODAL PRINCIPAL (GESTIÓN) ──────────────────────────────────── */}
+      {/* ── MODAL PRINCIPAL (GESTIÓN) — solo cierra con botón Cerrar ─────── */}
       {modalAbierto && incidenteActivo && (
-        <div className="tbl-modal-backdrop" onClick={() => setModalAbierto(false)}>
+        <div className="tbl-modal-backdrop">
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{maxWidth: '960px'}}>
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
@@ -962,7 +919,6 @@ function Incidentes() {
                     </select>
                   </div>
                 </div>
-
                 {nuevoRecurso.tipo === 'Maquinaria' ? (
                   <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '4px', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'20px', color:'#206bc4', fontWeight:'bold', fontSize:'16px' }}><FaFileInvoice /> Formulario: Parte Diario de Maquinaria</div>
@@ -1053,30 +1009,43 @@ function Incidentes() {
                         <select className="tbl-form-select" value={nuevoRecurso.actividad} onChange={e => onCambiaActividad(e.target.value)}>
                           <option value="">— Seleccionar actividad —</option>
                           {catActividades.map(a => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
-                          {/* Si la actividad actual no está en el catálogo (viene de un parte viejo), la mostramos igual */}
                           {nuevoRecurso.actividad && !catActividades.some(a => a.nombre === nuevoRecurso.actividad) && <option value={nuevoRecurso.actividad}>{nuevoRecurso.actividad}</option>}
                           <option value="__OTRO__">➕ Otro (agregar nueva)...</option>
                         </select>
                       </div>
                       <div className="tbl-col"><label className="tbl-form-label">Observaciones</label><input type="text" className="tbl-form-control" placeholder="Condiciones del terreno, clima..." value={nuevoRecurso.observaciones} onChange={e => setNuevoRecurso({...nuevoRecurso, observaciones: e.target.value})} /></div>
                     </div>
-
-                    {/* ── Cálculo de metrado (opcional) ──────────────────────── */}
+                    {/* ── Metrado por actividad (con imagen de referencia) ────── */}
+                    {tieneMetradoActividad ? (
+                      <div style={{ background:'#f0f6ff', padding:'14px', borderRadius:'4px', border:'1px solid #bfdbfe', marginTop:'4px' }}>
+                        <div style={{ display:'flex', gap:'14px', alignItems:'flex-start' }}>
+                          <div style={{ flexShrink:0, width:'160px' }}>
+                            <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5', marginBottom:'6px' }}>📐 Referencia</div>
+                            <img src={IMG_METRADO[nuevoRecurso.actividad]} alt={nuevoRecurso.actividad} onClick={() => setImgRefModal({src: IMG_METRADO[nuevoRecurso.actividad], titulo: nuevoRecurso.actividad})} style={{ width:'100%', borderRadius:'4px', border:'1px solid #bfdbfe', cursor:'pointer' }} title="Clic para ampliar" />
+                          </div>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5', marginBottom:'10px' }}>{nuevoRecurso.actividad}</div>
+                            <div className="tbl-row tbl-mb-2" style={{ gap:'8px' }}>{renderCamposMetrado()}</div>
+                          </div>
+                        </div>
+                        <div style={{ marginTop:'8px', padding:'8px 12px', background:'#fff', borderRadius:'4px', border:'1px solid #bfdbfe', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                          <span style={{ fontSize:'11px', color:'#626976' }}>{formulaMetrado[nuevoRecurso.actividad]}</span>
+                          <span style={{ fontSize:'16px', fontWeight:'700', color: volCalc.val > 0 ? '#1463A5' : '#94a3b8' }}>{volumenMetrado} {volCalc.unit}</span>
+                        </div>
+                      </div>
+                    ) : (
                     <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'14px', marginTop:'4px' }}>
                       <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontWeight:600, color:'#1e293b' }}>
                         <input type="checkbox" checked={nuevoRecurso.incluirMetrado} onChange={e => setNuevoRecurso({...nuevoRecurso, incluirMetrado: e.target.checked})} />
                         Incluir cálculo de metrado (volumen extraído)
                       </label>
-
                       {nuevoRecurso.incluirMetrado && (
                         <div style={{ marginTop:'14px' }}>
                           <div className="tbl-row tbl-mb-3">
-                            {/* Longitud */}
                             <div className="tbl-col-3">
                               <label className="tbl-form-label">Longitud L (m)</label>
                               <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.longitud} onChange={e => setNuevoRecurso({...nuevoRecurso, longitud: e.target.value})} />
                             </div>
-                            {/* Altura con thumbnail */}
                             <div className="tbl-col-3">
                               <label className="tbl-form-label" style={{display:'flex',alignItems:'center',gap:'6px'}}>
                                 Altura H (m)
@@ -1084,7 +1053,6 @@ function Incidentes() {
                               </label>
                               <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.altura} onChange={e => setNuevoRecurso({...nuevoRecurso, altura: e.target.value})} />
                             </div>
-                            {/* Ancho Superior con thumbnail */}
                             <div className="tbl-col-3">
                               <label className="tbl-form-label" style={{display:'flex',alignItems:'center',gap:'6px'}}>
                                 Ancho Sup. Ws (m)
@@ -1092,7 +1060,6 @@ function Incidentes() {
                               </label>
                               <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00" value={nuevoRecurso.anchoSup} onChange={e => setNuevoRecurso({...nuevoRecurso, anchoSup: e.target.value})} />
                             </div>
-                            {/* Ancho Inferior con thumbnail */}
                             <div className="tbl-col-3">
                               <label className="tbl-form-label" style={{display:'flex',alignItems:'center',gap:'6px'}}>
                                 Ancho Inf. Wi (m)
@@ -1103,11 +1070,12 @@ function Incidentes() {
                           </div>
                           <div style={{ display:'flex', alignItems:'center', gap:'10px', background:'#f0f9ff', borderRadius:'6px', padding:'10px 14px', fontSize:'13px' }}>
                             <span style={{color:'#64748b'}}>Fórmula: V = (Ws + Wi / 2) × H × L</span>
-                            <span style={{marginLeft:'auto', fontWeight:'bold', color:'#0284c7', fontSize:'15px'}}>Volumen extraído: {volumenMetrado} m³</span>
+                            <span style={{marginLeft:'auto', fontWeight:'bold', color:'#0284c7', fontSize:'15px'}}>Volumen extraído: {volumenMetrado} m3</span>
                           </div>
                         </div>
                       )}
                     </div>
+                    )}
                   </div>
                 ) : nuevoRecurso.tipo === 'Personal' ? (
                   <>
@@ -1204,8 +1172,6 @@ function Incidentes() {
           </div>
         </div>
       )}
-
-      {/* ── MODAL PDF ──────────────────────────────────────────────────── */}
       {/* ── Modal de imagen de referencia (metrado) ────────────────────── */}
       {imgRefModal && (
         <div onClick={() => setImgRefModal(null)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
@@ -1220,7 +1186,7 @@ function Incidentes() {
           </div>
         </div>
       )}
-
+      {/* ── MODAL PDF ──────────────────────────────────────────────────── */}
       {modalPdfAbierto && (
         <div className="tbl-modal-backdrop" onClick={() => setModalPdfAbierto(false)} style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.75)' }}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '850px', height: '90vh', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10000, marginTop: '2vh' }}>
@@ -1236,28 +1202,22 @@ function Incidentes() {
           </div>
         </div>
       )}
-
       {/* ── MODAL GALERÍA DE EVIDENCIAS ────────────────────────────────── */}
       {modalMediaAbierto && (
         <div onClick={() => setModalMediaAbierto(false)} style={{ position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:10001,background:'rgba(0,0,0,0.92)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center' }}>
-          {/* Botón cerrar */}
           <button onClick={() => setModalMediaAbierto(false)} style={{ position:'absolute',top:'16px',right:'20px',background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',fontSize:'22px',cursor:'pointer',borderRadius:'50%',width:'40px',height:'40px',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002 }}>✕</button>
-
-          {/* Header con info del incidente */}
           {galeriaIncidente && (
             <div onClick={e=>e.stopPropagation()} style={{ color:'#fff',textAlign:'center',marginBottom:'16px',pointerEvents:'none' }}>
               <div style={{fontSize:'16px',fontWeight:'700'}}>{galeriaIncidente.tipo} — {galeriaIncidente.codigo}</div>
               <div style={{fontSize:'12px',color:'rgba(255,255,255,0.6)',marginTop:'2px'}}>{galeriaIncidente.lugar} · {galeriaIncidente.fecha}</div>
             </div>
           )}
-
           {cargandoMedia ? (
             <div style={{color:'#fff',fontSize:'14px',display:'flex',alignItems:'center',gap:'8px'}}><FaSyncAlt className="icon-spin"/> Cargando evidencias...</div>
           ) : galeriaMedia.length === 0 ? (
             <div style={{color:'rgba(255,255,255,0.5)',fontSize:'14px'}}>No se encontraron evidencias para este incidente.</div>
           ) : (
             <>
-              {/* Media principal */}
               <div onClick={e=>e.stopPropagation()} style={{position:'relative',maxWidth:'90vw',maxHeight:'70vh',display:'flex',alignItems:'center',justifyContent:'center'}}>
                 {galeriaMedia[galeriaIndex].type === 'image' ? (
                   <img src={galeriaMedia[galeriaIndex].src} alt="Evidencia" style={{maxWidth:'90vw',maxHeight:'70vh',objectFit:'contain',borderRadius:'8px'}} />
@@ -1265,13 +1225,9 @@ function Incidentes() {
                   <video src={galeriaMedia[galeriaIndex].src} controls autoPlay style={{maxWidth:'90vw',maxHeight:'70vh',borderRadius:'8px',background:'#000'}} />
                 )}
               </div>
-
-              {/* Controles de navegación */}
               {galeriaMedia.length > 1 && (
                 <div onClick={e=>e.stopPropagation()} style={{display:'flex',alignItems:'center',gap:'16px',marginTop:'16px'}}>
                   <button onClick={galeriaAnterior} disabled={galeriaIndex===0} style={{background:galeriaIndex===0?'rgba(255,255,255,0.1)':'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:'50%',width:'40px',height:'40px',cursor:galeriaIndex===0?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'16px'}}><FaChevronLeft/></button>
-                  
-                  {/* Thumbnails */}
                   <div style={{display:'flex',gap:'6px',overflowX:'auto',maxWidth:'60vw',padding:'4px'}}>
                     {galeriaMedia.map((m,i) => (
                       <div key={i} onClick={()=>setGaleriaIndex(i)} style={{flexShrink:0,width:'56px',height:'56px',borderRadius:'6px',overflow:'hidden',border:i===galeriaIndex?'2px solid #fff':'2px solid transparent',cursor:'pointer',opacity:i===galeriaIndex?1:0.5,transition:'all 0.2s'}}>
@@ -1283,26 +1239,20 @@ function Incidentes() {
                       </div>
                     ))}
                   </div>
-
                   <button onClick={galeriaSiguiente} disabled={galeriaIndex===galeriaMedia.length-1} style={{background:galeriaIndex===galeriaMedia.length-1?'rgba(255,255,255,0.1)':'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:'50%',width:'40px',height:'40px',cursor:galeriaIndex===galeriaMedia.length-1?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'16px'}}><FaChevronRight/></button>
                 </div>
               )}
-
-              {/* Contador */}
               <div style={{color:'rgba(255,255,255,0.5)',fontSize:'12px',marginTop:'8px'}}>{galeriaIndex+1} / {galeriaMedia.length} · {galeriaMedia[galeriaIndex].type === 'image' ? 'Foto' : 'Video'}</div>
             </>
           )}
         </div>
       )}
-
       {/* ── Mantenedor de catálogos (Equipos/Marcas/Modelos) ─────────────── */}
       <MantenedorEquipos
         abierto={mantenedorAbierto}
         onClose={() => { setMantenedorAbierto(false); cargarEquiposCat(nuevoRecurso.origen); if (nuevoRecurso.equipoId) cargarMarcasCat(nuevoRecurso.equipoId); if (nuevoRecurso.marcaId) cargarModelosCat(nuevoRecurso.marcaId); }}
       />
-
     </div>
   );
 }
-
 export default Incidentes;
