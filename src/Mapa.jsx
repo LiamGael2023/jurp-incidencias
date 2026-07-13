@@ -395,18 +395,6 @@ function MapaChavimochic() {
 
         {/* ── Charts Column ───────────────────────────────────────────── */}
         <div className="dash-charts-col">
-          <div className="dash-panel">
-            <div className="dash-panel-title"><span className="accent">📈</span> Evolución de Incidentes</div>
-            <ResponsiveContainer width="100%" height={140}>
-              <LineChart data={incMes}><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" /><XAxis dataKey="mes" tick={{ fontSize: 10 }} stroke="#334155" /><YAxis allowDecimals={false} tick={{ fontSize: 10 }} stroke="#334155" width={25} /><Tooltip contentStyle={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '11px' }} /><Line type="monotone" dataKey="cant" stroke="#0ea5e9" strokeWidth={2} dot={{ fill: '#0ea5e9', r: 3 }} name="Incidentes" /></LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="dash-panel">
-            <div className="dash-panel-title"><span className="accent">🏗️</span> Infraestructura por Tipo</div>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={porTipoInfra} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" /><XAxis type="number" tick={{ fontSize: 10 }} stroke="#334155" /><YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} stroke="#334155" width={90} /><Tooltip contentStyle={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '11px' }} /><Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16}>{porTipoInfra.map((d, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
-            </ResponsiveContainer>
-          </div>
           <div className="dash-panel" style={{ flex: 1, minHeight: '180px' }}>
             <div className="dash-panel-title"><span className="accent">📋</span> Gestión de Incidentes</div>
             <div style={{ overflowY: 'auto', maxHeight: '240px' }}>
@@ -458,6 +446,12 @@ function MapaChavimochic() {
                 </div>
               )}
             </div>
+          </div>
+          <div className="dash-panel">
+            <div className="dash-panel-title"><span className="accent">🏗️</span> Infraestructura por Tipo</div>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={porTipoInfra} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis type="number" tick={{ fontSize: 10 }} stroke="#cbd5e1" /><YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} stroke="#cbd5e1" width={90} /><Tooltip contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '11px' }} /><Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16}>{porTipoInfra.map((d, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
