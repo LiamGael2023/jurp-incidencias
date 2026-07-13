@@ -401,12 +401,6 @@ function MapaChavimochic() {
             </ResponsiveContainer>
           </div>
           <div className="dash-panel">
-            <div className="dash-panel-title"><span className="accent">🎯</span> Incidentes por Tipo</div>
-            <ResponsiveContainer width="100%" height={160}>
-              <PieChart><Pie data={incPorTipo} cx="50%" cy="50%" innerRadius={35} outerRadius={60} dataKey="value" paddingAngle={2}>{incPorTipo.map((d, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip contentStyle={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '11px' }} /><Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={v => <span style={{ color: '#626976' }}>{v}</span>} /></PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="dash-panel">
             <div className="dash-panel-title"><span className="accent">🏗️</span> Infraestructura por Tipo</div>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={porTipoInfra} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" /><XAxis type="number" tick={{ fontSize: 10 }} stroke="#334155" /><YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} stroke="#334155" width={90} /><Tooltip contentStyle={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '11px' }} /><Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16}>{porTipoInfra.map((d, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
