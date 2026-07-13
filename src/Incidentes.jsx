@@ -1006,11 +1006,16 @@ function Incidentes() {
                     })()}
                     <div className="tbl-row tbl-mb-3">
                       <div className="tbl-col"><label className="tbl-form-label">Actividades Realizadas <span style={{color:'red'}}>*</span></label>
-                        <select className="tbl-form-select" value={nuevoRecurso.actividad} onChange={e => onCambiaActividad(e.target.value)}>
+                        <select className="tbl-form-select" value={nuevoRecurso.actividad} onChange={e => setNuevoRecurso({...nuevoRecurso, actividad: e.target.value})}>
                           <option value="">— Seleccionar actividad —</option>
-                          {catActividades.map(a => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
-                          {nuevoRecurso.actividad && !catActividades.some(a => a.nombre === nuevoRecurso.actividad) && <option value={nuevoRecurso.actividad}>{nuevoRecurso.actividad}</option>}
-                          <option value="__OTRO__">➕ Otro (agregar nueva)...</option>
+                          <option value="EXCAVACION DE MATERIAL">EXCAVACIÓN DE MATERIAL</option>
+                          <option value="CARGUIO DE MATERIAL">CARGUÍO DE MATERIAL</option>
+                          <option value="DESCOLMATACION DE CAUCE">DESCOLMATACIÓN DE CAUCE</option>
+                          <option value="ELIMINACION">ELIMINACIÓN DE MATERIAL</option>
+                          <option value="CONFORMACION DE DIQUE">CONFORMACIÓN DE DIQUE</option>
+                          <option value="ENROCADO">ENROCADO</option>
+                          <option value="PERFILADO DE TALUD">PERFILADO DE TALUD</option>
+                          <option value="HABILITACION DE ACCESO">HABILITACIÓN DE ACCESO</option>
                         </select>
                       </div>
                       <div className="tbl-col"><label className="tbl-form-label">Observaciones</label><input type="text" className="tbl-form-control" placeholder="Condiciones del terreno, clima..." value={nuevoRecurso.observaciones} onChange={e => setNuevoRecurso({...nuevoRecurso, observaciones: e.target.value})} /></div>
