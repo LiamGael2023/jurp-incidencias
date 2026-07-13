@@ -44,6 +44,7 @@ function Incidentes() {
 
   // --- ESTADOS DEL MODAL DE EVIDENCIAS (GALERÍA) ---
   const [modalMediaAbierto, setModalMediaAbierto] = useState(false);
+  const [lightboxImg, setLightboxImg] = useState(null);
   const [galeriaMedia, setGaleriaMedia] = useState([]);
   const [galeriaIndex, setGaleriaIndex] = useState(0);
   const [cargandoMedia, setCargandoMedia] = useState(false);
@@ -712,7 +713,7 @@ function Incidentes() {
                           {/* Imagen de referencia */}
                           <div style={{ flexShrink:0, width:'160px' }}>
                             <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5', marginBottom:'6px' }}>📐 Referencia</div>
-                            {IMG_METRADO[nuevoRecurso.actividad] && <img src={IMG_METRADO[nuevoRecurso.actividad]} alt={nuevoRecurso.actividad} style={{ width:'100%', borderRadius:'4px', border:'1px solid #bfdbfe' }} />}
+                            {IMG_METRADO[nuevoRecurso.actividad] && <img src={IMG_METRADO[nuevoRecurso.actividad]} alt={nuevoRecurso.actividad} onClick={() => setLightboxImg(IMG_METRADO[nuevoRecurso.actividad])} style={{ width:'100%', borderRadius:'4px', border:'1px solid #bfdbfe', cursor:'pointer' }} title="Clic para ampliar" />}
                           </div>
                           {/* Campos de medición */}
                           <div style={{ flex:1 }}>
@@ -912,6 +913,14 @@ function Incidentes() {
               <div style={{color:'rgba(255,255,255,0.5)',fontSize:'12px',marginTop:'8px'}}>{galeriaIndex+1} / {galeriaMedia.length} · {galeriaMedia[galeriaIndex].type === 'image' ? 'Foto' : 'Video'}</div>
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Lightbox imagen referencia ──────────────────────────────── */}
+      {lightboxImg && (
+        <div onClick={() => setLightboxImg(null)} style={{ position:'fixed',inset:0,zIndex:10002,background:'rgba(0,0,0,0.85)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'zoom-out' }}>
+          <button onClick={() => setLightboxImg(null)} style={{ position:'absolute',top:'16px',right:'20px',background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',fontSize:'22px',cursor:'pointer',borderRadius:'50%',width:'40px',height:'40px',display:'flex',alignItems:'center',justifyContent:'center' }}>✕</button>
+          <img src={lightboxImg} alt="Referencia" onClick={e => e.stopPropagation()} style={{ maxWidth:'90vw',maxHeight:'90vh',objectFit:'contain',borderRadius:'8px',cursor:'default',background:'#fff',padding:'12px' }} />
         </div>
       )}
 
