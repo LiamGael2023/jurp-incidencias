@@ -40,6 +40,7 @@ function Incidentes() {
   const [catMarcas, setCatMarcas] = useState([]);
   const [catModelos, setCatModelos] = useState([]);
   const [catActividades, setCatActividades] = useState([]);
+  const [catUnidades, setCatUnidades] = useState(['bol', 'm3', 'm2', 'und', 'kg', 'gln', 'rll']);
   const [mantenedorAbierto, setMantenedorAbierto] = useState(false);
 
   // --- ESTADOS DEL MODAL PRINCIPAL ---
@@ -72,7 +73,7 @@ function Incidentes() {
   };
   
   const estadoInicialRecurso = {
-    tipo: 'Personal', descripcion: '', cantidad: 1, precioUnitario: 0,
+    tipo: 'Personal', descripcion: '', cantidad: 1, precioUnitario: 0, unidad: 'und',
     numPersonas: 1, horasTrabajo: 8, horasExtras: 0, 
     horasEfectivas: '', obsReduccion: '',
     numeroParte: generarCorrelativo(), 
@@ -191,6 +192,46 @@ function Incidentes() {
     }
   };
 
+  // ── Gestionar unidades de medida ────────────────────────────────────────
+  const gestionarUnidades = async () => {
+    const html = `
+      <div style="text-align:left">
+        <div style="margin-bottom:10px;font-size:13px;color:#64748b">Unidades actuales:</div>
+        <div id="lista-unidades" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+          ${catUnidades.map(u => `<span style="background:#e0f2fe;color:#0284c7;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px">${u}<button data-del="${u}" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;padding:0;line-height:1">×</button></span>`).join('')}
+        </div>
+        <input id="nueva-unidad" class="swal2-input" placeholder="Nueva unidad (ej. tn, m, pza)" style="margin:0;width:100%" />
+      </div>`;
+    const { value: nueva } = await Swal.fire({
+      title: 'Unidades de medida',
+      html,
+      showCancelButton: true,
+      confirmButtonText: 'Agregar',
+      cancelButtonText: 'Cerrar',
+      confirmButtonColor: '#206bc4',
+      didOpen: () => {
+        document.querySelectorAll('[data-del]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const u = btn.getAttribute('data-del');
+            setCatUnidades(prev => prev.filter(x => x !== u));
+            setNuevoRecurso(prev => prev.unidad === u ? { ...prev, unidad: 'und' } : prev);
+            btn.parentElement.remove();
+          });
+        });
+      },
+      preConfirm: () => {
+        const v = document.getElementById('nueva-unidad').value.trim().toLowerCase();
+        if (!v) { Swal.showValidationMessage('Escribe una unidad'); return false; }
+        if (catUnidades.includes(v)) { Swal.showValidationMessage('Esa unidad ya existe'); return false; }
+        return v;
+      },
+    });
+    if (nueva) {
+      setCatUnidades(prev => [...prev, nueva]);
+      setNuevoRecurso(prev => ({ ...prev, unidad: nueva }));
+    }
+  };
+
   const obtenerIncidentes = async () => {
     const token = localStorage.getItem('userToken'); 
     if (!token) return;
@@ -297,7 +338,7 @@ function Incidentes() {
       const listMaq = Array.isArray(dataMaq) ? dataMaq : (dataMaq.results || []);
       const idStr = String(incidenteId);
       const formatPers = listPers.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-pers-${i.id}`, dbId: i.id, endpoint: 'incident-personnels', tipo: 'Personal', descripcionResumen: i.description, cantidad: parseFloat(i.quantity_hours), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity_hours) * parseFloat(i.unit_price), guardadoEnDB: true }));
-      const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', descripcionResumen: i.description, cantidad: parseFloat(i.quantity), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity) * parseFloat(i.unit_price), guardadoEnDB: true }));
+      const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', descripcionResumen: i.description, unidad: i.unit || 'und', cantidad: parseFloat(i.quantity), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity) * parseFloat(i.unit_price), guardadoEnDB: true }));
       const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-maq-${i.id}`, dbId: i.id, endpoint: 'daily-part-heavy-equipments', cerrado: i.cerrado || false, tipo: 'Maquinaria', descripcionResumen: `Parte N° ${i.part_number} | ${i.equipment_name}\nActividad: ${i.activities}`, cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)), precioUnitario: parseFloat(i.unit_price), total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price), guardadoEnDB: true }));
       setRecursos([...formatPers, ...formatMat, ...formatMaq]);
     } catch (error) { console.error("❌ Error al obtener los recursos guardados:", error); }
@@ -506,7 +547,7 @@ function Incidentes() {
         const cargo = normalizar(r.descripcion);
         clave = `pers|${cargo}|${r.numPersonas}|${r.horasTrabajo}|${r.horasExtras}|${r.cantidad}|${r.precioUnitario}|${r.guardadoEnDB}`;
       } else {
-        clave = `${r.tipo}|${normalizar(detalle)}|${r.precioUnitario}|${r.guardadoEnDB}`;
+        clave = `${r.tipo}|${normalizar(detalle)}|${r.unidad || 'und'}|${r.precioUnitario}|${r.guardadoEnDB}`;
       }
       if (!grupos.has(clave)) {
         grupos.set(clave, {
@@ -586,7 +627,7 @@ function Incidentes() {
       autoTable(doc, {
         startY: y,
         head: [['N°','Tipo','Detalle','Cantidad','Unidad','P. Unit. (S/)','Total (S/)']],
-        body: recursos.map((r,i) => [i+1, r.tipo, (r.descripcionResumen||r.descripcion||'').replace(/\n/g,' '), r.cantidad.toFixed(2), r.tipo==='Personal'?'HH':r.tipo==='Maquinaria'?'HE':'Unid.', parseFloat(r.precioUnitario).toFixed(2), r.total.toFixed(2)]),
+        body: recursos.map((r,i) => [i+1, r.tipo, (r.descripcionResumen||r.descripcion||'').replace(/\n/g,' '), r.cantidad.toFixed(2), r.tipo==='Personal'?'HH':r.tipo==='Maquinaria'?'HE':(r.unidad||'und'), parseFloat(r.precioUnitario).toFixed(2), r.total.toFixed(2)]),
         foot: [['','','','','','COSTO TOTAL:',`S/ ${costoTotalIncidente.toFixed(2)}`]],
         styles:{fontSize:8,cellPadding:2.5,lineColor:[226,232,240],lineWidth:0.1},
         headStyles:{fillColor:[20,99,165],textColor:[255,255,255],fontStyle:'bold',fontSize:8},
@@ -680,7 +721,7 @@ function Incidentes() {
     });
     recursos.forEach((r, i) => {
       const rowNum = hRow + 1 + i;
-      const vals = [i + 1, r.tipo, (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '), r.cantidad, r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.', parseFloat(r.precioUnitario), r.total];
+      const vals = [i + 1, r.tipo, (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '), r.cantidad, r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und'), parseFloat(r.precioUnitario), r.total];
       vals.forEach((v, j) => {
         const cell = ws.getCell(rowNum, j + 1);
         cell.value = v;
@@ -735,6 +776,7 @@ function Incidentes() {
           formData.append('description', r.descripcion);
           formData.append('quantity', r.cantidad);
           formData.append('unit_price', r.precioUnitario);
+          formData.append('unit', r.unidad || 'und');
         } else if (r.tipo === 'Maquinaria') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`;
           formData.append('part_number', r.numeroParte); formData.append('date', r.fechaParte);
@@ -1055,7 +1097,13 @@ function Incidentes() {
                 ) : (
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col"><label className="tbl-form-label">Descripción del Insumo</label><input type="text" className="tbl-form-control" placeholder="Ej. Piedra chancada, Cemento..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
-                    <div className="tbl-col-2"><label className="tbl-form-label">Cant.</label><input type="number" className="tbl-form-control" value={nuevoRecurso.cantidad} onChange={e => setNuevoRecurso({...nuevoRecurso, cantidad: e.target.value})} /></div>
+                    <div className="tbl-col-2"><label className="tbl-form-label">Cant.</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.cantidad} onChange={e => setNuevoRecurso({...nuevoRecurso, cantidad: e.target.value})} /></div>
+                    <div className="tbl-col-2">
+                      <label className="tbl-form-label">Unidad <button type="button" onClick={gestionarUnidades} title="Gestionar unidades" style={{ background:'none', border:'none', color:'#206bc4', cursor:'pointer', fontSize:'11px', padding:'0 0 0 4px' }}><FaPlus /> gestionar</button></label>
+                      <select className="tbl-form-select" value={nuevoRecurso.unidad} onChange={e => setNuevoRecurso({...nuevoRecurso, unidad: e.target.value})}>
+                        {catUnidades.map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
                     <div className="tbl-col-2"><label className="tbl-form-label">Precio Unit. (S/)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
                   </div>
                 )}
@@ -1079,7 +1127,7 @@ function Incidentes() {
                                 : (r.descripcionResumen || r.descripcion)}
                               {r.count > 1 && <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>}
                             </td>
-                            <td className="tbl-text-end font-bold">{r.cantidadTotal.toFixed(r.tipo==='Personal'?1:2)} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : 'Unid.'}</span></td>
+                            <td className="tbl-text-end font-bold">{r.cantidadTotal.toFixed(r.tipo==='Personal'?1:2)} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und')}</span></td>
                             <td className="tbl-text-end">S/ {parseFloat(r.precioUnitario).toFixed(2)}</td>
                             <td className="tbl-text-end text-blue font-bold">S/ {r.totalSum.toFixed(2)}</td>
                             <td>
