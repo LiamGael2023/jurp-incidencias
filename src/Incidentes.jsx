@@ -478,6 +478,8 @@ function Incidentes() {
   };
   const volCalc = calcVolumen();
   const volumenMetrado = volCalc.val.toFixed(2);
+  // Formatea números con separador de miles (1000000.00 → 1,000,000.00)
+  const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const tieneMetradoActividad = IMG_METRADO[nuevoRecurso.actividad] !== undefined;
 
   const agregarRecurso = () => {
@@ -627,8 +629,8 @@ function Incidentes() {
       autoTable(doc, {
         startY: y,
         head: [['N°','Tipo','Detalle','Cantidad','Unidad','P. Unit. (S/)','Total (S/)']],
-        body: recursos.map((r,i) => [i+1, r.tipo, (r.descripcionResumen||r.descripcion||'').replace(/\n/g,' '), r.cantidad.toFixed(2), r.tipo==='Personal'?'HH':r.tipo==='Maquinaria'?'HE':(r.unidad||'und'), parseFloat(r.precioUnitario).toFixed(2), r.total.toFixed(2)]),
-        foot: [['','','','','','COSTO TOTAL:',`S/ ${costoTotalIncidente.toFixed(2)}`]],
+        body: recursos.map((r,i) => [i+1, r.tipo, (r.descripcionResumen||r.descripcion||'').replace(/\n/g,' '), fmtNum(r.cantidad), r.tipo==='Personal'?'HH':r.tipo==='Maquinaria'?'HE':(r.unidad||'und'), fmtNum(r.precioUnitario), fmtNum(r.total)]),
+        foot: [['','','','','','COSTO TOTAL:',`S/ ${fmtNum(costoTotalIncidente)}`]],
         styles:{fontSize:8,cellPadding:2.5,lineColor:[226,232,240],lineWidth:0.1},
         headStyles:{fillColor:[20,99,165],textColor:[255,255,255],fontStyle:'bold',fontSize:8},
         footStyles:{fillColor:[241,245,249],textColor:[30,41,59],fontStyle:'bold',fontSize:9},
@@ -1078,7 +1080,7 @@ function Incidentes() {
                         </div>
                         <div style={{ marginTop:'8px', padding:'8px 12px', background:'#fff', borderRadius:'4px', border:'1px solid #bfdbfe', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                           <span style={{ fontSize:'11px', color:'#626976' }}>{formulaMetrado[nuevoRecurso.actividad]}</span>
-                          <span style={{ fontSize:'16px', fontWeight:'700', color: volCalc.val > 0 ? '#1463A5' : '#94a3b8' }}>{volumenMetrado} {volCalc.unit}</span>
+                          <span style={{ fontSize:'16px', fontWeight:'700', color: volCalc.val > 0 ? '#1463A5' : '#94a3b8' }}>{fmtNum(volumenMetrado)} {volCalc.unit}</span>
                         </div>
                       </div>
                     )}
@@ -1127,9 +1129,9 @@ function Incidentes() {
                                 : (r.descripcionResumen || r.descripcion)}
                               {r.count > 1 && <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>}
                             </td>
-                            <td className="tbl-text-end font-bold">{r.cantidadTotal.toFixed(r.tipo==='Personal'?1:2)} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und')}</span></td>
-                            <td className="tbl-text-end">S/ {parseFloat(r.precioUnitario).toFixed(2)}</td>
-                            <td className="tbl-text-end text-blue font-bold">S/ {r.totalSum.toFixed(2)}</td>
+                            <td className="tbl-text-end font-bold">{r.cantidadTotal.toLocaleString('es-PE', {minimumFractionDigits: r.tipo==='Personal'?1:2, maximumFractionDigits: r.tipo==='Personal'?1:2})} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und')}</span></td>
+                            <td className="tbl-text-end">S/ {fmtNum(r.precioUnitario)}</td>
+                            <td className="tbl-text-end text-blue font-bold">S/ {fmtNum(r.totalSum)}</td>
                             <td>
                               {r.guardadoEnDB ? (
                                 <div style={{display: 'flex', gap: '6px', alignItems: 'center', flexWrap:'wrap'}}>
@@ -1167,7 +1169,7 @@ function Incidentes() {
                 </div>
               </div>
               <div className="tbl-modal-footer" style={{flexWrap:'wrap',gap:'8px'}}>
-                <div className="tbl-text-start tbl-text-muted">Costo Total: <span style={{fontSize: '1.25rem', color: '#1e293b', fontWeight: 'bold'}}>S/ {costoTotalIncidente.toFixed(2)}</span></div>
+                <div className="tbl-text-start tbl-text-muted">Costo Total: <span style={{fontSize: '1.25rem', color: '#1e293b', fontWeight: 'bold'}}>S/ {fmtNum(costoTotalIncidente)}</span></div>
                 <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
                   {incidenteActivo?.estado === 'cer' ? (
                     <span style={{background:'#dcfce7',color:'#15803d',padding:'6px 14px',borderRadius:'4px',fontSize:'13px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px'}}><FaCheckCircle/> Incidencia cerrada</span>
