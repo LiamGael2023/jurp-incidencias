@@ -154,7 +154,8 @@ function MapaChavimochic() {
   const [modalMedia, setModalMedia] = useState(null);
   const [herramienta, setHerramienta] = useState(null);
   const [costeos, setCosteos] = useState({}); // { incidentId: { personal, maquinaria, insumos, total } }
-  const [incExpandido, setIncExpandido] = useState(null); // id del incidente abierto
+  const [rawRecursos, setRawRecursos] = useState({ pers: [], mats: [], maqs: [] });
+  const [grupoAbierto, setGrupoAbierto] = useState(null); // 'personal' | 'maquinaria' | 'insumos' | null
 
   const mapRef = useRef(null);
   const contenedorRef = useRef(null);
@@ -176,26 +177,52 @@ function MapaChavimochic() {
   const porTipoInfra = useMemo(() => Object.entries(stats.tipos).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, value]) => ({ name, value })), [stats]);
   const incPorTipo = useMemo(() => { const m = {}; for (const i of incidentesAPI) m[i.tipo] = (m[i.tipo] || 0) + 1; return Object.entries(m).map(([name, value]) => ({ name, value })); }, [incidentesAPI]);
 
-  // ── Totales globales de recursos ───────────────────────────────────────
-  const totalesGlobales = useMemo(() => {
-    let personal = 0, maquinaria = 0, insumos = 0, total = 0;
-    let nPersonal = 0, nMaquinaria = 0, nInsumos = 0;
-    const equiposUnicos = new Set();
-    let equiposEnUso = 0;
-    for (const [incId, c] of Object.entries(costeos)) {
-      personal += c.personal || 0; maquinaria += c.maquinaria || 0; insumos += c.insumos || 0; total += c.total || 0;
-      if (c.personal > 0) nPersonal++;
-      if (c.insumos > 0) nInsumos++;
-      for (const eq of (c.equipos || [])) {
-        const key = `${eq.nombre}|${eq.marca}|${eq.placa}`;
-        equiposUnicos.add(key);
-        const inc = incidentesAPI.find(i => String(i.id) === incId);
-        if (inc && inc.estado !== 'cer' && eq.enUso) equiposEnUso++;
-      }
+  // ── Recursos agrupados globalmente ─────────────────────────────────────
+  const recursosGlobales = useMemo(() => {
+    const { pers, mats, maqs } = rawRecursos;
+    const incCerrado = (id) => { const i = incidentesAPI.find(x => String(x.id) === String(id)); return i?.estado === 'cer'; };
+
+    // Personal: agrupa por descripción (cargo)
+    const gPers = {};
+    for (const p of pers) {
+      const cargo = (p.description || 'Sin cargo').split('\n')[0].trim();
+      const hrs = parseFloat(p.quantity_hours || 0), pu = parseFloat(p.unit_price || 0);
+      if (!gPers[cargo]) gPers[cargo] = { nombre: cargo, horas: 0, monto: 0, veces: 0 };
+      gPers[cargo].horas += hrs; gPers[cargo].monto += hrs * pu; gPers[cargo].veces++;
     }
-    nMaquinaria = equiposUnicos.size;
-    return { personal, maquinaria, insumos, total, nPersonal, nMaquinaria, nInsumos, equiposEnUso };
-  }, [costeos, incidentesAPI]);
+
+    // Insumos: agrupa por descripción
+    const gMats = {};
+    for (const m of mats) {
+      const desc = (m.description || 'Sin descripción').trim();
+      const cant = parseFloat(m.quantity || 0), pu = parseFloat(m.unit_price || 0);
+      if (!gMats[desc]) gMats[desc] = { nombre: desc, cantidad: 0, monto: 0, veces: 0 };
+      gMats[desc].cantidad += cant; gMats[desc].monto += cant * pu; gMats[desc].veces++;
+    }
+
+    // Maquinaria: agrupa por equipo+marca+placa (máquina única)
+    const gMaqs = {};
+    for (const q of maqs) {
+      const nombre = q.equipment_name || 'Equipo', marca = q.brand_name || '', placa = q.model_plate || '';
+      const key = `${nombre}|${marca}|${placa}`;
+      const hrs = Math.max(0, parseFloat(q.end_horometer || 0) - parseFloat(q.start_horometer || 0));
+      const pu = parseFloat(q.unit_price || 0);
+      const enUso = hrs === 0 && !incCerrado(q.incident_report);
+      if (!gMaqs[key]) gMaqs[key] = { nombre, marca, placa, horas: 0, monto: 0, partes: 0, enUso: false };
+      gMaqs[key].horas += hrs; gMaqs[key].monto += hrs * pu; gMaqs[key].partes++;
+      if (enUso) gMaqs[key].enUso = true;
+    }
+
+    const listaPers = Object.values(gPers).sort((a, b) => b.monto - a.monto);
+    const listaMats = Object.values(gMats).sort((a, b) => b.monto - a.monto);
+    const listaMaqs = Object.values(gMaqs).sort((a, b) => b.monto - a.monto);
+    const totPers = listaPers.reduce((s, x) => s + x.monto, 0);
+    const totMats = listaMats.reduce((s, x) => s + x.monto, 0);
+    const totMaqs = listaMaqs.reduce((s, x) => s + x.monto, 0);
+    const enUso = listaMaqs.filter(m => m.enUso).length;
+
+    return { listaPers, listaMats, listaMaqs, totPers, totMats, totMaqs, total: totPers + totMats + totMaqs, enUso };
+  }, [rawRecursos, incidentesAPI]);
   const incMes = useMemo(() => { const now = new Date(), m = {}; for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); m[`${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`] = 0; } for (const x of incidentesAPI) { const d = new Date(x.timestamp); const k = `${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`; if (k in m) m[k]++; } return Object.entries(m).map(([mes, cant]) => ({ mes, cant })); }, [incidentesAPI]);
 
   // Filtered
@@ -236,6 +263,7 @@ function MapaChavimochic() {
       ]);
       const parse = async (r) => { if (!r.ok) return []; const d = await r.json(); return Array.isArray(d) ? d : d.results || []; };
       const [pers, mats, maqs] = await Promise.all([parse(rP), parse(rM), parse(rQ)]);
+      setRawRecursos({ pers, mats, maqs });
       const resumen = {};
       const initR = (id) => { if (!resumen[id]) resumen[id] = { personal: 0, maquinaria: 0, insumos: 0, total: 0, items: 0, equipos: [] }; };
       for (const p of pers) { const id = String(p.incident_report); initR(id); const sub = parseFloat(p.quantity_hours || 0) * parseFloat(p.unit_price || 0); resumen[id].personal += sub; resumen[id].total += sub; resumen[id].items++; }
@@ -418,96 +446,106 @@ function MapaChavimochic() {
         {/* ── Charts Column ───────────────────────────────────────────── */}
         <div className="dash-charts-col">
           <div className="dash-panel" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div className="dash-panel-title"><span className="accent">📋</span> Gestión de Incidentes</div>
-            {/* ── Resumen global de recursos ─────────────────────────── */}
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px', marginBottom: '8px', flexShrink: 0 }}>
-              <div style={{ fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#626976', fontWeight: 700, marginBottom: '8px' }}>Recursos en uso — total</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginBottom: '8px' }}>
-                <div style={{ background: '#dbeafe', borderRadius: '4px', padding: '6px 8px' }}>
-                  <div style={{ fontSize: '9px', color: '#1463A5', fontWeight: 600 }}>👷 Personal</div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#1d273b', lineHeight: 1.2 }}>{totalesGlobales.nPersonal}</div>
-                  <div style={{ fontSize: '9px', color: '#626976' }}>S/ {totalesGlobales.personal.toFixed(0)}</div>
+            <div className="dash-panel-title"><span className="accent">📋</span> Recursos Utilizados</div>
+            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {/* ── PERSONAL ─────────────────────────────────────────── */}
+              <div style={{ background: grupoAbierto === 'personal' ? '#eff6ff' : '#f8fafc', borderRadius: '6px', border: `1px solid ${grupoAbierto === 'personal' ? '#bfdbfe' : '#e2e8f0'}`, overflow: 'hidden' }}>
+                <div onClick={() => setGrupoAbierto(grupoAbierto === 'personal' ? null : 'personal')} style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: '#626976', fontSize: '9px' }}>{grupoAbierto === 'personal' ? '▼' : '▶'}</span>
+                  <span style={{ fontSize: '16px' }}>👷</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>Personal</div>
+                    <div style={{ fontSize: '10px', color: '#626976' }}>{recursosGlobales.listaPers.length} cargo{recursosGlobales.listaPers.length !== 1 ? 's' : ''}</div>
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#1463A5' }}>S/ {recursosGlobales.totPers.toFixed(2)}</span>
                 </div>
-                <div style={{ background: '#fef3c7', borderRadius: '4px', padding: '6px 8px' }}>
-                  <div style={{ fontSize: '9px', color: '#b45309', fontWeight: 600 }}>🚜 Maquinaria</div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#1d273b', lineHeight: 1.2 }}>{totalesGlobales.nMaquinaria}</div>
-                  <div style={{ fontSize: '9px', color: '#626976' }}>S/ {totalesGlobales.maquinaria.toFixed(0)}</div>
-                </div>
-                <div style={{ background: '#d1fae5', borderRadius: '4px', padding: '6px 8px' }}>
-                  <div style={{ fontSize: '9px', color: '#047857', fontWeight: 600 }}>📦 Insumos</div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#1d273b', lineHeight: 1.2 }}>{totalesGlobales.nInsumos}</div>
-                  <div style={{ fontSize: '9px', color: '#626976' }}>S/ {totalesGlobales.insumos.toFixed(0)}</div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e2e8f0', paddingTop: '6px' }}>
-                {totalesGlobales.equiposEnUso > 0 && <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 600 }}>🟢 {totalesGlobales.equiposEnUso} máquina{totalesGlobales.equiposEnUso > 1 ? 's' : ''} en uso</span>}
-                <span style={{ marginLeft: 'auto', fontSize: '13px', fontWeight: 700, color: '#1463A5' }}>S/ {totalesGlobales.total.toFixed(2)}</span>
-              </div>
-            </div>
-            {/* ── Lista de incidentes (clic para ver detalle) ────────── */}
-            <div style={{ overflowY: 'auto', flex: 1 }}>
-              {incidentesAPI.length === 0 ? <div style={{ textAlign: 'center', color: '#626976', padding: '20px', fontSize: '12px' }}>Sin incidentes registrados</div> : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {incidentesAPI.map((inc, j) => {
-                    const c = costeos[String(inc.id)] || { personal: 0, maquinaria: 0, insumos: 0, total: 0, items: 0, equipos: [] };
-                    const [, tx] = badge(inc.estado);
-                    const abierto = incExpandido === inc.id;
-                    return (
-                      <div key={j} style={{ background: abierto ? '#f0f6ff' : '#f8fafc', borderRadius: '6px', border: `1px solid ${abierto ? '#bfdbfe' : '#e2e8f0'}`, overflow: 'hidden', transition: 'all 0.15s' }}>
-                        {/* Cabecera clicable */}
-                        <div onClick={() => setIncExpandido(abierto ? null : inc.id)} style={{ padding: '9px 10px', cursor: 'pointer' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                <span style={{ color: '#626976', fontSize: '9px' }}>{abierto ? '▼' : '▶'}</span>
-                                {inc.tipo}
-                              </div>
-                              <div style={{ fontSize: '10px', color: '#626976', marginLeft: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.codigo} · {inc.lugar}</div>
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
-                              <span className={`dash-badge dash-badge-${inc.estado === 'pat' ? 'orange' : inc.estado === 'ate' ? 'blue' : 'green'}`}>{tx}</span>
-                              {c.total > 0 && <span style={{ fontSize: '11px', fontWeight: 700, color: '#1463A5' }}>S/ {c.total.toFixed(2)}</span>}
-                            </div>
+                {grupoAbierto === 'personal' && (
+                  <div style={{ padding: '0 12px 10px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
+                    {recursosGlobales.listaPers.length === 0 ? <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>Sin personal registrado</div> : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {recursosGlobales.listaPers.map((p, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', background: '#fff', padding: '5px 8px', borderRadius: '4px' }}>
+                            <span style={{ fontWeight: 600, color: '#1d273b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</span>
+                            <span style={{ color: '#626976', fontSize: '10px', whiteSpace: 'nowrap' }}>{p.horas.toFixed(1)} HH</span>
+                            <span style={{ fontWeight: 700, color: '#1463A5', fontSize: '11px', whiteSpace: 'nowrap' }}>S/ {p.monto.toFixed(2)}</span>
                           </div>
-                        </div>
-                        {/* Detalle expandible */}
-                        {abierto && (
-                          <div style={{ padding: '0 10px 10px', borderTop: '1px dashed #cbd5e1', marginTop: '2px', paddingTop: '8px' }}>
-                            <div style={{ fontSize: '9px', color: '#626976', marginBottom: '6px' }}>🕒 {inc.fecha} · 👤 {inc.usuario}</div>
-                            {c.items > 0 ? (
-                              <>
-                                <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: c.equipos?.length ? '7px' : 0 }}>
-                                  {c.personal > 0 && <span style={{ background: '#dbeafe', color: '#1463A5', padding: '2px 7px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>👷 S/ {c.personal.toFixed(0)}</span>}
-                                  {c.maquinaria > 0 && <span style={{ background: '#fef3c7', color: '#b45309', padding: '2px 7px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>🚜 S/ {c.maquinaria.toFixed(0)}</span>}
-                                  {c.insumos > 0 && <span style={{ background: '#d1fae5', color: '#047857', padding: '2px 7px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>📦 S/ {c.insumos.toFixed(0)}</span>}
-                                </div>
-                                {c.equipos?.length > 0 && (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                    <div style={{ fontSize: '9px', color: '#626976', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Maquinaria ({c.equipos.length})</div>
-                                    {c.equipos.map((eq, k) => {
-                                      const usado = inc.estado !== 'cer' && eq.enUso;
-                                      return (
-                                        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', background: '#fff', padding: '3px 6px', borderRadius: '3px' }}>
-                                          <span style={{ background: usado ? '#dcfce7' : '#f1f5f9', color: usado ? '#16a34a' : '#626976', padding: '1px 5px', borderRadius: '3px', fontWeight: 600, fontSize: '9px', whiteSpace: 'nowrap' }}>{usado ? '🟢 En uso' : '✅ Disp.'}</span>
-                                          <span style={{ fontWeight: 600, color: '#1d273b' }}>{eq.nombre}</span>
-                                          <span style={{ color: '#626976', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{eq.marca} {eq.placa}</span>
-                                          <span style={{ marginLeft: 'auto', color: '#626976', whiteSpace: 'nowrap' }}>{eq.horas}h</span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>Sin costeo registrado</div>
-                            )}
-                          </div>
-                        )}
+                        ))}
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── MAQUINARIA ───────────────────────────────────────── */}
+              <div style={{ background: grupoAbierto === 'maquinaria' ? '#fffbeb' : '#f8fafc', borderRadius: '6px', border: `1px solid ${grupoAbierto === 'maquinaria' ? '#fde68a' : '#e2e8f0'}`, overflow: 'hidden' }}>
+                <div onClick={() => setGrupoAbierto(grupoAbierto === 'maquinaria' ? null : 'maquinaria')} style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: '#626976', fontSize: '9px' }}>{grupoAbierto === 'maquinaria' ? '▼' : '▶'}</span>
+                  <span style={{ fontSize: '16px' }}>🚜</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>Maquinaria</div>
+                    <div style={{ fontSize: '10px', color: '#626976' }}>
+                      {recursosGlobales.listaMaqs.length} equipo{recursosGlobales.listaMaqs.length !== 1 ? 's' : ''}
+                      {recursosGlobales.enUso > 0 && <span style={{ color: '#16a34a', fontWeight: 600 }}> · 🟢 {recursosGlobales.enUso} en uso</span>}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#b45309' }}>S/ {recursosGlobales.totMaqs.toFixed(2)}</span>
                 </div>
-              )}
+                {grupoAbierto === 'maquinaria' && (
+                  <div style={{ padding: '0 12px 10px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
+                    {recursosGlobales.listaMaqs.length === 0 ? <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>Sin maquinaria registrada</div> : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {recursosGlobales.listaMaqs.map((m, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', background: '#fff', padding: '5px 8px', borderRadius: '4px' }}>
+                            <span style={{ background: m.enUso ? '#dcfce7' : '#f1f5f9', color: m.enUso ? '#16a34a' : '#626976', padding: '1px 5px', borderRadius: '3px', fontWeight: 600, fontSize: '9px', whiteSpace: 'nowrap' }}>{m.enUso ? '🟢 En uso' : '✅ Disp.'}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 600, color: '#1d273b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.nombre}</div>
+                              <div style={{ fontSize: '9px', color: '#626976', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.marca} {m.placa}</div>
+                            </div>
+                            <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <div style={{ fontSize: '10px', color: '#626976' }}>{m.horas.toFixed(1)} HE</div>
+                              <div style={{ fontWeight: 700, color: '#b45309', fontSize: '11px' }}>S/ {m.monto.toFixed(2)}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── INSUMOS ──────────────────────────────────────────── */}
+              <div style={{ background: grupoAbierto === 'insumos' ? '#ecfdf5' : '#f8fafc', borderRadius: '6px', border: `1px solid ${grupoAbierto === 'insumos' ? '#a7f3d0' : '#e2e8f0'}`, overflow: 'hidden' }}>
+                <div onClick={() => setGrupoAbierto(grupoAbierto === 'insumos' ? null : 'insumos')} style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: '#626976', fontSize: '9px' }}>{grupoAbierto === 'insumos' ? '▼' : '▶'}</span>
+                  <span style={{ fontSize: '16px' }}>📦</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>Insumos</div>
+                    <div style={{ fontSize: '10px', color: '#626976' }}>{recursosGlobales.listaMats.length} ítem{recursosGlobales.listaMats.length !== 1 ? 's' : ''}</div>
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#047857' }}>S/ {recursosGlobales.totMats.toFixed(2)}</span>
+                </div>
+                {grupoAbierto === 'insumos' && (
+                  <div style={{ padding: '0 12px 10px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
+                    {recursosGlobales.listaMats.length === 0 ? <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>Sin insumos registrados</div> : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {recursosGlobales.listaMats.map((m, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', background: '#fff', padding: '5px 8px', borderRadius: '4px' }}>
+                            <span style={{ fontWeight: 600, color: '#1d273b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.nombre}</span>
+                            <span style={{ color: '#626976', fontSize: '10px', whiteSpace: 'nowrap' }}>{m.cantidad.toFixed(1)} u</span>
+                            <span style={{ fontWeight: 700, color: '#047857', fontSize: '11px', whiteSpace: 'nowrap' }}>S/ {m.monto.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── TOTAL ────────────────────────────────────────────── */}
+              <div style={{ background: '#f0f6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#626976', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Costo Total</span>
+                <span style={{ fontSize: '16px', fontWeight: 700, color: '#1463A5' }}>S/ {recursosGlobales.total.toFixed(2)}</span>
+              </div>
             </div>
           </div>
           <div className="dash-panel">
