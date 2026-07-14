@@ -134,7 +134,7 @@ function ClusteredLayer({ data, icon, color, label, buildPopup }) {
 function MapaChavimochic() {
   const centroMapa = [-8.4186, -78.7533];
   const [mapaBase, setMapaBase] = useState('satelite');
-  const [filtroTiempo, setFiltroTiempo] = useState(30);
+  const [filtroTiempo, setFiltroTiempo] = useState(0);
   const [filtroTramo, setFiltroTramo] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
   const [busqueda, setBusqueda] = useState('');
