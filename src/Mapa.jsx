@@ -154,6 +154,7 @@ function MapaChavimochic() {
   const [modalMedia, setModalMedia] = useState(null);
   const [herramienta, setHerramienta] = useState(null);
   const [costeos, setCosteos] = useState({}); // { incidentId: { personal, maquinaria, insumos, total } }
+  const [incExpandido, setIncExpandido] = useState(null); // id del incidente abierto
 
   const mapRef = useRef(null);
   const contenedorRef = useRef(null);
@@ -174,6 +175,27 @@ function MapaChavimochic() {
   // Chart data
   const porTipoInfra = useMemo(() => Object.entries(stats.tipos).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, value]) => ({ name, value })), [stats]);
   const incPorTipo = useMemo(() => { const m = {}; for (const i of incidentesAPI) m[i.tipo] = (m[i.tipo] || 0) + 1; return Object.entries(m).map(([name, value]) => ({ name, value })); }, [incidentesAPI]);
+
+  // ── Totales globales de recursos ───────────────────────────────────────
+  const totalesGlobales = useMemo(() => {
+    let personal = 0, maquinaria = 0, insumos = 0, total = 0;
+    let nPersonal = 0, nMaquinaria = 0, nInsumos = 0;
+    const equiposUnicos = new Set();
+    let equiposEnUso = 0;
+    for (const [incId, c] of Object.entries(costeos)) {
+      personal += c.personal || 0; maquinaria += c.maquinaria || 0; insumos += c.insumos || 0; total += c.total || 0;
+      if (c.personal > 0) nPersonal++;
+      if (c.insumos > 0) nInsumos++;
+      for (const eq of (c.equipos || [])) {
+        const key = `${eq.nombre}|${eq.marca}|${eq.placa}`;
+        equiposUnicos.add(key);
+        const inc = incidentesAPI.find(i => String(i.id) === incId);
+        if (inc && inc.estado !== 'cer' && eq.enUso) equiposEnUso++;
+      }
+    }
+    nMaquinaria = equiposUnicos.size;
+    return { personal, maquinaria, insumos, total, nPersonal, nMaquinaria, nInsumos, equiposEnUso };
+  }, [costeos, incidentesAPI]);
   const incMes = useMemo(() => { const now = new Date(), m = {}; for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); m[`${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`] = 0; } for (const x of incidentesAPI) { const d = new Date(x.timestamp); const k = `${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`; if (k in m) m[k]++; } return Object.entries(m).map(([mes, cant]) => ({ mes, cant })); }, [incidentesAPI]);
 
   // Filtered
@@ -397,48 +419,89 @@ function MapaChavimochic() {
         <div className="dash-charts-col">
           <div className="dash-panel" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div className="dash-panel-title"><span className="accent">📋</span> Gestión de Incidentes</div>
+            {/* ── Resumen global de recursos ─────────────────────────── */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px', marginBottom: '8px', flexShrink: 0 }}>
+              <div style={{ fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#626976', fontWeight: 700, marginBottom: '8px' }}>Recursos en uso — total</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginBottom: '8px' }}>
+                <div style={{ background: '#dbeafe', borderRadius: '4px', padding: '6px 8px' }}>
+                  <div style={{ fontSize: '9px', color: '#1463A5', fontWeight: 600 }}>👷 Personal</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#1d273b', lineHeight: 1.2 }}>{totalesGlobales.nPersonal}</div>
+                  <div style={{ fontSize: '9px', color: '#626976' }}>S/ {totalesGlobales.personal.toFixed(0)}</div>
+                </div>
+                <div style={{ background: '#fef3c7', borderRadius: '4px', padding: '6px 8px' }}>
+                  <div style={{ fontSize: '9px', color: '#b45309', fontWeight: 600 }}>🚜 Maquinaria</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#1d273b', lineHeight: 1.2 }}>{totalesGlobales.nMaquinaria}</div>
+                  <div style={{ fontSize: '9px', color: '#626976' }}>S/ {totalesGlobales.maquinaria.toFixed(0)}</div>
+                </div>
+                <div style={{ background: '#d1fae5', borderRadius: '4px', padding: '6px 8px' }}>
+                  <div style={{ fontSize: '9px', color: '#047857', fontWeight: 600 }}>📦 Insumos</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#1d273b', lineHeight: 1.2 }}>{totalesGlobales.nInsumos}</div>
+                  <div style={{ fontSize: '9px', color: '#626976' }}>S/ {totalesGlobales.insumos.toFixed(0)}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e2e8f0', paddingTop: '6px' }}>
+                {totalesGlobales.equiposEnUso > 0 && <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 600 }}>🟢 {totalesGlobales.equiposEnUso} máquina{totalesGlobales.equiposEnUso > 1 ? 's' : ''} en uso</span>}
+                <span style={{ marginLeft: 'auto', fontSize: '13px', fontWeight: 700, color: '#1463A5' }}>S/ {totalesGlobales.total.toFixed(2)}</span>
+              </div>
+            </div>
+            {/* ── Lista de incidentes (clic para ver detalle) ────────── */}
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {incidentesAPI.length === 0 ? <div style={{ textAlign: 'center', color: '#626976', padding: '20px', fontSize: '12px' }}>Sin incidentes registrados</div> : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {incidentesAPI.slice(0, 6).map((inc, j) => {
-                    const c = costeos[String(inc.id)] || { personal: 0, maquinaria: 0, insumos: 0, total: 0, items: 0 };
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {incidentesAPI.map((inc, j) => {
+                    const c = costeos[String(inc.id)] || { personal: 0, maquinaria: 0, insumos: 0, total: 0, items: 0, equipos: [] };
                     const [, tx] = badge(inc.estado);
+                    const abierto = incExpandido === inc.id;
                     return (
-                      <div key={j} style={{ background: '#f8fafc', borderRadius: '6px', padding: '10px 12px', border: '1px solid #e2e8f0' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>{inc.tipo}</div>
-                            <div style={{ fontSize: '10px', color: '#626976' }}>{inc.codigo} · {inc.fecha}</div>
-                          </div>
-                          <span className={`dash-badge dash-badge-${inc.estado === 'pat' ? 'orange' : inc.estado === 'ate' ? 'blue' : 'green'}`}>{tx}</span>
-                        </div>
-                        <div style={{ fontSize: '10px', color: '#626976', marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.lugar}</div>
-                        {c.items > 0 ? (
-                          <>
-                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginBottom: c.equipos?.length ? '6px' : 0 }}>
-                              {c.personal > 0 && <span style={{ background: '#dbeafe', color: '#1463A5', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>👷 S/ {c.personal.toFixed(0)}</span>}
-                              {c.maquinaria > 0 && <span style={{ background: '#fef3c7', color: '#b45309', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>🚜 S/ {c.maquinaria.toFixed(0)}</span>}
-                              {c.insumos > 0 && <span style={{ background: '#d1fae5', color: '#047857', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>📦 S/ {c.insumos.toFixed(0)}</span>}
-                              <span style={{ marginLeft: 'auto', fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>S/ {c.total.toFixed(2)}</span>
-                            </div>
-                            {c.equipos?.length > 0 && (
-                              <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: '5px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                {c.equipos.map((eq, k) => {
-                                  const usado = inc.estado !== 'cer' && eq.enUso;
-                                  return (
-                                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px' }}>
-                                      <span style={{ background: usado ? '#dcfce7' : '#f1f5f9', color: usado ? '#16a34a' : '#626976', padding: '1px 6px', borderRadius: '3px', fontWeight: 600, fontSize: '9px' }}>{usado ? '🟢 En uso' : '✅ Disponible'}</span>
-                                      <span style={{ fontWeight: 600, color: '#1d273b' }}>{eq.nombre}</span>
-                                      <span style={{ color: '#626976' }}>{eq.marca} {eq.placa}</span>
-                                      <span style={{ marginLeft: 'auto', color: '#626976' }}>{eq.horas}h</span>
-                                    </div>
-                                  );
-                                })}
+                      <div key={j} style={{ background: abierto ? '#f0f6ff' : '#f8fafc', borderRadius: '6px', border: `1px solid ${abierto ? '#bfdbfe' : '#e2e8f0'}`, overflow: 'hidden', transition: 'all 0.15s' }}>
+                        {/* Cabecera clicable */}
+                        <div onClick={() => setIncExpandido(abierto ? null : inc.id)} style={{ padding: '9px 10px', cursor: 'pointer' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <span style={{ color: '#626976', fontSize: '9px' }}>{abierto ? '▼' : '▶'}</span>
+                                {inc.tipo}
                               </div>
+                              <div style={{ fontSize: '10px', color: '#626976', marginLeft: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.codigo} · {inc.lugar}</div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                              <span className={`dash-badge dash-badge-${inc.estado === 'pat' ? 'orange' : inc.estado === 'ate' ? 'blue' : 'green'}`}>{tx}</span>
+                              {c.total > 0 && <span style={{ fontSize: '11px', fontWeight: 700, color: '#1463A5' }}>S/ {c.total.toFixed(2)}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        {/* Detalle expandible */}
+                        {abierto && (
+                          <div style={{ padding: '0 10px 10px', borderTop: '1px dashed #cbd5e1', marginTop: '2px', paddingTop: '8px' }}>
+                            <div style={{ fontSize: '9px', color: '#626976', marginBottom: '6px' }}>🕒 {inc.fecha} · 👤 {inc.usuario}</div>
+                            {c.items > 0 ? (
+                              <>
+                                <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: c.equipos?.length ? '7px' : 0 }}>
+                                  {c.personal > 0 && <span style={{ background: '#dbeafe', color: '#1463A5', padding: '2px 7px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>👷 S/ {c.personal.toFixed(0)}</span>}
+                                  {c.maquinaria > 0 && <span style={{ background: '#fef3c7', color: '#b45309', padding: '2px 7px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>🚜 S/ {c.maquinaria.toFixed(0)}</span>}
+                                  {c.insumos > 0 && <span style={{ background: '#d1fae5', color: '#047857', padding: '2px 7px', borderRadius: '4px', fontSize: '9px', fontWeight: 600 }}>📦 S/ {c.insumos.toFixed(0)}</span>}
+                                </div>
+                                {c.equipos?.length > 0 && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                    <div style={{ fontSize: '9px', color: '#626976', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Maquinaria ({c.equipos.length})</div>
+                                    {c.equipos.map((eq, k) => {
+                                      const usado = inc.estado !== 'cer' && eq.enUso;
+                                      return (
+                                        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', background: '#fff', padding: '3px 6px', borderRadius: '3px' }}>
+                                          <span style={{ background: usado ? '#dcfce7' : '#f1f5f9', color: usado ? '#16a34a' : '#626976', padding: '1px 5px', borderRadius: '3px', fontWeight: 600, fontSize: '9px', whiteSpace: 'nowrap' }}>{usado ? '🟢 En uso' : '✅ Disp.'}</span>
+                                          <span style={{ fontWeight: 600, color: '#1d273b' }}>{eq.nombre}</span>
+                                          <span style={{ color: '#626976', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{eq.marca} {eq.placa}</span>
+                                          <span style={{ marginLeft: 'auto', color: '#626976', whiteSpace: 'nowrap' }}>{eq.horas}h</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>Sin costeo registrado</div>
                             )}
-                          </>
-                        ) : (
-                          <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>Sin costeo registrado</div>
+                          </div>
                         )}
                       </div>
                     );
