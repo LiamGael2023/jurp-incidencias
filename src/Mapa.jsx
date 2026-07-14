@@ -156,6 +156,7 @@ function MapaChavimochic() {
   const [costeos, setCosteos] = useState({}); // { incidentId: { personal, maquinaria, insumos, total } }
   const [rawRecursos, setRawRecursos] = useState({ pers: [], mats: [], maqs: [] });
   const [grupoAbierto, setGrupoAbierto] = useState(null); // 'personal' | 'maquinaria' | 'insumos' | null
+  const [incSeleccionado, setIncSeleccionado] = useState(null); // incidente filtrado en panel recursos
 
   const mapRef = useRef(null);
   const contenedorRef = useRef(null);
@@ -179,7 +180,10 @@ function MapaChavimochic() {
 
   // ── Recursos agrupados globalmente ─────────────────────────────────────
   const recursosGlobales = useMemo(() => {
-    const { pers, mats, maqs } = rawRecursos;
+    const { pers: allPers, mats: allMats, maqs: allMaqs } = rawRecursos;
+    // Si hay incidente seleccionado, filtra solo sus recursos.
+    const fil = (arr) => incSeleccionado ? arr.filter(x => String(x.incident_report) === String(incSeleccionado.id)) : arr;
+    const pers = fil(allPers), mats = fil(allMats), maqs = fil(allMaqs);
     const incCerrado = (id) => { const i = incidentesAPI.find(x => String(x.id) === String(id)); return i?.estado === 'cer'; };
 
     // Personal: agrupa por descripción (cargo)
@@ -222,7 +226,7 @@ function MapaChavimochic() {
     const enUso = listaMaqs.filter(m => m.enUso).length;
 
     return { listaPers, listaMats, listaMaqs, totPers, totMats, totMaqs, total: totPers + totMats + totMaqs, enUso };
-  }, [rawRecursos, incidentesAPI]);
+  }, [rawRecursos, incidentesAPI, incSeleccionado]);
   const incMes = useMemo(() => { const now = new Date(), m = {}; for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); m[`${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`] = 0; } for (const x of incidentesAPI) { const d = new Date(x.timestamp); const k = `${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`; if (k in m) m[k]++; } return Object.entries(m).map(([mes, cant]) => ({ mes, cant })); }, [incidentesAPI]);
 
   // Filtered
@@ -417,7 +421,7 @@ function MapaChavimochic() {
                 if (!capas.Incidentes_Atencion && inc.estado === 'eat') return null;
                 const [bg, tx] = badge(inc.estado);
                 return (
-                  <Marker key={inc.id} position={[inc.lat, inc.lng]} icon={crearIconoIncidente(inc.gravedad)} eventHandlers={{ click: () => cargarDetalleIncidente(inc.id) }}>
+                  <Marker key={inc.id} position={[inc.lat, inc.lng]} icon={crearIconoIncidente(inc.gravedad)} eventHandlers={{ click: () => { cargarDetalleIncidente(inc.id); setIncSeleccionado(inc); setGrupoAbierto(null); } }}>
                     <Popup minWidth={260} maxWidth={300}>
                       <div style={{ fontFamily: 'system-ui', background: '#f8fafc', color: '#e2e8f0', borderRadius: '6px', padding: '10px', margin: '-14px -19px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #334155', paddingBottom: '6px', marginBottom: '8px' }}><b>{inc.tipo}</b><span className={`dash-badge dash-badge-${inc.estado === 'pat' ? 'orange' : inc.estado === 'ate' ? 'blue' : 'green'}`}>{tx}</span></div>
@@ -446,7 +450,21 @@ function MapaChavimochic() {
         {/* ── Charts Column ───────────────────────────────────────────── */}
         <div className="dash-charts-col">
           <div className="dash-panel" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div className="dash-panel-title"><span className="accent">📋</span> Recursos Utilizados</div>
+            <div className="dash-panel-title">
+              <span className="accent">📋</span> {incSeleccionado ? 'Recursos del Incidente' : 'Recursos Utilizados'}
+            </div>
+            {incSeleccionado && (
+              <div style={{ background: '#f0f6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '8px 10px', marginBottom: '8px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>{incSeleccionado.tipo}</div>
+                    <div style={{ fontSize: '10px', color: '#626976', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{incSeleccionado.codigo} · {incSeleccionado.lugar}</div>
+                    <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px' }}>🕒 {incSeleccionado.fecha}</div>
+                  </div>
+                  <button onClick={() => { setIncSeleccionado(null); setGrupoAbierto(null); }} style={{ background: '#fff', border: '1px solid #cbd5e1', color: '#626976', borderRadius: '4px', padding: '3px 8px', fontSize: '10px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600 }} title="Ver todos los recursos">✕ Ver todos</button>
+                </div>
+              </div>
+            )}
             <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {/* ── PERSONAL ─────────────────────────────────────────── */}
               <div style={{ background: grupoAbierto === 'personal' ? '#eff6ff' : '#f8fafc', borderRadius: '6px', border: `1px solid ${grupoAbierto === 'personal' ? '#bfdbfe' : '#e2e8f0'}`, overflow: 'hidden' }}>
