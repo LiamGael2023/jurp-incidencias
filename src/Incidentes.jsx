@@ -248,14 +248,30 @@ function Incidentes() {
       });
       if (res.ok) {
         const data = await res.json();
-        const tiposMapa = { '1': 'Deslizamiento', '2': 'Obstrucción', '3': 'Falla Mecánica', '4': 'Robo', '5': 'Daño Estructural', '6': 'Otro' };
+        const tiposMapa = {
+          '1': 'Rebose y/o Colapso de canoa o alcantarilla',
+          '2': 'Ingreso de sedimentos al Canal Madre',
+          '3': 'Desborde Canal Madre',
+          '4': 'Desborde Lateral 10',
+          '5': 'Rotura de Canal',
+          '6': 'Interrupción del flujo en el canal en tramos con retenciones',
+          '7': 'Presencia de palizada en canal Madre',
+          '8': 'Corte de camino de acceso y/o servicio',
+          '9': 'Rotura de embalse de usuario',
+          '10': 'Incremento de caudal',
+          '11': 'Erosión de obras de defensa ribereña',
+          '12': 'Desborde e inundación',
+          '13': 'Lluvia',
+          '14': 'Otros',
+        };
         const listaFormateada = (data.results || []).map(inc => {
-          let tipoNombre = tiposMapa[inc.type?.toString()] || 'Incidente';
+          const tipoBase = tiposMapa[inc.type?.toString()] || 'Incidente';
+          let tipoNombre = tipoBase;
           const anotherType = inc.another_type?.trim();
-          if (anotherType && (tipoNombre === 'Otro' || tipoNombre === 'Otros')) tipoNombre = `Otro (${anotherType})`;
+          if (anotherType && (tipoBase === 'Otro' || tipoBase === 'Otros')) tipoNombre = `Otros (${anotherType})`;
           return {
             id: inc.id, codigo: inc.code || 'Sin Código', lugar: inc.location_text || '-',
-            tipo: tipoNombre, gravedad: inc.severity || 'lev', estado: inc.status || 'pat',
+            tipo: tipoNombre, tipoBase, gravedad: inc.severity || 'lev', estado: inc.status || 'pat',
             usuario: inc.user?.username || 'Sistema',
             fecha: new Date(inc.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' }),
             imagesCount: inc.images_count || 0, videosCount: inc.videos_count || 0,
@@ -835,7 +851,7 @@ function Incidentes() {
 
   // ── Aplica los filtros antes de paginar ────────────────────────────────
   const incidentesFiltrados = incidentes.filter(inc => {
-    if (filtroTipo && inc.tipo !== filtroTipo) return false;
+    if (filtroTipo && inc.tipoBase !== filtroTipo) return false;
     if (filtroEstado && inc.estado !== filtroEstado) return false;
     if (filtroGravedad && inc.gravedad !== filtroGravedad) return false;
     if (busqueda.trim()) {
@@ -847,7 +863,7 @@ function Incidentes() {
   });
 
   // Lista de tipos presentes (para el select), ordenada.
-  const tiposDisponibles = [...new Set(incidentes.map(i => i.tipo))].sort();
+  const tiposDisponibles = [...new Set(incidentes.map(i => i.tipoBase))].sort();
   const hayFiltros = filtroTipo || filtroEstado || filtroGravedad || busqueda.trim();
   const limpiarFiltros = () => { setFiltroTipo(''); setFiltroEstado(''); setFiltroGravedad(''); setBusqueda(''); setPaginaActual(1); };
 
@@ -988,7 +1004,7 @@ function Incidentes() {
                     )}
                   </div>
                   <div className="tbl-card-body">
-                    <h3 className="tbl-card-title">{inc.tipo}</h3>
+                    <h3 className="tbl-card-title" title={inc.tipo} style={{ fontSize:'0.95rem', lineHeight:'1.3', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden', minHeight:'2.6em' }}>{inc.tipo}</h3>
                     <div className="tbl-text-muted tbl-mb-2"><FaMapMarkerAlt className="tbl-icon tbl-text-blue" /><strong>{inc.codigo}</strong><br/><span style={{paddingLeft: '20px', fontSize: '0.85rem'}}>{inc.lugar}</span></div>
                     <div className="tbl-text-muted"><FaCalendarAlt className="tbl-icon" /> {inc.fecha}</div>
                   </div>
