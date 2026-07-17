@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
-  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash, FaCheckCircle
+  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash, FaCheckCircle, FaFilter, FaSearch
 } from 'react-icons/fa';
 import './Incidentes.css';
 import Swal from 'sweetalert2';
@@ -34,6 +34,12 @@ function Incidentes() {
   const [cargando, setCargando] = useState(true);
   const [paginaActual, setPaginaActual] = useState(1);
   const itemsPorPagina = 8;
+
+  // --- FILTROS ---
+  const [filtroTipo, setFiltroTipo] = useState('');       // '' = todos
+  const [filtroEstado, setFiltroEstado] = useState('');   // '' | pat | ate | cer
+  const [filtroGravedad, setFiltroGravedad] = useState(''); // '' | lev | mod | gra
+  const [busqueda, setBusqueda] = useState('');
 
   // --- CATÁLOGOS (mantenedores) ---
   const [catEquipos, setCatEquipos] = useState([]);
@@ -344,6 +350,8 @@ function Incidentes() {
     } catch (error) { console.error("❌ Error al obtener los recursos guardados:", error); }
   };
   useEffect(() => { obtenerIncidentes(); }, []);
+  // Al cambiar cualquier filtro, vuelve a la primera página.
+  useEffect(() => { setPaginaActual(1); }, [filtroTipo, filtroEstado, filtroGravedad, busqueda]);
 
   const abrirModal = (inc) => {
     setIncidenteActivo(inc); setRecursos([]); 
@@ -825,10 +833,28 @@ function Incidentes() {
     } finally { setGuardando(false); }
   };
 
+  // ── Aplica los filtros antes de paginar ────────────────────────────────
+  const incidentesFiltrados = incidentes.filter(inc => {
+    if (filtroTipo && inc.tipo !== filtroTipo) return false;
+    if (filtroEstado && inc.estado !== filtroEstado) return false;
+    if (filtroGravedad && inc.gravedad !== filtroGravedad) return false;
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase().trim();
+      const texto = `${inc.codigo} ${inc.lugar} ${inc.tipo} ${inc.usuario}`.toLowerCase();
+      if (!texto.includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Lista de tipos presentes (para el select), ordenada.
+  const tiposDisponibles = [...new Set(incidentes.map(i => i.tipo))].sort();
+  const hayFiltros = filtroTipo || filtroEstado || filtroGravedad || busqueda.trim();
+  const limpiarFiltros = () => { setFiltroTipo(''); setFiltroEstado(''); setFiltroGravedad(''); setBusqueda(''); setPaginaActual(1); };
+
   const indexUltimoItem = paginaActual * itemsPorPagina;
   const indexPrimerItem = indexUltimoItem - itemsPorPagina;
-  const incidentesActuales = incidentes.slice(indexPrimerItem, indexUltimoItem);
-  const totalPaginas = Math.ceil(incidentes.length / itemsPorPagina);
+  const incidentesActuales = incidentesFiltrados.slice(indexPrimerItem, indexUltimoItem);
+  const totalPaginas = Math.max(1, Math.ceil(incidentesFiltrados.length / itemsPorPagina));
 
   const getEstadoBadge = (estado) => {
     const base = {padding:'3px 10px',borderRadius:'4px',fontSize:'11px',fontWeight:'700',letterSpacing:'0.5px',textShadow:'0 1px 2px rgba(0,0,0,0.15)',border:'1px solid rgba(255,255,255,0.3)'};
@@ -895,8 +921,56 @@ function Incidentes() {
         </div>
       </div>
       <div className="tbl-page-body">
+        {/* ── Barra de filtros ──────────────────────────────────────────── */}
+        {!cargando && incidentes.length > 0 && (
+          <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap', marginBottom:'16px', padding:'12px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px' }}>
+            <span style={{ fontSize:'13px', color:'#64748b', fontWeight:600, display:'flex', alignItems:'center', gap:'6px' }}><FaFilter size={12} /> Filtrar:</span>
+
+            <select className="tbl-form-select" value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} style={filtroSelStyle}>
+              <option value="">Todos los tipos</option>
+              {tiposDisponibles.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+
+            <select className="tbl-form-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={filtroSelStyle}>
+              <option value="">Todos los estados</option>
+              <option value="pat">Pendiente</option>
+              <option value="ate">En Atención</option>
+              <option value="cer">Cerrado</option>
+            </select>
+
+            <select className="tbl-form-select" value={filtroGravedad} onChange={e => setFiltroGravedad(e.target.value)} style={filtroSelStyle}>
+              <option value="">Toda gravedad</option>
+              <option value="lev">Leve</option>
+              <option value="mod">Moderada</option>
+              <option value="gra">Grave</option>
+            </select>
+
+            <div style={{ position:'relative', flex:'1', minWidth:'180px', maxWidth:'320px' }}>
+              <FaSearch size={11} style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }} />
+              <input type="text" className="tbl-form-control" placeholder="Buscar por código, lugar, usuario..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                style={{ ...filtroSelStyle, paddingLeft:'30px', width:'100%' }} />
+            </div>
+
+            {hayFiltros && (
+              <button onClick={limpiarFiltros} style={{ display:'flex', alignItems:'center', gap:'5px', background:'#fff', border:'1px solid #cbd5e1', color:'#64748b', borderRadius:'6px', padding:'7px 12px', fontSize:'12px', fontWeight:600, cursor:'pointer' }} title="Limpiar filtros">
+                <FaTimes size={11} /> Limpiar
+              </button>
+            )}
+
+            <span style={{ marginLeft:'auto', fontSize:'12px', color:'#64748b', fontWeight:600, whiteSpace:'nowrap' }}>
+              {incidentesFiltrados.length} de {incidentes.length}
+            </span>
+          </div>
+        )}
+
         {cargando ? <div className="tbl-empty">Cargando datos...</div> 
         : incidentes.length === 0 ? <div className="tbl-empty">No hay incidentes registrados.</div> 
+        : incidentesFiltrados.length === 0 ? (
+          <div className="tbl-empty" style={{ textAlign:'center', padding:'40px' }}>
+            <div style={{ fontSize:'14px', color:'#64748b', marginBottom:'10px' }}>Ningún incidente coincide con los filtros.</div>
+            <button onClick={limpiarFiltros} className="tbl-btn tbl-btn-primary" style={{ fontSize:'13px' }}>Limpiar filtros</button>
+          </div>
+        )
         : (
           <>
             <div className="tbl-row-cards">
@@ -1269,4 +1343,7 @@ function Incidentes() {
     </div>
   );
 }
+// Estilo compartido de los controles de la barra de filtros.
+const filtroSelStyle = { padding:'7px 10px', border:'1px solid #cbd5e1', borderRadius:'6px', fontSize:'12px', color:'#334155', background:'#fff', cursor:'pointer', width:'auto', minWidth:'140px' };
+
 export default Incidentes;
