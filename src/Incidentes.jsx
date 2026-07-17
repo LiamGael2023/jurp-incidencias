@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
@@ -45,6 +45,9 @@ function Incidentes() {
   const [catEquipos, setCatEquipos] = useState([]);
   const [catMarcas, setCatMarcas] = useState([]);
   const [catModelos, setCatModelos] = useState([]);
+  // Catálogo COMPLETO de modelos (sin filtros), solo para resolver el código
+  // de máquina de los partes ya guardados (la API no devuelve el código).
+  const [todosModelos, setTodosModelos] = useState([]);
   const [catActividades, setCatActividades] = useState([]);
   const [catUnidades, setCatUnidades] = useState(['bol', 'm3', 'm2', 'und', 'kg', 'gln', 'rll']);
   const [mantenedorAbierto, setMantenedorAbierto] = useState(false);
@@ -129,6 +132,42 @@ function Incidentes() {
     } catch (e) { console.error(e); }
   };
   useEffect(() => { cargarActividades(); }, []);
+
+  // Carga el catálogo completo de modelos (todas las máquinas, sin filtrar).
+  const cargarTodosModelos = async () => {
+    try {
+      const r = await fetch(`${API_OPS}/modelos/`);
+      if (r.ok) setTodosModelos(await r.json());
+    } catch (e) { console.error(e); }
+  };
+  useEffect(() => { cargarTodosModelos(); }, []);
+
+  // Reconstruye "CODIGO · EQUIPO MARCA MODELO" de un parte guardado.
+  // La API no devuelve el código de máquina, así que lo buscamos en el catálogo
+  // por placa o por modelo+marca (misma lógica que el backend al liberar).
+  const detalleMaquinaDeParte = (parte, catalogo) => {
+    const mp = (parte.model_plate || '').trim();
+    const marcaTxt = (parte.brand_name || '').trim();
+    const equipoTxt = (parte.equipment_name || '').trim();
+
+    let modeloTxt = mp, placaTxt = mp;
+    if (mp.includes('/')) {
+      const [a, b] = mp.split('/', 2).map(x => x.trim());
+      modeloTxt = a; placaTxt = b || '';
+    }
+
+    let maq = null;
+    if (placaTxt) maq = catalogo.find(m => m.placa && m.placa.toLowerCase() === placaTxt.toLowerCase());
+    if (!maq && modeloTxt) {
+      const porModelo = catalogo.filter(m => m.modelo && m.modelo.toLowerCase() === modeloTxt.toLowerCase());
+      maq = porModelo.find(m => (m.marca_nombre || '').toLowerCase() === marcaTxt.toLowerCase()) || porModelo[0];
+    }
+
+    const codigo = maq?.codigo || '';
+    const modelo = maq?.modelo || (modeloTxt !== placaTxt ? modeloTxt : '');
+    return [codigo, codigo ? '·' : '', equipoTxt, marcaTxt, modelo]
+      .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  };
 
   const obtenerCorrelativoParte = async () => {
     try {
@@ -361,7 +400,7 @@ function Incidentes() {
       const idStr = String(incidenteId);
       const formatPers = listPers.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-pers-${i.id}`, dbId: i.id, endpoint: 'incident-personnels', tipo: 'Personal', descripcionResumen: i.description, cantidad: parseFloat(i.quantity_hours), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity_hours) * parseFloat(i.unit_price), guardadoEnDB: true }));
       const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', descripcionResumen: i.description, unidad: i.unit || 'und', cantidad: parseFloat(i.quantity), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity) * parseFloat(i.unit_price), guardadoEnDB: true }));
-      const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-maq-${i.id}`, dbId: i.id, endpoint: 'daily-part-heavy-equipments', cerrado: i.cerrado || false, tipo: 'Maquinaria', descripcionResumen: `Parte N° ${i.part_number} | ${i.equipment_name}\nActividad: ${i.activities}`, cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)), precioUnitario: parseFloat(i.unit_price), total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price), guardadoEnDB: true }));
+      const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-maq-${i.id}`, dbId: i.id, endpoint: 'daily-part-heavy-equipments', cerrado: i.cerrado || false, tipo: 'Maquinaria', numeroParte: i.part_number, descripcionResumen: detalleMaquinaDeParte(i, todosModelos), cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)), precioUnitario: parseFloat(i.unit_price), total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price), guardadoEnDB: true }));
       setRecursos([...formatPers, ...formatMat, ...formatMaq]);
     } catch (error) { console.error("❌ Error al obtener los recursos guardados:", error); }
   };
@@ -376,6 +415,14 @@ function Incidentes() {
     setModalAbierto(true);
     cargarCosteosGuardados(inc.id); 
   };
+
+  // Si el catálogo de modelos llega después de abrir el modal, recarga los
+  // costeos para que la maquinaria muestre su código.
+  useEffect(() => {
+    if (modalAbierto && incidenteActivo && todosModelos.length > 0) {
+      cargarCosteosGuardados(incidenteActivo.id);
+    }
+  }, [todosModelos.length]);
   const abrirModalPdf = (dbId) => {
     const url = `https://gideonstudio.duckdns.org/api/v1/mobile/operations/daily-part-heavy-equipments/${dbId}/pdf/`;
     setPdfUrlActivo(url);
@@ -524,16 +571,9 @@ function Incidentes() {
       cantFinal = efectivas;
       const equipoFinal = nuevoRecurso.equipo;
       const marcaFinal = nuevoRecurso.marca;
-      descFinal = `Parte N° ${nuevoRecurso.numeroParte} | ${nuevoRecurso.codigoMaquina} · ${equipoFinal} ${marcaFinal} ${nuevoRecurso.modeloMaquina || ''} (${nuevoRecurso.placa})\n`;
-      descFinal += `Zona: ${nuevoRecurso.zonaTrabajo} | Op: ${nuevoRecurso.operador} | Prov: ${nuevoRecurso.proveedor}\n`;
-      descFinal += `HM: ${nuevoRecurso.hmInicio} a ${nuevoRecurso.hmFin} (${totalHM} HE) | Comb: ${nuevoRecurso.combustible || 0} Gls (Vale: ${nuevoRecurso.vale})\n`;
-      descFinal += `Actividad: ${nuevoRecurso.actividad}`;
-      if (efectivas < totalHM) {
-        descFinal += `\nHoras efectivas: ${efectivas} HE (reducción de ${(totalHM - efectivas).toFixed(1)}). Motivo: ${nuevoRecurso.obsReduccion.trim()}`;
-      }
-      if (nuevoRecurso.incluirMetrado || tieneMetradoActividad) {
-        if (volCalc.val > 0) descFinal += `\nMetrado: ${volumenMetrado} ${volCalc.unit}`;
-      }
+      // Detalle corto: solo código · equipo marca modelo. El resto va en el PDF del parte.
+      descFinal = [nuevoRecurso.codigoMaquina, '·', equipoFinal, marcaFinal, nuevoRecurso.modeloMaquina || '']
+        .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
     } else if (nuevoRecurso.tipo === 'Personal') {
       const pers = parseInt(nuevoRecurso.numPersonas) || 0;
       const hrs = parseFloat(nuevoRecurso.horasTrabajo) || 0;
@@ -567,8 +607,7 @@ function Incidentes() {
       const detalle = r.descripcionResumen || r.descripcion || '';
       let clave;
       if (r.tipo === 'Maquinaria') {
-        const detalleSinParte = detalle.replace(/Parte N° [^|]*\|/i, '').trim();
-        clave = `maq|${normalizar(detalleSinParte)}|${r.precioUnitario}`;
+        clave = `maq|${normalizar(detalle)}|${r.precioUnitario}`;
       } else if (r.tipo === 'Personal') {
         const cargo = normalizar(r.descripcion);
         clave = `pers|${cargo}|${r.numPersonas}|${r.horasTrabajo}|${r.horasExtras}|${r.cantidad}|${r.precioUnitario}|${r.guardadoEnDB}`;
@@ -588,12 +627,21 @@ function Incidentes() {
       if (r.guardadoEnDB && r.dbId) g.registros.push({ dbId: r.dbId, endpoint: r.endpoint });
       g.idsLocales.push(r.idLocal);
       if (r.tipo === 'Maquinaria') {
-        const mp = (r.descripcionResumen || '').match(/Parte N° ([^\s|]+)/i);
-        g.partesMaq.push({ dbId: r.dbId, idLocal: r.idLocal, cerrado: r.cerrado, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, numeroParte: mp ? mp[1] : (r.numeroParte || ''), registro: r });
+        g.partesMaq.push({ dbId: r.dbId, idLocal: r.idLocal, cerrado: r.cerrado, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, numeroParte: r.numeroParte || '', registro: r });
       }
     }
     return Array.from(grupos.values());
   })();
+
+  // Categorías del expediente: MANO DE OBRA / MATERIALES / EQUIPO.
+  const CATEGORIAS = [
+    { key: 'Personal',   titulo: 'MANO DE OBRA' },
+    { key: 'Insumo',     titulo: 'MATERIALES' },
+    { key: 'Maquinaria', titulo: 'EQUIPO' },
+  ];
+  const subtotalCategoria = (tipo) => recursosAgrupados
+    .filter(r => r.tipo === tipo)
+    .reduce((s, r) => s + r.totalSum, 0);
 
   const imgToBase64 = (src) => new Promise((resolve) => {
     const img = new Image();
@@ -652,15 +700,42 @@ function Incidentes() {
     if (recursos.length > 0) {
       autoTable(doc, {
         startY: y,
-        head: [['N°','Tipo','Detalle','Cantidad','Unidad','P. Unit. (S/)','Total (S/)']],
-        body: recursos.map((r,i) => [i+1, r.tipo, (r.descripcionResumen||r.descripcion||'').replace(/\n/g,' '), fmtNum(r.cantidad), r.tipo==='Personal'?'HH':r.tipo==='Maquinaria'?'HE':(r.unidad||'und'), fmtNum(r.precioUnitario), fmtNum(r.total)]),
-        foot: [['','','','','','COSTO TOTAL:',`S/ ${fmtNum(costoTotalIncidente)}`]],
+        head: [['N°','Detalle','Cantidad','Unidad','P. Unit. (S/)','Total (S/)','']],
+        body: (() => {
+          // Filas agrupadas por categoría, con subtotal por grupo.
+          const filas = [];
+          let n = 0;
+          for (const cat of CATEGORIAS) {
+            const delGrupo = recursosAgrupados.filter(r => r.tipo === cat.key);
+            if (!delGrupo.length) continue;
+            filas.push([{ content: cat.titulo, colSpan: 7, styles: { fillColor: [238,242,247], fontStyle: 'bold', fontSize: 8, textColor: [51,65,85] } }]);
+            for (const r of delGrupo) {
+              n++;
+              filas.push([
+                n,
+                (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '),
+                fmtNum(r.cantidadTotal),
+                r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad || 'und'),
+                fmtNum(r.precioUnitario),
+                fmtNum(r.totalSum),
+                '',
+              ]);
+            }
+            filas.push([
+              { content: `Subtotal ${cat.titulo}`, colSpan: 5, styles: { halign: 'right', fontStyle: 'bold', fontSize: 8, textColor: [100,116,139] } },
+              { content: fmtNum(subtotalCategoria(cat.key)), styles: { halign: 'right', fontStyle: 'bold', fontSize: 8 } },
+              '',
+            ]);
+          }
+          return filas;
+        })(),
+        foot: [[{ content: 'COSTO TOTAL:', colSpan: 5, styles: { halign: 'right' } }, `S/ ${fmtNum(costoTotalIncidente)}`, '']],
         styles:{fontSize:8,cellPadding:2.5,lineColor:[226,232,240],lineWidth:0.1},
         headStyles:{fillColor:[20,99,165],textColor:[255,255,255],fontStyle:'bold',fontSize:8},
         footStyles:{fillColor:[241,245,249],textColor:[30,41,59],fontStyle:'bold',fontSize:9},
         alternateRowStyles:{fillColor:[248,250,252]},
         margin:{left:14,right:14},
-        columnStyles:{0:{cellWidth:10,halign:'center'},1:{cellWidth:20},2:{cellWidth:68},3:{cellWidth:18,halign:'right'},4:{cellWidth:14,halign:'center'},5:{cellWidth:24,halign:'right'},6:{cellWidth:28,halign:'right'}},
+        columnStyles:{0:{cellWidth:10,halign:'center'},1:{cellWidth:78},2:{cellWidth:20,halign:'right'},3:{cellWidth:14,halign:'center'},4:{cellWidth:26,halign:'right'},5:{cellWidth:30,halign:'right'},6:{cellWidth:4}},
       });
     } else {
       doc.setFontSize(9); doc.setFont(undefined,'normal'); doc.setTextColor(100,116,139);
@@ -681,7 +756,7 @@ function Incidentes() {
     const fechaGenerado = new Date().toLocaleString('es-PE');
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Reporte de Incidente');
-    ws.columns = [{ width: 20 }, { width: 16 }, { width: 45 }, { width: 14 }, { width: 10 }, { width: 16 }, { width: 16 }];
+    ws.columns = [{ width: 22 }, { width: 48 }, { width: 12 }, { width: 8 }, { width: 15 }, { width: 16 }, { width: 3 }];
     const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1463A5' } };
     const azulClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E0F2FE' } };
     const grisClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9' } };
@@ -737,7 +812,7 @@ function Incidentes() {
     ['B','C','D','E','F','G'].forEach(c => { ws.getCell(`${c}${rStart}`).fill = azul; });
     ws.getRow(rStart).height = 22;
     const hRow = rStart + 1;
-    ['N°','Tipo','Detalle','Cantidad','Unidad','P. Unit. (S/)','Total (S/)'].forEach((h, i) => {
+    ['N°','Detalle','Cantidad','Unidad','P. Unit. (S/)','Total (S/)',''].forEach((h, i) => {
       const cell = ws.getCell(hRow, i + 1);
       cell.value = h;
       cell.font = { bold: true, color: { argb: 'FFFFFF' }, size: 9 };
@@ -745,29 +820,58 @@ function Incidentes() {
       cell.alignment = { horizontal: i >= 3 ? 'right' : 'left', vertical: 'middle' };
       cell.border = borde;
     });
-    recursos.forEach((r, i) => {
-      const rowNum = hRow + 1 + i;
-      const vals = [i + 1, r.tipo, (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '), r.cantidad, r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und'), parseFloat(r.precioUnitario), r.total];
-      vals.forEach((v, j) => {
-        const cell = ws.getCell(rowNum, j + 1);
-        cell.value = v;
-        cell.font = { size: 9 };
-        cell.border = borde;
-        if (j >= 3) cell.alignment = { horizontal: 'right' };
-        if (j === 5 || j === 6) cell.numFmt = '#,##0.00';
-        if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
+    let rowNum = hRow;
+    let n = 0;
+    for (const cat of CATEGORIAS) {
+      const delGrupo = recursosAgrupados.filter(r => r.tipo === cat.key);
+      if (!delGrupo.length) continue;
+
+      // Cabecera de categoría
+      rowNum++;
+      ws.mergeCells(`A${rowNum}:G${rowNum}`);
+      ws.getCell(`A${rowNum}`).value = cat.titulo;
+      ws.getCell(`A${rowNum}`).font = { bold: true, size: 9, color: { argb: '334155' } };
+      ws.getCell(`A${rowNum}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'EEF2F7' } };
+      ws.getCell(`A${rowNum}`).border = borde;
+
+      // Filas del grupo
+      delGrupo.forEach((r, i) => {
+        rowNum++; n++;
+        const vals = [n, (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '), r.cantidadTotal, r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und'), parseFloat(r.precioUnitario), r.totalSum, ''];
+        vals.forEach((v, j) => {
+          const cell = ws.getCell(rowNum, j + 1);
+          cell.value = v;
+          cell.font = { size: 9 };
+          cell.border = borde;
+          if (j >= 2) cell.alignment = { horizontal: 'right' };
+          if (j === 4 || j === 5) cell.numFmt = '#,##0.00';
+          if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
+        });
       });
-    });
-    const totalRow = hRow + 1 + recursos.length + 1;
+
+      // Subtotal del grupo
+      rowNum++;
+      ws.mergeCells(`A${rowNum}:E${rowNum}`);
+      ws.getCell(`A${rowNum}`).value = `Subtotal ${cat.titulo}`;
+      ws.getCell(`A${rowNum}`).font = { bold: true, size: 9, color: { argb: '64748B' } };
+      ws.getCell(`A${rowNum}`).alignment = { horizontal: 'right' };
+      ws.getCell(`F${rowNum}`).value = subtotalCategoria(cat.key);
+      ws.getCell(`F${rowNum}`).font = { bold: true, size: 9 };
+      ws.getCell(`F${rowNum}`).numFmt = '#,##0.00';
+      ws.getCell(`F${rowNum}`).alignment = { horizontal: 'right' };
+    }
+    const totalRow = rowNum + 2;
     ws.mergeCells(`A${totalRow}:E${totalRow}`);
-    ws.getCell(`F${totalRow}`).value = 'COSTO TOTAL:';
-    ws.getCell(`F${totalRow}`).font = { bold: true, size: 10 };
+    ws.getCell(`A${totalRow}`).value = 'COSTO TOTAL:';
+    ws.getCell(`A${totalRow}`).font = { bold: true, size: 10 };
+    ws.getCell(`A${totalRow}`).fill = azulClaro;
+    ws.getCell(`A${totalRow}`).alignment = { horizontal: 'right' };
+    ['B','C','D','E'].forEach(c => { ws.getCell(`${c}${totalRow}`).fill = azulClaro; });
+    ws.getCell(`F${totalRow}`).value = costoTotalIncidente;
+    ws.getCell(`F${totalRow}`).font = { bold: true, size: 11 };
+    ws.getCell(`F${totalRow}`).numFmt = '"S/ "#,##0.00';
     ws.getCell(`F${totalRow}`).fill = azulClaro;
     ws.getCell(`F${totalRow}`).alignment = { horizontal: 'right' };
-    ws.getCell(`G${totalRow}`).value = costoTotalIncidente;
-    ws.getCell(`G${totalRow}`).font = { bold: true, size: 11 };
-    ws.getCell(`G${totalRow}`).numFmt = '"S/ "#,##0.00';
-    ws.getCell(`G${totalRow}`).fill = azulClaro;
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
@@ -1205,54 +1309,71 @@ function Incidentes() {
                 </div>
                 <div className="tbl-table-responsive tbl-border-top">
                   <table className="tbl-table tbl-table-vcenter">
-                    <thead><tr><th>Tipo</th><th>Detalle (Resumen)</th><th className="tbl-text-end">Cantidad</th><th className="tbl-text-end">P. Unit.</th><th className="tbl-text-end">Total</th><th></th></tr></thead>
+                    <thead><tr><th style={{width:'24px'}}></th><th>Detalle</th><th className="tbl-text-end">Cantidad</th><th className="tbl-text-end">P. Unit.</th><th className="tbl-text-end">Total</th><th></th></tr></thead>
                     <tbody>
                       {recursos.length === 0 ? <tr><td colSpan="6" className="tbl-text-center tbl-text-muted py-4">Aún no hay registros para este incidente.</td></tr> : (
-                        recursosAgrupados.map(r => (
-                          <tr key={r.idLocal}>
-                            <td><span className="tbl-badge bg-secondary-lt">{r.tipo}</span></td>
-                            <td style={{fontSize: '11px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>
-                              {r.tipo === 'Maquinaria' && r.count > 1
-                                ? (r.descripcionResumen || '').replace(/Parte N° [^|]*\|\s*/i, '').trim()
-                                : r.tipo === 'Personal' && r.count > 1
-                                ? `${r.descripcion} (Cuadrilla: ${r.numPersonas} persona(s) x ${r.horasTrabajo}h normales + ${r.horasExtras}h extras)`
-                                : (r.descripcionResumen || r.descripcion)}
-                              {r.count > 1 && <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>}
-                            </td>
-                            <td className="tbl-text-end font-bold">{r.cantidadTotal.toLocaleString('es-PE', {minimumFractionDigits: r.tipo==='Personal'?1:2, maximumFractionDigits: r.tipo==='Personal'?1:2})} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und')}</span></td>
-                            <td className="tbl-text-end">S/ {fmtNum(r.precioUnitario)}</td>
-                            <td className="tbl-text-end text-blue font-bold">S/ {fmtNum(r.totalSum)}</td>
-                            <td>
-                              {r.guardadoEnDB ? (
-                                <div style={{display: 'flex', gap: '6px', alignItems: 'center', flexWrap:'wrap'}}>
-                                  {r.tipo === 'Maquinaria' && r.count > 1
-                                    ? (() => {
-                                        const cerrados = r.partesMaq.filter(p => p.cerrado).length;
-                                        const activos = r.count - cerrados;
-                                        return <span className="tbl-badge" style={{backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:600}}>{activos > 0 ? `${activos} activo${activos>1?'s':''}` : ''}{activos > 0 && cerrados > 0 ? ' · ' : ''}{cerrados > 0 ? `${cerrados} cerrado${cerrados>1?'s':''}` : ''}</span>;
-                                      })()
-                                    : r.tipo === 'Maquinaria' && r.cerrado
-                                    ? <span className="tbl-badge" style={{backgroundColor:'#e2e8f0', color:'#475569'}}>Cerrado</span>
-                                    : <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>}
-                                  {r.tipo === 'Maquinaria' && r.count === 1 && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
-                                  {r.tipo === 'Maquinaria' && r.count === 1 && !r.cerrado && (<button type="button" onClick={() => cerrarParteDiario(r)} className="tbl-btn-action" title="Finalizar actividades (libera la máquina)" style={{padding: '4px 10px', backgroundColor: '#dcfce7', color:'#15803d', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:'600'}}><FaCheckCircle size={13} /> Finalizar</button>)}
-                                  {r.tipo === 'Maquinaria' && r.count > 1 && (
-                                    <div style={{display:'flex', flexDirection:'column', gap:'4px', width:'100%'}}>
-                                      {r.partesMaq.map((p, idx) => (
-                                        <div key={p.idLocal || idx} style={{display:'flex', alignItems:'center', gap:'4px', justifyContent:'flex-end'}}>
-                                          <span style={{fontSize:'11px', color:'#64748b', marginRight:'auto'}}>{p.numeroParte}{p.cerrado && <span style={{color:'#15803d', fontWeight:600}}> · Cerrado</span>}</span>
-                                          {p.dbId && <button type="button" onClick={() => abrirModalPdf(p.dbId)} title="Ver PDF" style={{padding:'3px 7px', backgroundColor:'#e0f2fe', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaFilePdf size={14} /></button>}
-                                          {!p.cerrado && <button type="button" onClick={() => cerrarParteDiario(p.registro)} title="Finalizar este parte" style={{padding:'3px 8px', backgroundColor:'#dcfce7', color:'#15803d', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'3px', fontSize:'11px', fontWeight:600}}><FaCheckCircle size={11} /> Finalizar</button>}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {!(r.tipo === 'Maquinaria' && r.cerrado) && (<button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>)}
-                                </div>
-                              ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
-                            </td>
-                          </tr>
-                        ))
+                        CATEGORIAS.map(cat => {
+                          const filas = recursosAgrupados.filter(r => r.tipo === cat.key);
+                          if (filas.length === 0) return null;
+                          return (
+                            <Fragment key={cat.key}>
+                              {/* Cabecera de categoría */}
+                              <tr style={{ background:'#eef2f7' }}>
+                                <td colSpan="5" style={{ fontWeight:700, fontSize:'11px', letterSpacing:'0.6px', color:'#334155', padding:'7px 10px' }}>{cat.titulo}</td>
+                                <td style={{ background:'#eef2f7' }}></td>
+                              </tr>
+                              {filas.map(r => (
+                                <tr key={r.idLocal}>
+                                  <td></td>
+                                  <td style={{fontSize: '12px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>
+                                    {r.tipo === 'Personal' && r.count > 1
+                                      ? `${r.descripcion} (Cuadrilla: ${r.numPersonas} persona(s) x ${r.horasTrabajo}h normales + ${r.horasExtras}h extras)`
+                                      : (r.descripcionResumen || r.descripcion)}
+                                    {r.count > 1 && <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>}
+                                  </td>
+                                  <td className="tbl-text-end font-bold">{r.cantidadTotal.toLocaleString('es-PE', {minimumFractionDigits: r.tipo==='Personal'?1:2, maximumFractionDigits: r.tipo==='Personal'?1:2})} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und')}</span></td>
+                                  <td className="tbl-text-end">S/ {fmtNum(r.precioUnitario)}</td>
+                                  <td className="tbl-text-end text-blue font-bold">S/ {fmtNum(r.totalSum)}</td>
+                                  <td>
+                                    {r.guardadoEnDB ? (
+                                      <div style={{display: 'flex', gap: '6px', alignItems: 'center', flexWrap:'wrap'}}>
+                                        {r.tipo === 'Maquinaria' && r.count > 1
+                                          ? (() => {
+                                              const cerrados = r.partesMaq.filter(p => p.cerrado).length;
+                                              const activos = r.count - cerrados;
+                                              return <span className="tbl-badge" style={{backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:600}}>{activos > 0 ? `${activos} activo${activos>1?'s':''}` : ''}{activos > 0 && cerrados > 0 ? ' · ' : ''}{cerrados > 0 ? `${cerrados} cerrado${cerrados>1?'s':''}` : ''}</span>;
+                                            })()
+                                          : r.tipo === 'Maquinaria' && r.cerrado
+                                          ? <span className="tbl-badge" style={{backgroundColor:'#e2e8f0', color:'#475569'}}>Cerrado</span>
+                                          : <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>}
+                                        {r.tipo === 'Maquinaria' && r.count === 1 && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
+                                        {r.tipo === 'Maquinaria' && r.count === 1 && !r.cerrado && (<button type="button" onClick={() => cerrarParteDiario(r)} className="tbl-btn-action" title="Finalizar actividades (libera la máquina)" style={{padding: '4px 10px', backgroundColor: '#dcfce7', color:'#15803d', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:'600'}}><FaCheckCircle size={13} /> Finalizar</button>)}
+                                        {r.tipo === 'Maquinaria' && r.count > 1 && (
+                                          <div style={{display:'flex', flexDirection:'column', gap:'4px', width:'100%'}}>
+                                            {r.partesMaq.map((p, idx) => (
+                                              <div key={p.idLocal || idx} style={{display:'flex', alignItems:'center', gap:'4px', justifyContent:'flex-end'}}>
+                                                <span style={{fontSize:'11px', color:'#64748b', marginRight:'auto'}}>{p.numeroParte}{p.cerrado && <span style={{color:'#15803d', fontWeight:600}}> · Cerrado</span>}</span>
+                                                {p.dbId && <button type="button" onClick={() => abrirModalPdf(p.dbId)} title="Ver PDF" style={{padding:'3px 7px', backgroundColor:'#e0f2fe', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaFilePdf size={14} /></button>}
+                                                {!p.cerrado && <button type="button" onClick={() => cerrarParteDiario(p.registro)} title="Finalizar este parte" style={{padding:'3px 8px', backgroundColor:'#dcfce7', color:'#15803d', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'3px', fontSize:'11px', fontWeight:600}}><FaCheckCircle size={11} /> Finalizar</button>}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {!(r.tipo === 'Maquinaria' && r.cerrado) && (<button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>)}
+                                      </div>
+                                    ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
+                                  </td>
+                                </tr>
+                              ))}
+                              {/* Subtotal de la categoría */}
+                              <tr>
+                                <td colSpan="4" className="tbl-text-end" style={{ fontSize:'11px', color:'#64748b', fontWeight:600, paddingRight:'10px' }}>Subtotal {cat.titulo}</td>
+                                <td className="tbl-text-end" style={{ fontSize:'12px', fontWeight:700, color:'#334155' }}>S/ {fmtNum(subtotalCategoria(cat.key))}</td>
+                                <td></td>
+                              </tr>
+                            </Fragment>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
