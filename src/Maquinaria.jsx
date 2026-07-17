@@ -1,17 +1,19 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  Página: Panel de Maquinaria
 //  Muestra todas las máquinas del catálogo con su estado (disponible / en
-//  incidente). Filtros por origen y estado. Al hacer clic en una máquina
-//  ocupada, muestra el detalle del parte diario y permite abrir su PDF en modal.
+//  incidente). Filtros por origen y estado. Al hacer clic en cualquier máquina
+//  se muestra su historial completo de partes diarios (abiertos y cerrados).
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import {
   FaTruck, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaTimes,
-  FaDownload, FaFilePdf, FaMapMarkerAlt, FaTools, FaClock,
+  FaDownload, FaFilePdf, FaMapMarkerAlt, FaTools, FaClock, FaHistory,
 } from 'react-icons/fa';
 
 const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
+
+const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function Maquinaria() {
   const [maquinas, setMaquinas] = useState([]);
@@ -19,6 +21,8 @@ export default function Maquinaria() {
   const [filtroOrigen, setFiltroOrigen] = useState('');   // '' | JURP | EXTERNA
   const [filtroEstado, setFiltroEstado] = useState('');   // '' | 0 | 1
   const [detalle, setDetalle] = useState(null);           // máquina seleccionada
+  const [historial, setHistorial] = useState(null);       // { maquina, partes, totales }
+  const [cargandoHist, setCargandoHist] = useState(false);
   const [pdfModal, setPdfModal] = useState(null);         // { url, nombre }
 
   const cargar = async () => {
@@ -34,8 +38,24 @@ export default function Maquinaria() {
       }
     } catch (e) { console.error(e); } finally { setCargando(false); }
   };
-
   useEffect(() => { cargar(); }, [filtroOrigen, filtroEstado]);
+
+  // Abre el modal con el historial de partes de una máquina.
+  const abrirDetalle = async (m) => {
+    setDetalle(m);
+    setHistorial(null);
+    setCargandoHist(true);
+    try {
+      const r = await fetch(`${API_OPS}/modelos/${m.id}/partes/`);
+      if (r.ok) {
+        setHistorial(await r.json());
+      } else {
+        Swal.fire('Error', `No se pudo cargar el historial (código ${r.status}). ¿Agregaste el endpoint en el backend?`, 'error');
+      }
+    } catch (e) {
+      Swal.fire('Error', 'Fallo de conexión al cargar el historial.', 'error');
+    } finally { setCargandoHist(false); }
+  };
 
   // Abre el PDF del parte en un modal (igual que en Reportes / parte diario).
   const abrirPdfParte = async (parteId, nombre) => {
@@ -107,14 +127,14 @@ export default function Maquinaria() {
             const ocupada = !m.disponible;
             return (
               <div key={m.id}
-                onClick={() => ocupada && m.parte_activo && setDetalle(m)}
+                onClick={() => abrirDetalle(m)}
                 style={{
                   background: '#fff', borderRadius: '10px', overflow: 'hidden',
                   border: `1px solid ${ocupada ? '#fecaca' : '#bbf7d0'}`,
-                  cursor: (ocupada && m.parte_activo) ? 'pointer' : 'default',
+                  cursor: 'pointer',
                   transition: 'box-shadow 0.15s',
                 }}
-                onMouseEnter={e => { if (ocupada && m.parte_activo) e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'; }}
+                onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'}
                 onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
               >
                 {/* Banda de estado */}
@@ -127,6 +147,7 @@ export default function Maquinaria() {
                     {m.origen === 'JURP' ? 'JURP' : 'EXT'}
                   </span>
                 </div>
+
                 {/* Cuerpo */}
                 <div style={{ padding: '14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
@@ -139,17 +160,21 @@ export default function Maquinaria() {
                     {m.modelo && m.placa && ' · '}
                     {m.placa && <span>Placa: <b>{m.placa}</b></span>}
                   </div>
+
                   {/* Info del incidente si está ocupada */}
                   {ocupada && m.parte_activo && (
                     <div style={{ marginTop: '10px', padding: '8px', background: '#fef2f2', borderRadius: '6px', fontSize: '12px' }}>
                       <div style={{ color: '#991b1b', fontWeight: 600 }}>{m.parte_activo.part_number}</div>
                       <div style={{ color: '#7f1d1d', marginTop: '2px' }}><FaMapMarkerAlt size={10} /> {m.parte_activo.incidente_lugar || 'Sin ubicación'}</div>
-                      <div style={{ color: '#206bc4', marginTop: '4px', fontWeight: 600, fontSize: '11px' }}>Ver detalle →</div>
                     </div>
                   )}
                   {ocupada && !m.parte_activo && (
                     <div style={{ marginTop: '10px', fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>No disponible (sin parte vinculado)</div>
                   )}
+
+                  <div style={{ marginTop: '10px', color: '#206bc4', fontWeight: 600, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <FaHistory size={10} /> Ver historial de partes →
+                  </div>
                 </div>
               </div>
             );
@@ -157,34 +182,105 @@ export default function Maquinaria() {
         </div>
       )}
 
-      {/* ── Modal de detalle del parte ─────────────────────────────────── */}
-      {detalle && detalle.parte_activo && (
-        <div onClick={() => setDetalle(null)} style={overlayStyle}>
-          <div onClick={e => e.stopPropagation()} style={{ ...modalStyle, maxWidth: '560px' }}>
+      {/* ── Modal de historial de partes ───────────────────────────────── */}
+      {detalle && (
+        <div onClick={() => { setDetalle(null); setHistorial(null); }} style={overlayStyle}>
+          <div onClick={e => e.stopPropagation()} style={{ ...modalStyle, maxWidth: '760px' }}>
             <div style={modalHeadStyle}>
               <h5 style={{ margin: 0, fontSize: '16px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <FaTruck color="#475569" /> {detalle.codigo} · {detalle.modelo || detalle.placa}
               </h5>
-              <button onClick={() => setDetalle(null)} style={xBtnStyle}><FaTimes /></button>
+              <button onClick={() => { setDetalle(null); setHistorial(null); }} style={xBtnStyle}><FaTimes /></button>
             </div>
+
             <div style={{ padding: '18px', overflowY: 'auto' }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fef2f2', color: '#dc2626', padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, marginBottom: '14px' }}>
-                <FaExclamationTriangle size={12} /> EN INCIDENTE
+              {/* Badge de estado */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: detalle.disponible ? '#f0fdf4' : '#fef2f2', color: detalle.disponible ? '#16a34a' : '#dc2626', padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, marginBottom: '14px' }}>
+                {detalle.disponible ? <FaCheckCircle size={12} /> : <FaExclamationTriangle size={12} />}
+                {detalle.disponible ? 'DISPONIBLE' : 'EN INCIDENTE'}
               </div>
 
-              <Campo label="N° de Parte" valor={detalle.parte_activo.part_number} />
-              <Campo label="Incidente" valor={`${detalle.parte_activo.incidente_tipo}${detalle.parte_activo.incidente_codigo ? ` (${detalle.parte_activo.incidente_codigo})` : ''}`} />
-              <Campo label="Ubicación" valor={detalle.parte_activo.incidente_lugar} icono={<FaMapMarkerAlt />} />
-              <Campo label="Fecha / Turno" valor={`${detalle.parte_activo.date} · ${detalle.parte_activo.shift}`} icono={<FaClock />} />
-              <Campo label="Zona de trabajo" valor={detalle.parte_activo.work_zone_text} />
-              <Campo label="Operador" valor={detalle.parte_activo.operator} />
-              <Campo label="Actividad" valor={detalle.parte_activo.activities} icono={<FaTools />} />
-              <Campo label="Horómetro" valor={`${detalle.parte_activo.start_horometer} → ${detalle.parte_activo.end_horometer}`} />
+              {/* Datos de la máquina */}
+              <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '12px', marginBottom: '16px' }}>
+                <Campo label="Equipo" valor={`${detalle.equipo} · ${detalle.marca}`} />
+                <Campo label="Modelo" valor={detalle.modelo} />
+                <Campo label="Placa" valor={detalle.placa} />
+                <Campo label="Origen" valor={detalle.origen_texto} />
+              </div>
 
-              <button onClick={() => abrirPdfParte(detalle.parte_activo.id, detalle.parte_activo.part_number)}
-                style={{ marginTop: '16px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '8px', padding: '12px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
-                <FaFilePdf /> Ver PDF del parte diario
-              </button>
+              {/* Totales del historial */}
+              {historial && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '14px' }}>
+                  <div style={{ background: '#eff6ff', borderRadius: '6px', padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>PARTES</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: '#206bc4' }}>{historial.total_partes}</div>
+                  </div>
+                  <div style={{ background: '#fffbeb', borderRadius: '6px', padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>HORAS</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: '#b45309' }}>{historial.total_horas}</div>
+                  </div>
+                  <div style={{ background: '#f0fdf4', borderRadius: '6px', padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>COSTO</div>
+                    <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a' }}>S/ {fmtNum(historial.total_costo)}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de partes */}
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FaHistory size={11} /> Historial de partes diarios
+              </div>
+
+              {cargandoHist ? (
+                <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                  <FaSyncAlt className="spin-anim" style={{ fontSize: '22px' }} />
+                  <p style={{ fontSize: '13px' }}>Cargando historial…</p>
+                </div>
+              ) : !historial ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px', fontStyle: 'italic' }}>
+                  No se pudo cargar el historial.
+                </div>
+              ) : historial.partes.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px', fontStyle: 'italic' }}>
+                  Esta máquina aún no tiene partes diarios registrados.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {historial.partes.map(p => (
+                    <div key={p.id} style={{ border: `1px solid ${p.cerrado ? '#e2e8f0' : '#fed7aa'}`, background: p.cerrado ? '#fff' : '#fffbeb', borderRadius: '8px', padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 700, fontSize: '13px', color: '#1e293b' }}>{p.part_number}</span>
+                        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', background: p.cerrado ? '#dcfce7' : '#fef3c7', color: p.cerrado ? '#15803d' : '#b45309' }}>
+                          {p.cerrado ? 'CERRADO' : 'ABIERTO'}
+                        </span>
+                        <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#64748b' }}>{p.date} · {p.shift}</span>
+                      </div>
+
+                      <div style={{ fontSize: '12px', color: '#475569', marginBottom: '3px' }}>
+                        <FaMapMarkerAlt size={10} color="#94a3b8" /> {p.incidente_tipo} {p.incidente_codigo && `(${p.incidente_codigo})`} — {p.incidente_lugar || 'Sin ubicación'}
+                      </div>
+                      {p.activities && (
+                        <div style={{ fontSize: '12px', color: '#475569', marginBottom: '3px' }}>
+                          <FaTools size={10} color="#94a3b8" /> {p.activities}
+                        </div>
+                      )}
+                      {p.operator && (
+                        <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Operador: {p.operator}</div>
+                      )}
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingTop: '6px', borderTop: '1px dashed #e2e8f0', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '11px', color: '#64748b' }}>HM: {p.start_horometer} → {p.end_horometer}</span>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#b45309' }}>{p.horas} HE</span>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a' }}>S/ {fmtNum(p.costo)}</span>
+                        <button onClick={() => abrirPdfParte(p.id, p.part_number)}
+                          style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '5px', padding: '4px 10px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>
+                          <FaFilePdf size={11} /> PDF
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -219,8 +315,8 @@ export default function Maquinaria() {
 function Campo({ label, valor, icono }) {
   if (!valor) return null;
   return (
-    <div style={{ display: 'flex', padding: '7px 0', borderBottom: '1px solid #f1f5f9' }}>
-      <div style={{ width: '130px', fontSize: '12px', color: '#94a3b8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+    <div style={{ display: 'flex', padding: '5px 0' }}>
+      <div style={{ width: '110px', fontSize: '12px', color: '#94a3b8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
         {icono}{label}
       </div>
       <div style={{ fontSize: '13px', color: '#1e293b', flex: 1 }}>{valor}</div>
