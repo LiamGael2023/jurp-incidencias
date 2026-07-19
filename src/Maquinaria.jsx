@@ -8,8 +8,9 @@ import { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import {
   FaTruck, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaTimes,
-  FaDownload, FaFilePdf, FaMapMarkerAlt, FaTools, FaClock, FaHistory,
+  FaDownload, FaFilePdf, FaMapMarkerAlt, FaTools, FaClock, FaHistory, FaCog,
 } from 'react-icons/fa';
+import MantenedorEquipos from './MantenedorEquipos';
 
 const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
@@ -24,6 +25,7 @@ export default function Maquinaria() {
   const [historial, setHistorial] = useState(null);       // { maquina, partes, totales }
   const [cargandoHist, setCargandoHist] = useState(false);
   const [pdfModal, setPdfModal] = useState(null);         // { url, nombre }
+  const [mantenedorAbierto, setMantenedorAbierto] = useState(false);
 
   const cargar = async () => {
     setCargando(true);
@@ -74,9 +76,14 @@ export default function Maquinaria() {
           <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, letterSpacing: '0.5px' }}>GESTIÓN DE FLOTA</div>
           <h2 style={{ margin: '2px 0 0', fontSize: '24px', color: '#1e293b' }}>Panel de Maquinaria</h2>
         </div>
-        <button onClick={cargar} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#334155' }}>
-          <FaSyncAlt /> Actualizar
-        </button>
+        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+          <button onClick={() => setMantenedorAbierto(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#206bc4', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#fff' }}>
+            <FaCog /> Gestionar catálogo
+          </button>
+          <button onClick={cargar} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#334155' }}>
+            <FaSyncAlt /> Actualizar
+          </button>
+        </div>
       </div>
 
       {/* Tarjetas de resumen */}
@@ -307,6 +314,12 @@ export default function Maquinaria() {
           </div>
         </div>
       )}
+
+      {/* ── Mantenedor de catálogos (Equipos/Marcas/Modelos) ─────────────── */}
+      <MantenedorEquipos
+        abierto={mantenedorAbierto}
+        onClose={() => { setMantenedorAbierto(false); cargar(); }}
+      />
     </div>
   );
 }
