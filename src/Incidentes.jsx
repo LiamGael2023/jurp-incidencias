@@ -309,8 +309,12 @@ function Incidentes() {
           let tipoNombre = tipoBase;
           const anotherType = inc.another_type?.trim();
           if (anotherType && (tipoBase === 'Otro' || tipoBase === 'Otros')) tipoNombre = `Otros (${anotherType})`;
+          // Código de identificación: INCIDENTE-{id}-DDMMAAAA (fecha de creación).
+          const f = new Date(inc.created_at);
+          const fechaCod = `${String(f.getDate()).padStart(2,'0')}${String(f.getMonth()+1).padStart(2,'0')}${f.getFullYear()}`;
+          const codigoIncidente = `INCIDENTE-${String(inc.id).padStart(3,'0')}-${fechaCod}`;
           return {
-            id: inc.id, codigo: inc.code || 'Sin Código', lugar: inc.location_text || '-',
+            id: inc.id, codigoIncidente, codigo: inc.code || 'Sin Código', lugar: inc.location_text || '-',
             tipo: tipoNombre, tipoBase, gravedad: inc.severity || 'lev', estado: inc.status || 'pat',
             usuario: inc.user?.username || 'Sistema',
             fecha: new Date(inc.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' }),
@@ -681,7 +685,8 @@ function Incidentes() {
     doc.text(inc.tipo, 14, y); y += 9;
     doc.setFontSize(9);
     const infoRows = [
-      ['Código:', inc.codigo || 'Sin Código'],
+      ['Código Incidente:', inc.codigoIncidente || '-'],
+      ['Código Infra.:', inc.codigo || 'Sin Código'],
       ['Ubicación:', inc.lugar || '-'],
       ['Fecha:', inc.fecha || '-'],
       ['Estado:', estadoTexto],
@@ -793,7 +798,7 @@ function Incidentes() {
     ['B5','C5','D5','E5','F5','G5'].forEach(c => { ws.getCell(c).fill = azul; });
     ws.getRow(5).height = 22;
     const campos = [
-      ['Tipo de Incidente', inc.tipo], ['Código', inc.codigo || 'Sin Código'],
+      ['Tipo de Incidente', inc.tipo], ['Código Incidente', inc.codigoIncidente || '-'], ['Código Infraestructura', inc.codigo || 'Sin Código'],
       ['Ubicación', inc.lugar || '-'], ['Fecha', inc.fecha || '-'],
       ['Estado', estadoTexto], ['Gravedad', gravedadTexto], ['Reportado por', inc.usuario || '-'],
     ];
@@ -805,7 +810,7 @@ function Incidentes() {
       ws.getCell(`B${6+i}`).value = val;
       ws.getCell(`B${6+i}`).font = { size: 10 };
     });
-    const rStart = 14;
+    const rStart = 6 + campos.length + 1;
     ws.mergeCells(`A${rStart}:G${rStart}`);
     ws.getCell(`A${rStart}`).value = 'DETALLE DE RECURSOS Y COSTEO';
     ws.getCell(`A${rStart}`).font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
@@ -961,7 +966,7 @@ function Incidentes() {
     if (filtroGravedad && inc.gravedad !== filtroGravedad) return false;
     if (busqueda.trim()) {
       const q = busqueda.toLowerCase().trim();
-      const texto = `${inc.codigo} ${inc.lugar} ${inc.tipo} ${inc.usuario}`.toLowerCase();
+      const texto = `${inc.codigoIncidente} ${inc.codigo} ${inc.lugar} ${inc.tipo} ${inc.usuario}`.toLowerCase();
       if (!texto.includes(q)) return false;
     }
     return true;
@@ -1109,6 +1114,7 @@ function Incidentes() {
                     )}
                   </div>
                   <div className="tbl-card-body">
+                    <div style={{ fontSize:'10px', fontWeight:700, color:'#1463A5', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'4px', padding:'2px 8px', display:'inline-block', marginBottom:'6px', letterSpacing:'0.3px' }}>{inc.codigoIncidente}</div>
                     <h3 className="tbl-card-title" title={inc.tipo} style={{ fontSize:'0.95rem', lineHeight:'1.3', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden', minHeight:'2.6em' }}>{inc.tipo}</h3>
                     <div className="tbl-text-muted tbl-mb-2"><FaMapMarkerAlt className="tbl-icon tbl-text-blue" /><strong>{inc.codigo}</strong><br/><span style={{paddingLeft: '20px', fontSize: '0.85rem'}}>{inc.lugar}</span></div>
                     <div className="tbl-text-muted"><FaCalendarAlt className="tbl-icon" /> {inc.fecha}</div>
@@ -1140,11 +1146,12 @@ function Incidentes() {
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{maxWidth: '960px'}}>
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
-                <h5 className="tbl-modal-title">Gestión de Incidente #{incidenteActivo.id}</h5>
+                <h5 className="tbl-modal-title">Gestión · {incidenteActivo.codigoIncidente}</h5>
                 <button className="tbl-btn-close" onClick={() => setModalAbierto(false)}><FaTimes/></button>
               </div>
               <div className="tbl-modal-body">
                 <div className="tbl-alert tbl-alert-info">
+                  <div style={{ fontSize:'11px', fontWeight:700, color:'#1463A5', marginBottom:'4px', letterSpacing:'0.3px' }}>{incidenteActivo.codigoIncidente}</div>
                   <h4 className="tbl-alert-title">{incidenteActivo.tipo} en {incidenteActivo.codigo}</h4>
                   <div className="tbl-text-muted">{incidenteActivo.lugar}</div>
                 </div>
