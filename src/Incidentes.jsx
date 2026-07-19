@@ -63,6 +63,7 @@ function Incidentes() {
   const [pdfUrlActivo, setPdfUrlActivo] = useState(null);
   const [imgRefModal, setImgRefModal] = useState(null);
   const [modalPartes, setModalPartes] = useState(null);   // fila agrupada de maquinaria
+  const [formTipo, setFormTipo] = useState(null);         // 'Personal' | 'Maquinaria' | 'Insumo' | null → modal de añadir
 
   // --- ESTADOS DEL MODAL DE EVIDENCIAS (GALERÍA) ---
   const [modalMediaAbierto, setModalMediaAbierto] = useState(false);
@@ -403,7 +404,21 @@ function Incidentes() {
       const listMat = Array.isArray(dataMat) ? dataMat : (dataMat.results || []);
       const listMaq = Array.isArray(dataMaq) ? dataMaq : (dataMaq.results || []);
       const idStr = String(incidenteId);
-      const formatPers = listPers.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-pers-${i.id}`, dbId: i.id, endpoint: 'incident-personnels', tipo: 'Personal', descripcionResumen: i.description, cantidad: parseFloat(i.quantity_hours), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity_hours) * parseFloat(i.unit_price), guardadoEnDB: true }));
+      const formatPers = listPers.filter(i => String(i.incident_report) === idStr).map(i => {
+        // Recupera el cargo y el desglose de cuadrilla desde el texto guardado
+        // (o desde los campos del backend si existen), para no mostrar "undefined".
+        const descripcion = (i.description || '').split('\n')[0].trim();
+        return {
+          idLocal: `db-pers-${i.id}`, dbId: i.id, endpoint: 'incident-personnels', tipo: 'Personal',
+          descripcion,
+          numPersonas: i.num_personas ?? 1,
+          horasTrabajo: i.horas_normales ?? parseFloat(i.quantity_hours) ?? 0,
+          horasExtras: i.horas_extras ?? 0,
+          descripcionResumen: i.description,
+          cantidad: parseFloat(i.quantity_hours), precioUnitario: parseFloat(i.unit_price),
+          total: parseFloat(i.quantity_hours) * parseFloat(i.unit_price), guardadoEnDB: true
+        };
+      });
       const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', descripcionResumen: i.description, unidad: i.unit || 'und', cantidad: parseFloat(i.quantity), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity) * parseFloat(i.unit_price), guardadoEnDB: true }));
       const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-maq-${i.id}`, dbId: i.id, endpoint: 'daily-part-heavy-equipments', cerrado: i.cerrado || false, tipo: 'Maquinaria', numeroParte: i.part_number, descripcionResumen: detalleMaquinaDeParte(i, todosModelos), cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)), precioUnitario: parseFloat(i.unit_price), total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price), guardadoEnDB: true }));
       setRecursos([...formatPers, ...formatMat, ...formatMaq]);
@@ -558,6 +573,14 @@ function Incidentes() {
   const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const tieneMetradoActividad = IMG_METRADO[nuevoRecurso.actividad] !== undefined;
 
+  // Abre el modal de "Añadir" con el tipo de recurso preseleccionado y el
+  // formulario limpio (conservando el correlativo para maquinaria).
+  const abrirFormAñadir = (tipo) => {
+    setNuevoRecurso({ ...estadoInicialRecurso, tipo, numeroParte: generarCorrelativo() });
+    if (tipo === 'Maquinaria') { cargarEquiposCat('JURP'); obtenerCorrelativoParte(); }
+    setFormTipo(tipo);
+  };
+
   const agregarRecurso = () => {
     let descFinal = nuevoRecurso.descripcion;
     let cantFinal = parseFloat(nuevoRecurso.cantidad) || 0;
@@ -594,6 +617,7 @@ function Incidentes() {
     setRecursos([...recursos, recursoCalculado]);
     setNuevoRecurso({...estadoInicialRecurso, numeroParte: generarCorrelativo()});
     obtenerCorrelativoParte();
+    setFormTipo(null);   // cierra el modal de añadir
   };
 
   const eliminarRecurso = (idLocal) => setRecursos(recursos.filter(r => r.idLocal !== idLocal));
@@ -1155,16 +1179,114 @@ function Incidentes() {
                   <h4 className="tbl-alert-title">{incidenteActivo.tipo} en {incidenteActivo.codigo}</h4>
                   <div className="tbl-text-muted">{incidenteActivo.lugar}</div>
                 </div>
-                <div className="tbl-row tbl-mb-3 align-items-center">
-                  <div className="tbl-col-3">
-                    <label className="tbl-form-label">Tipo de Recurso</label>
-                    <select className="tbl-form-select" value={nuevoRecurso.tipo} onChange={e => setNuevoRecurso({...nuevoRecurso, tipo: e.target.value})}>
-                      <option value="Personal">Personal (HH / Día)</option>
-                      <option value="Maquinaria">Maquinaria (HE / Día)</option>
-                      <option value="Insumo">Insumos / Materiales</option>
-                    </select>
-                  </div>
+                {/* La tabla agrupada va aquí abajo (sin formulario inline) */}
+
+                <div className="tbl-table-responsive tbl-border-top">
+                  <table className="tbl-table tbl-table-vcenter">
+                    <thead><tr><th style={{width:'24px'}}></th><th>Detalle</th><th className="tbl-text-end">Cantidad</th><th className="tbl-text-end">P. Unit.</th><th className="tbl-text-end">Total</th><th></th></tr></thead>
+                    <tbody>
+                      {CATEGORIAS.map(cat => {
+                          const filas = recursosAgrupados.filter(r => r.tipo === cat.key);
+                          return (
+                            <Fragment key={cat.key}>
+                              {/* Cabecera de categoría con botón Añadir */}
+                              <tr style={{ background:'#eef2f7' }}>
+                                <td colSpan="5" style={{ padding:'7px 10px' }}>
+                                  <span style={{ fontWeight:700, fontSize:'11px', letterSpacing:'0.6px', color:'#334155' }}>{cat.titulo}</span>
+                                </td>
+                                <td style={{ background:'#eef2f7', textAlign:'right', paddingRight:'10px' }}>
+                                  <button type="button" onClick={() => abrirFormAñadir(cat.key)} title={`Añadir a ${cat.titulo}`}
+                                    style={{ display:'inline-flex', alignItems:'center', gap:'4px', background:'#206bc4', color:'#fff', border:'none', borderRadius:'5px', padding:'4px 10px', fontSize:'11px', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+                                    <FaPlus size={10} /> Añadir
+                                  </button>
+                                </td>
+                              </tr>
+                              {filas.length === 0 && (
+                                <tr><td colSpan="6" style={{ padding:'10px 14px', fontSize:'11px', color:'#94a3b8', fontStyle:'italic' }}>Sin registros — usa "Añadir" para agregar.</td></tr>
+                              )}
+                              {filas.map(r => (
+                                <tr key={r.idLocal}>
+                                  <td></td>
+                                  <td style={{fontSize: '12px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>
+                                    {r.tipo === 'Personal' && r.count > 1
+                                      ? (r.descripcion ? `${r.descripcion} (Cuadrilla: ${r.numPersonas} persona(s) x ${r.horasTrabajo}h normales + ${r.horasExtras}h extras)` : (r.descripcionResumen || ''))
+                                      : (r.descripcionResumen || r.descripcion)}
+                                    {r.count > 1 && <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>}
+                                  </td>
+                                  <td className="tbl-text-end font-bold">{r.cantidadTotal.toLocaleString('es-PE', {minimumFractionDigits: r.tipo==='Personal'?1:2, maximumFractionDigits: r.tipo==='Personal'?1:2})} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und')}</span></td>
+                                  <td className="tbl-text-end">S/ {fmtNum(r.precioUnitario)}</td>
+                                  <td className="tbl-text-end text-blue font-bold">S/ {fmtNum(r.totalSum)}</td>
+                                  <td>
+                                    {r.guardadoEnDB ? (
+                                      <div style={{display: 'flex', gap: '6px', alignItems: 'center', flexWrap:'wrap'}}>
+                                        {r.tipo === 'Maquinaria' && r.count > 1
+                                          ? (() => {
+                                              const cerrados = r.partesMaq.filter(p => p.cerrado).length;
+                                              const activos = r.count - cerrados;
+                                              return <span className="tbl-badge" style={{backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:600}}>{activos > 0 ? `${activos} activo${activos>1?'s':''}` : ''}{activos > 0 && cerrados > 0 ? ' · ' : ''}{cerrados > 0 ? `${cerrados} cerrado${cerrados>1?'s':''}` : ''}</span>;
+                                            })()
+                                          : r.tipo === 'Maquinaria' && r.cerrado
+                                          ? <span className="tbl-badge" style={{backgroundColor:'#e2e8f0', color:'#475569'}}>Cerrado</span>
+                                          : <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>}
+                                        {r.tipo === 'Maquinaria' && r.count === 1 && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
+                                        {r.tipo === 'Maquinaria' && r.count === 1 && !r.cerrado && (<button type="button" onClick={() => cerrarParteDiario(r)} className="tbl-btn-action" title="Finalizar actividades (libera la máquina)" style={{padding: '4px 10px', backgroundColor: '#dcfce7', color:'#15803d', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:'600'}}><FaCheckCircle size={13} /> Finalizar</button>)}
+                                        {r.tipo === 'Maquinaria' && r.count > 1 && (
+                                          <button type="button" onClick={() => setModalPartes(r)} title={`Ver los ${r.count} partes diarios`}
+                                            style={{padding:'4px 10px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'12px', fontWeight:600}}>
+                                            <FaListUl size={11} /> Ver partes ({r.count})
+                                          </button>
+                                        )}
+                                        {!(r.tipo === 'Maquinaria' && r.cerrado) && (<button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>)}
+                                      </div>
+                                    ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
+                                  </td>
+                                </tr>
+                              ))}
+                              {/* Subtotal de la categoría (solo si hay filas) */}
+                              {filas.length > 0 && (
+                                <tr>
+                                  <td colSpan="4" className="tbl-text-end" style={{ fontSize:'11px', color:'#64748b', fontWeight:600, paddingRight:'10px' }}>Subtotal {cat.titulo}</td>
+                                  <td className="tbl-text-end" style={{ fontSize:'12px', fontWeight:700, color:'#334155' }}>S/ {fmtNum(subtotalCategoria(cat.key))}</td>
+                                  <td></td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
+                    </tbody>
+                  </table>
                 </div>
+              </div>
+              <div className="tbl-modal-footer" style={{flexWrap:'wrap',gap:'8px'}}>
+                <div className="tbl-text-start tbl-text-muted">Costo Total: <span style={{fontSize: '1.25rem', color: '#1e293b', fontWeight: 'bold'}}>S/ {fmtNum(costoTotalIncidente)}</span></div>
+                <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
+                  {incidenteActivo?.estado === 'cer' ? (
+                    <span style={{background:'#dcfce7',color:'#15803d',padding:'6px 14px',borderRadius:'4px',fontSize:'13px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px'}}><FaCheckCircle/> Incidencia cerrada</span>
+                  ) : (
+                    <button className="tbl-btn" onClick={cerrarIncidenteCompleto} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Cierra los partes, libera las máquinas y marca la incidencia como cerrada"><FaCheckCircle/> Cerrar incidencia</button>
+                  )}
+                  <button className="tbl-btn" onClick={exportarPDF} style={{background:'#d63939',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar PDF"><FaFilePdf/> PDF</button>
+                  <button className="tbl-btn" onClick={exportarExcel} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar Excel"><FaFileExcel/> Excel</button>
+                  <button className="tbl-btn tbl-btn-link" onClick={() => setModalAbierto(false)}>Cerrar</button>
+                  <button className="tbl-btn tbl-btn-primary" onClick={guardarCosteos} disabled={guardando}>{guardando ? <><FaSyncAlt className="icon-spin" style={{marginRight: '8px'}} /> Guardando...</> : <><FaSave style={{marginRight: '8px'}} /> Guardar Costeos</>}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Modal: Añadir recurso (Mano de obra / Equipo / Insumo) ──────── */}
+      {formTipo && (
+        <div className="tbl-modal-backdrop" style={{ zIndex: 10001 }}>
+          <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: formTipo === 'Maquinaria' ? '900px' : '760px' }}>
+            <div className="tbl-modal-content">
+              <div className="tbl-modal-header">
+                <h5 className="tbl-modal-title">
+                  {formTipo === 'Personal' ? '👷 Añadir Mano de Obra' : formTipo === 'Maquinaria' ? '🚜 Añadir Equipo · Parte Diario' : '📦 Añadir Insumo / Material'}
+                </h5>
+                <button className="tbl-btn-close" onClick={() => setFormTipo(null)}><FaTimes/></button>
+              </div>
+              <div className="tbl-modal-body">
                 {nuevoRecurso.tipo === 'Maquinaria' ? (
                   <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '4px', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'20px', color:'#206bc4', fontWeight:'bold', fontSize:'16px' }}><FaFileInvoice /> Formulario: Parte Diario de Maquinaria</div>
@@ -1311,90 +1433,11 @@ function Incidentes() {
                     <div className="tbl-col-2"><label className="tbl-form-label">Precio Unit. (S/)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
                   </div>
                 )}
-                
-                <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '20px'}}>
-                  <button className="tbl-btn tbl-btn-success" onClick={agregarRecurso}><FaPlus style={{marginRight:'5px'}}/> Agregar a la lista</button>
-                </div>
-                <div className="tbl-table-responsive tbl-border-top">
-                  <table className="tbl-table tbl-table-vcenter">
-                    <thead><tr><th style={{width:'24px'}}></th><th>Detalle</th><th className="tbl-text-end">Cantidad</th><th className="tbl-text-end">P. Unit.</th><th className="tbl-text-end">Total</th><th></th></tr></thead>
-                    <tbody>
-                      {recursos.length === 0 ? <tr><td colSpan="6" className="tbl-text-center tbl-text-muted py-4">Aún no hay registros para este incidente.</td></tr> : (
-                        CATEGORIAS.map(cat => {
-                          const filas = recursosAgrupados.filter(r => r.tipo === cat.key);
-                          if (filas.length === 0) return null;
-                          return (
-                            <Fragment key={cat.key}>
-                              {/* Cabecera de categoría */}
-                              <tr style={{ background:'#eef2f7' }}>
-                                <td colSpan="5" style={{ fontWeight:700, fontSize:'11px', letterSpacing:'0.6px', color:'#334155', padding:'7px 10px' }}>{cat.titulo}</td>
-                                <td style={{ background:'#eef2f7' }}></td>
-                              </tr>
-                              {filas.map(r => (
-                                <tr key={r.idLocal}>
-                                  <td></td>
-                                  <td style={{fontSize: '12px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>
-                                    {r.tipo === 'Personal' && r.count > 1
-                                      ? `${r.descripcion} (Cuadrilla: ${r.numPersonas} persona(s) x ${r.horasTrabajo}h normales + ${r.horasExtras}h extras)`
-                                      : (r.descripcionResumen || r.descripcion)}
-                                    {r.count > 1 && <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>}
-                                  </td>
-                                  <td className="tbl-text-end font-bold">{r.cantidadTotal.toLocaleString('es-PE', {minimumFractionDigits: r.tipo==='Personal'?1:2, maximumFractionDigits: r.tipo==='Personal'?1:2})} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und')}</span></td>
-                                  <td className="tbl-text-end">S/ {fmtNum(r.precioUnitario)}</td>
-                                  <td className="tbl-text-end text-blue font-bold">S/ {fmtNum(r.totalSum)}</td>
-                                  <td>
-                                    {r.guardadoEnDB ? (
-                                      <div style={{display: 'flex', gap: '6px', alignItems: 'center', flexWrap:'wrap'}}>
-                                        {r.tipo === 'Maquinaria' && r.count > 1
-                                          ? (() => {
-                                              const cerrados = r.partesMaq.filter(p => p.cerrado).length;
-                                              const activos = r.count - cerrados;
-                                              return <span className="tbl-badge" style={{backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:600}}>{activos > 0 ? `${activos} activo${activos>1?'s':''}` : ''}{activos > 0 && cerrados > 0 ? ' · ' : ''}{cerrados > 0 ? `${cerrados} cerrado${cerrados>1?'s':''}` : ''}</span>;
-                                            })()
-                                          : r.tipo === 'Maquinaria' && r.cerrado
-                                          ? <span className="tbl-badge" style={{backgroundColor:'#e2e8f0', color:'#475569'}}>Cerrado</span>
-                                          : <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>}
-                                        {r.tipo === 'Maquinaria' && r.count === 1 && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
-                                        {r.tipo === 'Maquinaria' && r.count === 1 && !r.cerrado && (<button type="button" onClick={() => cerrarParteDiario(r)} className="tbl-btn-action" title="Finalizar actividades (libera la máquina)" style={{padding: '4px 10px', backgroundColor: '#dcfce7', color:'#15803d', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:'600'}}><FaCheckCircle size={13} /> Finalizar</button>)}
-                                        {r.tipo === 'Maquinaria' && r.count > 1 && (
-                                          <button type="button" onClick={() => setModalPartes(r)} title={`Ver los ${r.count} partes diarios`}
-                                            style={{padding:'4px 10px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'12px', fontWeight:600}}>
-                                            <FaListUl size={11} /> Ver partes ({r.count})
-                                          </button>
-                                        )}
-                                        {!(r.tipo === 'Maquinaria' && r.cerrado) && (<button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>)}
-                                      </div>
-                                    ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
-                                  </td>
-                                </tr>
-                              ))}
-                              {/* Subtotal de la categoría */}
-                              <tr>
-                                <td colSpan="4" className="tbl-text-end" style={{ fontSize:'11px', color:'#64748b', fontWeight:600, paddingRight:'10px' }}>Subtotal {cat.titulo}</td>
-                                <td className="tbl-text-end" style={{ fontSize:'12px', fontWeight:700, color:'#334155' }}>S/ {fmtNum(subtotalCategoria(cat.key))}</td>
-                                <td></td>
-                              </tr>
-                            </Fragment>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+
               </div>
-              <div className="tbl-modal-footer" style={{flexWrap:'wrap',gap:'8px'}}>
-                <div className="tbl-text-start tbl-text-muted">Costo Total: <span style={{fontSize: '1.25rem', color: '#1e293b', fontWeight: 'bold'}}>S/ {fmtNum(costoTotalIncidente)}</span></div>
-                <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
-                  {incidenteActivo?.estado === 'cer' ? (
-                    <span style={{background:'#dcfce7',color:'#15803d',padding:'6px 14px',borderRadius:'4px',fontSize:'13px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px'}}><FaCheckCircle/> Incidencia cerrada</span>
-                  ) : (
-                    <button className="tbl-btn" onClick={cerrarIncidenteCompleto} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Cierra los partes, libera las máquinas y marca la incidencia como cerrada"><FaCheckCircle/> Cerrar incidencia</button>
-                  )}
-                  <button className="tbl-btn" onClick={exportarPDF} style={{background:'#d63939',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar PDF"><FaFilePdf/> PDF</button>
-                  <button className="tbl-btn" onClick={exportarExcel} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar Excel"><FaFileExcel/> Excel</button>
-                  <button className="tbl-btn tbl-btn-link" onClick={() => setModalAbierto(false)}>Cerrar</button>
-                  <button className="tbl-btn tbl-btn-primary" onClick={guardarCosteos} disabled={guardando}>{guardando ? <><FaSyncAlt className="icon-spin" style={{marginRight: '8px'}} /> Guardando...</> : <><FaSave style={{marginRight: '8px'}} /> Guardar Costeos</>}</button>
-                </div>
+              <div className="tbl-modal-footer" style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+                <button className="tbl-btn tbl-btn-link" onClick={() => setFormTipo(null)}>Cancelar</button>
+                <button className="tbl-btn tbl-btn-success" onClick={agregarRecurso}><FaPlus style={{marginRight:'5px'}}/> Agregar a la lista</button>
               </div>
             </div>
           </div>
