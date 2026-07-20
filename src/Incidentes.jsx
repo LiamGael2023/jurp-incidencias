@@ -444,6 +444,7 @@ function Incidentes() {
           origen: maq?.origen || 'JURP',
           actividad: i.activities || '',
           hmInicio: i.start_horometer ?? '', hmFin: i.end_horometer ?? '',
+          combustible: i.fuel_gallons ?? '', vale: i.fuel_voucher || '',
           fechaParte: i.date || '', turno: i.shift || 'Día', zonaTrabajo: i.work_zone_text || '',
           operador: i.operator || '', observaciones: i.observations || '',
           cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)),
@@ -1676,6 +1677,7 @@ function Incidentes() {
                       <th style={{ textAlign:'left', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>ESTADO</th>
                       <th style={{ textAlign:'left', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>ACTIVIDAD</th>
                       <th style={{ textAlign:'right', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>HORAS</th>
+                      <th style={{ textAlign:'right', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>COMBUST.</th>
                       <th style={{ textAlign:'right', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>TOTAL</th>
                       <th style={{ textAlign:'right', padding:'11px 22px', fontSize:'11px', color:'#475569' }}>ACCIONES</th>
                     </tr>
@@ -1694,6 +1696,7 @@ function Incidentes() {
                           </td>
                           <td style={{ padding:'12px 10px', color:'#475569', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={reg.actividad || ''}>{reg.actividad || '—'}</td>
                           <td style={{ padding:'12px 10px', textAlign:'right', fontWeight:600, color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(horas)} HE</td>
+                          <td style={{ padding:'12px 10px', textAlign:'right', color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(reg.combustible || 0)} Gls</td>
                           <td style={{ padding:'12px 10px', textAlign:'right', fontWeight:700, color:'#1463A5', whiteSpace:'nowrap' }}>S/ {fmtNum(reg.total || 0)}</td>
                           <td style={{ padding:'12px 22px' }}>
                             <div style={{ display:'flex', gap:'6px', justifyContent:'flex-end', alignItems:'center' }}>
@@ -1722,6 +1725,7 @@ function Incidentes() {
                         TOTAL · {modalPartes.count} parte{modalPartes.count !== 1 ? 's' : ''}
                       </td>
                       <td style={{ padding:'14px 10px', textAlign:'right', fontWeight:700, color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(modalPartes.cantidadTotal)} HE</td>
+                      <td style={{ padding:'14px 10px', textAlign:'right', fontWeight:700, color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(modalPartes.partesMaq.reduce((s, p) => s + (parseFloat(p.registro?.combustible) || 0), 0))} Gls</td>
                       <td style={{ padding:'14px 10px', textAlign:'right', fontWeight:800, fontSize:'15px', color:'#1463A5', whiteSpace:'nowrap' }}>S/ {fmtNum(modalPartes.totalSum)}</td>
                       <td style={{ padding:'14px 22px' }}></td>
                     </tr>
