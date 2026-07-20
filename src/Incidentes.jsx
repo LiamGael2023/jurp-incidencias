@@ -806,8 +806,9 @@ function Incidentes() {
         // partes quedan en la misma fila.
         clave = `maq|${codigoDe(r)}`;
       } else if (r.tipo === 'Personal') {
+        // Personal: agrupa por cargo + origen (el desglose va por entrada).
         const cargo = normalizar(r.descripcion);
-        clave = `pers|${r.origen || 'JURP'}|${cargo}|${r.numPersonas}|${r.horasTrabajo}|${r.horasExtras}|${r.cantidad}|${r.precioUnitario}|${r.guardadoEnDB}`;
+        clave = `pers|${r.origen || 'JURP'}|${cargo}`;
       } else {
         // Insumos: agrupa por descripción + unidad (sin importar precio ni si
         // está guardado). El P. Unitario se recalcula como promedio ponderado.
@@ -841,6 +842,9 @@ function Incidentes() {
       }
       if (r.tipo === 'Insumo') {
         g.entradas.push({ idLocal: r.idLocal, dbId: r.dbId, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, cantidad: r.cantidad, precioUnitario: r.precioUnitario, total: r.total, unidad: r.unidad || 'und' });
+      }
+      if (r.tipo === 'Personal') {
+        g.entradas.push({ idLocal: r.idLocal, dbId: r.dbId, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, cantidad: r.cantidad, precioUnitario: r.precioUnitario, total: r.total, numPersonas: r.numPersonas, horasTrabajo: r.horasTrabajo, horasExtras: r.horasExtras });
       }
     }
     return Array.from(grupos.values());
@@ -1391,13 +1395,16 @@ function Incidentes() {
                                 <tr><td colSpan="6" style={{ padding:'10px 14px', fontSize:'11px', color:'#94a3b8', fontStyle:'italic' }}>Sin registros — usa "Añadir" para agregar.</td></tr>
                               )}
                               {filas.map(r => (
-                                r.tipo === 'Insumo' && r.count > 1 ? (
-                                  // ── Insumo agrupado: cabecera + desglose inline + total ──
+                                (r.tipo === 'Insumo' || r.tipo === 'Personal') && r.count > 1 ? (
+                                  // ── Grupo con desglose inline (insumo o personal) ──
                                   <Fragment key={r.idLocal}>
                                     <tr style={{ background:'#fafbfc' }}>
                                       <td></td>
                                       <td style={{fontSize:'12px', fontWeight:700, color:'#1e293b'}}>
-                                        📦 {(r.descripcionResumen || r.descripcion || '').toUpperCase()}
+                                        {r.tipo === 'Personal' && (
+                                          <span style={{marginRight:'6px', fontSize:'9px', fontWeight:700, padding:'2px 6px', borderRadius:'4px', backgroundColor: r.origen === 'EXTERNA' ? '#fef3c7' : '#e0f2fe', color: r.origen === 'EXTERNA' ? '#b45309' : '#0284c7'}}>{r.origen === 'EXTERNA' ? 'EXTERNA' : 'JURP'}</span>
+                                        )}
+                                        {r.tipo === 'Personal' ? '👷' : '📦'} {(r.descripcion || r.descripcionResumen || '').split('\n')[0].toUpperCase()}
                                         <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>
                                       </td>
                                       <td></td><td></td><td></td>
@@ -1406,8 +1413,12 @@ function Incidentes() {
                                     {r.entradas.map((e, idx) => (
                                       <tr key={e.idLocal || idx} style={{ fontSize:'12px' }}>
                                         <td></td>
-                                        <td style={{ paddingLeft:'28px', color:'#64748b' }}>Entrada {idx + 1}</td>
-                                        <td className="tbl-text-end">{e.cantidad.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2})} <span style={{fontSize:'10px', color:'#94a3b8'}}>{e.unidad}</span></td>
+                                        <td style={{ paddingLeft:'28px', color:'#64748b' }}>
+                                          {r.tipo === 'Personal'
+                                            ? `${e.numPersonas} pers × ${e.horasTrabajo}h${parseFloat(e.horasExtras) > 0 ? ` + ${e.horasExtras}h ext` : ''}`
+                                            : `Entrada ${idx + 1}`}
+                                        </td>
+                                        <td className="tbl-text-end">{e.cantidad.toLocaleString('es-PE', {minimumFractionDigits: r.tipo==='Personal'?1:2, maximumFractionDigits: r.tipo==='Personal'?1:2})} <span style={{fontSize:'10px', color:'#94a3b8'}}>{r.tipo === 'Personal' ? 'HH' : e.unidad}</span></td>
                                         <td className="tbl-text-end">S/ {fmtNum(e.precioUnitario)}</td>
                                         <td className="tbl-text-end" style={{ color:'#475569' }}>S/ {fmtNum(e.total)}</td>
                                         <td>
@@ -1417,8 +1428,8 @@ function Incidentes() {
                                     ))}
                                     <tr style={{ background:'#f1f5f9', borderBottom:'2px solid #e2e8f0' }}>
                                       <td></td>
-                                      <td style={{ fontSize:'11px', fontWeight:700, color:'#334155', textAlign:'right' }}>Total {(r.descripcionResumen || r.descripcion || '')}</td>
-                                      <td className="tbl-text-end" style={{ fontWeight:700, color:'#334155' }}>{r.cantidadTotal.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2})} <span style={{fontSize:'10px', color:'#626976'}}>{r.unidad||'und'}</span></td>
+                                      <td style={{ fontSize:'11px', fontWeight:700, color:'#334155', textAlign:'right' }}>Total {(r.descripcion || r.descripcionResumen || '').split('\n')[0]}</td>
+                                      <td className="tbl-text-end" style={{ fontWeight:700, color:'#334155' }}>{r.cantidadTotal.toLocaleString('es-PE', {minimumFractionDigits: r.tipo==='Personal'?1:2, maximumFractionDigits: r.tipo==='Personal'?1:2})} <span style={{fontSize:'10px', color:'#626976'}}>{r.tipo === 'Personal' ? 'HH' : (r.unidad||'und')}</span></td>
                                       <td></td>
                                       <td className="tbl-text-end text-blue" style={{ fontWeight:700 }}>S/ {fmtNum(r.totalSum)}</td>
                                       <td></td>
