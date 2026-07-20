@@ -523,6 +523,11 @@ function Incidentes() {
   };
 
   const cerrarParteDiario = async (fila) => {
+    // Un parte sin dbId todavía no está en la BD → no se puede cerrar.
+    if (!fila || !fila.dbId) {
+      Swal.fire({ icon: 'info', title: 'Guarda primero', text: 'Este parte aún no está guardado. Usa "Guardar Costeos" y luego finalízalo.' });
+      return;
+    }
     const conf = await Swal.fire({
       title: '¿Finalizar actividades?',
       html: `Se cerrará este parte diario.<br>La máquina quedará <b>disponible</b> para otros partes y el parte <b>no podrá editarse</b>.`,
