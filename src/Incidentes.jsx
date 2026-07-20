@@ -492,6 +492,7 @@ function Incidentes() {
   };
 
   const eliminarRecursoGuardado = async (fila) => {
+    if (incidentesCerrados.includes(incidenteActivo?.id)) { Swal.fire('Incidencia cerrada', 'Reábrela para poder editar.', 'info'); return; }
     const registros = fila.registros || [{ dbId: fila.dbId, endpoint: fila.endpoint }];
     const cuantos = registros.length;
     const conf = await Swal.fire({
@@ -781,6 +782,7 @@ function Incidentes() {
 
   // Elimina UNA entrada de insumo ya guardada en la BD.
   const eliminarEntradaInsumo = async (entrada) => {
+    if (incidentesCerrados.includes(incidenteActivo?.id)) { Swal.fire('Incidencia cerrada', 'Reábrela para poder editar.', 'info'); return; }
     const conf = await Swal.fire({
       title: '¿Eliminar esta entrada?',
       text: `Se eliminará ${fmtNum(entrada.cantidad)} ${entrada.unidad} (S/ ${fmtNum(entrada.total)}) de forma permanente.`,
@@ -1391,6 +1393,7 @@ function Incidentes() {
                     <tbody>
                       {CATEGORIAS.map(cat => {
                           const filas = recursosAgrupados.filter(r => r.tipo === cat.key);
+                          const bloqueado = incidentesCerrados.includes(incidenteActivo?.id);
                           return (
                             <Fragment key={cat.key}>
                               {/* Cabecera de categoría con botón Añadir */}
@@ -1438,7 +1441,9 @@ function Incidentes() {
                                         <td className="tbl-text-end">S/ {fmtNum(e.precioUnitario)}</td>
                                         <td className="tbl-text-end" style={{ color:'#475569' }}>S/ {fmtNum(e.total)}</td>
                                         <td>
-                                          <button type="button" onClick={() => (e.guardadoEnDB && e.dbId) ? eliminarEntradaInsumo(e) : eliminarRecursosLocales([e.idLocal])} className="tbl-btn-action text-danger" title="Eliminar esta entrada" style={{padding:'4px 8px', backgroundColor:'#fee2e2', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaTrash size={13} /></button>
+                                          {!bloqueado && (
+                                            <button type="button" onClick={() => (e.guardadoEnDB && e.dbId) ? eliminarEntradaInsumo(e) : eliminarRecursosLocales([e.idLocal])} className="tbl-btn-action text-danger" title="Eliminar esta entrada" style={{padding:'4px 8px', backgroundColor:'#fee2e2', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaTrash size={13} /></button>
+                                          )}
                                         </td>
                                       </tr>
                                     ))}
@@ -1478,26 +1483,32 @@ function Incidentes() {
                                           return <span className="tbl-badge" style={{backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:600}}>{activos > 0 ? `${activos} activo${activos>1?'s':''}` : ''}{activos > 0 && cerrados > 0 ? ' · ' : ''}{cerrados > 0 ? `${cerrados} cerrado${cerrados>1?'s':''}` : ''}</span>;
                                         })()}
 
-                                        {/* + Parte Diario — deshabilitado si hay un parte abierto */}
-                                        <button type="button" disabled={r.tieneParteAbierto}
-                                          onClick={() => !r.tieneParteAbierto && agregarParteAMaquina(r)}
-                                          title={r.tieneParteAbierto ? 'Finaliza el parte abierto para agregar otro' : 'Agregar un parte diario a esta máquina'}
-                                          style={{padding:'4px 10px', backgroundColor: r.tieneParteAbierto ? '#f1f5f9' : '#dbeafe', color: r.tieneParteAbierto ? '#94a3b8' : '#1463A5', borderRadius:'4px', border:'none', cursor: r.tieneParteAbierto ? 'not-allowed' : 'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'12px', fontWeight:600}}>
-                                          <FaPlus size={10} /> Parte Diario
-                                        </button>
+                                        {/* + Parte Diario — deshabilitado si hay parte abierto u oculto si cerrada */}
+                                        {!bloqueado && (
+                                          <button type="button" disabled={r.tieneParteAbierto}
+                                            onClick={() => !r.tieneParteAbierto && agregarParteAMaquina(r)}
+                                            title={r.tieneParteAbierto ? 'Finaliza el parte abierto para agregar otro' : 'Agregar un parte diario a esta máquina'}
+                                            style={{padding:'4px 10px', backgroundColor: r.tieneParteAbierto ? '#f1f5f9' : '#dbeafe', color: r.tieneParteAbierto ? '#94a3b8' : '#1463A5', borderRadius:'4px', border:'none', cursor: r.tieneParteAbierto ? 'not-allowed' : 'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'12px', fontWeight:600}}>
+                                            <FaPlus size={10} /> Parte Diario
+                                          </button>
+                                        )}
 
                                         {/* Todo se gestiona desde "Ver partes" */}
                                         <button type="button" onClick={() => setModalPartes(r)} title={`Ver y gestionar los ${r.count} parte(s)`} style={{padding:'4px 10px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'12px', fontWeight:600}}><FaListUl size={11} /> Ver partes ({r.count})</button>
 
-                                        {/* Quitar la máquina (borrador o todos sus partes) */}
-                                        <button type="button" onClick={() => quitarMaquina(r)} title="Quitar esta máquina y sus partes" style={{padding:'4px 8px', backgroundColor:'#fee2e2', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaTrash size={14} /></button>
+                                        {/* Quitar la máquina (oculto si cerrada) */}
+                                        {!bloqueado && (
+                                          <button type="button" onClick={() => quitarMaquina(r)} title="Quitar esta máquina y sus partes" style={{padding:'4px 8px', backgroundColor:'#fee2e2', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaTrash size={14} /></button>
+                                        )}
                                       </div>
                                     ) : (r.guardadoEnDB || (r.registros && r.registros.length > 0)) ? (
                                       <div style={{display: 'flex', gap: '6px', alignItems: 'center', flexWrap:'wrap'}}>
                                         <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>
-                                        <button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>
+                                        {!bloqueado && (
+                                          <button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>
+                                        )}
                                       </div>
-                                    ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
+                                    ) : (bloqueado ? null : <button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
                                   </td>
                                 </tr>
                                 )
@@ -1817,7 +1828,7 @@ function Incidentes() {
                                   <FaFilePdf size={12} /> Ver PDF
                                 </button>
                               )}
-                              {!p.cerrado && (
+                              {!p.cerrado && !incidentesCerrados.includes(incidenteActivo?.id) && (
                                 <button type="button" onClick={() => { cerrarParteDiario(p.registro); setModalPartes(null); }} title="Finalizar este parte (libera la máquina)"
                                   style={{ display:'inline-flex', alignItems:'center', gap:'5px', padding:'5px 11px', backgroundColor:'#dcfce7', color:'#15803d', borderRadius:'5px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:600, whiteSpace:'nowrap' }}>
                                   <FaCheckCircle size={12} /> Finalizar
@@ -1847,12 +1858,14 @@ function Incidentes() {
 
             {/* Footer */}
             <div style={{ padding:'12px 22px', borderTop:'1px solid #e2e8f0', background:'#f8fafc', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-              <button type="button" disabled={modalPartes.tieneParteAbierto}
-                onClick={() => { if (!modalPartes.tieneParteAbierto) { const g = modalPartes; setModalPartes(null); agregarParteAMaquina(g); } }}
-                title={modalPartes.tieneParteAbierto ? 'Finaliza el parte abierto para agregar otro' : 'Agregar un parte diario'}
-                style={{ display:'inline-flex', alignItems:'center', gap:'6px', padding:'8px 16px', background: modalPartes.tieneParteAbierto ? '#f1f5f9' : '#1463A5', color: modalPartes.tieneParteAbierto ? '#94a3b8' : '#fff', border:'none', borderRadius:'8px', fontSize:'13px', fontWeight:600, cursor: modalPartes.tieneParteAbierto ? 'not-allowed' : 'pointer' }}>
-                <FaPlus size={11} /> Agregar parte diario
-              </button>
+              {incidentesCerrados.includes(incidenteActivo?.id) ? <span style={{fontSize:'12px', color:'#94a3b8', fontStyle:'italic'}}>Incidencia cerrada</span> : (
+                <button type="button" disabled={modalPartes.tieneParteAbierto}
+                  onClick={() => { if (!modalPartes.tieneParteAbierto) { const g = modalPartes; setModalPartes(null); agregarParteAMaquina(g); } }}
+                  title={modalPartes.tieneParteAbierto ? 'Finaliza el parte abierto para agregar otro' : 'Agregar un parte diario'}
+                  style={{ display:'inline-flex', alignItems:'center', gap:'6px', padding:'8px 16px', background: modalPartes.tieneParteAbierto ? '#f1f5f9' : '#1463A5', color: modalPartes.tieneParteAbierto ? '#94a3b8' : '#fff', border:'none', borderRadius:'8px', fontSize:'13px', fontWeight:600, cursor: modalPartes.tieneParteAbierto ? 'not-allowed' : 'pointer' }}>
+                  <FaPlus size={11} /> Agregar parte diario
+                </button>
+              )}
               <button onClick={() => setModalPartes(null)} className="tbl-btn tbl-btn-link">Cerrar</button>
             </div>
           </div>
