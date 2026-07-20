@@ -793,7 +793,7 @@ function Incidentes() {
       if (!grupos.has(clave)) {
         grupos.set(clave, {
           ...r, cantidadTotal: 0, totalSum: 0, count: 0,
-          registros: [], idsLocales: [], partesMaq: [],
+          registros: [], idsLocales: [], partesMaq: [], entradas: [],
           idsBorrador: [], tieneParteAbierto: false,
         });
       }
@@ -815,6 +815,9 @@ function Incidentes() {
       if (r.tipo === 'Maquinaria') {
         if (!r.cerrado) g.tieneParteAbierto = true;
         g.partesMaq.push({ dbId: r.dbId, idLocal: r.idLocal, cerrado: r.cerrado, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, numeroParte: r.numeroParte || '', registro: r });
+      }
+      if (r.tipo === 'Insumo') {
+        g.entradas.push({ idLocal: r.idLocal, dbId: r.dbId, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, cantidad: r.cantidad, precioUnitario: r.precioUnitario, total: r.total, unidad: r.unidad || 'und' });
       }
     }
     return Array.from(grupos.values());
@@ -1363,6 +1366,40 @@ function Incidentes() {
                                 <tr><td colSpan="6" style={{ padding:'10px 14px', fontSize:'11px', color:'#94a3b8', fontStyle:'italic' }}>Sin registros — usa "Añadir" para agregar.</td></tr>
                               )}
                               {filas.map(r => (
+                                r.tipo === 'Insumo' && r.count > 1 ? (
+                                  // ── Insumo agrupado: cabecera + desglose inline + total ──
+                                  <Fragment key={r.idLocal}>
+                                    <tr style={{ background:'#fafbfc' }}>
+                                      <td></td>
+                                      <td style={{fontSize:'12px', fontWeight:700, color:'#1e293b'}}>
+                                        📦 {(r.descripcionResumen || r.descripcion || '').toUpperCase()}
+                                        <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>
+                                      </td>
+                                      <td></td><td></td><td></td>
+                                      <td>
+                                        <button type="button" onClick={() => (r.registros && r.registros.length > 0) ? eliminarRecursoGuardado(r) : eliminarRecursosLocales(r.idsLocales)} className="tbl-btn-action text-danger" title={`Eliminar las ${r.count} entradas`} style={{padding:'4px 8px', backgroundColor:'#fee2e2', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaTrash size={14} /></button>
+                                      </td>
+                                    </tr>
+                                    {r.entradas.map((e, idx) => (
+                                      <tr key={e.idLocal || idx} style={{ fontSize:'12px' }}>
+                                        <td></td>
+                                        <td style={{ paddingLeft:'28px', color:'#64748b' }}>Entrada {idx + 1}</td>
+                                        <td className="tbl-text-end">{e.cantidad.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2})} <span style={{fontSize:'10px', color:'#94a3b8'}}>{e.unidad}</span></td>
+                                        <td className="tbl-text-end">S/ {fmtNum(e.precioUnitario)}</td>
+                                        <td className="tbl-text-end" style={{ color:'#475569' }}>S/ {fmtNum(e.total)}</td>
+                                        <td></td>
+                                      </tr>
+                                    ))}
+                                    <tr style={{ background:'#f1f5f9', borderBottom:'2px solid #e2e8f0' }}>
+                                      <td></td>
+                                      <td style={{ fontSize:'11px', fontWeight:700, color:'#334155', textAlign:'right' }}>Total {(r.descripcionResumen || r.descripcion || '')}</td>
+                                      <td className="tbl-text-end" style={{ fontWeight:700, color:'#334155' }}>{r.cantidadTotal.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2})} <span style={{fontSize:'10px', color:'#626976'}}>{r.unidad||'und'}</span></td>
+                                      <td></td>
+                                      <td className="tbl-text-end text-blue" style={{ fontWeight:700 }}>S/ {fmtNum(r.totalSum)}</td>
+                                      <td></td>
+                                    </tr>
+                                  </Fragment>
+                                ) : (
                                 <tr key={r.idLocal}>
                                   <td></td>
                                   <td style={{fontSize: '12px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>
@@ -1408,6 +1445,7 @@ function Incidentes() {
                                     ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
                                   </td>
                                 </tr>
+                                )
                               ))}
                               {/* Subtotal de la categoría (solo si hay filas) */}
                               {filas.length > 0 && (
