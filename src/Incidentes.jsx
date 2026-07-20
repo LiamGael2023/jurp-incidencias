@@ -763,6 +763,28 @@ function Incidentes() {
 
   const eliminarRecurso = (idLocal) => setRecursos(recursos.filter(r => r.idLocal !== idLocal));
   const eliminarRecursosLocales = (idsLocales) => setRecursos(recursos.filter(r => !idsLocales.includes(r.idLocal)));
+
+  // Elimina UNA entrada de insumo ya guardada en la BD.
+  const eliminarEntradaInsumo = async (entrada) => {
+    const conf = await Swal.fire({
+      title: '¿Eliminar esta entrada?',
+      text: `Se eliminará ${fmtNum(entrada.cantidad)} ${entrada.unidad} (S/ ${fmtNum(entrada.total)}) de forma permanente.`,
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33',
+      confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar',
+    });
+    if (!conf.isConfirmed) return;
+    try {
+      const r = await fetch(`${API_OPS}/${entrada.endpoint}/${entrada.dbId}/`, { method: 'DELETE' });
+      if (r.ok || r.status === 204) {
+        if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
+        Swal.fire({ icon: 'success', title: 'Eliminado', timer: 1000, showConfirmButton: false });
+      } else {
+        Swal.fire('Error', `No se pudo eliminar (código ${r.status}).`, 'error');
+      }
+    } catch (e) {
+      Swal.fire('Error', 'Fallo de conexión al eliminar.', 'error');
+    }
+  };
   const costoTotalIncidente = recursos.reduce((sum, item) => sum + item.total, 0);
 
   const normalizar = (txt) => (txt || '')
@@ -1376,9 +1398,7 @@ function Incidentes() {
                                         <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>
                                       </td>
                                       <td></td><td></td><td></td>
-                                      <td>
-                                        <button type="button" onClick={() => (r.registros && r.registros.length > 0) ? eliminarRecursoGuardado(r) : eliminarRecursosLocales(r.idsLocales)} className="tbl-btn-action text-danger" title={`Eliminar las ${r.count} entradas`} style={{padding:'4px 8px', backgroundColor:'#fee2e2', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaTrash size={14} /></button>
-                                      </td>
+                                      <td></td>
                                     </tr>
                                     {r.entradas.map((e, idx) => (
                                       <tr key={e.idLocal || idx} style={{ fontSize:'12px' }}>
@@ -1387,7 +1407,9 @@ function Incidentes() {
                                         <td className="tbl-text-end">{e.cantidad.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2})} <span style={{fontSize:'10px', color:'#94a3b8'}}>{e.unidad}</span></td>
                                         <td className="tbl-text-end">S/ {fmtNum(e.precioUnitario)}</td>
                                         <td className="tbl-text-end" style={{ color:'#475569' }}>S/ {fmtNum(e.total)}</td>
-                                        <td></td>
+                                        <td>
+                                          <button type="button" onClick={() => (e.guardadoEnDB && e.dbId) ? eliminarEntradaInsumo(e) : eliminarRecursosLocales([e.idLocal])} className="tbl-btn-action text-danger" title="Eliminar esta entrada" style={{padding:'4px 8px', backgroundColor:'#fee2e2', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaTrash size={13} /></button>
+                                        </td>
                                       </tr>
                                     ))}
                                     <tr style={{ background:'#f1f5f9', borderBottom:'2px solid #e2e8f0' }}>
