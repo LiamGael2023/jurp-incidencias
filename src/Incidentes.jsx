@@ -31,6 +31,7 @@ const IMG_METRADO = {
 
 function Incidentes() {
   const [incidentes, setIncidentes] = useState([]);
+  const [incidentesCerrados, setIncidentesCerrados] = useState([]);  // IDs cerrados (operations)
   const [cargando, setCargando] = useState(true);
   const [paginaActual, setPaginaActual] = useState(1);
   const itemsPorPagina = 8;
@@ -458,6 +459,14 @@ function Incidentes() {
     } catch (error) { console.error("❌ Error al obtener los recursos guardados:", error); }
   };
   useEffect(() => { obtenerIncidentes(); }, []);
+
+  // Carga los IDs de incidentes cerrados (marca persistente en operations).
+  useEffect(() => {
+    fetch(`${API_OPS}/incidentes-cerrados/`)
+      .then(r => r.ok ? r.json() : { cerrados: [] })
+      .then(d => setIncidentesCerrados(d.cerrados || []))
+      .catch(() => setIncidentesCerrados([]));
+  }, []);
   // Al cambiar cualquier filtro, vuelve a la primera página.
   useEffect(() => { setPaginaActual(1); }, [filtroTipo, filtroEstado, filtroGravedad, busqueda]);
 
@@ -542,36 +551,41 @@ function Incidentes() {
     if (!incidenteActivo) return;
     const conf = await Swal.fire({
       title: '¿Cerrar esta incidencia?',
-      html: `Se cerrarán <b>todos los partes diarios</b> y sus máquinas quedarán disponibles.<br>El estado de la incidencia cambiará a <b>Cerrado</b>.`,
+      html: `Se cerrarán <b>todos los partes diarios</b> y sus máquinas quedarán disponibles.<br>La incidencia quedará <b>bloqueada</b> (no se podrá editar).`,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#2fb344',
       confirmButtonText: 'Sí, cerrar incidencia', cancelButtonText: 'Cancelar',
     });
     if (!conf.isConfirmed) return;
-    const BASE_URL = 'https://gideonstudio.duckdns.org';
-    const token = localStorage.getItem('userToken');
     try {
-      const r = await fetch(`${BASE_URL}/api/v1/mobile/operations/incidentes/${incidenteActivo.id}/cerrar-partes/`, { method: 'POST' });
+      // Un solo POST: cierra los partes, libera máquinas y marca el cierre.
+      const r = await fetch(`${API_OPS}/incidentes/${incidenteActivo.id}/cerrar-partes/`, { method: 'POST' });
       if (!r.ok) {
-        Swal.fire('Error', `No se pudieron cerrar los partes (código: ${r.status}).`, 'error');
+        Swal.fire('Error', `No se pudo cerrar la incidencia (código: ${r.status}).`, 'error');
         return;
       }
-      const rEstado = await fetch(`/api/v1/mobile/hi-incidents/${incidenteActivo.id}/`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Token ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'cer' }),
-      });
       cargarCosteosGuardados(incidenteActivo.id);
-      setNuevoRecurso(prev => {
-        if (prev.marcaId) cargarModelosCat(prev.marcaId);
-        return prev;
-      });
-      if (rEstado.ok) {
-        setIncidentes(prev => prev.map(i => i.id === incidenteActivo.id ? { ...i, estado: 'cer' } : i));
-        setIncidenteActivo(prev => prev ? { ...prev, estado: 'cer' } : prev);
-        Swal.fire({ icon: 'success', title: 'Incidencia cerrada', text: 'Partes cerrados, máquinas liberadas y estado actualizado.', timer: 2200, showConfirmButton: false });
-      } else {
-        Swal.fire('Parcial', `Los partes se cerraron, pero no se pudo cambiar el estado de la incidencia (código: ${rEstado.status}). Revisa manualmente.`, 'warning');
-      }
+      setIncidentesCerrados(prev => prev.includes(incidenteActivo.id) ? prev : [...prev, incidenteActivo.id]);
+      Swal.fire({ icon: 'success', title: 'Incidencia cerrada', text: 'Partes cerrados, máquinas liberadas y costeo bloqueado.', timer: 2200, showConfirmButton: false });
+    } catch (e) {
+      Swal.fire('Error', 'Fallo de conexión.', 'error');
+    }
+  };
+
+  // Reabre una incidencia cerrada (quita el bloqueo).
+  const reabrirIncidencia = async () => {
+    if (!incidenteActivo) return;
+    const conf = await Swal.fire({
+      title: '¿Reabrir esta incidencia?',
+      text: 'Podrás volver a editar los costeos. Los partes ya cerrados seguirán cerrados.',
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#206bc4',
+      confirmButtonText: 'Sí, reabrir', cancelButtonText: 'Cancelar',
+    });
+    if (!conf.isConfirmed) return;
+    try {
+      const r = await fetch(`${API_OPS}/incidentes/${incidenteActivo.id}/reabrir/`, { method: 'POST' });
+      if (!r.ok) { Swal.fire('Error', `No se pudo reabrir (código: ${r.status}).`, 'error'); return; }
+      setIncidentesCerrados(prev => prev.filter(id => id !== incidenteActivo.id));
+      Swal.fire({ icon: 'success', title: 'Incidencia reabierta', timer: 1500, showConfirmButton: false });
     } catch (e) {
       Swal.fire('Error', 'Fallo de conexión.', 'error');
     }
@@ -1319,7 +1333,7 @@ function Incidentes() {
                   <div className="tbl-card-img-top" onClick={() => verEvidencias(inc)} style={{cursor:'pointer',position:'relative'}} title="Ver evidencias">
                     {inc.imagenUrl ? <img src={inc.imagenUrl} alt="Evidencia" /> : <div className="tbl-img-placeholder"><FaCamera size={24} /><span>Sin Evidencia</span></div>}
                     <div style={{position:'absolute',top:0,left:0,right:0,height:'50px',background:'linear-gradient(to bottom, rgba(0,0,0,0.55), transparent)',borderRadius:'4px 4px 0 0',pointerEvents:'none'}}></div>
-                    <div className="tbl-card-badges" style={{position:'absolute',top:'8px',left:'8px',display:'flex',gap:'4px',zIndex:1}}>{getEstadoBadge(inc.estado)}{getGravedadBadge(inc.gravedad)}</div>
+                    <div className="tbl-card-badges" style={{position:'absolute',top:'8px',left:'8px',display:'flex',gap:'4px',zIndex:1}}>{incidentesCerrados.includes(inc.id) ? <span style={{padding:'3px 10px',borderRadius:'4px',fontSize:'11px',fontWeight:'700',letterSpacing:'0.5px',textShadow:'0 1px 2px rgba(0,0,0,0.15)',border:'1px solid rgba(255,255,255,0.3)',backgroundColor:'#2fb344',color:'#fff'}}>Cerrado</span> : getEstadoBadge(inc.estado)}{getGravedadBadge(inc.gravedad)}</div>
                     {(inc.imagesCount > 0 || inc.videosCount > 0) && (
                       <div style={{position:'absolute',bottom:'8px',right:'8px',background:'rgba(0,0,0,0.6)',color:'#fff',padding:'3px 8px',borderRadius:'12px',fontSize:'11px',display:'flex',alignItems:'center',gap:'6px'}}>
                         {inc.imagesCount > 0 && <span><FaImage size={10}/> {inc.imagesCount}</span>}
@@ -1385,10 +1399,12 @@ function Incidentes() {
                                   <span style={{ fontWeight:700, fontSize:'11px', letterSpacing:'0.6px', color:'#334155' }}>{cat.titulo}</span>
                                 </td>
                                 <td style={{ background:'#eef2f7', textAlign:'right', paddingRight:'10px' }}>
-                                  <button type="button" onClick={() => abrirFormAñadir(cat.key)} title={`Añadir a ${cat.titulo}`}
-                                    style={{ display:'inline-flex', alignItems:'center', gap:'4px', background:'#206bc4', color:'#fff', border:'none', borderRadius:'5px', padding:'4px 10px', fontSize:'11px', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
-                                    <FaPlus size={10} /> Añadir
-                                  </button>
+                                  {!incidentesCerrados.includes(incidenteActivo?.id) && (
+                                    <button type="button" onClick={() => abrirFormAñadir(cat.key)} title={`Añadir a ${cat.titulo}`}
+                                      style={{ display:'inline-flex', alignItems:'center', gap:'4px', background:'#206bc4', color:'#fff', border:'none', borderRadius:'5px', padding:'4px 10px', fontSize:'11px', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+                                      <FaPlus size={10} /> Añadir
+                                    </button>
+                                  )}
                                 </td>
                               </tr>
                               {filas.length === 0 && (
@@ -1504,15 +1520,20 @@ function Incidentes() {
               <div className="tbl-modal-footer" style={{flexWrap:'wrap',gap:'8px'}}>
                 <div className="tbl-text-start tbl-text-muted">Costo Total: <span style={{fontSize: '1.25rem', color: '#1e293b', fontWeight: 'bold'}}>S/ {fmtNum(costoTotalIncidente)}</span></div>
                 <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
-                  {incidenteActivo?.estado === 'cer' ? (
-                    <span style={{background:'#dcfce7',color:'#15803d',padding:'6px 14px',borderRadius:'4px',fontSize:'13px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px'}}><FaCheckCircle/> Incidencia cerrada</span>
+                  {incidentesCerrados.includes(incidenteActivo?.id) ? (
+                    <>
+                      <span style={{background:'#dcfce7',color:'#15803d',padding:'6px 14px',borderRadius:'4px',fontSize:'13px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px'}}><FaCheckCircle/> Incidencia cerrada</span>
+                      <button className="tbl-btn" onClick={reabrirIncidencia} style={{background:'#fff',color:'#206bc4',border:'1px solid #206bc4',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Reabrir para volver a editar"><FaSyncAlt/> Reabrir</button>
+                    </>
                   ) : (
-                    <button className="tbl-btn" onClick={cerrarIncidenteCompleto} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Cierra los partes, libera las máquinas y marca la incidencia como cerrada"><FaCheckCircle/> Cerrar incidencia</button>
+                    <button className="tbl-btn" onClick={cerrarIncidenteCompleto} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Cierra los partes, libera las máquinas y bloquea el costeo"><FaCheckCircle/> Cerrar incidencia</button>
                   )}
                   <button className="tbl-btn" onClick={exportarPDF} style={{background:'#d63939',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar PDF"><FaFilePdf/> PDF</button>
                   <button className="tbl-btn" onClick={exportarExcel} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar Excel"><FaFileExcel/> Excel</button>
                   <button className="tbl-btn tbl-btn-link" onClick={() => setModalAbierto(false)}>Cerrar</button>
-                  <button className="tbl-btn tbl-btn-primary" onClick={guardarCosteos} disabled={guardando}>{guardando ? <><FaSyncAlt className="icon-spin" style={{marginRight: '8px'}} /> Guardando...</> : <><FaSave style={{marginRight: '8px'}} /> Guardar Costeos</>}</button>
+                  {!incidentesCerrados.includes(incidenteActivo?.id) && (
+                    <button className="tbl-btn tbl-btn-primary" onClick={guardarCosteos} disabled={guardando}>{guardando ? <><FaSyncAlt className="icon-spin" style={{marginRight: '8px'}} /> Guardando...</> : <><FaSave style={{marginRight: '8px'}} /> Guardar Costeos</>}</button>
+                  )}
                 </div>
               </div>
             </div>
