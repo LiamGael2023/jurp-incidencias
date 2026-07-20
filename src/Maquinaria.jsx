@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import {
   FaTruck, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaTimes,
-  FaDownload, FaFilePdf, FaMapMarkerAlt, FaTools, FaClock, FaHistory, FaCog, FaSearch,
+  FaDownload, FaFilePdf, FaMapMarkerAlt, FaTools, FaClock, FaHistory, FaCog, FaSearch, FaExternalLinkAlt,
 } from 'react-icons/fa';
 import MantenedorEquipos from './MantenedorEquipos';
 
@@ -16,7 +16,7 @@ const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
 const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export default function Maquinaria() {
+export default function Maquinaria({ irAIncidente }) {
   const [maquinas, setMaquinas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [filtroOrigen, setFiltroOrigen] = useState('');   // '' | JURP | EXTERNA
@@ -205,9 +205,19 @@ export default function Maquinaria() {
 
                   {/* Info del incidente si está ocupada */}
                   {ocupada && m.parte_activo && (
-                    <div style={{ marginTop: '10px', padding: '8px', background: '#fef2f2', borderRadius: '6px', fontSize: '12px' }}>
-                      <div style={{ color: '#991b1b', fontWeight: 600 }}>{m.parte_activo.part_number}</div>
-                      <div style={{ color: '#7f1d1d', marginTop: '2px' }}><FaMapMarkerAlt size={10} /> {m.parte_activo.incidente_lugar || 'Sin ubicación'}</div>
+                    <div style={{ marginTop: '10px', padding: '10px', background: '#fef2f2', borderRadius: '6px', fontSize: '12px', border: '1px solid #fecaca' }}>
+                      <div style={{ color: '#991b1b', fontWeight: 700, marginBottom: '3px' }}>{m.parte_activo.part_number}</div>
+                      {m.parte_activo.incidente_tipo && (
+                        <div style={{ color: '#7f1d1d', marginBottom: '2px', fontWeight: 600 }}>{m.parte_activo.incidente_tipo}</div>
+                      )}
+                      <div style={{ color: '#7f1d1d', marginBottom: '6px' }}><FaMapMarkerAlt size={10} /> {m.parte_activo.incidente_lugar || 'Sin ubicación'}</div>
+                      {m.parte_activo.incidente_id && irAIncidente && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); irAIncidente(m.parte_activo.incidente_id); }}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '5px', padding: '5px 11px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', width: '100%', justifyContent: 'center' }}>
+                          <FaExternalLinkAlt size={10} /> Ir a la incidencia
+                        </button>
+                      )}
                     </div>
                   )}
                   {ocupada && !m.parte_activo && (

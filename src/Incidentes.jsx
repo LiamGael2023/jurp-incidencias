@@ -29,7 +29,7 @@ const IMG_METRADO = {
   'HABILITACION DE ACCESO': imgHabilitacion, 'PERFILADO DE TALUD': imgPerfilado,
 };
 
-function Incidentes() {
+function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const [incidentes, setIncidentes] = useState([]);
   const [incidentesCerrados, setIncidentesCerrados] = useState([]);  // IDs cerrados (operations)
   const [cargando, setCargando] = useState(true);
@@ -477,6 +477,17 @@ function Incidentes() {
     setModalAbierto(true);
     cargarCosteosGuardados(inc.id); 
   };
+
+  // Si llega una solicitud de abrir un incidente (enlace desde Maquinaria),
+  // lo busca en la lista cargada y abre su modal.
+  useEffect(() => {
+    if (!incidenteAbrir || incidentes.length === 0) return;
+    const inc = incidentes.find(i => i.id === incidenteAbrir);
+    if (inc) {
+      abrirModal(inc);
+      if (onIncidenteAbierto) onIncidenteAbierto();
+    }
+  }, [incidenteAbrir, incidentes]);
 
   // Si el catálogo de modelos llega después de abrir el modal, recarga los
   // costeos para que la maquinaria muestre su código.
