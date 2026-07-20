@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import {
   FaTruck, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaTimes,
-  FaDownload, FaFilePdf, FaMapMarkerAlt, FaTools, FaClock, FaHistory, FaCog,
+  FaDownload, FaFilePdf, FaMapMarkerAlt, FaTools, FaClock, FaHistory, FaCog, FaSearch,
 } from 'react-icons/fa';
 import MantenedorEquipos from './MantenedorEquipos';
 
@@ -21,6 +21,7 @@ export default function Maquinaria() {
   const [cargando, setCargando] = useState(true);
   const [filtroOrigen, setFiltroOrigen] = useState('');   // '' | JURP | EXTERNA
   const [filtroEstado, setFiltroEstado] = useState('');   // '' | 0 | 1
+  const [busqueda, setBusqueda] = useState('');
   const [detalle, setDetalle] = useState(null);           // máquina seleccionada
   const [historial, setHistorial] = useState(null);       // { maquina, partes, totales }
   const [cargandoHist, setCargandoHist] = useState(false);
@@ -64,6 +65,14 @@ export default function Maquinaria() {
     const url = `${API_OPS}/daily-part-heavy-equipments/${parteId}/pdf/`;
     setPdfModal({ url, nombre: nombre || `Parte ${parteId}` });
   };
+
+  // Filtra por texto de búsqueda (código, equipo, marca, modelo, placa).
+  const maquinasFiltradas = maquinas.filter(m => {
+    if (!busqueda.trim()) return true;
+    const q = busqueda.toLowerCase().trim();
+    const texto = `${m.codigo} ${m.equipo} ${m.marca} ${m.modelo} ${m.placa || ''}`.toLowerCase();
+    return texto.includes(q);
+  });
 
   const disponibles = maquinas.filter(m => m.disponible).length;
   const ocupadas = maquinas.filter(m => !m.disponible).length;
@@ -115,6 +124,15 @@ export default function Maquinaria() {
           <option value="0">Solo disponibles</option>
           <option value="1">Solo en incidente</option>
         </select>
+        <div style={{ position:'relative', flex:'1', minWidth:'200px', maxWidth:'360px' }}>
+          <FaSearch size={12} style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }} />
+          <input type="text" placeholder="Buscar código, equipo, modelo, placa..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
+            style={{ width:'100%', padding:'8px 12px 8px 34px', border:'1px solid #cbd5e1', borderRadius:'8px', fontSize:'13px', color:'#334155', boxSizing:'border-box' }} />
+          {busqueda && (
+            <button onClick={() => setBusqueda('')} title="Limpiar" style={{ position:'absolute', right:'8px', top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'#94a3b8', display:'flex', padding:'2px' }}><FaTimes size={12} /></button>
+          )}
+        </div>
+        {busqueda && <span style={{ fontSize:'12px', color:'#64748b', fontWeight:600, whiteSpace:'nowrap' }}>{maquinasFiltradas.length} de {maquinas.length}</span>}
       </div>
 
       {/* Grid de tarjetas */}
@@ -128,9 +146,15 @@ export default function Maquinaria() {
           <FaTruck style={{ fontSize: '40px', opacity: 0.4 }} />
           <p>No hay máquinas que coincidan con el filtro.</p>
         </div>
+      ) : maquinasFiltradas.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
+          <FaSearch style={{ fontSize: '36px', opacity: 0.4 }} />
+          <p>Ninguna máquina coincide con "{busqueda}".</p>
+          <button onClick={() => setBusqueda('')} style={{ marginTop:'8px', background:'#206bc4', color:'#fff', border:'none', borderRadius:'8px', padding:'8px 16px', fontSize:'13px', fontWeight:600, cursor:'pointer' }}>Limpiar búsqueda</button>
+        </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '14px' }}>
-          {maquinas.map(m => {
+          {maquinasFiltradas.map(m => {
             const ocupada = !m.disponible;
             return (
               <div key={m.id}
