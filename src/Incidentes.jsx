@@ -1096,8 +1096,9 @@ function Incidentes() {
   };
 
   const guardarCosteos = async () => {
-    const recursosNuevos = recursos.filter(r => !r.guardadoEnDB);
-    if (recursosNuevos.length === 0) return Swal.fire({ icon: 'info', title: 'Todo al día', text: 'No hay recursos nuevos.' });
+    // Excluye los borradores de maquinaria (máquinas en la lista sin parte diario).
+    const recursosNuevos = recursos.filter(r => !r.guardadoEnDB && !r.esBorrador);
+    if (recursosNuevos.length === 0) return Swal.fire({ icon: 'info', title: 'Todo al día', text: 'No hay recursos nuevos por guardar.' });
     setGuardando(true);
     const BASE_URL = 'https://gideonstudio.duckdns.org'; 
     const token = localStorage.getItem('userToken'); 
@@ -1122,15 +1123,15 @@ function Incidentes() {
           formData.append('unit', r.unidad || 'und');
         } else if (r.tipo === 'Maquinaria') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`;
-          formData.append('part_number', r.numeroParte); formData.append('date', r.fechaParte);
+          formData.append('part_number', r.numeroParte); formData.append('date', /^\d{4}-\d{2}-\d{2}$/.test(r.fechaParte) ? r.fechaParte : getFechaHoy());
           formData.append('shift', r.turno); formData.append('work_zone_text', r.zonaTrabajo);
           formData.append('provider', r.proveedor); formData.append('operator', r.operador);
           formData.append('licencia', r.licencia || ''); formData.append('categoria', r.categoria || '');
           if (r.longitud !== '' && r.longitud != null) formData.append('longitud', r.longitud);
           formData.append('equipment_name', r.equipo);
           formData.append('brand_name', r.marca);
-          formData.append('model_plate', r.placa ? `${r.modeloMaquina || ''} / ${r.placa}`.trim() : (r.modeloMaquina || '')); formData.append('start_horometer', r.hmInicio);
-          formData.append('end_horometer', r.hmFin); formData.append('fuel_gallons', r.combustible || 0);
+          formData.append('model_plate', r.placa ? `${r.modeloMaquina || ''} / ${r.placa}`.trim() : (r.modeloMaquina || '')); formData.append('start_horometer', parseFloat(r.hmInicio) || 0);
+          formData.append('end_horometer', parseFloat(r.hmFin) || 0); formData.append('fuel_gallons', parseFloat(r.combustible) || 0);
           formData.append('fuel_voucher', r.vale); formData.append('activities', r.actividad);
           formData.append('observations', r.observaciones); formData.append('unit_price', r.precioUnitario);
           if (r.fotoParte) formData.append('part_photo', r.fotoParte);
