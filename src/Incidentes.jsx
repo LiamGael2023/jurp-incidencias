@@ -443,6 +443,7 @@ function Incidentes() {
           modeloMaquina: maq?.modelo || modeloTxt || '', placa: maq?.placa || placaTxt || '',
           origen: maq?.origen || 'JURP',
           actividad: i.activities || '',
+          hmInicio: i.start_horometer ?? '', hmFin: i.end_horometer ?? '',
           fechaParte: i.date || '', turno: i.shift || 'Día', zonaTrabajo: i.work_zone_text || '',
           operador: i.operator || '', observaciones: i.observations || '',
           cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)),
@@ -616,6 +617,18 @@ function Incidentes() {
     setFormTipo(tipo);
   };
 
+  // Devuelve el HM Fin del último parte de una máquina (por código), o 0.
+  // "Último" = el mayor end_horometer entre sus partes existentes.
+  const ultimoHmFinDeMaquina = (codigo) => {
+    const cod = (codigo || '').toUpperCase();
+    if (!cod) return 0;
+    const codigoDeRec = (r) => ((r.codigoMaquina || (r.descripcionResumen || '').split('·')[0]).trim().split(' ')[0] || '').toUpperCase();
+    const partes = recursos.filter(r => r.tipo === 'Maquinaria' && !r.esBorrador && codigoDeRec(r) === cod);
+    if (partes.length === 0) return 0;
+    const maxFin = Math.max(...partes.map(r => parseFloat(r.hmFin) || 0));
+    return isFinite(maxFin) ? maxFin : 0;
+  };
+
   // Paso 1: al elegir máquina del selector, la agrega a la lista en BORRADOR
   // (sin parte diario todavía). Vive solo en pantalla hasta que tenga un parte.
   const seleccionarMaquina = (maq) => {
@@ -648,6 +661,7 @@ function Incidentes() {
   // Paso 2: abre el formulario de PARTE DIARIO para una máquina concreta.
   const abrirParteDiario = (maq) => {
     setSelectorMaquina(false);
+    const hmInicioPrev = ultimoHmFinDeMaquina(maq.codigo);
     setNuevoRecurso({
       ...estadoInicialRecurso,
       tipo: 'Maquinaria',
@@ -661,6 +675,7 @@ function Incidentes() {
       modeloMaquina: maq.modelo || '',
       placa: maq.placa || '',
       codigoMaquina: maq.codigo || '',
+      hmInicio: hmInicioPrev,
     });
     obtenerCorrelativoParte();
     setFormTipo('Maquinaria');
@@ -669,6 +684,7 @@ function Incidentes() {
   // Desde una fila de máquina (grupo), agrega OTRO parte diario a la misma
   // máquina, reutilizando su identidad ya conocida.
   const agregarParteAMaquina = (grupo) => {
+    const hmInicioPrev = ultimoHmFinDeMaquina(grupo.codigoMaquina || (grupo.descripcionResumen || '').split('·')[0]);
     setNuevoRecurso({
       ...estadoInicialRecurso, tipo: 'Maquinaria', numeroParte: generarCorrelativo(),
       origen: grupo.origen || 'JURP',
@@ -677,6 +693,7 @@ function Incidentes() {
       modeloId: grupo.modeloId || '', modeloMaquina: grupo.modeloMaquina || '',
       placa: grupo.placa || '', codigoMaquina: grupo.codigoMaquina || '',
       precioUnitario: grupo.precioUnitario || 0,
+      hmInicio: hmInicioPrev,
     });
     obtenerCorrelativoParte();
     setFormTipo('Maquinaria');
@@ -1526,7 +1543,7 @@ function Incidentes() {
                       <div className="tbl-col-3"><label className="tbl-form-label">Precio Unit. (S/ HE)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
                     </div>
                     <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col"><label className="tbl-form-label">HM Inicio <span style={{color:'red'}}>*</span></label><input type="number" step="0.1" className="tbl-form-control" value={nuevoRecurso.hmInicio} onChange={e => setNuevoRecurso({...nuevoRecurso, hmInicio: e.target.value})} /></div>
+                      <div className="tbl-col"><label className="tbl-form-label">HM Inicio <span style={{color:'red'}}>*</span> {parseFloat(nuevoRecurso.hmInicio) > 0 && <span style={{color:'#0284c7', fontSize:'10px', fontWeight:600}}>· viene del parte anterior</span>}</label><input type="number" step="0.1" className="tbl-form-control" value={nuevoRecurso.hmInicio} onChange={e => setNuevoRecurso({...nuevoRecurso, hmInicio: e.target.value})} /></div>
                       <div className="tbl-col"><label className="tbl-form-label">HM Fin <span style={{color:'red'}}>*</span></label><input type="number" step="0.1" className="tbl-form-control" value={nuevoRecurso.hmFin} onChange={e => setNuevoRecurso({...nuevoRecurso, hmFin: e.target.value})} /></div>
                       <div className="tbl-col-auto" style={{display: 'flex', flexDirection: 'column', justifyContent: 'flex-end'}}><div style={{background: '#e0f2fe', color: '#0284c7', padding: '8px 12px', borderRadius: '4px', fontWeight: 'bold', fontSize: '13px', border: '1px solid #bae6fd'}}>Horas: {horasMaquina} h</div></div>
                       <div className="tbl-col"><label className="tbl-form-label">Combustible (Gls)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.combustible} onChange={e => setNuevoRecurso({...nuevoRecurso, combustible: e.target.value})} /></div>
