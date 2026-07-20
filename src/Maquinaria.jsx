@@ -258,7 +258,7 @@ export default function Maquinaria() {
       {/* ── Modal de historial de partes ───────────────────────────────── */}
       {detalle && (
         <div onClick={() => { setDetalle(null); setHistorial(null); }} style={overlayStyle}>
-          <div onClick={e => e.stopPropagation()} style={{ ...modalStyle, maxWidth: '760px' }}>
+          <div onClick={e => e.stopPropagation()} style={{ ...modalStyle, maxWidth: '960px' }}>
             <div style={modalHeadStyle}>
               <h5 style={{ margin: 0, fontSize: '16px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <FaTruck color="#475569" /> {detalle.codigo} · {detalle.modelo || detalle.placa}
@@ -318,40 +318,53 @@ export default function Maquinaria() {
                   Esta máquina aún no tiene partes diarios registrados.
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {historial.partes.map(p => (
-                    <div key={p.id} style={{ border: `1px solid ${p.cerrado ? '#e2e8f0' : '#fed7aa'}`, background: p.cerrado ? '#fff' : '#fffbeb', borderRadius: '8px', padding: '10px 12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 700, fontSize: '13px', color: '#1e293b' }}>{p.part_number}</span>
-                        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', background: p.cerrado ? '#dcfce7' : '#fef3c7', color: p.cerrado ? '#15803d' : '#b45309' }}>
-                          {p.cerrado ? 'CERRADO' : 'ABIERTO'}
-                        </span>
-                        <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#64748b' }}>{p.date} · {p.shift}</span>
-                      </div>
-
-                      <div style={{ fontSize: '12px', color: '#475569', marginBottom: '3px' }}>
-                        <FaMapMarkerAlt size={10} color="#94a3b8" /> {p.incidente_tipo} {p.incidente_codigo && `(${p.incidente_codigo})`} — {p.incidente_lugar || 'Sin ubicación'}
-                      </div>
-                      {p.activities && (
-                        <div style={{ fontSize: '12px', color: '#475569', marginBottom: '3px' }}>
-                          <FaTools size={10} color="#94a3b8" /> {p.activities}
-                        </div>
-                      )}
-                      {p.operator && (
-                        <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>Operador: {p.operator}</div>
-                      )}
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingTop: '6px', borderTop: '1px dashed #e2e8f0', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '11px', color: '#64748b' }}>HM: {p.start_horometer} → {p.end_horometer}</span>
-                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#b45309' }}>{p.horas} HE</span>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a' }}>S/ {fmtNum(p.costo)}</span>
-                        <button onClick={() => abrirPdfParte(p.id, p.part_number)}
-                          style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '5px', padding: '4px 10px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>
-                          <FaFilePdf size={11} /> PDF
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
+                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '11px', color: '#475569' }}>N° PARTE</th>
+                        <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>FECHA</th>
+                        <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>ESTADO</th>
+                        <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>ACTIVIDAD</th>
+                        <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>HORAS</th>
+                        <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>COMBUST.</th>
+                        <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>TOTAL</th>
+                        <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '11px', color: '#475569' }}>PDF</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historial.partes.map(p => (
+                        <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', background: p.cerrado ? '#fff' : '#fffbeb' }}>
+                          <td style={{ padding: '11px 14px', fontWeight: 700, color: '#1e293b' }}>{p.part_number}</td>
+                          <td style={{ padding: '11px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{p.date ? p.date.split('T')[0].split('-').reverse().join('/') : '—'}</td>
+                          <td style={{ padding: '11px 8px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 9px', borderRadius: '4px', background: p.cerrado ? '#dcfce7' : '#fef3c7', color: p.cerrado ? '#15803d' : '#b45309', whiteSpace: 'nowrap' }}>
+                              {p.cerrado ? 'CERRADO' : 'ABIERTO'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '11px 8px', color: '#475569', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.activities || ''}>{p.activities || '—'}</td>
+                          <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.horas)} HE</td>
+                          <td style={{ padding: '11px 8px', textAlign: 'right', color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.fuel_gallons || 0)} Gls</td>
+                          <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 700, color: '#1463A5', whiteSpace: 'nowrap' }}>S/ {fmtNum(p.costo)}</td>
+                          <td style={{ padding: '11px 14px', textAlign: 'right' }}>
+                            <button onClick={() => abrirPdfParte(p.id, p.part_number)} title="Ver PDF"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#e0f2fe', color: '#0284c7', border: 'none', borderRadius: '5px', padding: '5px 10px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>
+                              <FaFilePdf size={11} /> PDF
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
+                        <td colSpan="4" style={{ padding: '13px 14px', fontWeight: 700, color: '#334155' }}>TOTAL · {historial.total_partes} parte{historial.total_partes !== 1 ? 's' : ''}</td>
+                        <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(historial.total_horas)} HE</td>
+                        <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(historial.partes.reduce((s, p) => s + (parseFloat(p.fuel_gallons) || 0), 0))} Gls</td>
+                        <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 800, fontSize: '15px', color: '#1463A5', whiteSpace: 'nowrap' }}>S/ {fmtNum(historial.total_costo)}</td>
+                        <td style={{ padding: '13px 14px' }}></td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
               )}
             </div>
