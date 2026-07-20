@@ -1737,6 +1737,7 @@ function Incidentes() {
                   <thead>
                     <tr style={{ background:'#f1f5f9', borderBottom:'2px solid #e2e8f0' }}>
                       <th style={{ textAlign:'left', padding:'11px 22px', fontSize:'11px', color:'#475569', letterSpacing:'0.4px' }}>N° PARTE</th>
+                      <th style={{ textAlign:'left', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>FECHA</th>
                       <th style={{ textAlign:'left', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>ESTADO</th>
                       <th style={{ textAlign:'left', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>ACTIVIDAD</th>
                       <th style={{ textAlign:'right', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>HORAS</th>
@@ -1752,6 +1753,7 @@ function Incidentes() {
                       return (
                         <tr key={p.idLocal || idx} style={{ borderBottom:'1px solid #f1f5f9', background: p.cerrado ? '#fff' : '#fffbeb' }}>
                           <td style={{ padding:'12px 22px', fontWeight:700, color:'#1e293b' }}>{p.numeroParte || `#${p.dbId}`}</td>
+                          <td style={{ padding:'12px 10px', color:'#475569', whiteSpace:'nowrap' }}>{reg.fechaParte || '—'}</td>
                           <td style={{ padding:'12px 10px' }}>
                             <span style={{ fontSize:'10px', fontWeight:700, padding:'3px 9px', borderRadius:'4px', background: p.cerrado ? '#dcfce7' : '#fef3c7', color: p.cerrado ? '#15803d' : '#b45309', whiteSpace:'nowrap' }}>
                               {p.cerrado ? 'CERRADO' : 'ABIERTO'}
@@ -1784,7 +1786,7 @@ function Incidentes() {
                   {/* Fila de total */}
                   <tfoot>
                     <tr style={{ background:'#f8fafc', borderTop:'2px solid #e2e8f0' }}>
-                      <td colSpan="3" style={{ padding:'14px 22px', fontWeight:700, color:'#334155' }}>
+                      <td colSpan="4" style={{ padding:'14px 22px', fontWeight:700, color:'#334155' }}>
                         TOTAL · {modalPartes.count} parte{modalPartes.count !== 1 ? 's' : ''}
                       </td>
                       <td style={{ padding:'14px 10px', textAlign:'right', fontWeight:700, color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(modalPartes.cantidadTotal)} HE</td>
