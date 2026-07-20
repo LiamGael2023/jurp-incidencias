@@ -22,6 +22,8 @@ export default function Maquinaria() {
   const [filtroOrigen, setFiltroOrigen] = useState('');   // '' | JURP | EXTERNA
   const [filtroEstado, setFiltroEstado] = useState('');   // '' | 0 | 1
   const [busqueda, setBusqueda] = useState('');
+  const [pagina, setPagina] = useState(1);
+  const PORPAGINA = 8;
   const [detalle, setDetalle] = useState(null);           // máquina seleccionada
   const [historial, setHistorial] = useState(null);       // { maquina, partes, totales }
   const [cargandoHist, setCargandoHist] = useState(false);
@@ -73,6 +75,14 @@ export default function Maquinaria() {
     const texto = `${m.codigo} ${m.equipo} ${m.marca} ${m.modelo} ${m.placa || ''}`.toLowerCase();
     return texto.includes(q);
   });
+
+  // Paginación de 8 en 8 sobre la lista filtrada.
+  const totalPaginas = Math.max(1, Math.ceil(maquinasFiltradas.length / PORPAGINA));
+  const paginaSegura = Math.min(pagina, totalPaginas);
+  const inicio = (paginaSegura - 1) * PORPAGINA;
+  const maquinasPagina = maquinasFiltradas.slice(inicio, inicio + PORPAGINA);
+  // Al buscar o filtrar, vuelve a la primera página.
+  useEffect(() => { setPagina(1); }, [busqueda, filtroOrigen, filtroEstado]);
 
   const disponibles = maquinas.filter(m => m.disponible).length;
   const ocupadas = maquinas.filter(m => !m.disponible).length;
@@ -155,7 +165,7 @@ export default function Maquinaria() {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '14px' }}>
-          {maquinasFiltradas.map(m => {
+          {maquinasPagina.map(m => {
             const ocupada = !m.disponible;
             return (
               <div key={m.id}
@@ -211,6 +221,37 @@ export default function Maquinaria() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ── Paginador (8 por página) ────────────────────────────────────── */}
+      {maquinasFiltradas.length > PORPAGINA && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '20px', flexWrap: 'wrap' }}>
+          <button onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={paginaSegura === 1}
+            style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', background: paginaSegura === 1 ? '#f1f5f9' : '#fff', color: paginaSegura === 1 ? '#94a3b8' : '#334155', cursor: paginaSegura === 1 ? 'default' : 'pointer', fontSize: '13px', fontWeight: 600 }}>
+            ← Anterior
+          </button>
+
+          {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+            .filter(n => n === 1 || n === totalPaginas || Math.abs(n - paginaSegura) <= 1)
+            .map((n, idx, arr) => (
+              <span key={n} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {idx > 0 && arr[idx - 1] !== n - 1 && <span style={{ color: '#94a3b8' }}>…</span>}
+                <button onClick={() => setPagina(n)}
+                  style={{ minWidth: '36px', padding: '7px 0', borderRadius: '8px', border: '1px solid', borderColor: n === paginaSegura ? '#206bc4' : '#cbd5e1', background: n === paginaSegura ? '#206bc4' : '#fff', color: n === paginaSegura ? '#fff' : '#334155', cursor: 'pointer', fontSize: '13px', fontWeight: 700 }}>
+                  {n}
+                </button>
+              </span>
+            ))}
+
+          <button onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))} disabled={paginaSegura === totalPaginas}
+            style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', background: paginaSegura === totalPaginas ? '#f1f5f9' : '#fff', color: paginaSegura === totalPaginas ? '#94a3b8' : '#334155', cursor: paginaSegura === totalPaginas ? 'default' : 'pointer', fontSize: '13px', fontWeight: 600 }}>
+            Siguiente →
+          </button>
+
+          <span style={{ marginLeft: '8px', fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
+            Página {paginaSegura} de {totalPaginas} · {maquinasFiltradas.length} máquinas
+          </span>
         </div>
       )}
 
