@@ -541,7 +541,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     }
     const conf = await Swal.fire({
       title: '¿Finalizar actividades?',
-      html: `Se cerrará este parte diario.<br>La máquina quedará <b>disponible</b> para otros partes y el parte <b>no podrá editarse</b>.`,
+      html: `Se cerrará este parte diario.<br>La máquina quedará <b>disponible</b> para otros partes.`,
       icon: 'question', showCancelButton: true, confirmButtonColor: '#206bc4',
       confirmButtonText: 'Sí, finalizar', cancelButtonText: 'Cancelar',
     });
