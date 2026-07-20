@@ -2,7 +2,7 @@ import { useState, useEffect, Fragment } from 'react';
 import { 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
-  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash, FaCheckCircle, FaFilter, FaSearch, FaListUl
+  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash, FaCheckCircle, FaFilter, FaSearch, FaListUl, FaTruck
 } from 'react-icons/fa';
 import './Incidentes.css';
 import Swal from 'sweetalert2';
@@ -64,6 +64,8 @@ function Incidentes() {
   const [imgRefModal, setImgRefModal] = useState(null);
   const [modalPartes, setModalPartes] = useState(null);   // fila agrupada de maquinaria
   const [formTipo, setFormTipo] = useState(null);         // 'Personal' | 'Maquinaria' | 'Insumo' | null → modal de añadir
+  const [selectorMaquina, setSelectorMaquina] = useState(false); // paso 1: elegir máquina
+  const [buscarMaquina, setBuscarMaquina] = useState('');
 
   // --- ESTADOS DEL MODAL DE EVIDENCIAS (GALERÍA) ---
   const [modalMediaAbierto, setModalMediaAbierto] = useState(false);
@@ -573,12 +575,59 @@ function Incidentes() {
   const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const tieneMetradoActividad = IMG_METRADO[nuevoRecurso.actividad] !== undefined;
 
-  // Abre el modal de "Añadir" con el tipo de recurso preseleccionado y el
-  // formulario limpio (conservando el correlativo para maquinaria).
+  // Abre el modal de "Añadir". Para maquinaria abre primero el SELECTOR de
+  // máquina (paso 1). Personal/Insumo abren su formulario directo.
   const abrirFormAñadir = (tipo) => {
+    if (tipo === 'Maquinaria') {
+      cargarTodosModelos();
+      setBuscarMaquina('');
+      setSelectorMaquina(true);
+      return;
+    }
     setNuevoRecurso({ ...estadoInicialRecurso, tipo, numeroParte: generarCorrelativo() });
-    if (tipo === 'Maquinaria') { cargarEquiposCat('JURP'); obtenerCorrelativoParte(); }
     setFormTipo(tipo);
+  };
+
+  // Paso 2: con una máquina ya elegida (del catálogo o de una fila existente),
+  // abre el formulario de PARTE DIARIO con esa máquina fijada.
+  const abrirParteDiario = (maq) => {
+    // maq: registro de /modelos/ con codigo, modelo, placa, marca_nombre, equipo_nombre, marca, equipo, origen
+    setSelectorMaquina(false);
+    setNuevoRecurso({
+      ...estadoInicialRecurso,
+      tipo: 'Maquinaria',
+      numeroParte: generarCorrelativo(),
+      origen: maq.origen || 'JURP',
+      equipoId: maq.equipo || '',
+      equipo: maq.equipo_nombre || '',
+      marcaId: maq.marca || '',
+      marca: maq.marca_nombre || '',
+      modeloId: maq.id,
+      modeloMaquina: maq.modelo || '',
+      placa: maq.placa || '',
+      codigoMaquina: maq.codigo || '',
+    });
+    obtenerCorrelativoParte();
+    setFormTipo('Maquinaria');
+  };
+
+  // Desde una fila de máquina ya en la lista, agrega OTRO parte diario a la
+  // misma máquina. Resuelve la máquina del catálogo por su código.
+  const agregarParteAMaquina = (fila) => {
+    // El detalle empieza con el código (ej. "JURP002 · CAMIONETA...").
+    const codigo = (fila.descripcionResumen || fila.codigoMaquina || '').split('·')[0].trim().split(' ')[0].trim();
+    const maq = todosModelos.find(m => (m.codigo || '').toUpperCase() === codigo.toUpperCase());
+    if (maq) { abrirParteDiario(maq); return; }
+    // Si no se halla en catálogo, reconstruye lo mínimo desde la fila.
+    setNuevoRecurso({
+      ...estadoInicialRecurso, tipo: 'Maquinaria', numeroParte: generarCorrelativo(),
+      origen: fila.origen || 'JURP', equipoId: fila.equipoId || '', equipo: fila.equipo || '',
+      marcaId: fila.marcaId || '', marca: fila.marca || '', modeloId: fila.modeloId || '',
+      modeloMaquina: fila.modeloMaquina || '', placa: fila.placa || '', codigoMaquina: codigo,
+      precioUnitario: fila.precioUnitario || 0,
+    });
+    obtenerCorrelativoParte();
+    setFormTipo('Maquinaria');
   };
 
   const agregarRecurso = () => {
@@ -1228,6 +1277,12 @@ function Incidentes() {
                                           : r.tipo === 'Maquinaria' && r.cerrado
                                           ? <span className="tbl-badge" style={{backgroundColor:'#e2e8f0', color:'#475569'}}>Cerrado</span>
                                           : <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>}
+                                        {r.tipo === 'Maquinaria' && (
+                                          <button type="button" onClick={() => agregarParteAMaquina(r)} title="Agregar otro parte diario a esta máquina"
+                                            style={{padding:'4px 10px', backgroundColor:'#dbeafe', color:'#1463A5', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'12px', fontWeight:600}}>
+                                            <FaPlus size={10} /> Parte Diario
+                                          </button>
+                                        )}
                                         {r.tipo === 'Maquinaria' && r.count === 1 && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
                                         {r.tipo === 'Maquinaria' && r.count === 1 && !r.cerrado && (<button type="button" onClick={() => cerrarParteDiario(r)} className="tbl-btn-action" title="Finalizar actividades (libera la máquina)" style={{padding: '4px 10px', backgroundColor: '#dcfce7', color:'#15803d', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:'600'}}><FaCheckCircle size={13} /> Finalizar</button>)}
                                         {r.tipo === 'Maquinaria' && r.count > 1 && (
@@ -1275,6 +1330,64 @@ function Incidentes() {
           </div>
         </div>
       )}
+      {/* ── Modal PASO 1: Selector de máquina ───────────────────────────── */}
+      {selectorMaquina && (
+        <div className="tbl-modal-backdrop" style={{ zIndex: 10001 }}>
+          <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '620px' }}>
+            <div className="tbl-modal-content">
+              <div className="tbl-modal-header">
+                <h5 className="tbl-modal-title">🚜 Seleccionar máquina</h5>
+                <button className="tbl-btn-close" onClick={() => setSelectorMaquina(false)}><FaTimes/></button>
+              </div>
+              <div className="tbl-modal-body">
+                <div style={{ position:'relative', marginBottom:'12px' }}>
+                  <FaSearch size={12} style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }} />
+                  <input type="text" className="tbl-form-control" placeholder="Buscar por código, equipo, marca, modelo o placa..." value={buscarMaquina} onChange={e => setBuscarMaquina(e.target.value)} style={{ paddingLeft:'34px' }} autoFocus />
+                </div>
+                <div style={{ maxHeight:'50vh', overflowY:'auto', display:'flex', flexDirection:'column', gap:'6px' }}>
+                  {(() => {
+                    const q = buscarMaquina.toLowerCase().trim();
+                    const lista = todosModelos.filter(m => {
+                      if (!q) return true;
+                      const t = `${m.codigo} ${m.equipo_nombre} ${m.marca_nombre} ${m.modelo} ${m.placa || ''}`.toLowerCase();
+                      return t.includes(q);
+                    });
+                    if (todosModelos.length === 0) return <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'13px' }}>Cargando catálogo de máquinas…</div>;
+                    if (lista.length === 0) return <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'13px' }}>Ninguna máquina coincide con "{buscarMaquina}".</div>;
+                    return lista.map(m => (
+                      <div key={m.id} onClick={() => abrirParteDiario(m)}
+                        style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', cursor:'pointer', transition:'all 0.12s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background='#eff6ff'; e.currentTarget.style.borderColor='#bfdbfe'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background='#fff'; e.currentTarget.style.borderColor='#e2e8f0'; }}>
+                        <FaTruck color="#475569" />
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontWeight:700, fontSize:'13px', color:'#1e293b' }}>
+                            <span style={{ color: m.origen === 'JURP' ? '#206bc4' : '#d6832b' }}>{m.codigo}</span> · {m.equipo_nombre} {m.marca_nombre}
+                          </div>
+                          <div style={{ fontSize:'11px', color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            {m.modelo}{m.placa ? ` · Placa ${m.placa}` : ''}
+                          </div>
+                        </div>
+                        <span style={{ fontSize:'11px', fontWeight:600, color: m.disponible ? '#16a34a' : '#dc2626', whiteSpace:'nowrap' }}>
+                          {m.disponible ? '● Disponible' : '● Ocupada'}
+                        </span>
+                        <FaChevronRight size={12} color="#cbd5e1" />
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+              <div className="tbl-modal-footer" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <button type="button" onClick={() => setMantenedorAbierto(true)} style={{ background:'none', border:'none', color:'#206bc4', cursor:'pointer', fontSize:'12px', fontWeight:600, display:'flex', alignItems:'center', gap:'5px' }}>
+                  <FaPlus size={11} /> ¿No está? Gestionar catálogo
+                </button>
+                <button className="tbl-btn tbl-btn-link" onClick={() => setSelectorMaquina(false)}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal: Añadir recurso (Mano de obra / Equipo / Insumo) ──────── */}
       {formTipo && (
         <div className="tbl-modal-backdrop" style={{ zIndex: 10001 }}>
@@ -1282,7 +1395,7 @@ function Incidentes() {
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
                 <h5 className="tbl-modal-title">
-                  {formTipo === 'Personal' ? '👷 Añadir Mano de Obra' : formTipo === 'Maquinaria' ? '🚜 Añadir Equipo · Parte Diario' : '📦 Añadir Insumo / Material'}
+                  {formTipo === 'Personal' ? '👷 Añadir Mano de Obra' : formTipo === 'Maquinaria' ? '🚜 Parte Diario de Maquinaria' : '📦 Añadir Insumo / Material'}
                 </h5>
                 <button className="tbl-btn-close" onClick={() => setFormTipo(null)}><FaTimes/></button>
               </div>
@@ -1304,35 +1417,18 @@ function Incidentes() {
                       <div className="tbl-col-4"><label className="tbl-form-label">Licencia</label><input type="text" className="tbl-form-control" placeholder="N° de licencia" value={nuevoRecurso.licencia} onChange={e => setNuevoRecurso({...nuevoRecurso, licencia: e.target.value})} /></div>
                       <div className="tbl-col-4"><label className="tbl-form-label">Categoría</label><input type="text" className="tbl-form-control" placeholder="Ej. A-IIIb" value={nuevoRecurso.categoria} onChange={e => setNuevoRecurso({...nuevoRecurso, categoria: e.target.value})} /></div>
                     </div>
-                    <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col-3">
-                        <label className="tbl-form-label">Origen <button type="button" onClick={() => setMantenedorAbierto(true)} title="Gestionar catálogos" style={{ background:'none', border:'none', color:'#206bc4', cursor:'pointer', fontSize:'11px', padding:'0 0 0 4px' }}><FaPlus /> gestionar</button></label>
-                        <select className="tbl-form-select" value={nuevoRecurso.origen} onChange={e => onCambiaOrigen(e.target.value)}>
-                          <option value="JURP">JURP (propia)</option>
-                          <option value="EXTERNA">Externa</option>
-                        </select>
+                    <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'12px 14px', marginBottom:'15px', display:'flex', alignItems:'center', gap:'10px' }}>
+                      <FaTruck size={20} color="#1463A5" />
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:'10px', color:'#64748b', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.4px' }}>Máquina seleccionada</div>
+                        <div style={{ fontSize:'14px', fontWeight:700, color:'#1e293b' }}>
+                          {nuevoRecurso.codigoMaquina} · {nuevoRecurso.equipo} {nuevoRecurso.marca} {nuevoRecurso.modeloMaquina}{nuevoRecurso.placa ? ` · ${nuevoRecurso.placa}` : ''}
+                        </div>
                       </div>
-                      <div className="tbl-col-3">
-                        <label className="tbl-form-label">Equipo</label>
-                        <select className="tbl-form-select" value={nuevoRecurso.equipoId} onChange={e => onCambiaEquipo(e.target.value)}>
-                          <option value="">— Seleccionar —</option>
-                          {catEquipos.map(eq => <option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
-                        </select>
-                      </div>
-                      <div className="tbl-col-3">
-                        <label className="tbl-form-label">Marca</label>
-                        <select className="tbl-form-select" value={nuevoRecurso.marcaId} onChange={e => onCambiaMarca(e.target.value)} disabled={!nuevoRecurso.equipoId}>
-                          <option value="">{nuevoRecurso.equipoId ? '— Seleccionar —' : 'Elige equipo'}</option>
-                          {catMarcas.map(ma => <option key={ma.id} value={ma.id}>{ma.nombre}</option>)}
-                        </select>
-                      </div>
-                      <div className="tbl-col-3">
-                        <label className="tbl-form-label">Modelo/Placa {nuevoRecurso.codigoMaquina && <span style={{color:'#1a5aa8',fontWeight:700,fontSize:'11px'}}>· {nuevoRecurso.codigoMaquina}</span>}</label>
-                        <select className="tbl-form-select" value={nuevoRecurso.modeloId} onChange={e => onCambiaModelo(e.target.value)} disabled={!nuevoRecurso.marcaId}>
-                          <option value="">{nuevoRecurso.marcaId ? '— Seleccionar —' : 'Elige marca'}</option>
-                          {catModelos.map(mo => <option key={mo.id} value={mo.id}>{mo.codigo} · {mo.placa ? `${mo.modelo || ''} · ${mo.placa}` : (mo.modelo || 's/modelo')}</option>)}
-                        </select>
-                      </div>
+                      <button type="button" onClick={() => { setFormTipo(null); cargarTodosModelos(); setBuscarMaquina(''); setSelectorMaquina(true); }}
+                        style={{ background:'#fff', border:'1px solid #cbd5e1', color:'#206bc4', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+                        Cambiar máquina
+                      </button>
                     </div>
                     <div className="tbl-row tbl-mb-3">
                       <div className="tbl-col-3"><label className="tbl-form-label">Precio Unit. (S/ HE)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
