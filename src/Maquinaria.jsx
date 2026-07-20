@@ -78,6 +78,7 @@ export default function Maquinaria() {
   const ocupadas = maquinas.filter(m => !m.disponible).length;
 
   return (
+    <div style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Encabezado */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
@@ -344,6 +345,7 @@ export default function Maquinaria() {
         abierto={mantenedorAbierto}
         onClose={() => { setMantenedorAbierto(false); cargar(); }}
       />
+    </div>
     </div>
   );
 }
