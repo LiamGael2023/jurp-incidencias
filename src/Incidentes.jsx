@@ -414,6 +414,7 @@ function Incidentes() {
           idLocal: `db-pers-${i.id}`, dbId: i.id, endpoint: 'incident-personnels', tipo: 'Personal',
           descripcion,
           numPersonas: i.num_personas ?? 1,
+          origen: i.origin || 'JURP',
           horasTrabajo: i.horas_normales ?? parseFloat(i.quantity_hours) ?? 0,
           horasExtras: i.horas_extras ?? 0,
           descripcionResumen: i.description,
@@ -806,7 +807,7 @@ function Incidentes() {
         clave = `maq|${codigoDe(r)}`;
       } else if (r.tipo === 'Personal') {
         const cargo = normalizar(r.descripcion);
-        clave = `pers|${cargo}|${r.numPersonas}|${r.horasTrabajo}|${r.horasExtras}|${r.cantidad}|${r.precioUnitario}|${r.guardadoEnDB}`;
+        clave = `pers|${r.origen || 'JURP'}|${cargo}|${r.numPersonas}|${r.horasTrabajo}|${r.horasExtras}|${r.cantidad}|${r.precioUnitario}|${r.guardadoEnDB}`;
       } else {
         // Insumos: agrupa por descripción + unidad (sin importar precio ni si
         // está guardado). El P. Unitario se recalcula como promedio ponderado.
@@ -1115,6 +1116,7 @@ function Incidentes() {
           formData.append('num_personas', parseInt(r.numPersonas)||0);
           formData.append('horas_normales', parseFloat(r.horasTrabajo)||0);
           formData.append('horas_extras', parseFloat(r.horasExtras)||0);
+          formData.append('origin', r.origen || 'JURP');
         } else if (r.tipo === 'Insumo') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-materials/`;
           formData.append('description', r.descripcion);
@@ -1426,6 +1428,9 @@ function Incidentes() {
                                 <tr key={r.idLocal}>
                                   <td></td>
                                   <td style={{fontSize: '12px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>
+                                    {r.tipo === 'Personal' && (
+                                      <span style={{marginRight:'6px', fontSize:'9px', fontWeight:700, padding:'2px 6px', borderRadius:'4px', backgroundColor: r.origen === 'EXTERNA' ? '#fef3c7' : '#e0f2fe', color: r.origen === 'EXTERNA' ? '#b45309' : '#0284c7'}}>{r.origen === 'EXTERNA' ? 'EXTERNA' : 'JURP'}</span>
+                                    )}
                                     {r.tipo === 'Personal' && r.count > 1
                                       ? (r.descripcion ? `${r.descripcion} (Cuadrilla: ${r.numPersonas} persona(s) x ${r.horasTrabajo}h normales + ${r.horasExtras}h extras)` : (r.descripcionResumen || ''))
                                       : (r.descripcionResumen || r.descripcion)}
@@ -1680,6 +1685,15 @@ function Incidentes() {
                   </div>
                 ) : nuevoRecurso.tipo === 'Personal' ? (
                   <>
+                  <div className="tbl-row tbl-mb-3">
+                    <div className="tbl-col-3">
+                      <label className="tbl-form-label">Origen</label>
+                      <select className="tbl-form-select" value={nuevoRecurso.origen} onChange={e => setNuevoRecurso({...nuevoRecurso, origen: e.target.value})}>
+                        <option value="JURP">JURP (propia)</option>
+                        <option value="EXTERNA">Externa</option>
+                      </select>
+                    </div>
+                  </div>
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col-3"><label className="tbl-form-label">Cargo</label><input type="text" className="tbl-form-control" placeholder="Ej. Peón, Operario..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">N° Personas</label><input type="number" min="1" className="tbl-form-control" value={nuevoRecurso.numPersonas} onChange={e => setNuevoRecurso({...nuevoRecurso, numPersonas: e.target.value})} /></div>
