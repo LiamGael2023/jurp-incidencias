@@ -130,6 +130,9 @@ function ClusteredLayer({ data, icon, color, label, buildPopup }) {
   return null;
 }
 
+// Formatea números con separador de miles y 2 decimales (es-PE).
+const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 // ── Componente principal ────────────────────────────────────────────────────
 function MapaChavimochic() {
   const centroMapa = [-8.4186, -78.7533];
@@ -477,7 +480,7 @@ function MapaChavimochic() {
                     <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>Personal</div>
                     <div style={{ fontSize: '10px', color: '#626976' }}>{recursosGlobales.listaPers.length} cargo{recursosGlobales.listaPers.length !== 1 ? 's' : ''}</div>
                   </div>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#1463A5' }}>S/ {recursosGlobales.totPers.toFixed(2)}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#1463A5' }}>S/ {fmtNum(recursosGlobales.totPers)}</span>
                 </div>
                 {grupoAbierto === 'personal' && (
                   <div style={{ padding: '0 12px 10px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
@@ -487,7 +490,7 @@ function MapaChavimochic() {
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', background: '#fff', padding: '5px 8px', borderRadius: '4px' }}>
                             <span style={{ fontWeight: 600, color: '#1d273b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</span>
                             <span style={{ color: '#626976', fontSize: '10px', whiteSpace: 'nowrap' }}>{p.horas.toFixed(1)} HH</span>
-                            <span style={{ fontWeight: 700, color: '#1463A5', fontSize: '11px', whiteSpace: 'nowrap' }}>S/ {p.monto.toFixed(2)}</span>
+                            <span style={{ fontWeight: 700, color: '#1463A5', fontSize: '11px', whiteSpace: 'nowrap' }}>S/ {fmtNum(p.monto)}</span>
                           </div>
                         ))}
                       </div>
@@ -508,7 +511,7 @@ function MapaChavimochic() {
                       {recursosGlobales.enUso > 0 && <span style={{ color: '#16a34a', fontWeight: 600 }}> · 🟢 {recursosGlobales.enUso} en uso</span>}
                     </div>
                   </div>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#b45309' }}>S/ {recursosGlobales.totMaqs.toFixed(2)}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#b45309' }}>S/ {fmtNum(recursosGlobales.totMaqs)}</span>
                 </div>
                 {grupoAbierto === 'maquinaria' && (
                   <div style={{ padding: '0 12px 10px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
@@ -523,7 +526,7 @@ function MapaChavimochic() {
                             </div>
                             <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                               <div style={{ fontSize: '10px', color: '#626976' }}>{m.horas.toFixed(1)} HE</div>
-                              <div style={{ fontWeight: 700, color: '#b45309', fontSize: '11px' }}>S/ {m.monto.toFixed(2)}</div>
+                              <div style={{ fontWeight: 700, color: '#b45309', fontSize: '11px' }}>S/ {fmtNum(m.monto)}</div>
                             </div>
                           </div>
                         ))}
@@ -542,7 +545,7 @@ function MapaChavimochic() {
                     <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>Insumos</div>
                     <div style={{ fontSize: '10px', color: '#626976' }}>{recursosGlobales.listaMats.length} ítem{recursosGlobales.listaMats.length !== 1 ? 's' : ''}</div>
                   </div>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#047857' }}>S/ {recursosGlobales.totMats.toFixed(2)}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#047857' }}>S/ {fmtNum(recursosGlobales.totMats)}</span>
                 </div>
                 {grupoAbierto === 'insumos' && (
                   <div style={{ padding: '0 12px 10px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
@@ -552,7 +555,7 @@ function MapaChavimochic() {
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', background: '#fff', padding: '5px 8px', borderRadius: '4px' }}>
                             <span style={{ fontWeight: 600, color: '#1d273b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.nombre}</span>
                             <span style={{ color: '#626976', fontSize: '10px', whiteSpace: 'nowrap' }}>{m.cantidad.toFixed(1)} u</span>
-                            <span style={{ fontWeight: 700, color: '#047857', fontSize: '11px', whiteSpace: 'nowrap' }}>S/ {m.monto.toFixed(2)}</span>
+                            <span style={{ fontWeight: 700, color: '#047857', fontSize: '11px', whiteSpace: 'nowrap' }}>S/ {fmtNum(m.monto)}</span>
                           </div>
                         ))}
                       </div>
@@ -564,7 +567,7 @@ function MapaChavimochic() {
               {/* ── TOTAL ────────────────────────────────────────────── */}
               <div style={{ background: '#f0f6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
                 <span style={{ fontSize: '11px', fontWeight: 700, color: '#626976', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Costo Total</span>
-                <span style={{ fontSize: '16px', fontWeight: 700, color: '#1463A5' }}>S/ {recursosGlobales.total.toFixed(2)}</span>
+                <span style={{ fontSize: '16px', fontWeight: 700, color: '#1463A5' }}>S/ {fmtNum(recursosGlobales.total)}</span>
               </div>
             </div>
           </div>
