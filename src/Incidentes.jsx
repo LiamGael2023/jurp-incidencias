@@ -1753,7 +1753,7 @@ function Incidentes() {
                       return (
                         <tr key={p.idLocal || idx} style={{ borderBottom:'1px solid #f1f5f9', background: p.cerrado ? '#fff' : '#fffbeb' }}>
                           <td style={{ padding:'12px 22px', fontWeight:700, color:'#1e293b' }}>{p.numeroParte || `#${p.dbId}`}</td>
-                          <td style={{ padding:'12px 10px', color:'#475569', whiteSpace:'nowrap' }}>{reg.fechaParte || '—'}</td>
+                          <td style={{ padding:'12px 10px', color:'#475569', whiteSpace:'nowrap' }}>{reg.fechaParte ? (reg.fechaParte.split('T')[0].split('-').reverse().join('/')) : '—'}</td>
                           <td style={{ padding:'12px 10px' }}>
                             <span style={{ fontSize:'10px', fontWeight:700, padding:'3px 9px', borderRadius:'4px', background: p.cerrado ? '#dcfce7' : '#fef3c7', color: p.cerrado ? '#15803d' : '#b45309', whiteSpace:'nowrap' }}>
                               {p.cerrado ? 'CERRADO' : 'ABIERTO'}
