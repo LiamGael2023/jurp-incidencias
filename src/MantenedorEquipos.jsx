@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
-import { FaPlus, FaEdit, FaTrash, FaTimes, FaChevronRight, FaSync, FaCircle } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaTimes, FaChevronRight, FaSync, FaCircle, FaSearch } from 'react-icons/fa';
 import './MantenedorEquipos.css';
 
 const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
@@ -30,6 +30,8 @@ export default function MantenedorEquipos({ abierto, onClose }) {
   const [equipoSel, setEquipoSel] = useState(null);
   const [origenSel, setOrigenSel] = useState('JURP');   // JURP | EXTERNA
   const [marcaSel, setMarcaSel] = useState(null);
+  const [buscarEquipo, setBuscarEquipo] = useState('');
+  const [buscarMarca, setBuscarMarca] = useState('');
   const [cargando, setCargando] = useState(false);
 
   // ── Cargas ──────────────────────────────────────────────────────────────
@@ -61,9 +63,9 @@ export default function MantenedorEquipos({ abierto, onClose }) {
 
   // Al abrir o cambiar el origen: recargar equipos y limpiar toda la cadena.
   useEffect(() => {
-    if (abierto) { cargarEquipos(origenSel); setEquipoSel(null); setMarcaSel(null); setMarcas([]); setPlacas([]); }
+    if (abierto) { cargarEquipos(origenSel); setEquipoSel(null); setMarcaSel(null); setMarcas([]); setPlacas([]); setBuscarEquipo(''); setBuscarMarca(''); }
   }, [abierto, origenSel, cargarEquipos]);
-  useEffect(() => { cargarMarcas(equipoSel?.id); setMarcaSel(null); setPlacas([]); }, [equipoSel, cargarMarcas]);
+  useEffect(() => { cargarMarcas(equipoSel?.id); setMarcaSel(null); setPlacas([]); setBuscarMarca(''); }, [equipoSel, cargarMarcas]);
   useEffect(() => { cargarPlacas(marcaSel?.id); }, [marcaSel, cargarPlacas]);
 
   // ── CRUD genérico ─────────────────────────────────────────────────────────
@@ -199,6 +201,12 @@ export default function MantenedorEquipos({ abierto, onClose }) {
     editar('modelos', mo.id, { estado: nuevo }, () => cargarPlacas(marcaSel.id));
   };
 
+  // Listas filtradas por los buscadores.
+  const equiposFiltrados = equipos.filter(eq =>
+    !buscarEquipo.trim() || eq.nombre.toLowerCase().includes(buscarEquipo.toLowerCase().trim()));
+  const marcasFiltradas = marcas.filter(ma =>
+    !buscarMarca.trim() || ma.nombre.toLowerCase().includes(buscarMarca.toLowerCase().trim()));
+
   if (!abierto) return null;
 
   return (
@@ -223,10 +231,17 @@ export default function MantenedorEquipos({ abierto, onClose }) {
               <span>2 · Equipos <small>{origenSel === 'JURP' ? 'JURP' : 'Externa'}</small></span>
               <button className="mnt-btn-add" onClick={nuevoEquipo}><FaPlus /> Nuevo</button>
             </div>
+            <div style={{ position:'relative', padding:'8px 10px', borderBottom:'1px solid #e2e8f0' }}>
+              <FaSearch size={11} style={{ position:'absolute', left:'20px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }} />
+              <input type="text" placeholder="Buscar equipo..." value={buscarEquipo} onChange={e => setBuscarEquipo(e.target.value)}
+                style={{ width:'100%', padding:'6px 8px 6px 28px', border:'1px solid #cbd5e1', borderRadius:'6px', fontSize:'12px', boxSizing:'border-box' }} />
+              {buscarEquipo && <button onClick={() => setBuscarEquipo('')} style={{ position:'absolute', right:'18px', top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'#94a3b8', display:'flex', padding:0 }}><FaTimes size={11} /></button>}
+            </div>
             <div className="mnt-list">
               {cargando && <div className="mnt-empty"><FaSync className="mnt-spin" /> Cargando...</div>}
               {!cargando && equipos.length === 0 && <div className="mnt-empty">Sin equipos {origenSel === 'JURP' ? 'propios' : 'externos'}. Crea el primero.</div>}
-              {equipos.map(eq => (
+              {!cargando && equipos.length > 0 && equiposFiltrados.length === 0 && <div className="mnt-empty">Ningún equipo coincide con "{buscarEquipo}".</div>}
+              {equiposFiltrados.map(eq => (
                 <div key={eq.id} className={`mnt-item ${equipoSel?.id === eq.id ? 'sel' : ''}`} onClick={() => setEquipoSel(eq)}>
                   <span className="mnt-item-name">{eq.nombre}</span>
                   <span className="mnt-item-actions">
@@ -245,10 +260,19 @@ export default function MantenedorEquipos({ abierto, onClose }) {
               <span>3 · POTENCIA / CAPACIDAD {equipoSel && <small>de {equipoSel.nombre}</small>}</span>
               <button className="mnt-btn-add" onClick={nuevaMarca} disabled={!equipoSel}><FaPlus /> Nueva</button>
             </div>
+            {equipoSel && (
+              <div style={{ position:'relative', padding:'8px 10px', borderBottom:'1px solid #e2e8f0' }}>
+                <FaSearch size={11} style={{ position:'absolute', left:'20px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }} />
+                <input type="text" placeholder="Buscar potencia / capacidad..." value={buscarMarca} onChange={e => setBuscarMarca(e.target.value)}
+                  style={{ width:'100%', padding:'6px 8px 6px 28px', border:'1px solid #cbd5e1', borderRadius:'6px', fontSize:'12px', boxSizing:'border-box' }} />
+                {buscarMarca && <button onClick={() => setBuscarMarca('')} style={{ position:'absolute', right:'18px', top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'#94a3b8', display:'flex', padding:0 }}><FaTimes size={11} /></button>}
+              </div>
+            )}
             <div className="mnt-list">
               {!equipoSel && <div className="mnt-empty">Selecciona un equipo →</div>}
               {equipoSel && marcas.length === 0 && <div className="mnt-empty">Sin registros. Crea el primero.</div>}
-              {marcas.map(ma => (
+              {equipoSel && marcas.length > 0 && marcasFiltradas.length === 0 && <div className="mnt-empty">Ninguna coincide con "{buscarMarca}".</div>}
+              {marcasFiltradas.map(ma => (
                 <div key={ma.id} className={`mnt-item ${marcaSel?.id === ma.id ? 'sel' : ''}`} onClick={() => setMarcaSel(ma)}>
                   <span className="mnt-item-name">{ma.nombre}</span>
                   <span className="mnt-item-actions">
