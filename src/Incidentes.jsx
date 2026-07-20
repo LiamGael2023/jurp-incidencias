@@ -1371,16 +1371,8 @@ function Incidentes() {
                                           <FaPlus size={10} /> Parte Diario
                                         </button>
 
-                                        {/* Ver partes / PDF */}
-                                        {r.count === 1 && r.partesMaq[0]?.dbId && (
-                                          <button type="button" onClick={() => abrirModalPdf(r.partesMaq[0].dbId)} title="Ver Parte Diario (PDF)" style={{padding:'4px 8px', backgroundColor:'#e0f2fe', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaFilePdf size={16} /></button>
-                                        )}
-                                        {r.count === 1 && !r.partesMaq[0]?.cerrado && (
-                                          <button type="button" onClick={() => cerrarParteDiario(r.partesMaq[0].registro)} title="Finalizar parte (libera la máquina)" style={{padding:'4px 10px', backgroundColor:'#dcfce7', color:'#15803d', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:600}}><FaCheckCircle size={13} /> Finalizar</button>
-                                        )}
-                                        {r.count > 1 && (
-                                          <button type="button" onClick={() => setModalPartes(r)} title={`Ver los ${r.count} partes diarios`} style={{padding:'4px 10px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'12px', fontWeight:600}}><FaListUl size={11} /> Ver partes ({r.count})</button>
-                                        )}
+                                        {/* Todo se gestiona desde "Ver partes" */}
+                                        <button type="button" onClick={() => setModalPartes(r)} title={`Ver y gestionar los ${r.count} parte(s)`} style={{padding:'4px 10px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'12px', fontWeight:600}}><FaListUl size={11} /> Ver partes ({r.count})</button>
 
                                         {/* Quitar la máquina (borrador o todos sus partes) */}
                                         <button type="button" onClick={() => quitarMaquina(r)} title="Quitar esta máquina y sus partes" style={{padding:'4px 8px', backgroundColor:'#fee2e2', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaTrash size={14} /></button>
@@ -1639,52 +1631,93 @@ function Incidentes() {
       {/* ── Modal: partes diarios de una máquina ───────────────────────── */}
       {modalPartes && (
         <div onClick={() => setModalPartes(null)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:'10px', overflow:'hidden', maxWidth:'620px', width:'100%', maxHeight:'85vh', display:'flex', flexDirection:'column' }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
-              <div>
-                <h5 style={{ margin:0, fontSize:'15px', color:'#1e293b' }}>{modalPartes.descripcionResumen}</h5>
-                <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>
-                  {modalPartes.count} parte{modalPartes.count > 1 ? 's' : ''} · {fmtNum(modalPartes.cantidadTotal)} HE · S/ {fmtNum(modalPartes.totalSum)}
+          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:'10px', overflow:'hidden', maxWidth:'960px', width:'100%', maxHeight:'88vh', display:'flex', flexDirection:'column' }}>
+            {/* Header */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 22px', background:'#1463A5', color:'#fff' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'12px', minWidth:0 }}>
+                <FaTruck size={22} />
+                <div style={{ minWidth:0 }}>
+                  <h5 style={{ margin:0, fontSize:'17px', fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{modalPartes.descripcionResumen}</h5>
+                  <div style={{ fontSize:'12px', opacity:0.85, marginTop:'2px' }}>Partes diarios de esta máquina</div>
                 </div>
               </div>
-              <button onClick={() => setModalPartes(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'18px', display:'flex' }}><FaTimes /></button>
+              <button onClick={() => setModalPartes(null)} style={{ background:'rgba(255,255,255,0.15)', border:'none', cursor:'pointer', color:'#fff', fontSize:'16px', display:'flex', borderRadius:'6px', padding:'8px' }}><FaTimes /></button>
             </div>
-            <div style={{ padding:'14px 18px', overflowY:'auto' }}>
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {modalPartes.partesMaq.map((p, idx) => {
-                  const reg = p.registro || {};
-                  const horas = parseFloat(reg.cantidad) || 0;
-                  return (
-                    <div key={p.idLocal || idx} style={{ border:`1px solid ${p.cerrado ? '#e2e8f0' : '#fed7aa'}`, background: p.cerrado ? '#fff' : '#fffbeb', borderRadius:'8px', padding:'10px 12px' }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
-                        <span style={{ fontWeight:700, fontSize:'13px', color:'#1e293b' }}>{p.numeroParte || `Parte #${p.dbId}`}</span>
-                        <span style={{ fontSize:'10px', fontWeight:700, padding:'2px 7px', borderRadius:'4px', background: p.cerrado ? '#dcfce7' : '#fef3c7', color: p.cerrado ? '#15803d' : '#b45309' }}>
-                          {p.cerrado ? 'CERRADO' : 'ABIERTO'}
-                        </span>
-                        <span style={{ marginLeft:'auto', fontSize:'12px', color:'#64748b' }}>
-                          {fmtNum(horas)} HE · <span style={{ fontWeight:700, color:'#1463A5' }}>S/ {fmtNum(reg.total || 0)}</span>
-                        </span>
-                      </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:'6px', marginTop:'8px', paddingTop:'8px', borderTop:'1px dashed #e2e8f0' }}>
-                        {p.dbId && (
-                          <button type="button" onClick={() => { setModalPartes(null); abrirModalPdf(p.dbId); }} title="Ver PDF del parte"
-                            style={{ display:'flex', alignItems:'center', gap:'5px', padding:'4px 10px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'4px', border:'none', cursor:'pointer', fontSize:'11px', fontWeight:600 }}>
-                            <FaFilePdf size={12} /> Ver PDF
-                          </button>
-                        )}
-                        {!p.cerrado && (
-                          <button type="button" onClick={() => { cerrarParteDiario(p.registro); setModalPartes(null); }} title="Finalizar este parte (libera la máquina)"
-                            style={{ display:'flex', alignItems:'center', gap:'5px', padding:'4px 10px', backgroundColor:'#dcfce7', color:'#15803d', borderRadius:'4px', border:'none', cursor:'pointer', fontSize:'11px', fontWeight:600 }}>
-                            <FaCheckCircle size={12} /> Finalizar
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+
+            {/* Tabla de partes */}
+            <div style={{ overflowY:'auto', padding:'0' }}>
+              {modalPartes.partesMaq.length === 0 ? (
+                <div style={{ padding:'40px', textAlign:'center', color:'#94a3b8', fontSize:'14px' }}>Esta máquina aún no tiene partes diarios. Usa "+ Parte Diario" para crear el primero.</div>
+              ) : (
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
+                  <thead>
+                    <tr style={{ background:'#f1f5f9', borderBottom:'2px solid #e2e8f0' }}>
+                      <th style={{ textAlign:'left', padding:'11px 22px', fontSize:'11px', color:'#475569', letterSpacing:'0.4px' }}>N° PARTE</th>
+                      <th style={{ textAlign:'left', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>ESTADO</th>
+                      <th style={{ textAlign:'left', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>ACTIVIDAD</th>
+                      <th style={{ textAlign:'right', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>HORAS</th>
+                      <th style={{ textAlign:'right', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>TOTAL</th>
+                      <th style={{ textAlign:'right', padding:'11px 22px', fontSize:'11px', color:'#475569' }}>ACCIONES</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modalPartes.partesMaq.map((p, idx) => {
+                      const reg = p.registro || {};
+                      const horas = parseFloat(reg.cantidad) || 0;
+                      return (
+                        <tr key={p.idLocal || idx} style={{ borderBottom:'1px solid #f1f5f9', background: p.cerrado ? '#fff' : '#fffbeb' }}>
+                          <td style={{ padding:'12px 22px', fontWeight:700, color:'#1e293b' }}>{p.numeroParte || `#${p.dbId}`}</td>
+                          <td style={{ padding:'12px 10px' }}>
+                            <span style={{ fontSize:'10px', fontWeight:700, padding:'3px 9px', borderRadius:'4px', background: p.cerrado ? '#dcfce7' : '#fef3c7', color: p.cerrado ? '#15803d' : '#b45309', whiteSpace:'nowrap' }}>
+                              {p.cerrado ? 'CERRADO' : 'ABIERTO'}
+                            </span>
+                          </td>
+                          <td style={{ padding:'12px 10px', color:'#475569', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={reg.actividad || ''}>{reg.actividad || '—'}</td>
+                          <td style={{ padding:'12px 10px', textAlign:'right', fontWeight:600, color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(horas)} HE</td>
+                          <td style={{ padding:'12px 10px', textAlign:'right', fontWeight:700, color:'#1463A5', whiteSpace:'nowrap' }}>S/ {fmtNum(reg.total || 0)}</td>
+                          <td style={{ padding:'12px 22px' }}>
+                            <div style={{ display:'flex', gap:'6px', justifyContent:'flex-end', alignItems:'center' }}>
+                              {p.dbId && (
+                                <button type="button" onClick={() => { setModalPartes(null); abrirModalPdf(p.dbId); }} title="Ver PDF del parte"
+                                  style={{ display:'inline-flex', alignItems:'center', gap:'5px', padding:'5px 11px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'5px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:600, whiteSpace:'nowrap' }}>
+                                  <FaFilePdf size={12} /> Ver PDF
+                                </button>
+                              )}
+                              {!p.cerrado && (
+                                <button type="button" onClick={() => { cerrarParteDiario(p.registro); setModalPartes(null); }} title="Finalizar este parte (libera la máquina)"
+                                  style={{ display:'inline-flex', alignItems:'center', gap:'5px', padding:'5px 11px', backgroundColor:'#dcfce7', color:'#15803d', borderRadius:'5px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:600, whiteSpace:'nowrap' }}>
+                                  <FaCheckCircle size={12} /> Finalizar
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {/* Fila de total */}
+                  <tfoot>
+                    <tr style={{ background:'#f8fafc', borderTop:'2px solid #e2e8f0' }}>
+                      <td colSpan="3" style={{ padding:'14px 22px', fontWeight:700, color:'#334155' }}>
+                        TOTAL · {modalPartes.count} parte{modalPartes.count !== 1 ? 's' : ''}
+                      </td>
+                      <td style={{ padding:'14px 10px', textAlign:'right', fontWeight:700, color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(modalPartes.cantidadTotal)} HE</td>
+                      <td style={{ padding:'14px 10px', textAlign:'right', fontWeight:800, fontSize:'15px', color:'#1463A5', whiteSpace:'nowrap' }}>S/ {fmtNum(modalPartes.totalSum)}</td>
+                      <td style={{ padding:'14px 22px' }}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
             </div>
-            <div style={{ padding:'12px 18px', borderTop:'1px solid #e2e8f0', background:'#f8fafc', display:'flex', justifyContent:'flex-end' }}>
+
+            {/* Footer */}
+            <div style={{ padding:'12px 22px', borderTop:'1px solid #e2e8f0', background:'#f8fafc', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <button type="button" disabled={modalPartes.tieneParteAbierto}
+                onClick={() => { if (!modalPartes.tieneParteAbierto) { const g = modalPartes; setModalPartes(null); agregarParteAMaquina(g); } }}
+                title={modalPartes.tieneParteAbierto ? 'Finaliza el parte abierto para agregar otro' : 'Agregar un parte diario'}
+                style={{ display:'inline-flex', alignItems:'center', gap:'6px', padding:'8px 16px', background: modalPartes.tieneParteAbierto ? '#f1f5f9' : '#1463A5', color: modalPartes.tieneParteAbierto ? '#94a3b8' : '#fff', border:'none', borderRadius:'8px', fontSize:'13px', fontWeight:600, cursor: modalPartes.tieneParteAbierto ? 'not-allowed' : 'pointer' }}>
+                <FaPlus size={11} /> Agregar parte diario
+              </button>
               <button onClick={() => setModalPartes(null)} className="tbl-btn tbl-btn-link">Cerrar</button>
             </div>
           </div>
