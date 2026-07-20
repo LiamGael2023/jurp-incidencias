@@ -422,7 +422,32 @@ function Incidentes() {
         };
       });
       const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', descripcionResumen: i.description, unidad: i.unit || 'und', cantidad: parseFloat(i.quantity), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity) * parseFloat(i.unit_price), guardadoEnDB: true }));
-      const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-maq-${i.id}`, dbId: i.id, endpoint: 'daily-part-heavy-equipments', cerrado: i.cerrado || false, tipo: 'Maquinaria', numeroParte: i.part_number, descripcionResumen: detalleMaquinaDeParte(i, todosModelos), cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)), precioUnitario: parseFloat(i.unit_price), total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price), guardadoEnDB: true }));
+      const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => {
+        // Resuelve la máquina del catálogo para poder agregarle más partes luego.
+        const mp = (i.model_plate || '').trim();
+        let modeloTxt = mp, placaTxt = mp;
+        if (mp.includes('/')) { const [a, b] = mp.split('/', 2).map(x => x.trim()); modeloTxt = a; placaTxt = b || ''; }
+        let maq = null;
+        if (placaTxt) maq = todosModelos.find(m => m.placa && m.placa.toLowerCase() === placaTxt.toLowerCase());
+        if (!maq && modeloTxt) {
+          const porModelo = todosModelos.filter(m => m.modelo && m.modelo.toLowerCase() === modeloTxt.toLowerCase());
+          maq = porModelo.find(m => (m.marca_nombre || '').toLowerCase() === (i.brand_name || '').toLowerCase()) || porModelo[0];
+        }
+        return {
+          idLocal: `db-maq-${i.id}`, dbId: i.id, endpoint: 'daily-part-heavy-equipments',
+          cerrado: i.cerrado || false, tipo: 'Maquinaria', numeroParte: i.part_number,
+          descripcionResumen: detalleMaquinaDeParte(i, todosModelos),
+          codigoMaquina: maq?.codigo || '', modeloId: maq?.id || '',
+          equipoId: maq?.equipo || '', equipo: maq?.equipo_nombre || i.equipment_name || '',
+          marcaId: maq?.marca || '', marca: maq?.marca_nombre || i.brand_name || '',
+          modeloMaquina: maq?.modelo || modeloTxt || '', placa: maq?.placa || placaTxt || '',
+          origen: maq?.origen || 'JURP',
+          cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)),
+          precioUnitario: parseFloat(i.unit_price),
+          total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price),
+          guardadoEnDB: true,
+        };
+      });
       setRecursos([...formatPers, ...formatMat, ...formatMaq]);
     } catch (error) { console.error("❌ Error al obtener los recursos guardados:", error); }
   };
@@ -588,10 +613,37 @@ function Incidentes() {
     setFormTipo(tipo);
   };
 
-  // Paso 2: con una máquina ya elegida (del catálogo o de una fila existente),
-  // abre el formulario de PARTE DIARIO con esa máquina fijada.
+  // Paso 1: al elegir máquina del selector, la agrega a la lista en BORRADOR
+  // (sin parte diario todavía). Vive solo en pantalla hasta que tenga un parte.
+  const seleccionarMaquina = (maq) => {
+    setSelectorMaquina(false);
+    // Evita duplicar una máquina ya presente (borrador o con partes).
+    const codigo = (maq.codigo || '').toUpperCase();
+    const yaEsta = recursos.some(r => r.tipo === 'Maquinaria' &&
+      ((r.codigoMaquina || '').toUpperCase() === codigo ||
+       (r.descripcionResumen || '').toUpperCase().startsWith(codigo)));
+    if (yaEsta) {
+      Swal.fire({ icon: 'info', title: 'Ya está en la lista', text: `${maq.codigo} ya fue agregada. Usa "+ Parte Diario" en su fila.` });
+      return;
+    }
+    const detalle = [maq.codigo, '·', maq.equipo_nombre, maq.marca_nombre, maq.modelo || '']
+      .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    const borrador = {
+      idLocal: `maq-borrador-${maq.id}-${Date.now()}`,
+      tipo: 'Maquinaria', esBorrador: true, guardadoEnDB: false,
+      descripcionResumen: detalle,
+      origen: maq.origen || 'JURP',
+      equipoId: maq.equipo || '', equipo: maq.equipo_nombre || '',
+      marcaId: maq.marca || '', marca: maq.marca_nombre || '',
+      modeloId: maq.id, modeloMaquina: maq.modelo || '', placa: maq.placa || '',
+      codigoMaquina: maq.codigo || '',
+      cantidad: 0, precioUnitario: 0, total: 0,
+    };
+    setRecursos(prev => [...prev, borrador]);
+  };
+
+  // Paso 2: abre el formulario de PARTE DIARIO para una máquina concreta.
   const abrirParteDiario = (maq) => {
-    // maq: registro de /modelos/ con codigo, modelo, placa, marca_nombre, equipo_nombre, marca, equipo, origen
     setSelectorMaquina(false);
     setNuevoRecurso({
       ...estadoInicialRecurso,
@@ -611,23 +663,42 @@ function Incidentes() {
     setFormTipo('Maquinaria');
   };
 
-  // Desde una fila de máquina ya en la lista, agrega OTRO parte diario a la
-  // misma máquina. Resuelve la máquina del catálogo por su código.
-  const agregarParteAMaquina = (fila) => {
-    // El detalle empieza con el código (ej. "JURP002 · CAMIONETA...").
-    const codigo = (fila.descripcionResumen || fila.codigoMaquina || '').split('·')[0].trim().split(' ')[0].trim();
-    const maq = todosModelos.find(m => (m.codigo || '').toUpperCase() === codigo.toUpperCase());
-    if (maq) { abrirParteDiario(maq); return; }
-    // Si no se halla en catálogo, reconstruye lo mínimo desde la fila.
+  // Desde una fila de máquina (grupo), agrega OTRO parte diario a la misma
+  // máquina, reutilizando su identidad ya conocida.
+  const agregarParteAMaquina = (grupo) => {
     setNuevoRecurso({
       ...estadoInicialRecurso, tipo: 'Maquinaria', numeroParte: generarCorrelativo(),
-      origen: fila.origen || 'JURP', equipoId: fila.equipoId || '', equipo: fila.equipo || '',
-      marcaId: fila.marcaId || '', marca: fila.marca || '', modeloId: fila.modeloId || '',
-      modeloMaquina: fila.modeloMaquina || '', placa: fila.placa || '', codigoMaquina: codigo,
-      precioUnitario: fila.precioUnitario || 0,
+      origen: grupo.origen || 'JURP',
+      equipoId: grupo.equipoId || '', equipo: grupo.equipo || '',
+      marcaId: grupo.marcaId || '', marca: grupo.marca || '',
+      modeloId: grupo.modeloId || '', modeloMaquina: grupo.modeloMaquina || '',
+      placa: grupo.placa || '', codigoMaquina: grupo.codigoMaquina || '',
+      precioUnitario: grupo.precioUnitario || 0,
     });
     obtenerCorrelativoParte();
     setFormTipo('Maquinaria');
+  };
+
+  // Quita una máquina completa: su borrador (local) y todos sus partes.
+  // Los partes ya guardados en BD se eliminan con confirmación.
+  const quitarMaquina = async (grupo) => {
+    const guardados = grupo.partesMaq.filter(p => p.guardadoEnDB && p.dbId);
+    if (guardados.length > 0) {
+      const c = await Swal.fire({
+        title: '¿Quitar máquina?',
+        text: `Se eliminarán ${guardados.length} parte(s) diario(s) de ${grupo.codigoMaquina}.`,
+        icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33',
+        confirmButtonText: 'Sí, quitar', cancelButtonText: 'Cancelar',
+      });
+      if (!c.isConfirmed) return;
+      for (const p of guardados) {
+        try { await fetch(`${API_OPS}/${p.endpoint}/${p.dbId}/`, { method: 'DELETE' }); } catch (e) { console.error(e); }
+      }
+    }
+    // Quita de la lista local (borrador + partes locales).
+    const ids = new Set(grupo.idsLocales);
+    setRecursos(prev => prev.filter(r => !ids.has(r.idLocal)));
+    if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
   };
 
   const agregarRecurso = () => {
@@ -681,11 +752,15 @@ function Incidentes() {
 
   const recursosAgrupados = (() => {
     const grupos = new Map();
+    // Código de máquina desde el detalle (ej. "JURP002 · ...") o del campo.
+    const codigoDe = (r) => ((r.codigoMaquina || (r.descripcionResumen || '').split('·')[0]).trim().split(' ')[0] || '').toUpperCase();
     for (const r of recursos) {
       const detalle = r.descripcionResumen || r.descripcion || '';
       let clave;
       if (r.tipo === 'Maquinaria') {
-        clave = `maq|${normalizar(detalle)}|${r.precioUnitario}`;
+        // Agrupa por máquina (código), no por precio: así el borrador y sus
+        // partes quedan en la misma fila.
+        clave = `maq|${codigoDe(r)}`;
       } else if (r.tipo === 'Personal') {
         const cargo = normalizar(r.descripcion);
         clave = `pers|${cargo}|${r.numPersonas}|${r.horasTrabajo}|${r.horasExtras}|${r.cantidad}|${r.precioUnitario}|${r.guardadoEnDB}`;
@@ -696,15 +771,26 @@ function Incidentes() {
         grupos.set(clave, {
           ...r, cantidadTotal: 0, totalSum: 0, count: 0,
           registros: [], idsLocales: [], partesMaq: [],
+          idsBorrador: [], tieneParteAbierto: false,
         });
       }
       const g = grupos.get(clave);
+      g.idsLocales.push(r.idLocal);
+      if (r.tipo === 'Maquinaria' && r.esBorrador) {
+        // El borrador aporta la identidad de la máquina pero no cuenta como parte.
+        g.idsBorrador.push(r.idLocal);
+        // Conserva los datos de máquina en el grupo.
+        g.codigoMaquina = r.codigoMaquina; g.modeloId = r.modeloId; g.modeloMaquina = r.modeloMaquina;
+        g.placa = r.placa; g.origen = r.origen; g.equipoId = r.equipoId; g.equipo = r.equipo;
+        g.marcaId = r.marcaId; g.marca = r.marca;
+        continue;
+      }
       g.cantidadTotal += r.cantidad;
       g.totalSum += r.total;
       g.count += 1;
       if (r.guardadoEnDB && r.dbId) g.registros.push({ dbId: r.dbId, endpoint: r.endpoint });
-      g.idsLocales.push(r.idLocal);
       if (r.tipo === 'Maquinaria') {
+        if (!r.cerrado) g.tieneParteAbierto = true;
         g.partesMaq.push({ dbId: r.dbId, idLocal: r.idLocal, cerrado: r.cerrado, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, numeroParte: r.numeroParte || '', registro: r });
       }
     }
@@ -1266,32 +1352,43 @@ function Incidentes() {
                                   <td className="tbl-text-end">S/ {fmtNum(r.precioUnitario)}</td>
                                   <td className="tbl-text-end text-blue font-bold">S/ {fmtNum(r.totalSum)}</td>
                                   <td>
-                                    {r.guardadoEnDB ? (
+                                    {r.tipo === 'Maquinaria' ? (
+                                      // ── Fila de MÁQUINA (borrador y/o con partes) ──
+                                      <div style={{display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap'}}>
+                                        {r.count === 0 ? (
+                                          <span className="tbl-badge" style={{backgroundColor:'#fef3c7', color:'#b45309', fontWeight:600}}>Sin partes</span>
+                                        ) : (() => {
+                                          const cerrados = r.partesMaq.filter(p => p.cerrado).length;
+                                          const activos = r.count - cerrados;
+                                          return <span className="tbl-badge" style={{backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:600}}>{activos > 0 ? `${activos} activo${activos>1?'s':''}` : ''}{activos > 0 && cerrados > 0 ? ' · ' : ''}{cerrados > 0 ? `${cerrados} cerrado${cerrados>1?'s':''}` : ''}</span>;
+                                        })()}
+
+                                        {/* + Parte Diario — deshabilitado si hay un parte abierto */}
+                                        <button type="button" disabled={r.tieneParteAbierto}
+                                          onClick={() => !r.tieneParteAbierto && agregarParteAMaquina(r)}
+                                          title={r.tieneParteAbierto ? 'Finaliza el parte abierto para agregar otro' : 'Agregar un parte diario a esta máquina'}
+                                          style={{padding:'4px 10px', backgroundColor: r.tieneParteAbierto ? '#f1f5f9' : '#dbeafe', color: r.tieneParteAbierto ? '#94a3b8' : '#1463A5', borderRadius:'4px', border:'none', cursor: r.tieneParteAbierto ? 'not-allowed' : 'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'12px', fontWeight:600}}>
+                                          <FaPlus size={10} /> Parte Diario
+                                        </button>
+
+                                        {/* Ver partes / PDF */}
+                                        {r.count === 1 && r.partesMaq[0]?.dbId && (
+                                          <button type="button" onClick={() => abrirModalPdf(r.partesMaq[0].dbId)} title="Ver Parte Diario (PDF)" style={{padding:'4px 8px', backgroundColor:'#e0f2fe', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaFilePdf size={16} /></button>
+                                        )}
+                                        {r.count === 1 && !r.partesMaq[0]?.cerrado && (
+                                          <button type="button" onClick={() => cerrarParteDiario(r.partesMaq[0].registro)} title="Finalizar parte (libera la máquina)" style={{padding:'4px 10px', backgroundColor:'#dcfce7', color:'#15803d', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:600}}><FaCheckCircle size={13} /> Finalizar</button>
+                                        )}
+                                        {r.count > 1 && (
+                                          <button type="button" onClick={() => setModalPartes(r)} title={`Ver los ${r.count} partes diarios`} style={{padding:'4px 10px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'12px', fontWeight:600}}><FaListUl size={11} /> Ver partes ({r.count})</button>
+                                        )}
+
+                                        {/* Quitar la máquina (borrador o todos sus partes) */}
+                                        <button type="button" onClick={() => quitarMaquina(r)} title="Quitar esta máquina y sus partes" style={{padding:'4px 8px', backgroundColor:'#fee2e2', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaTrash size={14} /></button>
+                                      </div>
+                                    ) : r.guardadoEnDB ? (
                                       <div style={{display: 'flex', gap: '6px', alignItems: 'center', flexWrap:'wrap'}}>
-                                        {r.tipo === 'Maquinaria' && r.count > 1
-                                          ? (() => {
-                                              const cerrados = r.partesMaq.filter(p => p.cerrado).length;
-                                              const activos = r.count - cerrados;
-                                              return <span className="tbl-badge" style={{backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:600}}>{activos > 0 ? `${activos} activo${activos>1?'s':''}` : ''}{activos > 0 && cerrados > 0 ? ' · ' : ''}{cerrados > 0 ? `${cerrados} cerrado${cerrados>1?'s':''}` : ''}</span>;
-                                            })()
-                                          : r.tipo === 'Maquinaria' && r.cerrado
-                                          ? <span className="tbl-badge" style={{backgroundColor:'#e2e8f0', color:'#475569'}}>Cerrado</span>
-                                          : <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>}
-                                        {r.tipo === 'Maquinaria' && (
-                                          <button type="button" onClick={() => agregarParteAMaquina(r)} title="Agregar otro parte diario a esta máquina"
-                                            style={{padding:'4px 10px', backgroundColor:'#dbeafe', color:'#1463A5', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'12px', fontWeight:600}}>
-                                            <FaPlus size={10} /> Parte Diario
-                                          </button>
-                                        )}
-                                        {r.tipo === 'Maquinaria' && r.count === 1 && (<button type="button" onClick={() => abrirModalPdf(r.dbId)} className="tbl-btn-action text-blue" title="Ver Parte Diario (PDF)" style={{padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaFilePdf size={16} /></button>)}
-                                        {r.tipo === 'Maquinaria' && r.count === 1 && !r.cerrado && (<button type="button" onClick={() => cerrarParteDiario(r)} className="tbl-btn-action" title="Finalizar actividades (libera la máquina)" style={{padding: '4px 10px', backgroundColor: '#dcfce7', color:'#15803d', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems:'center', gap:'4px', fontSize:'12px', fontWeight:'600'}}><FaCheckCircle size={13} /> Finalizar</button>)}
-                                        {r.tipo === 'Maquinaria' && r.count > 1 && (
-                                          <button type="button" onClick={() => setModalPartes(r)} title={`Ver los ${r.count} partes diarios`}
-                                            style={{padding:'4px 10px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'12px', fontWeight:600}}>
-                                            <FaListUl size={11} /> Ver partes ({r.count})
-                                          </button>
-                                        )}
-                                        {!(r.tipo === 'Maquinaria' && r.cerrado) && (<button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>)}
+                                        <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>
+                                        <button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>
                                       </div>
                                     ) : (<button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
                                   </td>
@@ -1355,7 +1452,7 @@ function Incidentes() {
                     if (todosModelos.length === 0) return <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'13px' }}>Cargando catálogo de máquinas…</div>;
                     if (lista.length === 0) return <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'13px' }}>Ninguna máquina coincide con "{buscarMaquina}".</div>;
                     return lista.map(m => (
-                      <div key={m.id} onClick={() => abrirParteDiario(m)}
+                      <div key={m.id} onClick={() => seleccionarMaquina(m)}
                         style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', cursor:'pointer', transition:'all 0.12s' }}
                         onMouseEnter={e => { e.currentTarget.style.background='#eff6ff'; e.currentTarget.style.borderColor='#bfdbfe'; }}
                         onMouseLeave={e => { e.currentTarget.style.background='#fff'; e.currentTarget.style.borderColor='#e2e8f0'; }}>
