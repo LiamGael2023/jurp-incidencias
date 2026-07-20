@@ -786,7 +786,9 @@ function Incidentes() {
         const cargo = normalizar(r.descripcion);
         clave = `pers|${cargo}|${r.numPersonas}|${r.horasTrabajo}|${r.horasExtras}|${r.cantidad}|${r.precioUnitario}|${r.guardadoEnDB}`;
       } else {
-        clave = `${r.tipo}|${normalizar(detalle)}|${r.unidad || 'und'}|${r.precioUnitario}|${r.guardadoEnDB}`;
+        // Insumos: agrupa por descripción + unidad (sin importar precio ni si
+        // está guardado). El P. Unitario se recalcula como promedio ponderado.
+        clave = `${r.tipo}|${normalizar(detalle)}|${r.unidad || 'und'}`;
       }
       if (!grupos.has(clave)) {
         grupos.set(clave, {
@@ -1370,7 +1372,7 @@ function Incidentes() {
                                     {r.count > 1 && <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>}
                                   </td>
                                   <td className="tbl-text-end font-bold">{r.cantidadTotal.toLocaleString('es-PE', {minimumFractionDigits: r.tipo==='Personal'?1:2, maximumFractionDigits: r.tipo==='Personal'?1:2})} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und')}</span></td>
-                                  <td className="tbl-text-end">S/ {fmtNum(r.precioUnitario)}</td>
+                                  <td className="tbl-text-end">S/ {fmtNum(r.tipo === 'Insumo' && r.cantidadTotal > 0 ? (r.totalSum / r.cantidadTotal) : r.precioUnitario)}</td>
                                   <td className="tbl-text-end text-blue font-bold">S/ {fmtNum(r.totalSum)}</td>
                                   <td>
                                     {r.tipo === 'Maquinaria' ? (
@@ -1398,7 +1400,7 @@ function Incidentes() {
                                         {/* Quitar la máquina (borrador o todos sus partes) */}
                                         <button type="button" onClick={() => quitarMaquina(r)} title="Quitar esta máquina y sus partes" style={{padding:'4px 8px', backgroundColor:'#fee2e2', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaTrash size={14} /></button>
                                       </div>
-                                    ) : r.guardadoEnDB ? (
+                                    ) : (r.guardadoEnDB || (r.registros && r.registros.length > 0)) ? (
                                       <div style={{display: 'flex', gap: '6px', alignItems: 'center', flexWrap:'wrap'}}>
                                         <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>
                                         <button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>
