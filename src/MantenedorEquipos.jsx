@@ -1,11 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //  MantenedorEquipos.jsx
 //  Mantenedor (CRUD) de catálogos. Flujo:
-//    Equipo → Origen (JURP / Externa) → Marca → Placas
+//    Equipo → Origen (JURP / Externa) → POTENCIA/CAPACIDAD → Placas
 //  Cada "placa" es una máquina física con:
 //    - código autogenerado (JURP001… o EX01…) según origen
 //    - placa única
 //    - estado: 0 disponible / 1 no disponible (se crea en 0)
+//  Nota: en el modelo de datos, la POTENCIA/CAPACIDAD se guarda en la tabla
+//  "marcas" (campo nombre). Solo cambia la etiqueta visible.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
@@ -134,14 +136,14 @@ export default function MantenedorEquipos({ abierto, onClose }) {
     if (form) editar('equipos', eq.id, { nombre: form.nombre.toUpperCase(), requiere_placa: form.requiere_placa }, () => cargarEquipos(origenSel));
   };
 
-  // ── Marcas ─────────────────────────────────────────────────────────────
+  // ── POTENCIA / CAPACIDAD (guardado en tabla "marcas") ──────────────────
   const nuevaMarca = async () => {
     if (!equipoSel) return;
-    const { value } = await Swal.fire({ title: `Nueva marca para ${equipoSel.nombre}`, input: 'text', inputPlaceholder: 'Ej. CAT', showCancelButton: true, confirmButtonText: 'Crear', inputValidator: v => !v && 'Escribe un nombre' });
+    const { value } = await Swal.fire({ title: `Nueva POTENCIA / CAPACIDAD para ${equipoSel.nombre}`, input: 'text', inputPlaceholder: 'Ej. 170-250 HP · 1.1-2.75 YD3', showCancelButton: true, confirmButtonText: 'Crear', inputValidator: v => !v && 'Escribe la potencia / capacidad' });
     if (value) crear('marcas', { equipo: equipoSel.id, nombre: value.toUpperCase().trim(), activo: true }, () => cargarMarcas(equipoSel.id));
   };
   const editarMarca = async (ma) => {
-    const { value } = await Swal.fire({ title: 'Editar marca', input: 'text', inputValue: ma.nombre, showCancelButton: true, confirmButtonText: 'Guardar' });
+    const { value } = await Swal.fire({ title: 'Editar POTENCIA / CAPACIDAD', input: 'text', inputValue: ma.nombre, showCancelButton: true, confirmButtonText: 'Guardar' });
     if (value && value !== ma.nombre) editar('marcas', ma.id, { nombre: value.toUpperCase().trim() }, () => cargarMarcas(equipoSel.id));
   };
 
@@ -153,7 +155,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
     const { value: form } = await Swal.fire({
       title: `Nueva máquina · ${origenTxt}`,
       html:
-        `<p style="font-size:13px;color:#64748b;margin:0 0 10px">Equipo: <b>${equipoSel.nombre}</b> · Marca: <b>${marcaSel.nombre}</b><br>El código se generará automáticamente.</p>` +
+        `<p style="font-size:13px;color:#64748b;margin:0 0 10px">Equipo: <b>${equipoSel.nombre}</b> · Pot./Cap.: <b>${marcaSel.nombre}</b><br>El código se generará automáticamente.</p>` +
         '<input id="sw-modelo" class="swal2-input" placeholder="Modelo (ej. D8T, 320)">' +
         (pidePlaca ? '<input id="sw-placa" class="swal2-input" placeholder="Placa (ej. ABC-123)">' : ''),
       focusConfirm: false, showCancelButton: true, confirmButtonText: 'Crear',
@@ -222,7 +224,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
               <button className="mnt-btn-add" onClick={nuevoEquipo}><FaPlus /> Nuevo</button>
             </div>
             <div className="mnt-list">
-              {cargando && <div className="mnt-empty"><FaSync className="mnt-spin" /> Cargando…</div>}
+              {cargando && <div className="mnt-empty"><FaSync className="mnt-spin" /> Cargando...</div>}
               {!cargando && equipos.length === 0 && <div className="mnt-empty">Sin equipos {origenSel === 'JURP' ? 'propios' : 'externos'}. Crea el primero.</div>}
               {equipos.map(eq => (
                 <div key={eq.id} className={`mnt-item ${equipoSel?.id === eq.id ? 'sel' : ''}`} onClick={() => setEquipoSel(eq)}>
@@ -237,15 +239,15 @@ export default function MantenedorEquipos({ abierto, onClose }) {
             </div>
           </div>
 
-          {/* ── Marcas ──────────────────────────────────────────────────── */}
+          {/* ── POTENCIA / CAPACIDAD ────────────────────────────────────── */}
           <div className="mnt-col">
             <div className="mnt-col-head">
-              <span>3 · Marcas {equipoSel && <small>de {equipoSel.nombre}</small>}</span>
+              <span>3 · POTENCIA / CAPACIDAD {equipoSel && <small>de {equipoSel.nombre}</small>}</span>
               <button className="mnt-btn-add" onClick={nuevaMarca} disabled={!equipoSel}><FaPlus /> Nueva</button>
             </div>
             <div className="mnt-list">
               {!equipoSel && <div className="mnt-empty">Selecciona un equipo →</div>}
-              {equipoSel && marcas.length === 0 && <div className="mnt-empty">Sin marcas. Crea la primera.</div>}
+              {equipoSel && marcas.length === 0 && <div className="mnt-empty">Sin registros. Crea el primero.</div>}
               {marcas.map(ma => (
                 <div key={ma.id} className={`mnt-item ${marcaSel?.id === ma.id ? 'sel' : ''}`} onClick={() => setMarcaSel(ma)}>
                   <span className="mnt-item-name">{ma.nombre}</span>
@@ -266,7 +268,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
               <button className="mnt-btn-add" onClick={nuevaPlaca} disabled={!marcaSel}><FaPlus /> Nueva</button>
             </div>
             <div className="mnt-list">
-              {!marcaSel && <div className="mnt-empty">Selecciona una marca →</div>}
+              {!marcaSel && <div className="mnt-empty">Selecciona pot./cap. →</div>}
               {marcaSel && placas.length === 0 && <div className="mnt-empty">Sin placas {origenSel === 'JURP' ? 'JURP' : 'externas'}. Crea la primera.</div>}
               {placas.map(mo => (
                 <div key={mo.id} className="mnt-item mnt-item-placa">
@@ -292,7 +294,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
         </div>
 
         <div className="mnt-footer">
-          <span className="mnt-hint">Código automático: JURP001… (propia) · EX01… (externa). Placa única. Se crea disponible.</span>
+          <span className="mnt-hint">Código automático: JURP001... (propia) · EX01... (externa). Placa única. Se crea disponible.</span>
           <button className="mnt-btn-cerrar" onClick={onClose}>Cerrar</button>
         </div>
       </div>
