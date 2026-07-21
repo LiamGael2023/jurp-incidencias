@@ -1547,6 +1547,19 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               <div className="tbl-modal-footer" style={{flexWrap:'wrap',gap:'8px'}}>
                 <div className="tbl-text-start tbl-text-muted">Costo Total: <span style={{fontSize: '1.25rem', color: '#1e293b', fontWeight: 'bold'}}>S/ {fmtNum(costoTotalIncidente)}</span></div>
                 <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
+                  {/* Resumen: PDF / Excel (con borde) */}
+                  <div style={{display:'flex',alignItems:'center',gap:'8px',border:'1px solid #cbd5e1',borderRadius:'6px',padding:'4px 10px',background:'#f8fafc'}}>
+                    <span style={{fontSize:'12px',color:'#64748b',fontWeight:600}}>Resumen:</span>
+                    <button className="tbl-btn" onClick={exportarPDF} style={{background:'#d63939',color:'#fff',border:'none',padding:'5px 12px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar PDF"><FaFilePdf/> PDF</button>
+                    <button className="tbl-btn" onClick={exportarExcel} style={{background:'#2fb344',color:'#fff',border:'none',padding:'5px 12px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar Excel"><FaFileExcel/> Excel</button>
+                  </div>
+
+                  {/* Guardar Costeos */}
+                  {!incidentesCerrados.includes(incidenteActivo?.id) && (
+                    <button className="tbl-btn tbl-btn-primary" onClick={guardarCosteos} disabled={guardando}>{guardando ? <><FaSyncAlt className="icon-spin" style={{marginRight: '8px'}} /> Guardando...</> : <><FaSave style={{marginRight: '8px'}} /> Guardar Costeos</>}</button>
+                  )}
+
+                  {/* Cerrar incidencia / Reabrir */}
                   {incidentesCerrados.includes(incidenteActivo?.id) ? (
                     <>
                       <span style={{background:'#dcfce7',color:'#15803d',padding:'6px 14px',borderRadius:'4px',fontSize:'13px',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px'}}><FaCheckCircle/> Incidencia cerrada</span>
@@ -1555,12 +1568,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                   ) : (
                     <button className="tbl-btn" onClick={cerrarIncidenteCompleto} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Cierra los partes, libera las máquinas y bloquea el costeo"><FaCheckCircle/> Cerrar incidencia</button>
                   )}
-                  <button className="tbl-btn" onClick={exportarPDF} style={{background:'#d63939',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar PDF"><FaFilePdf/> PDF</button>
-                  <button className="tbl-btn" onClick={exportarExcel} style={{background:'#2fb344',color:'#fff',border:'none',padding:'6px 14px',borderRadius:'4px',cursor:'pointer',fontSize:'13px',display:'flex',alignItems:'center',gap:'6px'}} title="Descargar Excel"><FaFileExcel/> Excel</button>
+
+                  {/* Cerrar (última) */}
                   <button className="tbl-btn tbl-btn-link" onClick={() => setModalAbierto(false)}>Cerrar</button>
-                  {!incidentesCerrados.includes(incidenteActivo?.id) && (
-                    <button className="tbl-btn tbl-btn-primary" onClick={guardarCosteos} disabled={guardando}>{guardando ? <><FaSyncAlt className="icon-spin" style={{marginRight: '8px'}} /> Guardando...</> : <><FaSave style={{marginRight: '8px'}} /> Guardar Costeos</>}</button>
-                  )}
                 </div>
               </div>
             </div>
