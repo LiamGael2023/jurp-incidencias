@@ -35,7 +35,7 @@ export default function Maquinaria({ irAIncidente }) {
     try {
       const params = new URLSearchParams();
       if (filtroOrigen) params.append('origen', filtroOrigen);
-      if (filtroEstado !== '') params.append('estado', filtroEstado);
+      if (filtroEstado === '0' || filtroEstado === '1') params.append('estado', filtroEstado);
       const r = await fetch(`${API_OPS}/maquinaria-estado/?${params.toString()}`);
       if (r.ok) {
         const d = await r.json();
@@ -44,6 +44,44 @@ export default function Maquinaria({ irAIncidente }) {
     } catch (e) { console.error(e); } finally { setCargando(false); }
   };
   useEffect(() => { cargar(); }, [filtroOrigen, filtroEstado]);
+
+  // Pone / quita una máquina de mantenimiento (con observación).
+  const toggleMantenimiento = async (m) => {
+    const entrando = !m.en_mantenimiento;
+    const { value: obs, isConfirmed } = await Swal.fire({
+      title: entrando ? `Enviar a mantenimiento · ${m.codigo}` : `Marcar operativa · ${m.codigo}`,
+      input: 'textarea',
+      inputLabel: 'Observación (opcional)',
+      inputPlaceholder: entrando
+        ? 'Ej. Cambio de aceite, falla hidráulica...'
+        : 'Ej. Mantenimiento completado, lista para operar',
+      inputValue: entrando ? '' : (m.mantenimiento_obs || ''),
+      showCancelButton: true,
+      confirmButtonText: entrando ? 'Enviar a mantenimiento' : 'Marcar operativa',
+      confirmButtonColor: entrando ? '#d97706' : '#16a34a',
+    });
+    if (!isConfirmed) return;
+    try {
+      const r = await fetch(`${API_OPS}/modelos/${m.id}/mantenimiento/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ en_mantenimiento: entrando, observacion: obs || '' }),
+      });
+      if (r.ok) {
+        cargar();
+        Swal.fire({
+          icon: 'success',
+          title: entrando ? 'En mantenimiento' : 'Operativa',
+          timer: 1400, showConfirmButton: false,
+        });
+      } else {
+        const e = await r.json().catch(() => ({}));
+        Swal.fire('No se pudo', e.detail || 'Inténtalo de nuevo.', 'error');
+      }
+    } catch (e) {
+      Swal.fire('Error', 'Sin conexión con el servidor.', 'error');
+    }
+  };
 
   // Abre el modal con el historial de partes de una máquina.
   const abrirDetalle = async (m) => {
@@ -70,6 +108,8 @@ export default function Maquinaria({ irAIncidente }) {
 
   // Filtra por texto de búsqueda (código, equipo, marca, modelo, placa).
   const maquinasFiltradas = maquinas.filter(m => {
+    // Filtro "solo en mantenimiento" se resuelve aquí (no viaja al backend).
+    if (filtroEstado === 'mant' && !m.en_mantenimiento) return false;
     if (!busqueda.trim()) return true;
     const q = busqueda.toLowerCase().trim();
     const texto = `${m.codigo} ${m.equipo} ${m.marca} ${m.modelo} ${m.placa || ''}`.toLowerCase();
@@ -85,7 +125,8 @@ export default function Maquinaria({ irAIncidente }) {
   useEffect(() => { setPagina(1); }, [busqueda, filtroOrigen, filtroEstado]);
 
   const disponibles = maquinas.filter(m => m.disponible).length;
-  const ocupadas = maquinas.filter(m => !m.disponible).length;
+  const enMantenimiento = maquinas.filter(m => m.en_mantenimiento).length;
+  const ocupadas = maquinas.filter(m => !m.disponible && !m.en_mantenimiento).length;
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
@@ -120,6 +161,10 @@ export default function Maquinaria({ irAIncidente }) {
           <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>EN INCIDENTE</div>
           <div style={{ fontSize: '28px', fontWeight: 700, color: '#dc2626' }}>{ocupadas}</div>
         </div>
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderLeft: '4px solid #f59e0b', borderRadius: '8px', padding: '14px 18px' }}>
+          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>EN MANTENIMIENTO</div>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: '#d97706' }}>{enMantenimiento}</div>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -134,6 +179,7 @@ export default function Maquinaria({ irAIncidente }) {
           <option value="">Todos los estados</option>
           <option value="0">Solo disponibles</option>
           <option value="1">Solo en incidente</option>
+          <option value="mant">Solo en mantenimiento</option>
         </select>
         <div style={{ position:'relative', flex:'1', minWidth:'200px', maxWidth:'360px' }}>
           <FaSearch size={12} style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }} />
@@ -166,13 +212,19 @@ export default function Maquinaria({ irAIncidente }) {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '14px' }}>
           {maquinasPagina.map(m => {
-            const ocupada = !m.disponible;
+            const enMant = !!m.en_mantenimiento;
+            const ocupada = !m.disponible && !enMant;
+            // Color de borde/banda según los 3 estados posibles.
+            const cBorde = enMant ? '#fed7aa' : (ocupada ? '#fecaca' : '#bbf7d0');
+            const cBandaBg = enMant ? '#fff7ed' : (ocupada ? '#fef2f2' : '#f0fdf4');
+            const cTexto = enMant ? '#d97706' : (ocupada ? '#dc2626' : '#16a34a');
+            const etiqueta = enMant ? 'EN MANTENIMIENTO' : (ocupada ? 'EN INCIDENTE' : 'DISPONIBLE');
             return (
               <div key={m.id}
                 onClick={() => abrirDetalle(m)}
                 style={{
                   background: '#fff', borderRadius: '10px', overflow: 'hidden',
-                  border: `1px solid ${ocupada ? '#fecaca' : '#bbf7d0'}`,
+                  border: `1px solid ${cBorde}`,
                   cursor: 'pointer',
                   transition: 'box-shadow 0.15s',
                 }}
@@ -180,10 +232,10 @@ export default function Maquinaria({ irAIncidente }) {
                 onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
               >
                 {/* Banda de estado */}
-                <div style={{ background: ocupada ? '#fef2f2' : '#f0fdf4', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '6px', borderBottom: `1px solid ${ocupada ? '#fecaca' : '#bbf7d0'}` }}>
-                  {ocupada ? <FaExclamationTriangle color="#dc2626" size={13} /> : <FaCheckCircle color="#16a34a" size={13} />}
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: ocupada ? '#dc2626' : '#16a34a' }}>
-                    {ocupada ? 'EN INCIDENTE' : 'DISPONIBLE'}
+                <div style={{ background: cBandaBg, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '6px', borderBottom: `1px solid ${cBorde}` }}>
+                  {enMant ? <FaTools color="#d97706" size={13} /> : (ocupada ? <FaExclamationTriangle color="#dc2626" size={13} /> : <FaCheckCircle color="#16a34a" size={13} />)}
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: cTexto }}>
+                    {etiqueta}
                   </span>
                   <span style={{ marginLeft: 'auto', fontSize: '11px', fontWeight: 700, color: '#fff', background: m.origen === 'JURP' ? '#206bc4' : '#d6832b', padding: '2px 8px', borderRadius: '4px' }}>
                     {m.origen === 'JURP' ? 'JURP' : 'EXT'}
@@ -222,6 +274,25 @@ export default function Maquinaria({ irAIncidente }) {
                   )}
                   {ocupada && !m.parte_activo && (
                     <div style={{ marginTop: '10px', fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>No disponible (sin parte vinculado)</div>
+                  )}
+
+                  {/* Info de mantenimiento si aplica */}
+                  {enMant && (
+                    <div style={{ marginTop: '10px', padding: '10px', background: '#fff7ed', borderRadius: '6px', fontSize: '12px', border: '1px solid #fed7aa' }}>
+                      <div style={{ color: '#b45309', fontWeight: 700, marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '5px' }}><FaTools size={11} /> En mantenimiento</div>
+                      {m.mantenimiento_obs && <div style={{ color: '#92400e', marginBottom: '2px' }}>{m.mantenimiento_obs}</div>}
+                      {m.mantenimiento_inicio && <div style={{ color: '#a16207', fontSize: '11px' }}>Desde: {new Date(m.mantenimiento_inicio).toLocaleString('es-PE')}</div>}
+                    </div>
+                  )}
+
+                  {/* Botón enviar / liberar de mantenimiento (no disponible si hay parte abierto) */}
+                  {!ocupada && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleMantenimiento(m); }}
+                      style={{ marginTop: '10px', width: '100%', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '6px',
+                        background: enMant ? '#16a34a' : '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', padding: '7px 11px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                      <FaTools size={11} /> {enMant ? 'Marcar operativa' : 'Enviar a mantenimiento'}
+                    </button>
                   )}
 
                   <div style={{ marginTop: '10px', color: '#206bc4', fontWeight: 600, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -278,9 +349,12 @@ export default function Maquinaria({ irAIncidente }) {
 
             <div style={{ padding: '18px', overflowY: 'auto' }}>
               {/* Badge de estado */}
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: detalle.disponible ? '#f0fdf4' : '#fef2f2', color: detalle.disponible ? '#16a34a' : '#dc2626', padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, marginBottom: '14px' }}>
-                {detalle.disponible ? <FaCheckCircle size={12} /> : <FaExclamationTriangle size={12} />}
-                {detalle.disponible ? 'DISPONIBLE' : 'EN INCIDENTE'}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px',
+                background: detalle.en_mantenimiento ? '#fff7ed' : (detalle.disponible ? '#f0fdf4' : '#fef2f2'),
+                color: detalle.en_mantenimiento ? '#d97706' : (detalle.disponible ? '#16a34a' : '#dc2626'),
+                padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, marginBottom: '14px' }}>
+                {detalle.en_mantenimiento ? <FaTools size={12} /> : (detalle.disponible ? <FaCheckCircle size={12} /> : <FaExclamationTriangle size={12} />)}
+                {detalle.en_mantenimiento ? 'EN MANTENIMIENTO' : (detalle.disponible ? 'DISPONIBLE' : 'EN INCIDENTE')}
               </div>
 
               {/* Datos de la máquina */}
