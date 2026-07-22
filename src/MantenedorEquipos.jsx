@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
-import { FaPlus, FaEdit, FaTrash, FaTimes, FaChevronRight, FaSync, FaCircle, FaSearch } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaTimes, FaChevronRight, FaSync, FaCircle, FaSearch, FaTools } from 'react-icons/fa';
 import './MantenedorEquipos.css';
 
 const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
@@ -201,6 +201,44 @@ export default function MantenedorEquipos({ abierto, onClose }) {
     editar('modelos', mo.id, { estado: nuevo }, () => cargarPlacas(marcaSel.id));
   };
 
+  // Pone / quita una máquina de mantenimiento (con observación).
+  const toggleMantenimiento = async (mo) => {
+    const entrando = !mo.en_mantenimiento;
+    const { value: obs, isConfirmed } = await Swal.fire({
+      title: entrando ? `Enviar a mantenimiento · ${mo.codigo}` : `Marcar operativa · ${mo.codigo}`,
+      input: 'textarea',
+      inputLabel: 'Observación (opcional)',
+      inputPlaceholder: entrando
+        ? 'Ej. Cambio de aceite, falla hidráulica...'
+        : 'Ej. Mantenimiento completado, lista para operar',
+      inputValue: entrando ? '' : (mo.mantenimiento_obs || ''),
+      showCancelButton: true,
+      confirmButtonText: entrando ? 'Enviar a mantenimiento' : 'Marcar operativa',
+      confirmButtonColor: entrando ? '#d97706' : '#16a34a',
+    });
+    if (!isConfirmed) return;
+    try {
+      const r = await fetch(`${API}/modelos/${mo.id}/mantenimiento/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ en_mantenimiento: entrando, observacion: obs || '' }),
+      });
+      if (r.ok) {
+        cargarPlacas(marcaSel.id);
+        Swal.fire({
+          icon: 'success',
+          title: entrando ? 'En mantenimiento' : 'Operativa',
+          timer: 1400, showConfirmButton: false,
+        });
+      } else {
+        const e = await r.json().catch(() => ({}));
+        Swal.fire('No se pudo', e.detail || 'Inténtalo de nuevo.', 'error');
+      }
+    } catch (e) {
+      Swal.fire('Error', 'Sin conexión con el servidor.', 'error');
+    }
+  };
+
   // Listas filtradas por los buscadores.
   const equiposFiltrados = equipos.filter(eq =>
     !buscarEquipo.trim() || eq.nombre.toLowerCase().includes(buscarEquipo.toLowerCase().trim()));
@@ -304,9 +342,19 @@ export default function MantenedorEquipos({ abierto, onClose }) {
                     <button
                       className={`mnt-estado ${mo.estado === 0 ? 'disp' : 'nodisp'}`}
                       onClick={() => toggleEstado(mo)}
-                      title={mo.estado === 0 ? 'Disponible (clic para marcar no disponible)' : 'No disponible (clic para marcar disponible)'}
+                      disabled={mo.en_mantenimiento}
+                      title={mo.en_mantenimiento
+                        ? 'En mantenimiento (no editable aquí)'
+                        : (mo.estado === 0 ? 'Disponible (clic para marcar no disponible)' : 'No disponible (clic para marcar disponible)')}
                     >
                       <FaCircle /> {mo.estado === 0 ? 'Disponible' : 'No disp.'}
+                    </button>
+                    <button
+                      className={`mnt-estado ${mo.en_mantenimiento ? 'mant on' : 'mant'}`}
+                      onClick={() => toggleMantenimiento(mo)}
+                      title={mo.en_mantenimiento ? 'En mantenimiento (clic para marcar operativa)' : 'Enviar a mantenimiento'}
+                    >
+                      <FaTools /> {mo.en_mantenimiento ? 'En mant.' : 'Mant.'}
                     </button>
                     <button onClick={() => editarPlaca(mo)} title="Editar placa"><FaEdit /></button>
                     <button onClick={() => eliminar('modelos', mo.id, () => cargarPlacas(marcaSel.id), mo.codigo)} title="Eliminar" className="del"><FaTrash /></button>

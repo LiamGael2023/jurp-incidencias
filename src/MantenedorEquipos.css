@@ -234,3 +234,8 @@
 .mnt-estado.disp:hover { background: #d4edda; }
 .mnt-estado.nodisp { background: #fdecea; color: #c0392b; }
 .mnt-estado.nodisp:hover { background: #fadbd8; }
+.mnt-estado.mant { background: #fff4e5; color: #b45309; }
+.mnt-estado.mant:hover { background: #ffe8cc; }
+.mnt-estado.mant.on { background: #f59e0b; color: #fff; }
+.mnt-estado.mant.on:hover { background: #d97706; }
+.mnt-estado:disabled { opacity: 0.5; cursor: not-allowed; }

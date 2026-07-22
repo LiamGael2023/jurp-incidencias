@@ -665,6 +665,17 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   // Paso 1: al elegir máquina del selector, la agrega a la lista en BORRADOR
   // (sin parte diario todavía). Vive solo en pantalla hasta que tenga un parte.
   const seleccionarMaquina = (maq) => {
+    // 🚧 Máquina en mantenimiento: no se puede asignar a un parte.
+    if (maq.en_mantenimiento) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Máquina en mantenimiento',
+        html: `<b>${maq.codigo}</b> está en mantenimiento y no puede asignarse a un parte.`
+              + (maq.mantenimiento_obs ? `<br><br><small style="color:#64748b">Motivo: ${maq.mantenimiento_obs}</small>` : ''),
+        confirmButtonColor: '#d97706',
+      });
+      return;
+    }
     setSelectorMaquina(false);
     // Evita duplicar una máquina ya presente (borrador o con partes).
     const codigo = (maq.codigo || '').toUpperCase();
@@ -693,6 +704,17 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
 
   // Paso 2: abre el formulario de PARTE DIARIO para una máquina concreta.
   const abrirParteDiario = (maq) => {
+    // 🚧 Máquina en mantenimiento: no se puede asignar a un parte.
+    if (maq.en_mantenimiento) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Máquina en mantenimiento',
+        html: `<b>${maq.codigo}</b> está en mantenimiento y no puede asignarse a un parte.`
+              + (maq.mantenimiento_obs ? `<br><br><small style="color:#64748b">Motivo: ${maq.mantenimiento_obs}</small>` : ''),
+        confirmButtonColor: '#d97706',
+      });
+      return;
+    }
     setSelectorMaquina(false);
     const hmInicioPrev = ultimoHmFinDeMaquina(maq.codigo);
     setNuevoRecurso({
@@ -1603,8 +1625,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                     if (lista.length === 0) return <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'13px' }}>Ninguna máquina coincide con "{buscarMaquina}".</div>;
                     return lista.map(m => (
                       <div key={m.id} onClick={() => seleccionarMaquina(m)}
-                        style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', cursor:'pointer', transition:'all 0.12s' }}
-                        onMouseEnter={e => { e.currentTarget.style.background='#eff6ff'; e.currentTarget.style.borderColor='#bfdbfe'; }}
+                        style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', cursor: m.en_mantenimiento ? 'not-allowed' : 'pointer', opacity: m.en_mantenimiento ? 0.6 : 1, transition:'all 0.12s' }}
+                        onMouseEnter={e => { if (!m.en_mantenimiento) { e.currentTarget.style.background='#eff6ff'; e.currentTarget.style.borderColor='#bfdbfe'; } }}
                         onMouseLeave={e => { e.currentTarget.style.background='#fff'; e.currentTarget.style.borderColor='#e2e8f0'; }}>
                         <FaTruck color="#475569" />
                         <div style={{ flex:1, minWidth:0 }}>
@@ -1615,8 +1637,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                             {m.modelo}{m.placa ? ` · Placa ${m.placa}` : ''}
                           </div>
                         </div>
-                        <span style={{ fontSize:'11px', fontWeight:600, color: m.disponible ? '#16a34a' : '#dc2626', whiteSpace:'nowrap' }}>
-                          {m.disponible ? '● Disponible' : '● Ocupada'}
+                        <span style={{ fontSize:'11px', fontWeight:600, whiteSpace:'nowrap',
+                          color: m.en_mantenimiento ? '#d97706' : (m.disponible ? '#16a34a' : '#dc2626') }}>
+                          {m.en_mantenimiento ? '🔧 En mantenim.' : (m.disponible ? '● Disponible' : '● Ocupada')}
                         </span>
                         <FaChevronRight size={12} color="#cbd5e1" />
                       </div>
