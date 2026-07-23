@@ -676,6 +676,17 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       });
       return;
     }
+    // 🚧 Máquina ocupada (con parte abierto en otro incidente): tampoco se puede.
+    if (maq.disponible === false) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Máquina ocupada',
+        html: `<b>${maq.codigo}</b> ya tiene un parte diario abierto y no puede asignarse a otro incidente.`
+              + `<br><br><small style="color:#64748b">Cierra el parte anterior para liberarla.</small>`,
+        confirmButtonColor: '#dc2626',
+      });
+      return;
+    }
     setSelectorMaquina(false);
     // Evita duplicar una máquina ya presente (borrador o con partes).
     const codigo = (maq.codigo || '').toUpperCase();
@@ -712,6 +723,17 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         html: `<b>${maq.codigo}</b> está en mantenimiento y no puede asignarse a un parte.`
               + (maq.mantenimiento_obs ? `<br><br><small style="color:#64748b">Motivo: ${maq.mantenimiento_obs}</small>` : ''),
         confirmButtonColor: '#d97706',
+      });
+      return;
+    }
+    // 🚧 Máquina ocupada (con parte abierto en otro incidente): tampoco se puede.
+    if (maq.disponible === false) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Máquina ocupada',
+        html: `<b>${maq.codigo}</b> ya tiene un parte diario abierto y no puede asignarse a otro incidente.`
+              + `<br><br><small style="color:#64748b">Cierra el parte anterior para liberarla.</small>`,
+        confirmButtonColor: '#dc2626',
       });
       return;
     }
@@ -783,6 +805,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       const totalHM = parseFloat(horasMaquina) || 0;
       if (totalHM <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Horómetro Final debe ser mayor al Inicial' });
       if (!nuevoRecurso.numeroParte) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Número de Parte es obligatorio' });
+      if (!nuevoRecurso.proveedor || !nuevoRecurso.proveedor.trim()) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Proveedor es obligatorio' });
       if (!nuevoRecurso.equipo) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un equipo' });
       const efectivas = (nuevoRecurso.horasEfectivas === '' || nuevoRecurso.horasEfectivas === null)
         ? totalHM
@@ -1625,8 +1648,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                     if (lista.length === 0) return <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'13px' }}>Ninguna máquina coincide con "{buscarMaquina}".</div>;
                     return lista.map(m => (
                       <div key={m.id} onClick={() => seleccionarMaquina(m)}
-                        style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', cursor: m.en_mantenimiento ? 'not-allowed' : 'pointer', opacity: m.en_mantenimiento ? 0.6 : 1, transition:'all 0.12s' }}
-                        onMouseEnter={e => { if (!m.en_mantenimiento) { e.currentTarget.style.background='#eff6ff'; e.currentTarget.style.borderColor='#bfdbfe'; } }}
+                        style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', cursor: (m.en_mantenimiento || !m.disponible) ? 'not-allowed' : 'pointer', opacity: (m.en_mantenimiento || !m.disponible) ? 0.6 : 1, transition:'all 0.12s' }}
+                        onMouseEnter={e => { if (!m.en_mantenimiento && m.disponible) { e.currentTarget.style.background='#eff6ff'; e.currentTarget.style.borderColor='#bfdbfe'; } }}
                         onMouseLeave={e => { e.currentTarget.style.background='#fff'; e.currentTarget.style.borderColor='#e2e8f0'; }}>
                         <FaTruck color="#475569" />
                         <div style={{ flex:1, minWidth:0 }}>
@@ -1680,7 +1703,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                       <div className="tbl-col"><label className="tbl-form-label">Zona de Trabajo</label><input type="text" className="tbl-form-control" placeholder="Ej. Tramo 15" value={nuevoRecurso.zonaTrabajo} onChange={e => setNuevoRecurso({...nuevoRecurso, zonaTrabajo: e.target.value})} /></div>
                     </div>
                     <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col"><label className="tbl-form-label">Proveedor</label><input type="text" className="tbl-form-control" placeholder="Nombre de empresa" value={nuevoRecurso.proveedor} onChange={e => setNuevoRecurso({...nuevoRecurso, proveedor: e.target.value})} /></div>
+                      <div className="tbl-col"><label className="tbl-form-label">Proveedor <span style={{color:'red'}}>*</span></label><input type="text" className="tbl-form-control" placeholder="Nombre de empresa" value={nuevoRecurso.proveedor} onChange={e => setNuevoRecurso({...nuevoRecurso, proveedor: e.target.value})} /></div>
                       <div className="tbl-col"><label className="tbl-form-label">Operador</label><input type="text" className="tbl-form-control" placeholder="Nombre del operador" value={nuevoRecurso.operador} onChange={e => setNuevoRecurso({...nuevoRecurso, operador: e.target.value})} /></div>
                     </div>
                     <div className="tbl-row tbl-mb-3">
