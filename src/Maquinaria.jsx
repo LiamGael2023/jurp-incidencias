@@ -31,7 +31,9 @@ export default function Maquinaria({ irAIncidente }) {
   const [detalle, setDetalle] = useState(null);           // máquina seleccionada
   const [historial, setHistorial] = useState(null);       // { maquina, partes, totales }
   const [cargandoHist, setCargandoHist] = useState(false);
-  const [pdfModal, setPdfModal] = useState(null);         // { url, nombre }
+  const [pdfModal, setPdfModal] = useState(null);
+  const [modalReporteFlota, setModalReporteFlota] = useState(false);
+  const [generandoFlota, setGenerandoFlota] = useState(false);         // { url, nombre }
   const [mantenedorAbierto, setMantenedorAbierto] = useState(false);
 
   const cargar = async () => {
@@ -153,6 +155,290 @@ export default function Maquinaria({ irAIncidente }) {
 
   // Unidad legible del metrado (m3 → m³).
   const uMet = (u) => ({ m: 'm', m2: 'm²', m3: 'm³', glb: 'glb' }[u] || u || 'm³');
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  REPORTE DE FLOTA — todas las máquinas con sus partes en un archivo
+  // ══════════════════════════════════════════════════════════════════════
+
+  // Trae TODOS los partes de una vez y los agrupa por máquina.
+  const recopilarFlota = async () => {
+    const r = await fetch(`${API_OPS}/daily-part-heavy-equipments/`);
+    const d = await r.json();
+    const todos = Array.isArray(d) ? d : (d.results || []);
+
+    // Índice de máquinas por placa/código para vincular cada parte.
+    const porMaquina = {};
+    maquinas.forEach(m => { porMaquina[m.id] = { maquina: m, partes: [], horas: 0, costo: 0, metrado: 0, combustible: 0 }; });
+
+    const norm = (t) => (t || '').toString().trim().toUpperCase().replace(/[\s-]/g, '');
+    todos.forEach(p => {
+      const marca = norm(p.model_plate);
+      const hit = maquinas.find(m => {
+        const cod = norm(m.codigo), pla = norm(m.placa), mod = norm(m.modelo);
+        return (pla && marca.includes(pla)) || (cod && marca.includes(cod)) || (mod && marca === mod);
+      });
+      if (!hit || !porMaquina[hit.id]) return;
+      const hIni = parseFloat(p.start_horometer) || 0;
+      const hFin = parseFloat(p.end_horometer) || 0;
+      const horas = Math.max(0, hFin - hIni);
+      const pu = parseFloat(p.unit_price) || 0;
+      const g = porMaquina[hit.id];
+      g.partes.push({
+        parte: p.part_number || '—',
+        fecha: p.date || '—',
+        actividad: p.activities || '—',
+        proveedor: p.provider || '—',
+        operador: p.operator || '—',
+        metrado: parseFloat(p.metrado) || 0,
+        metradoUnidad: p.metrado_unidad || 'm3',
+        horas, precio: pu, costo: horas * pu,
+        combustible: parseFloat(p.fuel_gallons) || 0,
+        cerrado: !!p.cerrado,
+      });
+      g.horas += horas; g.costo += horas * pu;
+      g.metrado += parseFloat(p.metrado) || 0;
+      g.combustible += parseFloat(p.fuel_gallons) || 0;
+    });
+    return porMaquina;
+  };
+
+  const estadoTxt = (m) => m.en_mantenimiento ? 'EN MANTENIMIENTO' : (m.disponible ? 'DISPONIBLE' : 'EN INCIDENTE');
+
+  // ── Reporte de flota en PDF ────────────────────────────────────────────
+  const reporteFlotaPDF = async () => {
+    setGenerandoFlota(true);
+    try {
+      const datos = await recopilarFlota();
+      const lista = maquinasFiltradas;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const W = doc.internal.pageSize.getWidth();
+      const logoB64 = await imgToBase64(logo).catch(() => null);
+
+      doc.setFillColor(20, 99, 165);
+      doc.rect(0, 0, W, 28, 'F');
+      if (logoB64) { try { doc.addImage(logoB64, 'PNG', 10, 5, 19, 19); } catch (e) {} }
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(14); doc.setFont(undefined, 'bold');
+      doc.text('JUNTA DE RIEGO PRESURIZADO', 34, 12);
+      doc.setFontSize(11); doc.setFont(undefined, 'normal');
+      doc.text('Reporte General de Maquinaria', 34, 19);
+      doc.setFontSize(8);
+      doc.text(`Generado: ${new Date().toLocaleString('es-PE')} · ${lista.length} máquina(s)`, 34, 24.5);
+
+      const tot = lista.reduce((a, m) => {
+        const g = datos[m.id] || { horas: 0, costo: 0, combustible: 0 };
+        return { h: a.h + g.horas, c: a.c + g.costo, f: a.f + g.combustible, p: a.p + (g.partes?.length || 0) };
+      }, { h: 0, c: 0, f: 0, p: 0 });
+
+      autoTable(doc, {
+        startY: 34,
+        head: [['CÓDIGO', 'EQUIPO', 'MARCA', 'MODELO', 'PLACA', 'ORIGEN', 'ESTADO', 'PARTES', 'HORAS', 'COMBUST.', 'COSTO S/']],
+        body: lista.map(m => {
+          const g = datos[m.id] || { partes: [], horas: 0, costo: 0, combustible: 0 };
+          return [m.codigo, m.equipo || '—', m.marca || '—', m.modelo || '—', m.placa || '—',
+                  m.origen === 'JURP' ? 'JURP' : 'EXT', estadoTxt(m),
+                  String(g.partes.length), g.horas.toFixed(2), g.combustible.toFixed(2), g.costo.toFixed(2)];
+        }),
+        foot: [['', '', '', '', '', '', 'TOTALES', String(tot.p), tot.h.toFixed(2), tot.f.toFixed(2), tot.c.toFixed(2)]],
+        styles: { fontSize: 7.5, cellPadding: 2 },
+        headStyles: { fillColor: [20, 99, 165], textColor: 255, fontSize: 7.5 },
+        footStyles: { fillColor: [224, 242, 254], textColor: [20, 99, 165], fontStyle: 'bold', fontSize: 7.5 },
+        columnStyles: { 7: { halign: 'right' }, 8: { halign: 'right' }, 9: { halign: 'right' }, 10: { halign: 'right' } },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 10, right: 10 },
+      });
+
+      // Detalle: una sección por máquina que tenga partes
+      lista.forEach(m => {
+        const g = datos[m.id];
+        if (!g || !g.partes.length) return;
+        doc.addPage();
+        doc.setFillColor(20, 99, 165);
+        doc.rect(0, 0, W, 20, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11); doc.setFont(undefined, 'bold');
+        doc.text(`${m.codigo} · ${m.equipo || ''}`, 10, 9);
+        doc.setFontSize(8); doc.setFont(undefined, 'normal');
+        doc.text(`${m.marca || '—'} ${m.modelo || ''}  |  Placa: ${m.placa || '—'}  |  ${m.origen === 'JURP' ? 'JURP (propia)' : 'Externa'}  |  ${estadoTxt(m)}`, 10, 15.5);
+
+        autoTable(doc, {
+          startY: 26,
+          head: [['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'COMBUST.', 'TOTAL S/']],
+          body: g.partes.map(x => ([
+            x.parte, x.fecha, x.cerrado ? 'CERRADO' : 'ABIERTO', x.actividad, x.proveedor,
+            `${x.metrado.toFixed(2)} ${uMet(x.metradoUnidad)}`,
+            x.horas.toFixed(2), x.combustible.toFixed(2), x.costo.toFixed(2),
+          ])),
+          foot: [['', '', '', '', 'TOTALES', `${g.metrado.toFixed(2)}`, g.horas.toFixed(2), g.combustible.toFixed(2), g.costo.toFixed(2)]],
+          styles: { fontSize: 7.5, cellPadding: 1.8 },
+          headStyles: { fillColor: [100, 116, 139], textColor: 255, fontSize: 7.5 },
+          footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 7.5 },
+          columnStyles: { 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' } },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: 10, right: 10 },
+        });
+      });
+
+      const paginas = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= paginas; i++) {
+        doc.setPage(i);
+        doc.setTextColor(148, 163, 184);
+        doc.setFontSize(7.5); doc.setFont(undefined, 'normal');
+        doc.text(`Página ${i} de ${paginas}`, W - 10, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
+      }
+
+      doc.save(`Reporte_Maquinaria_${new Date().toISOString().slice(0, 10)}.pdf`);
+      setModalReporteFlota(false);
+    } catch (e) {
+      console.error(e);
+      Swal.fire('Error', 'No se pudo generar el reporte.', 'error');
+    } finally {
+      setGenerandoFlota(false);
+    }
+  };
+
+  // ── Reporte de flota en Excel ──────────────────────────────────────────
+  const reporteFlotaExcel = async () => {
+    setGenerandoFlota(true);
+    try {
+      const datos = await recopilarFlota();
+      const lista = maquinasFiltradas;
+      const wb = new ExcelJS.Workbook();
+      const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1463A5' } };
+      const azulClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E0F2FE' } };
+      const gris = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9' } };
+      const borde = { top:{style:'thin',color:{argb:'E2E8F0'}}, bottom:{style:'thin',color:{argb:'E2E8F0'}}, left:{style:'thin',color:{argb:'E2E8F0'}}, right:{style:'thin',color:{argb:'E2E8F0'}} };
+
+      // ══ HOJA 1: RESUMEN DE FLOTA ══
+      const ws = wb.addWorksheet('Flota');
+      ws.columns = [{ width: 14 }, { width: 30 }, { width: 18 }, { width: 16 }, { width: 14 },
+                    { width: 10 }, { width: 19 }, { width: 10 }, { width: 12 }, { width: 13 }, { width: 15 }];
+      for (let r = 1; r <= 3; r++) for (let c = 1; c <= 11; c++) ws.getCell(r, c).fill = azul;
+      ws.getRow(1).height = 28; ws.getRow(2).height = 20; ws.getRow(3).height = 18;
+      try {
+        const logoB64 = await imgToBase64(logo);
+        if (logoB64) {
+          const imgId = wb.addImage({ base64: logoB64.split(',')[1], extension: 'png' });
+          ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 75, height: 65 } });
+        }
+      } catch (e) {}
+      ws.mergeCells('B1:K1');
+      ws.getCell('B1').value = 'JUNTA DE RIEGO PRESURIZADO';
+      ws.getCell('B1').font = { bold: true, color: { argb: 'FFFFFF' }, size: 12 };
+      ws.getCell('B1').alignment = { vertical: 'middle' };
+      ws.mergeCells('B2:K2');
+      ws.getCell('B2').value = 'Reporte General de Maquinaria';
+      ws.getCell('B2').font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
+      ws.getCell('B2').alignment = { vertical: 'middle' };
+      ws.mergeCells('B3:K3');
+      ws.getCell('B3').value = `Generado: ${new Date().toLocaleString('es-PE')} · ${lista.length} máquina(s)`;
+      ws.getCell('B3').font = { italic: true, size: 9, color: { argb: 'D0D5DD' } };
+      ws.getCell('B3').alignment = { vertical: 'middle' };
+      ws.getRow(4).height = 6;
+
+      const cab = ['CÓDIGO', 'EQUIPO', 'MARCA', 'MODELO', 'PLACA', 'ORIGEN', 'ESTADO', 'PARTES', 'HORAS', 'COMBUST.', 'COSTO S/'];
+      cab.forEach((h, i) => {
+        const c = ws.getCell(5, i + 1);
+        c.value = h; c.fill = azul; c.border = borde;
+        c.font = { bold: true, color: { argb: 'FFFFFF' }, size: 9 };
+        c.alignment = { horizontal: 'center', vertical: 'middle' };
+      });
+      ws.getRow(5).height = 20;
+
+      lista.forEach((m, i) => {
+        const g = datos[m.id] || { partes: [], horas: 0, costo: 0, combustible: 0 };
+        const r = 6 + i;
+        const fila = [m.codigo, m.equipo || '—', m.marca || '—', m.modelo || '—', m.placa || '—',
+                      m.origen === 'JURP' ? 'JURP' : 'EXT', estadoTxt(m),
+                      g.partes.length, g.horas, g.combustible, g.costo];
+        fila.forEach((v, ci) => {
+          const c = ws.getCell(r, ci + 1);
+          c.value = v; c.border = borde; c.font = { size: 9 };
+          if (ci >= 7) { c.alignment = { horizontal: 'right' }; if (ci > 7) c.numFmt = '#,##0.00'; }
+        });
+      });
+
+      const rTot = 6 + lista.length;
+      ws.mergeCells(`A${rTot}:G${rTot}`);
+      ws.getCell(`A${rTot}`).value = 'TOTALES';
+      ws.getCell(`A${rTot}`).font = { bold: true, size: 10, color: { argb: '1463A5' } };
+      ws.getCell(`A${rTot}`).alignment = { horizontal: 'right' };
+      ws.getCell(`A${rTot}`).fill = azulClaro;
+      const sum = (f) => lista.reduce((a, m) => a + (datos[m.id] ? f(datos[m.id]) : 0), 0);
+      [[8, sum(g => g.partes.length)], [9, sum(g => g.horas)], [10, sum(g => g.combustible)], [11, sum(g => g.costo)]]
+        .forEach(([col, val]) => {
+          const c = ws.getCell(rTot, col);
+          c.value = val; c.fill = azulClaro; c.border = borde;
+          c.font = { bold: true, size: 10, color: { argb: '1463A5' } };
+          c.alignment = { horizontal: 'right' };
+          if (col > 8) c.numFmt = '#,##0.00';
+        });
+
+      // ══ HOJA 2: DETALLE DE PARTES ══
+      const wd = wb.addWorksheet('Partes');
+      wd.columns = [{ width: 22 }, { width: 13 }, { width: 11 }, { width: 28 }, { width: 20 },
+                    { width: 15 }, { width: 11 }, { width: 12 }, { width: 14 }];
+      let f = 1;
+      lista.forEach(m => {
+        const g = datos[m.id];
+        if (!g || !g.partes.length) return;
+        wd.mergeCells(`A${f}:I${f}`);
+        const t = wd.getCell(`A${f}`);
+        t.value = `${m.codigo} · ${m.equipo || ''} · ${m.marca || ''} ${m.modelo || ''}  |  Placa: ${m.placa || '—'}  |  ${estadoTxt(m)}`;
+        t.fill = azul; t.font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
+        wd.getRow(f).height = 20;
+        f += 1;
+
+        const ch = ['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'COMBUST.', 'TOTAL S/'];
+        ch.forEach((h, i) => {
+          const c = wd.getCell(f, i + 1);
+          c.value = h; c.fill = gris; c.border = borde;
+          c.font = { bold: true, size: 8.5, color: { argb: '475569' } };
+          c.alignment = { horizontal: 'center' };
+        });
+        f += 1;
+
+        g.partes.forEach(x => {
+          const fila = [x.parte, x.fecha, x.cerrado ? 'CERRADO' : 'ABIERTO', x.actividad, x.proveedor,
+                        `${x.metrado.toFixed(2)} ${uMet(x.metradoUnidad)}`, x.horas, x.combustible, x.costo];
+          fila.forEach((v, ci) => {
+            const c = wd.getCell(f, ci + 1);
+            c.value = v; c.border = borde; c.font = { size: 9 };
+            if (ci >= 5) c.alignment = { horizontal: 'right' };
+            if (ci >= 6) c.numFmt = '#,##0.00';
+          });
+          f += 1;
+        });
+
+        wd.getCell(f, 5).value = 'TOTALES';
+        wd.getCell(f, 5).font = { bold: true, size: 9 };
+        wd.getCell(f, 5).alignment = { horizontal: 'right' };
+        [[6, `${g.metrado.toFixed(2)}`], [7, g.horas], [8, g.combustible], [9, g.costo]].forEach(([col, val]) => {
+          const c = wd.getCell(f, col);
+          c.value = val; c.fill = azulClaro; c.border = borde;
+          c.font = { bold: true, size: 9, color: { argb: '1463A5' } };
+          c.alignment = { horizontal: 'right' };
+          if (col >= 7) c.numFmt = '#,##0.00';
+        });
+        f += 3;
+      });
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Reporte_Maquinaria_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setModalReporteFlota(false);
+    } catch (e) {
+      console.error(e);
+      Swal.fire('Error', 'No se pudo generar el reporte.', 'error');
+    } finally {
+      setGenerandoFlota(false);
+    }
+  };
 
   // ── Exportar el historial de partes a Excel ─────────────────────────────
   const exportarHistorialExcel = async () => {
@@ -364,6 +650,11 @@ export default function Maquinaria({ irAIncidente }) {
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
           <button onClick={() => setMantenedorAbierto(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#206bc4', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#fff' }}>
             <FaCog /> Gestionar catálogo
+          </button>
+          <button onClick={() => setModalReporteFlota(true)} disabled={cargando || maquinas.length === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#0ea5e9', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#fff', opacity: (cargando || maquinas.length === 0) ? 0.5 : 1 }}
+            title="Reporte de toda la flota">
+            <FaDownload /> Reporte
           </button>
           <button onClick={cargar} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#334155' }}>
             <FaSyncAlt /> Actualizar
@@ -577,6 +868,51 @@ export default function Maquinaria({ irAIncidente }) {
           <span style={{ marginLeft: '8px', fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>
             Página {paginaSegura} de {totalPaginas} · {maquinasFiltradas.length} máquinas
           </span>
+        </div>
+      )}
+
+      {/* ── Modal: elegir formato del reporte de flota ─────────────────── */}
+      {modalReporteFlota && (
+        <div onClick={() => !generandoFlota && setModalReporteFlota(false)}
+          style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'#fff', borderRadius:'12px', width:'100%', maxWidth:'440px', overflow:'hidden', boxShadow:'0 20px 40px rgba(0,0,0,0.25)' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', borderBottom:'1px solid #e2e8f0', background:'#f8fafc' }}>
+              <h5 style={{ margin:0, fontSize:'16px', color:'#1e293b', display:'flex', alignItems:'center', gap:'8px' }}>
+                <FaTruck color="#0ea5e9" /> Reporte de Maquinaria
+              </h5>
+              <button onClick={() => !generandoFlota && setModalReporteFlota(false)} disabled={generandoFlota} style={xBtnStyle}><FaTimes /></button>
+            </div>
+            <div style={{ padding:'20px 18px' }}>
+              <p style={{ margin:'0 0 6px', fontSize:'13px', color:'#334155' }}>
+                Se generará un archivo con <b>{maquinasFiltradas.length} máquina(s)</b>, cada una con el
+                detalle de sus partes diarios.
+              </p>
+              {(filtroOrigen || filtroEstado || busqueda.trim()) && (
+                <p style={{ margin:'6px 0', fontSize:'12px', color:'#0369a1', background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:'6px', padding:'8px 10px' }}>
+                  Se aplicarán los filtros activos ({maquinasFiltradas.length} de {maquinas.length}).
+                </p>
+              )}
+              <p style={{ margin:'12px 0 16px', fontSize:'13px', color:'#64748b' }}>Elige el formato:</p>
+              {generandoFlota ? (
+                <div style={{ textAlign:'center', padding:'24px 0' }}>
+                  <FaSyncAlt className="spin-anim" style={{ fontSize:'26px', color:'#0ea5e9' }} />
+                  <p style={{ fontSize:'13px', color:'#64748b', marginTop:'10px' }}>Generando reporte…</p>
+                </div>
+              ) : (
+                <div style={{ display:'flex', gap:'12px' }}>
+                  <button onClick={reporteFlotaPDF}
+                    style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'8px', padding:'18px 12px', background:'#fef2f2', color:'#b91c1c', border:'2px solid #fecaca', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:700 }}>
+                    <FaFilePdf size={26} /> PDF
+                  </button>
+                  <button onClick={reporteFlotaExcel}
+                    style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'8px', padding:'18px 12px', background:'#f0fdf4', color:'#15803d', border:'2px solid #bbf7d0', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:700 }}>
+                    <FaDownload size={26} /> Excel
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

@@ -6,7 +6,11 @@ import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import './MapaDashboard.css';
-import { FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint } from 'react-icons/fa';
+import { FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint, FaFilePdf, FaFileExcel, FaDownload } from 'react-icons/fa';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import ExcelJS from 'exceljs';
+import Swal from 'sweetalert2';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 // ── Herramientas del visor ───────────────────────────────────────────────────
 import { BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
@@ -230,6 +234,205 @@ function MapaChavimochic() {
 
     return { listaPers, listaMats, listaMaqs, totPers, totMats, totMaqs, total: totPers + totMats + totMaqs, enUso };
   }, [rawRecursos, incidentesAPI, incSeleccionado]);
+  // ══════════════════════════════════════════════════════════════════════
+  //  REPORTE DE RECURSOS UTILIZADOS (PDF / Excel)
+  // ══════════════════════════════════════════════════════════════════════
+  const [modalReporteRec, setModalReporteRec] = useState(false);
+  const [generandoRec, setGenerandoRec] = useState(false);
+
+  const imgToBase64Rec = (src) => new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width; canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+
+  const nf = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const reporteRecursosPDF = async () => {
+    setGenerandoRec(true);
+    try {
+      const R = recursosGlobales;
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const W = doc.internal.pageSize.getWidth();
+      const logoB64 = await imgToBase64Rec(logo).catch(() => null);
+      const alcance = incSeleccionado
+        ? `${incSeleccionado.codigoIncidente || ''} · ${incSeleccionado.tipo || ''}`
+        : 'Todas las incidencias';
+
+      doc.setFillColor(20, 99, 165);
+      doc.rect(0, 0, W, 28, 'F');
+      if (logoB64) { try { doc.addImage(logoB64, 'PNG', 10, 5, 19, 19); } catch (e) {} }
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(13); doc.setFont(undefined, 'bold');
+      doc.text('JUNTA DE RIEGO PRESURIZADO', 33, 11);
+      doc.setFontSize(10); doc.setFont(undefined, 'normal');
+      doc.text('Reporte de Recursos Utilizados', 33, 17.5);
+      doc.setFontSize(7.5);
+      doc.text(`${alcance}  |  Generado: ${new Date().toLocaleString('es-PE')}`, 33, 23);
+
+      let y = 36;
+      const seccion = (titulo, head, body, foot) => {
+        if (!body.length) return;
+        doc.setTextColor(20, 99, 165);
+        doc.setFontSize(10); doc.setFont(undefined, 'bold');
+        doc.text(titulo, 12, y);
+        autoTable(doc, {
+          startY: y + 2,
+          head: [head], body, foot: [foot],
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [100, 116, 139], textColor: 255, fontSize: 8 },
+          footStyles: { fillColor: [224, 242, 254], textColor: [20, 99, 165], fontStyle: 'bold', fontSize: 8 },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: 12, right: 12 },
+        });
+        y = doc.lastAutoTable.finalY + 9;
+      };
+
+      seccion(`PERSONAL  (${R.listaPers.length} cargo${R.listaPers.length !== 1 ? 's' : ''})`,
+        ['CARGO', 'REGISTROS', 'HORAS (HH)', 'MONTO S/'],
+        R.listaPers.map(x => ([x.nombre, String(x.veces), nf(x.horas), nf(x.monto)])),
+        ['', '', 'SUBTOTAL', nf(R.totPers)]);
+
+      seccion(`MAQUINARIA  (${R.listaMaqs.length} equipo${R.listaMaqs.length !== 1 ? 's' : ''})`,
+        ['EQUIPO', 'MARCA', 'PLACA', 'PARTES', 'HORAS (HE)', 'MONTO S/'],
+        R.listaMaqs.map(x => ([x.nombre, x.marca || '—', x.placa || '—', String(x.partes), nf(x.horas), nf(x.monto)])),
+        ['', '', '', '', 'SUBTOTAL', nf(R.totMaqs)]);
+
+      seccion(`INSUMOS  (${R.listaMats.length} item${R.listaMats.length !== 1 ? 's' : ''})`,
+        ['DESCRIPCIÓN', 'REGISTROS', 'CANTIDAD', 'MONTO S/'],
+        R.listaMats.map(x => ([x.nombre, String(x.veces), nf(x.cantidad), nf(x.monto)])),
+        ['', '', 'SUBTOTAL', nf(R.totMats)]);
+
+      // Costo total
+      doc.setFillColor(224, 242, 254);
+      doc.rect(12, y - 4, W - 24, 12, 'F');
+      doc.setTextColor(20, 99, 165);
+      doc.setFontSize(12); doc.setFont(undefined, 'bold');
+      doc.text('COSTO TOTAL', 16, y + 4);
+      doc.text(`S/ ${nf(R.total)}`, W - 16, y + 4, { align: 'right' });
+
+      doc.save(`Recursos_Utilizados_${new Date().toISOString().slice(0, 10)}.pdf`);
+      setModalReporteRec(false);
+    } catch (e) {
+      console.error(e);
+      Swal.fire('Error', 'No se pudo generar el reporte.', 'error');
+    } finally { setGenerandoRec(false); }
+  };
+
+  const reporteRecursosExcel = async () => {
+    setGenerandoRec(true);
+    try {
+      const R = recursosGlobales;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Recursos Utilizados');
+      ws.columns = [{ width: 40 }, { width: 18 }, { width: 15 }, { width: 14 }, { width: 16 }, { width: 16 }];
+      const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1463A5' } };
+      const azulClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E0F2FE' } };
+      const gris = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9' } };
+      const borde = { top:{style:'thin',color:{argb:'E2E8F0'}}, bottom:{style:'thin',color:{argb:'E2E8F0'}}, left:{style:'thin',color:{argb:'E2E8F0'}}, right:{style:'thin',color:{argb:'E2E8F0'}} };
+
+      for (let r = 1; r <= 3; r++) for (let c = 1; c <= 6; c++) ws.getCell(r, c).fill = azul;
+      ws.getRow(1).height = 28; ws.getRow(2).height = 20; ws.getRow(3).height = 18;
+      try {
+        const b64 = await imgToBase64Rec(logo);
+        if (b64) {
+          const id = wb.addImage({ base64: b64.split(',')[1], extension: 'png' });
+          ws.addImage(id, { tl: { col: 0, row: 0 }, ext: { width: 70, height: 62 } });
+        }
+      } catch (e) {}
+      ws.mergeCells('B1:F1');
+      ws.getCell('B1').value = 'JUNTA DE RIEGO PRESURIZADO';
+      ws.getCell('B1').font = { bold: true, color: { argb: 'FFFFFF' }, size: 12 };
+      ws.getCell('B1').alignment = { vertical: 'middle' };
+      ws.mergeCells('B2:F2');
+      ws.getCell('B2').value = 'Reporte de Recursos Utilizados';
+      ws.getCell('B2').font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
+      ws.getCell('B2').alignment = { vertical: 'middle' };
+      ws.mergeCells('B3:F3');
+      ws.getCell('B3').value = `${incSeleccionado ? (incSeleccionado.codigoIncidente || '') + ' · ' + (incSeleccionado.tipo || '') : 'Todas las incidencias'}  |  Generado: ${new Date().toLocaleString('es-PE')}`;
+      ws.getCell('B3').font = { italic: true, size: 9, color: { argb: 'D0D5DD' } };
+      ws.getCell('B3').alignment = { vertical: 'middle' };
+
+      let f = 5;
+      const bloque = (titulo, cab, filas, subtotal, colSub) => {
+        if (!filas.length) return;
+        ws.mergeCells(`A${f}:F${f}`);
+        ws.getCell(`A${f}`).value = titulo;
+        ws.getCell(`A${f}`).fill = azul;
+        ws.getCell(`A${f}`).font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
+        ws.getRow(f).height = 20;
+        f += 1;
+        cab.forEach((h, i) => {
+          const c = ws.getCell(f, i + 1);
+          c.value = h; c.fill = gris; c.border = borde;
+          c.font = { bold: true, size: 9, color: { argb: '475569' } };
+          c.alignment = { horizontal: 'center' };
+        });
+        f += 1;
+        filas.forEach(fila => {
+          fila.forEach((v, ci) => {
+            const c = ws.getCell(f, ci + 1);
+            c.value = v; c.border = borde; c.font = { size: 9 };
+            if (typeof v === 'number') { c.numFmt = '#,##0.00'; c.alignment = { horizontal: 'right' }; }
+          });
+          f += 1;
+        });
+        ws.getCell(f, colSub - 1).value = 'SUBTOTAL';
+        ws.getCell(f, colSub - 1).font = { bold: true, size: 9 };
+        ws.getCell(f, colSub - 1).alignment = { horizontal: 'right' };
+        const cs = ws.getCell(f, colSub);
+        cs.value = subtotal; cs.numFmt = '#,##0.00'; cs.fill = azulClaro; cs.border = borde;
+        cs.font = { bold: true, size: 10, color: { argb: '1463A5' } };
+        cs.alignment = { horizontal: 'right' };
+        f += 2;
+      };
+
+      bloque(`PERSONAL (${R.listaPers.length} cargo${R.listaPers.length !== 1 ? 's' : ''})`,
+        ['CARGO', 'REGISTROS', 'HORAS (HH)', 'MONTO S/'],
+        R.listaPers.map(x => ([x.nombre, x.veces, x.horas, x.monto])), R.totPers, 4);
+
+      bloque(`MAQUINARIA (${R.listaMaqs.length} equipo${R.listaMaqs.length !== 1 ? 's' : ''})`,
+        ['EQUIPO', 'MARCA', 'PLACA', 'PARTES', 'HORAS (HE)', 'MONTO S/'],
+        R.listaMaqs.map(x => ([x.nombre, x.marca || '—', x.placa || '—', x.partes, x.horas, x.monto])), R.totMaqs, 6);
+
+      bloque(`INSUMOS (${R.listaMats.length} item${R.listaMats.length !== 1 ? 's' : ''})`,
+        ['DESCRIPCIÓN', 'REGISTROS', 'CANTIDAD', 'MONTO S/'],
+        R.listaMats.map(x => ([x.nombre, x.veces, x.cantidad, x.monto])), R.totMats, 4);
+
+      ws.mergeCells(`A${f}:E${f}`);
+      ws.getCell(`A${f}`).value = 'COSTO TOTAL';
+      ws.getCell(`A${f}`).fill = azulClaro;
+      ws.getCell(`A${f}`).font = { bold: true, size: 12, color: { argb: '1463A5' } };
+      ws.getCell(`A${f}`).alignment = { horizontal: 'right' };
+      ws.getCell(`F${f}`).value = R.total;
+      ws.getCell(`F${f}`).numFmt = '#,##0.00';
+      ws.getCell(`F${f}`).fill = azulClaro;
+      ws.getCell(`F${f}`).font = { bold: true, size: 12, color: { argb: '1463A5' } };
+      ws.getCell(`F${f}`).alignment = { horizontal: 'right' };
+      ws.getRow(f).height = 24;
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Recursos_Utilizados_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setModalReporteRec(false);
+    } catch (e) {
+      console.error(e);
+      Swal.fire('Error', 'No se pudo generar el reporte.', 'error');
+    } finally { setGenerandoRec(false); }
+  };
+
   const incMes = useMemo(() => { const now = new Date(), m = {}; for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); m[`${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`] = 0; } for (const x of incidentesAPI) { const d = new Date(x.timestamp); const k = `${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`; if (k in m) m[k]++; } return Object.entries(m).map(([mes, cant]) => ({ mes, cant })); }, [incidentesAPI]);
 
   // Filtered
@@ -454,8 +657,13 @@ function MapaChavimochic() {
         {/* ── Charts Column ───────────────────────────────────────────── */}
         <div className="dash-charts-col">
           <div className="dash-panel" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div className="dash-panel-title">
+            <div className="dash-panel-title" style={{ display:'flex', alignItems:'center', gap:'8px' }}>
               <span className="accent">📋</span> {incSeleccionado ? 'Recursos del Incidente' : 'Recursos Utilizados'}
+              <button onClick={() => setModalReporteRec(true)} disabled={recursosGlobales.total === 0}
+                title="Descargar reporte de recursos"
+                style={{ marginLeft:'auto', display:'inline-flex', alignItems:'center', gap:'5px', background:'#e0f2fe', color:'#0284c7', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:600, cursor:'pointer', opacity: recursosGlobales.total === 0 ? 0.45 : 1 }}>
+                <FaDownload size={10} /> Reporte
+              </button>
             </div>
             {incSeleccionado && (
               <div style={{ background: '#f0f6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '8px 10px', marginBottom: '8px', flexShrink: 0 }}>
@@ -593,6 +801,53 @@ function MapaChavimochic() {
           <button onClick={() => setModalMedia(null)} style={{ position: 'absolute', top: '16px', right: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
           {modalMedia.type === 'image' ? <img src={modalMedia.src} alt="" onClick={e => e.stopPropagation()} style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px' }} />
           : <video src={modalMedia.src} onClick={e => e.stopPropagation()} controls autoPlay style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: '8px', background: '#000' }} />}
+        </div>
+      )}
+
+      {/* ── Modal: formato del reporte de recursos ─────────────────────── */}
+      {modalReporteRec && (
+        <div onClick={() => !generandoRec && setModalReporteRec(false)}
+          style={{ position:'fixed', inset:0, zIndex:10002, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'#fff', borderRadius:'12px', width:'100%', maxWidth:'420px', overflow:'hidden', boxShadow:'0 20px 40px rgba(0,0,0,0.25)' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', borderBottom:'1px solid #e2e8f0', background:'#f8fafc' }}>
+              <h5 style={{ margin:0, fontSize:'15px', color:'#1e293b', display:'flex', alignItems:'center', gap:'8px' }}>
+                📋 Reporte de Recursos
+              </h5>
+              <button onClick={() => !generandoRec && setModalReporteRec(false)} disabled={generandoRec}
+                style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'17px', display:'flex' }}>
+                <FaTimes />
+              </button>
+            </div>
+            <div style={{ padding:'18px' }}>
+              <p style={{ margin:'0 0 6px', fontSize:'13px', color:'#334155' }}>
+                {incSeleccionado
+                  ? <>Recursos de <b>{incSeleccionado.codigoIncidente || incSeleccionado.tipo}</b>.</>
+                  : <>Recursos de <b>todas las incidencias</b>.</>}
+              </p>
+              <p style={{ margin:'0 0 14px', fontSize:'12px', color:'#64748b' }}>
+                {recursosGlobales.listaPers.length} cargo(s) · {recursosGlobales.listaMaqs.length} equipo(s) · {recursosGlobales.listaMats.length} insumo(s)
+                <br />Costo total: <b style={{ color:'#1463A5' }}>S/ {nf(recursosGlobales.total)}</b>
+              </p>
+              {generandoRec ? (
+                <div style={{ textAlign:'center', padding:'20px 0' }}>
+                  <FaSyncAlt className="icon-spin" style={{ fontSize:'24px', color:'#0ea5e9' }} />
+                  <p style={{ fontSize:'13px', color:'#64748b', marginTop:'8px' }}>Generando…</p>
+                </div>
+              ) : (
+                <div style={{ display:'flex', gap:'10px' }}>
+                  <button onClick={reporteRecursosPDF}
+                    style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'6px', padding:'16px 10px', background:'#fef2f2', color:'#b91c1c', border:'2px solid #fecaca', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:700 }}>
+                    <FaFilePdf size={24} /> PDF
+                  </button>
+                  <button onClick={reporteRecursosExcel}
+                    style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'6px', padding:'16px 10px', background:'#f0fdf4', color:'#15803d', border:'2px solid #bbf7d0', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:700 }}>
+                    <FaFileExcel size={24} /> Excel
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
