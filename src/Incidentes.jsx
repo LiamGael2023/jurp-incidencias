@@ -57,6 +57,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   // --- ESTADOS DEL MODAL PRINCIPAL ---
   const [modalAbierto, setModalAbierto] = useState(false);
   const [incidenteActivo, setIncidenteActivo] = useState(null);
+  const [modalReporteGlobal, setModalReporteGlobal] = useState(false);
+  const [generandoReporte, setGenerandoReporte] = useState(false);
   const [recursos, setRecursos] = useState([]); 
   const [guardando, setGuardando] = useState(false);
 
@@ -1258,6 +1260,372 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     URL.revokeObjectURL(url);
   };
 
+  // ══════════════════════════════════════════════════════════════════════
+  //  REPORTE GLOBAL — todas las incidencias en un solo archivo
+  // ══════════════════════════════════════════════════════════════════════
+
+  // Trae TODOS los costeos de una vez y los agrupa por incidente.
+  // (Una sola llamada por tipo, no una por incidente: mucho más rápido.)
+  const recopilarDatosGlobales = async () => {
+    const BASE = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
+    const [rPers, rMat, rMaq] = await Promise.all([
+      fetch(`${BASE}/incident-personnels/`),
+      fetch(`${BASE}/incident-materials/`),
+      fetch(`${BASE}/daily-part-heavy-equipments/`),
+    ]);
+    const [dPers, dMat, dMaq] = await Promise.all([rPers.json(), rMat.json(), rMaq.json()]);
+    const lPers = Array.isArray(dPers) ? dPers : (dPers.results || []);
+    const lMat  = Array.isArray(dMat)  ? dMat  : (dMat.results  || []);
+    const lMaq  = Array.isArray(dMaq)  ? dMaq  : (dMaq.results  || []);
+
+    const porIncidente = {};
+    const asegurar = (id) => {
+      const k = String(id);
+      if (!porIncidente[k]) porIncidente[k] = { personal: [], materiales: [], maquinaria: [], total: 0 };
+      return porIncidente[k];
+    };
+
+    lPers.forEach(i => {
+      if (i.incident_report == null) return;
+      const g = asegurar(i.incident_report);
+      const cant = parseFloat(i.quantity_hours) || 0;
+      const pu = parseFloat(i.unit_price) || 0;
+      const tot = cant * pu;
+      g.personal.push({
+        descripcion: (i.description || '').split('\n')[0].trim() || '—',
+        origen: i.origin || 'JURP',
+        personas: i.num_personas ?? 1,
+        horas: cant, precio: pu, total: tot,
+      });
+      g.total += tot;
+    });
+
+    lMat.forEach(i => {
+      if (i.incident_report == null) return;
+      const g = asegurar(i.incident_report);
+      const cant = parseFloat(i.quantity) || 0;
+      const pu = parseFloat(i.unit_price) || 0;
+      const tot = cant * pu;
+      g.materiales.push({
+        descripcion: i.description || '—',
+        unidad: i.unit || 'und',
+        cantidad: cant, precio: pu, total: tot,
+      });
+      g.total += tot;
+    });
+
+    lMaq.forEach(i => {
+      if (i.incident_report == null) return;
+      const g = asegurar(i.incident_report);
+      const hIni = parseFloat(i.start_horometer) || 0;
+      const hFin = parseFloat(i.end_horometer) || 0;
+      const horas = Math.max(0, hFin - hIni);
+      const pu = parseFloat(i.unit_price) || 0;
+      const tot = horas * pu;
+      g.maquinaria.push({
+        parte: i.part_number || '—',
+        actividad: i.activities || '—',
+        proveedor: i.provider || '—',
+        metrado: parseFloat(i.metrado) || 0,
+        metradoUnidad: i.metrado_unidad || 'm3',
+        horas, precio: pu, total: tot,
+        combustible: parseFloat(i.fuel_gallons) || 0,
+      });
+      g.total += tot;
+    });
+
+    return porIncidente;
+  };
+
+  const uMetrado = (u) => ({ m: 'm', m2: 'm²', m3: 'm³', glb: 'glb' }[u] || u || 'm³');
+  const txtEstado = (e) => e === 'pat' ? 'Pendiente' : e === 'ate' ? 'En Atención' : e === 'cer' ? 'Cerrado' : e;
+  const txtGravedad = (g) => g === 'lev' ? 'Leve' : g === 'mod' ? 'Moderada' : g === 'gra' ? 'Grave' : g;
+
+  // ── Reporte global en PDF ──────────────────────────────────────────────
+  const reporteGlobalPDF = async (lista) => {
+    setGenerandoReporte(true);
+    try {
+      const datos = await recopilarDatosGlobales();
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const W = doc.internal.pageSize.getWidth();
+      const logoB64 = await imgToBase64(logo).catch(() => null);
+
+      // ── Portada / resumen ──
+      doc.setFillColor(20, 99, 165);
+      doc.rect(0, 0, W, 28, 'F');
+      if (logoB64) { try { doc.addImage(logoB64, 'PNG', 10, 5, 19, 19); } catch (e) {} }
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(14); doc.setFont(undefined, 'bold');
+      doc.text('JUNTA DE RIEGO PRESURIZADO', 34, 12);
+      doc.setFontSize(11); doc.setFont(undefined, 'normal');
+      doc.text('Reporte General de Incidencias', 34, 19);
+      doc.setFontSize(8);
+      doc.text(`Generado: ${new Date().toLocaleString('es-PE')} · ${lista.length} incidencia(s)`, 34, 24.5);
+
+      const totalGeneral = lista.reduce((a, i) => a + (datos[String(i.id)]?.total || 0), 0);
+      autoTable(doc, {
+        startY: 34,
+        head: [['CÓDIGO', 'TIPO', 'UBICACIÓN', 'FECHA', 'ESTADO', 'GRAVEDAD', 'REPORTADO POR', 'COSTO S/']],
+        body: lista.map(i => ([
+          i.codigoIncidente || '—', i.tipo || '—', i.lugar || '—', i.fecha || '—',
+          txtEstado(i.estado), txtGravedad(i.gravedad), i.usuario || '—',
+          (datos[String(i.id)]?.total || 0).toFixed(2),
+        ])),
+        foot: [['', '', '', '', '', '', 'TOTAL GENERAL', totalGeneral.toFixed(2)]],
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [20, 99, 165], textColor: 255, fontSize: 8 },
+        footStyles: { fillColor: [224, 242, 254], textColor: [20, 99, 165], fontStyle: 'bold' },
+        columnStyles: { 7: { halign: 'right' } },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 10, right: 10 },
+      });
+
+      // ── Una sección por incidencia ──
+      lista.forEach((inc) => {
+        const d = datos[String(inc.id)] || { personal: [], materiales: [], maquinaria: [], total: 0 };
+        doc.addPage();
+        doc.setFillColor(20, 99, 165);
+        doc.rect(0, 0, W, 20, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11); doc.setFont(undefined, 'bold');
+        doc.text(`${inc.codigoIncidente || 'Incidencia'} · ${inc.tipo || ''}`, 10, 9);
+        doc.setFontSize(8); doc.setFont(undefined, 'normal');
+        doc.text(`${inc.lugar || '—'}  |  ${inc.fecha || '—'}  |  ${txtEstado(inc.estado)} · ${txtGravedad(inc.gravedad)}`, 10, 15.5);
+
+        let y = 26;
+        const bloque = (titulo, head, body, foots) => {
+          if (!body.length) return;
+          doc.setTextColor(20, 99, 165);
+          doc.setFontSize(9); doc.setFont(undefined, 'bold');
+          doc.text(titulo, 10, y);
+          autoTable(doc, {
+            startY: y + 2,
+            head: [head], body, foot: foots ? [foots] : undefined,
+            styles: { fontSize: 7.5, cellPadding: 1.8 },
+            headStyles: { fillColor: [100, 116, 139], textColor: 255, fontSize: 7.5 },
+            footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 7.5 },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: 10, right: 10 },
+          });
+          y = doc.lastAutoTable.finalY + 7;
+        };
+
+        bloque('MANO DE OBRA',
+          ['CARGO', 'ORIGEN', 'N° PERS.', 'HORAS', 'P. UNIT.', 'TOTAL S/'],
+          d.personal.map(x => ([x.descripcion, x.origen, String(x.personas), x.horas.toFixed(2), x.precio.toFixed(2), x.total.toFixed(2)])),
+          ['', '', '', '', 'SUBTOTAL', d.personal.reduce((a, x) => a + x.total, 0).toFixed(2)]);
+
+        bloque('MAQUINARIA',
+          ['N° PARTE', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'P. UNIT.', 'TOTAL S/'],
+          d.maquinaria.map(x => ([x.parte, x.actividad, x.proveedor, `${x.metrado.toFixed(2)} ${uMetrado(x.metradoUnidad)}`, x.horas.toFixed(2), x.precio.toFixed(2), x.total.toFixed(2)])),
+          ['', '', '', '', '', 'SUBTOTAL', d.maquinaria.reduce((a, x) => a + x.total, 0).toFixed(2)]);
+
+        bloque('MATERIALES',
+          ['DESCRIPCIÓN', 'UNIDAD', 'CANTIDAD', 'P. UNIT.', 'TOTAL S/'],
+          d.materiales.map(x => ([x.descripcion, x.unidad, x.cantidad.toFixed(2), x.precio.toFixed(2), x.total.toFixed(2)])),
+          ['', '', '', 'SUBTOTAL', d.materiales.reduce((a, x) => a + x.total, 0).toFixed(2)]);
+
+        if (!d.personal.length && !d.maquinaria.length && !d.materiales.length) {
+          doc.setTextColor(148, 163, 184);
+          doc.setFontSize(9); doc.setFont(undefined, 'italic');
+          doc.text('Esta incidencia no tiene recursos costeados.', 10, y);
+          y += 8;
+        }
+
+        doc.setTextColor(20, 99, 165);
+        doc.setFontSize(11); doc.setFont(undefined, 'bold');
+        doc.text(`COSTO TOTAL DE LA INCIDENCIA:  S/ ${d.total.toFixed(2)}`, 10, y + 2);
+      });
+
+      // Numeración de páginas
+      const paginas = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= paginas; i++) {
+        doc.setPage(i);
+        doc.setTextColor(148, 163, 184);
+        doc.setFontSize(7.5); doc.setFont(undefined, 'normal');
+        doc.text(`Página ${i} de ${paginas}`, W - 10, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
+      }
+
+      doc.save(`Reporte_General_Incidencias_${new Date().toISOString().slice(0, 10)}.pdf`);
+      setModalReporteGlobal(false);
+    } catch (e) {
+      console.error(e);
+      Swal.fire('Error', 'No se pudo generar el reporte. Inténtalo de nuevo.', 'error');
+    } finally {
+      setGenerandoReporte(false);
+    }
+  };
+
+  // ── Reporte global en Excel ────────────────────────────────────────────
+  const reporteGlobalExcel = async (lista) => {
+    setGenerandoReporte(true);
+    try {
+      const datos = await recopilarDatosGlobales();
+      const wb = new ExcelJS.Workbook();
+      const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1463A5' } };
+      const azulClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E0F2FE' } };
+      const gris = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9' } };
+      const borde = { top:{style:'thin',color:{argb:'E2E8F0'}}, bottom:{style:'thin',color:{argb:'E2E8F0'}}, left:{style:'thin',color:{argb:'E2E8F0'}}, right:{style:'thin',color:{argb:'E2E8F0'}} };
+
+      // ══ HOJA 1: RESUMEN ══
+      const ws = wb.addWorksheet('Resumen');
+      ws.columns = [{ width: 26 }, { width: 30 }, { width: 32 }, { width: 18 },
+                    { width: 14 }, { width: 13 }, { width: 18 }, { width: 15 }];
+      for (let r = 1; r <= 3; r++) for (let c = 1; c <= 8; c++) ws.getCell(r, c).fill = azul;
+      ws.getRow(1).height = 28; ws.getRow(2).height = 20; ws.getRow(3).height = 18;
+      try {
+        const logoB64 = await imgToBase64(logo);
+        if (logoB64) {
+          const imgId = wb.addImage({ base64: logoB64.split(',')[1], extension: 'png' });
+          ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 75, height: 65 } });
+        }
+      } catch (e) {}
+      ws.mergeCells('B1:H1');
+      ws.getCell('B1').value = 'JUNTA DE RIEGO PRESURIZADO';
+      ws.getCell('B1').font = { bold: true, color: { argb: 'FFFFFF' }, size: 12 };
+      ws.getCell('B1').alignment = { vertical: 'middle' };
+      ws.mergeCells('B2:H2');
+      ws.getCell('B2').value = 'Reporte General de Incidencias';
+      ws.getCell('B2').font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
+      ws.getCell('B2').alignment = { vertical: 'middle' };
+      ws.mergeCells('B3:H3');
+      ws.getCell('B3').value = `Generado: ${new Date().toLocaleString('es-PE')} · ${lista.length} incidencia(s)`;
+      ws.getCell('B3').font = { italic: true, size: 9, color: { argb: 'D0D5DD' } };
+      ws.getCell('B3').alignment = { vertical: 'middle' };
+      ws.getRow(4).height = 6;
+
+      const cab = ['CÓDIGO', 'TIPO', 'UBICACIÓN', 'FECHA', 'ESTADO', 'GRAVEDAD', 'REPORTADO POR', 'COSTO S/'];
+      cab.forEach((h, i) => {
+        const c = ws.getCell(5, i + 1);
+        c.value = h; c.fill = azul; c.border = borde;
+        c.font = { bold: true, color: { argb: 'FFFFFF' }, size: 9 };
+        c.alignment = { horizontal: 'center', vertical: 'middle' };
+      });
+      ws.getRow(5).height = 20;
+
+      lista.forEach((inc, i) => {
+        const r = 6 + i;
+        const tot = datos[String(inc.id)]?.total || 0;
+        const fila = [inc.codigoIncidente || '—', inc.tipo || '—', inc.lugar || '—', inc.fecha || '—',
+                      txtEstado(inc.estado), txtGravedad(inc.gravedad), inc.usuario || '—', tot];
+        fila.forEach((v, ci) => {
+          const c = ws.getCell(r, ci + 1);
+          c.value = v; c.border = borde; c.font = { size: 9 };
+          if (ci === 7) { c.numFmt = '#,##0.00'; c.alignment = { horizontal: 'right' }; }
+        });
+      });
+
+      const rTot = 6 + lista.length;
+      ws.mergeCells(`A${rTot}:G${rTot}`);
+      ws.getCell(`A${rTot}`).value = 'TOTAL GENERAL';
+      ws.getCell(`A${rTot}`).font = { bold: true, size: 10, color: { argb: '1463A5' } };
+      ws.getCell(`A${rTot}`).alignment = { horizontal: 'right' };
+      ws.getCell(`A${rTot}`).fill = azulClaro;
+      ws.getCell(`H${rTot}`).value = lista.reduce((a, i) => a + (datos[String(i.id)]?.total || 0), 0);
+      ws.getCell(`H${rTot}`).numFmt = '#,##0.00';
+      ws.getCell(`H${rTot}`).font = { bold: true, size: 11, color: { argb: '1463A5' } };
+      ws.getCell(`H${rTot}`).fill = azulClaro;
+      ws.getCell(`H${rTot}`).alignment = { horizontal: 'right' };
+      ws.getCell(`H${rTot}`).border = borde;
+
+      // ══ HOJA 2: DETALLE POR INCIDENCIA ══
+      const wd = wb.addWorksheet('Detalle');
+      wd.columns = [{ width: 30 }, { width: 34 }, { width: 16 }, { width: 15 },
+                    { width: 14 }, { width: 14 }, { width: 15 }];
+      let f = 1;
+      const tituloSeccion = (texto, fill, size) => {
+        wd.mergeCells(`A${f}:G${f}`);
+        const c = wd.getCell(`A${f}`);
+        c.value = texto; c.fill = fill;
+        c.font = { bold: true, color: { argb: 'FFFFFF' }, size: size || 10 };
+        c.alignment = { vertical: 'middle' };
+        wd.getRow(f).height = size ? 22 : 18;
+        f += 1;
+      };
+      const tablaDetalle = (encabezados, filas, etiquetaSub, subtotal) => {
+        if (!filas.length) return;
+        encabezados.forEach((h, i) => {
+          const c = wd.getCell(f, i + 1);
+          c.value = h; c.fill = gris; c.border = borde;
+          c.font = { bold: true, size: 8.5, color: { argb: '475569' } };
+          c.alignment = { horizontal: 'center' };
+        });
+        f += 1;
+        filas.forEach(fila => {
+          fila.forEach((v, ci) => {
+            const c = wd.getCell(f, ci + 1);
+            c.value = v; c.border = borde; c.font = { size: 9 };
+            if (typeof v === 'number') { c.numFmt = '#,##0.00'; c.alignment = { horizontal: 'right' }; }
+          });
+          f += 1;
+        });
+        wd.getCell(f, encabezados.length - 1).value = etiquetaSub;
+        wd.getCell(f, encabezados.length - 1).font = { bold: true, size: 9 };
+        wd.getCell(f, encabezados.length - 1).alignment = { horizontal: 'right' };
+        wd.getCell(f, encabezados.length).value = subtotal;
+        wd.getCell(f, encabezados.length).numFmt = '#,##0.00';
+        wd.getCell(f, encabezados.length).font = { bold: true, size: 9 };
+        wd.getCell(f, encabezados.length).alignment = { horizontal: 'right' };
+        f += 2;
+      };
+
+      lista.forEach(inc => {
+        const d = datos[String(inc.id)] || { personal: [], materiales: [], maquinaria: [], total: 0 };
+        tituloSeccion(`${inc.codigoIncidente || 'Incidencia'} · ${inc.tipo || ''}`, azul, 11);
+        wd.mergeCells(`A${f}:G${f}`);
+        wd.getCell(`A${f}`).value = `${inc.lugar || '—'}  |  ${inc.fecha || '—'}  |  ${txtEstado(inc.estado)} · ${txtGravedad(inc.gravedad)}  |  Reportado por: ${inc.usuario || '—'}`;
+        wd.getCell(`A${f}`).font = { size: 9, color: { argb: '64748B' } };
+        f += 2;
+
+        tablaDetalle(['CARGO', 'ORIGEN', 'N° PERS.', 'HORAS', 'P. UNIT.', 'TOTAL S/'],
+          d.personal.map(x => ([x.descripcion, x.origen, x.personas, x.horas, x.precio, x.total])),
+          'SUBTOTAL MANO DE OBRA', d.personal.reduce((a, x) => a + x.total, 0));
+
+        tablaDetalle(['N° PARTE', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'P. UNIT.', 'TOTAL S/'],
+          d.maquinaria.map(x => ([x.parte, x.actividad, x.proveedor, `${x.metrado.toFixed(2)} ${uMetrado(x.metradoUnidad)}`, x.horas, x.precio, x.total])),
+          'SUBTOTAL MAQUINARIA', d.maquinaria.reduce((a, x) => a + x.total, 0));
+
+        tablaDetalle(['DESCRIPCIÓN', 'UNIDAD', 'CANTIDAD', 'P. UNIT.', 'TOTAL S/'],
+          d.materiales.map(x => ([x.descripcion, x.unidad, x.cantidad, x.precio, x.total])),
+          'SUBTOTAL MATERIALES', d.materiales.reduce((a, x) => a + x.total, 0));
+
+        if (!d.personal.length && !d.maquinaria.length && !d.materiales.length) {
+          wd.mergeCells(`A${f}:G${f}`);
+          wd.getCell(`A${f}`).value = 'Sin recursos costeados.';
+          wd.getCell(`A${f}`).font = { italic: true, size: 9, color: { argb: '94A3B8' } };
+          f += 2;
+        }
+
+        wd.mergeCells(`A${f}:F${f}`);
+        wd.getCell(`A${f}`).value = 'COSTO TOTAL DE LA INCIDENCIA';
+        wd.getCell(`A${f}`).font = { bold: true, size: 10, color: { argb: '1463A5' } };
+        wd.getCell(`A${f}`).alignment = { horizontal: 'right' };
+        wd.getCell(`A${f}`).fill = azulClaro;
+        wd.getCell(`G${f}`).value = d.total;
+        wd.getCell(`G${f}`).numFmt = '#,##0.00';
+        wd.getCell(`G${f}`).font = { bold: true, size: 10, color: { argb: '1463A5' } };
+        wd.getCell(`G${f}`).fill = azulClaro;
+        wd.getCell(`G${f}`).alignment = { horizontal: 'right' };
+        f += 3;
+      });
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Reporte_General_Incidencias_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setModalReporteGlobal(false);
+    } catch (e) {
+      console.error(e);
+      Swal.fire('Error', 'No se pudo generar el reporte. Inténtalo de nuevo.', 'error');
+    } finally {
+      setGenerandoReporte(false);
+    }
+  };
+
   const guardarCosteos = async () => {
     // Excluye los borradores de maquinaria (máquinas en la lista sin parte diario).
     const recursosNuevos = recursos.filter(r => !r.guardadoEnDB && !r.esBorrador);
@@ -1417,7 +1785,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
             <div className="tbl-page-pretitle">Gestión de Campo</div>
             <h2 className="tbl-page-title">Incidentes y Reportes</h2>
           </div>
-          <div className="tbl-col-auto">
+          <div className="tbl-col-auto" style={{ display: 'flex', gap: '8px' }}>
+            <button className="tbl-btn" onClick={() => setModalReporteGlobal(true)} disabled={cargando || incidentes.length === 0}
+              style={{ background:'#0ea5e9', color:'#fff', border:'none', display:'flex', alignItems:'center', gap:'8px', opacity: (cargando || incidentes.length === 0) ? 0.5 : 1 }}
+              title="Generar reporte de todas las incidencias">
+              <FaFileInvoice /> Reporte
+            </button>
             <button className="tbl-btn tbl-btn-primary" onClick={obtenerIncidentes} disabled={cargando}>
               <FaSyncAlt className={cargando ? 'icon-spin' : ''} style={{marginRight: '8px'}} /> {cargando ? 'Cargando...' : 'Actualizar Datos'}
             </button>
@@ -2138,6 +2511,55 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           )}
         </div>
       )}
+      {/* ── Modal: elegir formato del reporte general ─────────────────── */}
+      {modalReporteGlobal && (
+        <div onClick={() => !generandoReporte && setModalReporteGlobal(false)}
+          style={{ position:'fixed', inset:0, zIndex:10000, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'#fff', borderRadius:'12px', width:'100%', maxWidth:'440px', overflow:'hidden', boxShadow:'0 20px 40px rgba(0,0,0,0.25)' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', borderBottom:'1px solid #e2e8f0', background:'#f8fafc' }}>
+              <h5 style={{ margin:0, fontSize:'16px', color:'#1e293b', display:'flex', alignItems:'center', gap:'8px' }}>
+                <FaFileInvoice color="#0ea5e9" /> Reporte General
+              </h5>
+              <button onClick={() => !generandoReporte && setModalReporteGlobal(false)} disabled={generandoReporte}
+                style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'18px', display:'flex' }}>
+                <FaTimes />
+              </button>
+            </div>
+            <div style={{ padding:'20px 18px' }}>
+              <p style={{ margin:'0 0 4px', fontSize:'13px', color:'#334155' }}>
+                Se generará un solo archivo con <b>{(incidentesFiltrados.length || incidentes.length)} incidencia(s)</b>,
+                cada una con su detalle de mano de obra, maquinaria y materiales.
+              </p>
+              {hayFiltros && incidentesFiltrados.length !== incidentes.length && (
+                <p style={{ margin:'0 0 4px', fontSize:'12px', color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'6px', padding:'8px 10px' }}>
+                  Se aplicarán los filtros activos ({incidentesFiltrados.length} de {incidentes.length}).
+                </p>
+              )}
+              <p style={{ margin:'10px 0 16px', fontSize:'13px', color:'#64748b' }}>Elige el formato:</p>
+
+              {generandoReporte ? (
+                <div style={{ textAlign:'center', padding:'24px 0' }}>
+                  <FaSyncAlt className="icon-spin" style={{ fontSize:'26px', color:'#0ea5e9' }} />
+                  <p style={{ fontSize:'13px', color:'#64748b', marginTop:'10px' }}>Generando reporte…</p>
+                </div>
+              ) : (
+                <div style={{ display:'flex', gap:'12px' }}>
+                  <button onClick={() => reporteGlobalPDF(incidentesFiltrados.length ? incidentesFiltrados : incidentes)}
+                    style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'8px', padding:'18px 12px', background:'#fef2f2', color:'#b91c1c', border:'2px solid #fecaca', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:700 }}>
+                    <FaFilePdf size={26} /> PDF
+                  </button>
+                  <button onClick={() => reporteGlobalExcel(incidentesFiltrados.length ? incidentesFiltrados : incidentes)}
+                    style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'8px', padding:'18px 12px', background:'#f0fdf4', color:'#15803d', border:'2px solid #bbf7d0', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:700 }}>
+                    <FaFileExcel size={26} /> Excel
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Mantenedor de catálogos (Equipos/Marcas/Modelos) ─────────────── */}
       <MantenedorEquipos
         abierto={mantenedorAbierto}
