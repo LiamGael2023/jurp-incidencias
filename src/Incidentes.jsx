@@ -51,6 +51,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const [todosModelos, setTodosModelos] = useState([]);
   const [catActividades, setCatActividades] = useState([]);
   const [catUnidades, setCatUnidades] = useState(['bol', 'm3', 'm2', 'und', 'kg', 'gln', 'rll']);
+  const [catCargos, setCatCargos] = useState([]);   // catálogo de cargos (backend)
   const [mantenedorAbierto, setMantenedorAbierto] = useState(false);
 
   // --- ESTADOS DEL MODAL PRINCIPAL ---
@@ -137,6 +138,15 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     } catch (e) { console.error(e); }
   };
   useEffect(() => { cargarActividades(); }, []);
+
+  // Catálogo de cargos de mano de obra (persistido en el backend).
+  const cargarCargos = async () => {
+    try {
+      const r = await fetch(`${API_OPS}/cargos/?activo=true`);
+      if (r.ok) setCatCargos(await r.json());
+    } catch (e) { console.error(e); }
+  };
+  useEffect(() => { cargarCargos(); }, []);
 
   // Carga el catálogo completo de modelos (todas las máquinas, sin filtrar).
   const cargarTodosModelos = async () => {
@@ -239,6 +249,66 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       }
     } else {
       setNuevoRecurso(prev => ({ ...prev, actividad: valor }));
+    }
+  };
+
+  // ── Gestionar cargos de mano de obra (persistidos en el backend) ────────
+  const gestionarCargos = async () => {
+    const html = `
+      <div style="text-align:left">
+        <div style="margin-bottom:10px;font-size:13px;color:#64748b">Cargos actuales:</div>
+        <div id="lista-cargos" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+          ${catCargos.map(c => `<span style="background:#e0f2fe;color:#0284c7;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px">${c.nombre}<button data-del="${c.id}" data-nom="${c.nombre}" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;padding:0;line-height:1">×</button></span>`).join('')}
+        </div>
+        <input id="nuevo-cargo" class="swal2-input" placeholder="Nuevo cargo (ej. CAPATAZ)" style="margin:0;width:100%" />
+      </div>`;
+    const { value: nuevo } = await Swal.fire({
+      title: 'Cargos de mano de obra',
+      html,
+      showCancelButton: true,
+      confirmButtonText: 'Agregar',
+      cancelButtonText: 'Cerrar',
+      confirmButtonColor: '#206bc4',
+      didOpen: () => {
+        document.querySelectorAll('[data-del]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.getAttribute('data-del');
+            const nom = btn.getAttribute('data-nom');
+            try {
+              const r = await fetch(`${API_OPS}/cargos/${id}/`, { method: 'DELETE' });
+              if (r.ok || r.status === 204) {
+                btn.parentElement.remove();
+                setCatCargos(prev => prev.filter(x => String(x.id) !== String(id)));
+                setNuevoRecurso(prev => prev.descripcion === nom ? { ...prev, descripcion: '' } : prev);
+              }
+            } catch (e) { console.error(e); }
+          });
+        });
+      },
+      preConfirm: () => {
+        const v = document.getElementById('nuevo-cargo').value.trim().toUpperCase();
+        if (!v) { Swal.showValidationMessage('Escribe un cargo'); return false; }
+        if (catCargos.some(c => c.nombre.toUpperCase() === v)) { Swal.showValidationMessage('Ese cargo ya existe'); return false; }
+        return v;
+      },
+    });
+    if (nuevo) {
+      try {
+        const r = await fetch(`${API_OPS}/cargos/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: nuevo, activo: true }),
+        });
+        if (r.ok) {
+          await cargarCargos();
+          setNuevoRecurso(prev => ({ ...prev, descripcion: nuevo }));
+        } else {
+          const e = await r.json().catch(() => ({}));
+          Swal.fire('Error', e.nombre ? e.nombre[0] : 'No se pudo crear el cargo.', 'error');
+        }
+      } catch (e) {
+        Swal.fire('Error', 'Fallo de conexión al crear el cargo.', 'error');
+      }
     }
   };
 
@@ -1810,7 +1880,13 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                     </div>
                   </div>
                   <div className="tbl-row tbl-mb-3">
-                    <div className="tbl-col-3"><label className="tbl-form-label">Cargo</label><input type="text" className="tbl-form-control" placeholder="Ej. Peón, Operario..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
+                    <div className="tbl-col-3">
+                      <label className="tbl-form-label">Cargo <button type="button" onClick={gestionarCargos} title="Gestionar cargos" style={{ background:'none', border:'none', color:'#206bc4', cursor:'pointer', fontSize:'11px', padding:'0 0 0 4px' }}><FaPlus /> gestionar</button></label>
+                      <select className="tbl-form-select" value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})}>
+                        <option value="">— Seleccionar —</option>
+                        {catCargos.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+                      </select>
+                    </div>
                     <div className="tbl-col-2"><label className="tbl-form-label">N° Personas</label><input type="number" min="1" className="tbl-form-control" value={nuevoRecurso.numPersonas} onChange={e => setNuevoRecurso({...nuevoRecurso, numPersonas: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">H. Normales</label><input type="number" min="0" className="tbl-form-control" value={nuevoRecurso.horasTrabajo} onChange={e => setNuevoRecurso({...nuevoRecurso, horasTrabajo: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">H. Extras</label><input type="number" min="0" className="tbl-form-control" value={nuevoRecurso.horasExtras} onChange={e => setNuevoRecurso({...nuevoRecurso, horasExtras: e.target.value})} /></div>
