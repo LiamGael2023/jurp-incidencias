@@ -1335,6 +1335,10 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       const tot = horas * pu;
       g.maquinaria.push({
         parte: i.part_number || '—',
+        // Identificación de la máquina (viene en el propio parte).
+        equipo: i.equipment_name || '—',
+        marca: i.brand_name || '',
+        placa: i.model_plate || '—',
         actividad: i.activities || '—',
         proveedor: i.provider || '—',
         metrado: parseFloat(i.metrado) || 0,
@@ -1470,9 +1474,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           ['', '', '', '', 'SUBTOTAL', d.personal.reduce((a, x) => a + x.total, 0).toFixed(2)]);
 
         bloque('MAQUINARIA',
-          ['N° PARTE', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'P. UNIT.', 'TOTAL S/'],
-          d.maquinaria.map(x => ([x.parte, x.actividad, x.proveedor, `${x.metrado.toFixed(2)} ${uMetrado(x.metradoUnidad)}`, x.horas.toFixed(2), x.precio.toFixed(2), x.total.toFixed(2)])),
-          ['', '', '', '', '', 'SUBTOTAL', d.maquinaria.reduce((a, x) => a + x.total, 0).toFixed(2)]);
+          ['N° PARTE', 'MÁQUINA', 'PLACA/CÓDIGO', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'P. UNIT.', 'TOTAL S/'],
+          d.maquinaria.map(x => ([x.parte, `${x.equipo}${x.marca ? ' · ' + x.marca : ''}`, x.placa, x.actividad, x.proveedor, `${x.metrado.toFixed(2)} ${uMetrado(x.metradoUnidad)}`, x.horas.toFixed(2), x.precio.toFixed(2), x.total.toFixed(2)])),
+          ['', '', '', '', '', '', '', 'SUBTOTAL', d.maquinaria.reduce((a, x) => a + x.total, 0).toFixed(2)]);
 
         bloque('MATERIALES',
           ['DESCRIPCIÓN', 'UNIDAD', 'CANTIDAD', 'P. UNIT.', 'TOTAL S/'],
@@ -1602,11 +1606,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
 
       // ══ HOJA 2: DETALLE POR INCIDENCIA ══
       const wd = wb.addWorksheet('Detalle');
-      wd.columns = [{ width: 30 }, { width: 34 }, { width: 16 }, { width: 15 },
-                    { width: 14 }, { width: 14 }, { width: 15 }];
+      wd.columns = [{ width: 22 }, { width: 30 }, { width: 16 }, { width: 30 }, { width: 18 },
+                    { width: 15 }, { width: 12 }, { width: 13 }, { width: 15 }];
       let f = 1;
       const tituloSeccion = (texto, fill, size) => {
-        wd.mergeCells(`A${f}:G${f}`);
+        wd.mergeCells(`A${f}:I${f}`);
         const c = wd.getCell(`A${f}`);
         c.value = texto; c.fill = fill;
         c.font = { bold: true, color: { argb: 'FFFFFF' }, size: size || 10 };
@@ -1644,7 +1648,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       lista.forEach(inc => {
         const d = datos[String(inc.id)] || { personal: [], materiales: [], maquinaria: [], total: 0 };
         tituloSeccion(`${inc.codigoIncidente || 'Incidencia'} · ${inc.tipo || ''}`, azul, 11);
-        wd.mergeCells(`A${f}:G${f}`);
+        wd.mergeCells(`A${f}:I${f}`);
         wd.getCell(`A${f}`).value = `${inc.lugar || '—'}  |  ${inc.fecha || '—'}  |  ${txtEstado(inc.estado)} · ${txtGravedad(inc.gravedad)}  |  Reportado por: ${inc.usuario || '—'}`;
         wd.getCell(`A${f}`).font = { size: 9, color: { argb: '64748B' } };
         f += 1;
@@ -1668,24 +1672,24 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           d.personal.map(x => ([x.descripcion, x.origen, x.personas, x.horas, x.precio, x.total])),
           'SUBTOTAL MANO DE OBRA', d.personal.reduce((a, x) => a + x.total, 0));
 
-        tablaDetalle(['N° PARTE', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'P. UNIT.', 'TOTAL S/'],
-          d.maquinaria.map(x => ([x.parte, x.actividad, x.proveedor, `${x.metrado.toFixed(2)} ${uMetrado(x.metradoUnidad)}`, x.horas, x.precio, x.total])),
+        tablaDetalle(['N° PARTE', 'MÁQUINA', 'PLACA/CÓDIGO', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'P. UNIT.', 'TOTAL S/'],
+          d.maquinaria.map(x => ([x.parte, `${x.equipo}${x.marca ? ' · ' + x.marca : ''}`, x.placa, x.actividad, x.proveedor, `${x.metrado.toFixed(2)} ${uMetrado(x.metradoUnidad)}`, x.horas, x.precio, x.total])),
           'SUBTOTAL MAQUINARIA', d.maquinaria.reduce((a, x) => a + x.total, 0));
 
         tablaDetalle(['DESCRIPCIÓN', 'UNIDAD', 'CANTIDAD', 'P. UNIT.', 'TOTAL S/'],
           d.materiales.map(x => ([x.descripcion, x.unidad, x.cantidad, x.precio, x.total])),
           'SUBTOTAL MATERIALES', d.materiales.reduce((a, x) => a + x.total, 0));
 
-        wd.mergeCells(`A${f}:F${f}`);
+        wd.mergeCells(`A${f}:H${f}`);
         wd.getCell(`A${f}`).value = 'COSTO TOTAL DE LA INCIDENCIA';
         wd.getCell(`A${f}`).font = { bold: true, size: 10, color: { argb: '1463A5' } };
         wd.getCell(`A${f}`).alignment = { horizontal: 'right' };
         wd.getCell(`A${f}`).fill = azulClaro;
-        wd.getCell(`G${f}`).value = d.total;
-        wd.getCell(`G${f}`).numFmt = '#,##0.00';
-        wd.getCell(`G${f}`).font = { bold: true, size: 10, color: { argb: '1463A5' } };
-        wd.getCell(`G${f}`).fill = azulClaro;
-        wd.getCell(`G${f}`).alignment = { horizontal: 'right' };
+        wd.getCell(`I${f}`).value = d.total;
+        wd.getCell(`I${f}`).numFmt = '#,##0.00';
+        wd.getCell(`I${f}`).font = { bold: true, size: 10, color: { argb: '1463A5' } };
+        wd.getCell(`I${f}`).fill = azulClaro;
+        wd.getCell(`I${f}`).alignment = { horizontal: 'right' };
         f += 3;
       });
 

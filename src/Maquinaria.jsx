@@ -269,7 +269,7 @@ export default function Maquinaria({ irAIncidente }) {
             `${x.metrado.toFixed(2)} ${uMet(x.metradoUnidad)}`,
             x.horas.toFixed(2), x.combustible.toFixed(2), x.costo.toFixed(2),
           ])),
-          foot: [['', '', '', '', 'TOTALES', `${g.metrado.toFixed(2)}`, g.horas.toFixed(2), g.combustible.toFixed(2), g.costo.toFixed(2)]],
+          foot: [['', '', '', '', 'TOTALES', '', g.horas.toFixed(2), g.combustible.toFixed(2), g.costo.toFixed(2)]],
           styles: { fontSize: 7.5, cellPadding: 1.8 },
           headStyles: { fillColor: [100, 116, 139], textColor: 255, fontSize: 7.5 },
           footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 7.5 },
@@ -413,7 +413,7 @@ export default function Maquinaria({ irAIncidente }) {
         wd.getCell(f, 5).value = 'TOTALES';
         wd.getCell(f, 5).font = { bold: true, size: 9 };
         wd.getCell(f, 5).alignment = { horizontal: 'right' };
-        [[6, `${g.metrado.toFixed(2)}`], [7, g.horas], [8, g.combustible], [9, g.costo]].forEach(([col, val]) => {
+        [[7, g.horas], [8, g.combustible], [9, g.costo]].forEach(([col, val]) => {
           const c = wd.getCell(f, col);
           c.value = val; c.fill = azulClaro; c.border = borde;
           c.font = { bold: true, size: 9, color: { argb: '1463A5' } };
@@ -573,10 +573,15 @@ export default function Maquinaria({ irAIncidente }) {
     doc.setTextColor(60, 60, 60);
     doc.setFontSize(9);
     const infoY = 33;
-    doc.text(`Equipo: ${maq.equipo} · ${maq.marca}`, 10, infoY);
+    // El nombre del equipo puede ser largo: lo recortamos al ancho disponible
+    // para que no se solape con la columna de la derecha.
+    const anchoEquipo = 165;   // mm disponibles antes de la segunda columna
+    const txtEquipo = `Equipo: ${maq.equipo || '—'}${maq.marca ? ' · ' + maq.marca : ''}`;
+    const lineasEquipo = doc.splitTextToSize(txtEquipo, anchoEquipo);
+    doc.text(lineasEquipo[0], 10, infoY);
     doc.text(`Modelo: ${maq.modelo || '—'}`, 10, infoY + 5);
-    doc.text(`Placa: ${maq.placa || '—'}`, 110, infoY);
-    doc.text(`Origen: ${maq.origen === 'JURP' ? 'JURP (propia)' : 'Externa'}`, 110, infoY + 5);
+    doc.text(`Placa: ${maq.placa || '—'}`, 185, infoY);
+    doc.text(`Origen: ${maq.origen === 'JURP' ? 'JURP (propia)' : 'Externa'}`, 185, infoY + 5);
 
     const cuerpo = historial.partes.map(p => ([
       p.part_number,
@@ -1042,7 +1047,7 @@ export default function Maquinaria({ irAIncidente }) {
                     <tfoot>
                       <tr style={{ background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
                         <td colSpan="4" style={{ padding: '13px 14px', fontWeight: 700, color: '#334155' }}>TOTAL · {historial.total_partes} parte{historial.total_partes !== 1 ? 's' : ''}</td>
-                        <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(historial.partes.reduce((s, p) => s + (parseFloat(p.metrado) || 0), 0))}</td>
+                        <td style={{ padding: '13px 8px' }}></td>
                         <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(historial.total_horas)} HE</td>
                         <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(historial.partes.reduce((s, p) => s + (parseFloat(p.fuel_gallons) || 0), 0))} Gls</td>
                         <td style={{ padding: '13px 8px' }}></td>
