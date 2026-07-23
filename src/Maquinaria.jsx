@@ -583,7 +583,7 @@ export default function Maquinaria({ irAIncidente }) {
       {/* ── Modal de historial de partes ───────────────────────────────── */}
       {detalle && (
         <div onClick={() => { setDetalle(null); setHistorial(null); }} style={overlayStyle}>
-          <div onClick={e => e.stopPropagation()} style={{ ...modalStyle, maxWidth: '960px' }}>
+          <div onClick={e => e.stopPropagation()} style={{ ...modalStyle, maxWidth: '1400px', maxHeight: '94vh' }}>
             <div style={modalHeadStyle}>
               <h5 style={{ margin: 0, fontSize: '16px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <FaTruck color="#475569" /> {detalle.codigo} · {detalle.modelo || detalle.placa}
@@ -664,7 +664,7 @@ export default function Maquinaria({ irAIncidente }) {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
-                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '11px', color: '#475569' }}>N° PARTE</th>
+                        <th style={{ textAlign: 'left', padding: '10px 10px', fontSize: '11px', color: '#475569', whiteSpace: 'nowrap' }}>N° PARTE</th>
                         <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>FECHA</th>
                         <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>ESTADO</th>
                         <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>ACTIVIDAD</th>
@@ -672,7 +672,7 @@ export default function Maquinaria({ irAIncidente }) {
                         <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>HORAS</th>
                         <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>COMBUST.</th>
                         <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>PROVEEDOR</th>
-                        <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>N° INCIDENCIA</th>
+                        <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569', whiteSpace: 'nowrap' }}>N° INCIDENCIA</th>
                         <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>TOTAL</th>
                         <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '11px', color: '#475569' }}>PDF</th>
                       </tr>
@@ -680,7 +680,7 @@ export default function Maquinaria({ irAIncidente }) {
                     <tbody>
                       {historial.partes.map(p => (
                         <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', background: p.cerrado ? '#fff' : '#fffbeb' }}>
-                          <td style={{ padding: '11px 14px', fontWeight: 700, color: '#1e293b' }}>{p.part_number}</td>
+                          <td style={{ padding: '11px 10px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>{p.part_number}</td>
                           <td style={{ padding: '11px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{p.date ? p.date.split('T')[0].split('-').reverse().join('/') : '—'}</td>
                           <td style={{ padding: '11px 8px' }}>
                             <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 9px', borderRadius: '4px', background: p.cerrado ? '#dcfce7' : '#fef3c7', color: p.cerrado ? '#15803d' : '#b45309', whiteSpace: 'nowrap' }}>
@@ -769,7 +769,7 @@ function Campo({ label, valor, icono }) {
 }
 
 const selStyle = { padding: '7px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', color: '#334155', background: '#fff', cursor: 'pointer' };
-const overlayStyle = { position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' };
+const overlayStyle = { position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' };
 const modalStyle = { background: '#fff', borderRadius: '12px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' };
 const modalHeadStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc' };
 const xBtnStyle = { background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: '18px', display: 'flex' };
