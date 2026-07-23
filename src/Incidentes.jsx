@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
@@ -59,6 +59,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const [incidenteActivo, setIncidenteActivo] = useState(null);
   const [modalReporteGlobal, setModalReporteGlobal] = useState(false);
   const [generandoReporte, setGenerandoReporte] = useState(false);
+  const [conDatosInfo, setConDatosInfo] = useState(null);  // {conDatos, total} del reporte
+  const incidentesFiltradosRef = useRef([]);   // lista filtrada visible (para el reporte)
   const [recursos, setRecursos] = useState([]); 
   const [guardando, setGuardando] = useState(false);
 
@@ -1341,11 +1343,38 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const txtEstado = (e) => e === 'pat' ? 'Pendiente' : e === 'ate' ? 'En Atención' : e === 'cer' ? 'Cerrado' : e;
   const txtGravedad = (g) => g === 'lev' ? 'Leve' : g === 'mod' ? 'Moderada' : g === 'gra' ? 'Grave' : g;
 
+  // Abre la ventanita de reporte y calcula cuántas incidencias tienen datos.
+  const abrirModalReporte = async () => {
+    setModalReporteGlobal(true);
+    setConDatosInfo(null);
+    try {
+      const datos = await recopilarDatosGlobales();
+      const base = incidentesFiltradosRef.current || [];
+      const conDatos = base.filter(i => {
+        const d = datos[String(i.id)];
+        return d && (d.personal.length || d.maquinaria.length || d.materiales.length);
+      }).length;
+      setConDatosInfo({ conDatos, total: base.length });
+    } catch (e) {
+      setConDatosInfo({ conDatos: null, total: null });
+    }
+  };
+
   // ── Reporte global en PDF ──────────────────────────────────────────────
-  const reporteGlobalPDF = async (lista) => {
+  const reporteGlobalPDF = async (listaEntrada) => {
     setGenerandoReporte(true);
     try {
       const datos = await recopilarDatosGlobales();
+      // Solo las incidencias que tienen algún recurso costeado.
+      const lista = (listaEntrada || []).filter(i => {
+        const d = datos[String(i.id)];
+        return d && (d.personal.length || d.maquinaria.length || d.materiales.length);
+      });
+      if (!lista.length) {
+        Swal.fire('Sin datos', 'Ninguna de las incidencias seleccionadas tiene recursos costeados.', 'info');
+        setGenerandoReporte(false);
+        return;
+      }
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const W = doc.internal.pageSize.getWidth();
       const logoB64 = await imgToBase64(logo).catch(() => null);
@@ -1425,13 +1454,6 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           d.materiales.map(x => ([x.descripcion, x.unidad, x.cantidad.toFixed(2), x.precio.toFixed(2), x.total.toFixed(2)])),
           ['', '', '', 'SUBTOTAL', d.materiales.reduce((a, x) => a + x.total, 0).toFixed(2)]);
 
-        if (!d.personal.length && !d.maquinaria.length && !d.materiales.length) {
-          doc.setTextColor(148, 163, 184);
-          doc.setFontSize(9); doc.setFont(undefined, 'italic');
-          doc.text('Esta incidencia no tiene recursos costeados.', 10, y);
-          y += 8;
-        }
-
         doc.setTextColor(20, 99, 165);
         doc.setFontSize(11); doc.setFont(undefined, 'bold');
         doc.text(`COSTO TOTAL DE LA INCIDENCIA:  S/ ${d.total.toFixed(2)}`, 10, y + 2);
@@ -1457,10 +1479,20 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   };
 
   // ── Reporte global en Excel ────────────────────────────────────────────
-  const reporteGlobalExcel = async (lista) => {
+  const reporteGlobalExcel = async (listaEntrada) => {
     setGenerandoReporte(true);
     try {
       const datos = await recopilarDatosGlobales();
+      // Solo las incidencias que tienen algún recurso costeado.
+      const lista = (listaEntrada || []).filter(i => {
+        const d = datos[String(i.id)];
+        return d && (d.personal.length || d.maquinaria.length || d.materiales.length);
+      });
+      if (!lista.length) {
+        Swal.fire('Sin datos', 'Ninguna de las incidencias seleccionadas tiene recursos costeados.', 'info');
+        setGenerandoReporte(false);
+        return;
+      }
       const wb = new ExcelJS.Workbook();
       const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1463A5' } };
       const azulClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E0F2FE' } };
@@ -1589,13 +1621,6 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           d.materiales.map(x => ([x.descripcion, x.unidad, x.cantidad, x.precio, x.total])),
           'SUBTOTAL MATERIALES', d.materiales.reduce((a, x) => a + x.total, 0));
 
-        if (!d.personal.length && !d.maquinaria.length && !d.materiales.length) {
-          wd.mergeCells(`A${f}:G${f}`);
-          wd.getCell(`A${f}`).value = 'Sin recursos costeados.';
-          wd.getCell(`A${f}`).font = { italic: true, size: 9, color: { argb: '94A3B8' } };
-          f += 2;
-        }
-
         wd.mergeCells(`A${f}:F${f}`);
         wd.getCell(`A${f}`).value = 'COSTO TOTAL DE LA INCIDENCIA';
         wd.getCell(`A${f}`).font = { bold: true, size: 10, color: { argb: '1463A5' } };
@@ -1719,6 +1744,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
 
   // Lista de tipos presentes (para el select), ordenada.
   const tiposDisponibles = [...new Set(incidentes.map(i => i.tipoBase))].sort();
+  incidentesFiltradosRef.current = incidentesFiltrados;
   const hayFiltros = filtroTipo || filtroEstado || filtroGravedad || busqueda.trim();
   const limpiarFiltros = () => { setFiltroTipo(''); setFiltroEstado(''); setFiltroGravedad(''); setBusqueda(''); setPaginaActual(1); };
 
@@ -1786,7 +1812,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
             <h2 className="tbl-page-title">Incidentes y Reportes</h2>
           </div>
           <div className="tbl-col-auto" style={{ display: 'flex', gap: '8px' }}>
-            <button className="tbl-btn" onClick={() => setModalReporteGlobal(true)} disabled={cargando || incidentes.length === 0}
+            <button className="tbl-btn" onClick={abrirModalReporte} disabled={cargando || incidentes.length === 0}
               style={{ background:'#0ea5e9', color:'#fff', border:'none', display:'flex', alignItems:'center', gap:'8px', opacity: (cargando || incidentes.length === 0) ? 0.5 : 1 }}
               title="Generar reporte de todas las incidencias">
               <FaFileInvoice /> Reporte
@@ -2527,12 +2553,23 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               </button>
             </div>
             <div style={{ padding:'20px 18px' }}>
-              <p style={{ margin:'0 0 4px', fontSize:'13px', color:'#334155' }}>
-                Se generará un solo archivo con <b>{(incidentesFiltrados.length || incidentes.length)} incidencia(s)</b>,
-                cada una con su detalle de mano de obra, maquinaria y materiales.
-              </p>
+              {conDatosInfo === null ? (
+                <p style={{ margin:'0 0 4px', fontSize:'13px', color:'#64748b' }}>
+                  <FaSyncAlt className="icon-spin" style={{ marginRight:'6px' }} /> Revisando incidencias…
+                </p>
+              ) : (
+                <p style={{ margin:'0 0 4px', fontSize:'13px', color:'#334155' }}>
+                  Se generará un solo archivo con <b>{conDatosInfo.conDatos} incidencia(s) con información</b>,
+                  cada una con su detalle de mano de obra, maquinaria y materiales.
+                </p>
+              )}
+              {conDatosInfo && conDatosInfo.total > conDatosInfo.conDatos && (
+                <p style={{ margin:'6px 0 4px', fontSize:'12px', color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'6px', padding:'8px 10px' }}>
+                  Se omitirán {conDatosInfo.total - conDatosInfo.conDatos} incidencia(s) sin recursos costeados.
+                </p>
+              )}
               {hayFiltros && incidentesFiltrados.length !== incidentes.length && (
-                <p style={{ margin:'0 0 4px', fontSize:'12px', color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'6px', padding:'8px 10px' }}>
+                <p style={{ margin:'6px 0 4px', fontSize:'12px', color:'#0369a1', background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:'6px', padding:'8px 10px' }}>
                   Se aplicarán los filtros activos ({incidentesFiltrados.length} de {incidentes.length}).
                 </p>
               )}
@@ -2544,7 +2581,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                   <p style={{ fontSize:'13px', color:'#64748b', marginTop:'10px' }}>Generando reporte…</p>
                 </div>
               ) : (
-                <div style={{ display:'flex', gap:'12px' }}>
+                <div style={{ display:'flex', gap:'12px', opacity: (conDatosInfo && conDatosInfo.conDatos === 0) ? 0.45 : 1, pointerEvents: (conDatosInfo && conDatosInfo.conDatos === 0) ? 'none' : 'auto' }}>
                   <button onClick={() => reporteGlobalPDF(incidentesFiltrados.length ? incidentesFiltrados : incidentes)}
                     style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'8px', padding:'18px 12px', background:'#fef2f2', color:'#b91c1c', border:'2px solid #fecaca', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:700 }}>
                     <FaFilePdf size={26} /> PDF
