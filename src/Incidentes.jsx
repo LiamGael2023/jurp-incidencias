@@ -102,8 +102,14 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     hmInicio: '', hmFin: '', combustible: '', vale: '', fotoVale: null,
     actividad: '', observaciones: '', fotoParte: null,
     incluirMetrado: false, longitud: '', altura: '', anchoSup: '', anchoInf: '',
-    nViajes: '', volTolva: '', fe: '1.25', hPromedio: '', anchoBase: '', corona: '', talud: ''
+    nViajes: '', volTolva: '', fe: '1.25', hPromedio: '', anchoBase: '', corona: '', talud: '',
+    // Metrado: por defecto se ingresa MANUAL. Al marcar el check se calcula por fórmula.
+    calcularMetrado: false, metradoManual: '', unidadMetrado: 'm3'
   };
+  // Unidades disponibles para el metrado manual.
+  const UNIDADES_METRADO = ['m', 'm2', 'm3', 'glb'];
+  const UNIDADES_METRADO_TXT = { m: 'm', m2: 'm²', m3: 'm³', glb: 'glb' };
+
   const [nuevoRecurso, setNuevoRecurso] = useState(estadoInicialRecurso);
 
   // ── Carga de catálogos (equipos/marcas/modelos) ──────────────────────────
@@ -681,8 +687,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const horasMaquina = (nuevoRecurso.hmFin && nuevoRecurso.hmInicio) ? Math.max(0, (parseFloat(nuevoRecurso.hmFin) - parseFloat(nuevoRecurso.hmInicio))).toFixed(1) : 0;
 
   // ── Cálculo de metrado según actividad ──────────────────────────────────
-  const calcVolumen = () => {
-    const r = nuevoRecurso;
+  // Calcula el metrado de CUALQUIER recurso (no solo el del formulario abierto).
+  const calcMetradoDe = (r) => {
+    // Sin el check marcado, el metrado es el que el usuario escribe a mano.
+    if (!r.calcularMetrado) {
+      return { val: parseFloat(r.metradoManual) || 0, unit: UNIDADES_METRADO_TXT[r.unidadMetrado] || r.unidadMetrado || 'm³' };
+    }
     const L = parseFloat(r.longitud)||0, h = parseFloat(r.altura)||0;
     const B = parseFloat(r.anchoBase)||0, b = parseFloat(r.corona)||0;
     const N = parseFloat(r.nViajes)||0, vt = parseFloat(r.volTolva)||0;
@@ -701,6 +711,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       default: return {val:((Ws+Wi)/2)*h*L, unit:'m³'};
     }
   };
+  const calcVolumen = () => calcMetradoDe(nuevoRecurso);
   const volCalc = calcVolumen();
   const volumenMetrado = volCalc.val.toFixed(2);
   // Formatea números con separador de miles (1000000.00 → 1,000,000.00)
@@ -1294,6 +1305,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
             if (r.anchoInf !== '' && r.anchoInf != null) formData.append('width_bottom', r.anchoInf);
             if (r.altura !== '' && r.altura != null) formData.append('height', r.altura);
             if (r.longitud !== '' && r.longitud != null) formData.append('length', r.longitud);
+            // Metrado final: calculado por fórmula o ingresado a mano.
+            const mv = calcMetradoDe(r);
+            formData.append('metrado', mv.val.toFixed(2));
+            formData.append('metrado_unidad', r.calcularMetrado ? mv.unit : (r.unidadMetrado || 'm3'));
+            formData.append('metrado_calculado', r.calcularMetrado ? 'true' : 'false');
           }
         }
         const res = await fetch(endpoint, { method: 'POST', body: formData });
@@ -1366,8 +1382,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const renderCamposMetrado = () => {
     const act = nuevoRecurso.actividad;
     const set = (campo, val) => setNuevoRecurso({...nuevoRecurso, [campo]: val});
+    const activo = !!nuevoRecurso.calcularMetrado;
     const inp = (campo, label, step='0.01') => (
-      <div className="tbl-col"><label className="tbl-form-label">{label}</label><input type="number" step={step} className="tbl-form-control" placeholder="0.00" value={nuevoRecurso[campo]} onChange={e => set(campo, e.target.value)} /></div>
+      <div className="tbl-col"><label className="tbl-form-label" style={{ color: activo ? undefined : '#94a3b8' }}>{label}</label><input type="number" step={step} className="tbl-form-control" placeholder="0.00" value={nuevoRecurso[campo]} disabled={!activo} onChange={e => set(campo, e.target.value)} style={{ background: activo ? undefined : '#f1f5f9', cursor: activo ? undefined : 'not-allowed' }} /></div>
     );
     if (act === 'EXCAVACION DE MATERIAL' || act === 'ENROCADO')
       return <>{inp('anchoBase','Base B (m)')}{inp('corona','Corona b (m)')}{inp('altura','Altura h (m)')}{inp('longitud','Longitud L (m)')}</>;
@@ -1861,10 +1878,37 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                             <div className="tbl-row tbl-mb-2" style={{ gap:'8px' }}>{renderCamposMetrado()}</div>
                           </div>
                         </div>
-                        <div style={{ marginTop:'8px', padding:'8px 12px', background:'#fff', borderRadius:'4px', border:'1px solid #bfdbfe', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                          <span style={{ fontSize:'11px', color:'#626976' }}>{formulaMetrado[nuevoRecurso.actividad]}</span>
-                          <span style={{ fontSize:'16px', fontWeight:'700', color: volCalc.val > 0 ? '#1463A5' : '#94a3b8' }}>{fmtNum(volumenMetrado)} {volCalc.unit}</span>
+                        <div style={{ marginTop:'8px', padding:'8px 12px', background:'#fff', borderRadius:'4px', border:'1px solid #bfdbfe', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'10px' }}>
+                          {nuevoRecurso.calcularMetrado ? (
+                            <>
+                              <span style={{ fontSize:'11px', color:'#626976' }}>{formulaMetrado[nuevoRecurso.actividad]}</span>
+                              <span style={{ fontSize:'16px', fontWeight:'700', color: volCalc.val > 0 ? '#1463A5' : '#94a3b8' }}>{fmtNum(volumenMetrado)} {volCalc.unit}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span style={{ fontSize:'11px', color:'#626976', whiteSpace:'nowrap' }}>Metrado (ingreso manual)</span>
+                              <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                                <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00"
+                                  value={nuevoRecurso.metradoManual}
+                                  onChange={e => setNuevoRecurso({ ...nuevoRecurso, metradoManual: e.target.value })}
+                                  style={{ width:'130px', textAlign:'right', fontWeight:700, color:'#1463A5' }} />
+                                <select className="tbl-form-select" value={nuevoRecurso.unidadMetrado}
+                                  onChange={e => setNuevoRecurso({ ...nuevoRecurso, unidadMetrado: e.target.value })}
+                                  style={{ width:'80px' }}>
+                                  {UNIDADES_METRADO.map(u => <option key={u} value={u}>{UNIDADES_METRADO_TXT[u]}</option>)}
+                                </select>
+                              </div>
+                            </>
+                          )}
                         </div>
+
+                        {/* Check para activar el cálculo por fórmula */}
+                        <label style={{ marginTop:'8px', display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:'#1463A5', fontWeight:600, cursor:'pointer', userSelect:'none' }}>
+                          <input type="checkbox" checked={!!nuevoRecurso.calcularMetrado}
+                            onChange={e => setNuevoRecurso({ ...nuevoRecurso, calcularMetrado: e.target.checked })}
+                            style={{ width:'15px', height:'15px', cursor:'pointer' }} />
+                          Calcular metrado con las medidas de campo
+                        </label>
                       </div>
                     )}
                   </div>
