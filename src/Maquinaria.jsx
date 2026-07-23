@@ -49,6 +49,33 @@ export default function Maquinaria({ irAIncidente }) {
   };
   useEffect(() => { cargar(); }, [filtroOrigen, filtroEstado]);
 
+  // Libera una máquina que quedó marcada como ocupada sin parte abierto.
+  const liberarMaquina = async (m) => {
+    const c = await Swal.fire({
+      title: `Liberar ${m.codigo}`,
+      html: 'Esta máquina figura como ocupada pero no tiene ningún parte abierto.'
+            + '<br><br>¿Quieres devolverla a <b>Disponible</b>?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, liberar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#16a34a',
+    });
+    if (!c.isConfirmed) return;
+    try {
+      const r = await fetch(`${API_OPS}/modelos/${m.id}/liberar/`, { method: 'POST' });
+      if (r.ok) {
+        cargar();
+        Swal.fire({ icon: 'success', title: 'Máquina liberada', timer: 1400, showConfirmButton: false });
+      } else {
+        const e = await r.json().catch(() => ({}));
+        Swal.fire('No se pudo', e.detail || 'Inténtalo de nuevo.', 'error');
+      }
+    } catch (e) {
+      Swal.fire('Error', 'Sin conexión con el servidor.', 'error');
+    }
+  };
+
   // Pone / quita una máquina de mantenimiento (con observación).
   const toggleMantenimiento = async (m) => {
     const entrando = !m.en_mantenimiento;
@@ -470,7 +497,27 @@ export default function Maquinaria({ irAIncidente }) {
                     </div>
                   )}
                   {ocupada && !m.parte_activo && (
-                    <div style={{ marginTop: '10px', fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>No disponible (sin parte vinculado)</div>
+                    <div style={{ marginTop: '10px', padding: '10px', background: '#fef2f2', borderRadius: '6px', border: '1px solid #fecaca' }}>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', marginBottom: m.ultimo_parte ? '8px' : '0' }}>
+                        Marcada como ocupada, pero sin parte abierto.
+                      </div>
+                      {m.ultimo_parte && (
+                        <div style={{ fontSize: '12px', marginBottom: '8px' }}>
+                          <div style={{ color: '#64748b', fontSize: '11px', marginBottom: '2px' }}>Último parte: <b style={{ color: '#b91c1c' }}>{m.ultimo_parte.part_number}</b> · {m.ultimo_parte.date}</div>
+                          {m.ultimo_parte.incidente_lugar && <div style={{ color: '#64748b', fontSize: '11px' }}>📍 {m.ultimo_parte.incidente_lugar}</div>}
+                          {m.ultimo_parte.incidente_id && irAIncidente && (
+                            <button onClick={(e) => { e.stopPropagation(); irAIncidente(m.ultimo_parte.incidente_id); }}
+                              style={{ marginTop: '6px', width: '100%', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', padding: '7px 11px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                              <FaExternalLinkAlt size={10} /> Ir a la incidencia
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <button onClick={(e) => { e.stopPropagation(); liberarMaquina(m); }}
+                        style={{ width: '100%', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '6px', padding: '7px 11px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                        <FaCheckCircle size={11} /> Liberar máquina
+                      </button>
+                    </div>
                   )}
 
                   {/* Info de mantenimiento si aplica */}
