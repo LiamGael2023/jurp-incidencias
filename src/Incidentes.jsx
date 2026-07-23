@@ -397,8 +397,17 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           const f = new Date(inc.created_at);
           const fechaCod = `${String(f.getDate()).padStart(2,'0')}${String(f.getMonth()+1).padStart(2,'0')}${f.getFullYear()}`;
           const codigoIncidente = `INCIDENTE-${String(inc.id).padStart(3,'0')}-${fechaCod}`;
+          // Coordenadas GPS que manda la app móvil. El backend puede nombrarlas
+          // de varias formas, así que probamos las más habituales.
+          const latRaw = inc.latitude ?? inc.latitude_marker ?? inc.lat ?? inc.latitud ?? null;
+          const lngRaw = inc.longitude ?? inc.longitude_marker ?? inc.lng ?? inc.lon ?? inc.longitud ?? null;
+          const latNum = latRaw !== null && latRaw !== '' ? parseFloat(latRaw) : null;
+          const lngNum = lngRaw !== null && lngRaw !== '' ? parseFloat(lngRaw) : null;
+          const tieneCoords = Number.isFinite(latNum) && Number.isFinite(lngNum);
           return {
             id: inc.id, codigoIncidente, codigo: inc.code || 'Sin Código', lugar: inc.location_text || '-',
+            latitud: tieneCoords ? latNum : null,
+            longitud: tieneCoords ? lngNum : null,
             tipo: tipoNombre, tipoBase, gravedad: inc.severity || 'lev', estado: inc.status || 'pat',
             usuario: inc.user?.username || 'Sistema',
             fecha: new Date(inc.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute:'2-digit' }),
@@ -1340,6 +1349,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   };
 
   const uMetrado = (u) => ({ m: 'm', m2: 'm²', m3: 'm³', glb: 'glb' }[u] || u || 'm³');
+  const txtCoords = (i) => (i.latitud != null && i.longitud != null)
+    ? `${i.latitud.toFixed(6)}, ${i.longitud.toFixed(6)}`
+    : 'Sin GPS';
+  const urlMaps = (i) => (i.latitud != null && i.longitud != null)
+    ? `https://www.google.com/maps?q=${i.latitud},${i.longitud}` : '';
   const txtEstado = (e) => e === 'pat' ? 'Pendiente' : e === 'ate' ? 'En Atención' : e === 'cer' ? 'Cerrado' : e;
   const txtGravedad = (g) => g === 'lev' ? 'Leve' : g === 'mod' ? 'Moderada' : g === 'gra' ? 'Grave' : g;
 
@@ -1394,17 +1408,17 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       const totalGeneral = lista.reduce((a, i) => a + (datos[String(i.id)]?.total || 0), 0);
       autoTable(doc, {
         startY: 34,
-        head: [['CÓDIGO', 'TIPO', 'UBICACIÓN', 'FECHA', 'ESTADO', 'GRAVEDAD', 'REPORTADO POR', 'COSTO S/']],
+        head: [['CÓDIGO', 'TIPO', 'UBICACIÓN', 'COORDENADAS', 'FECHA', 'ESTADO', 'GRAVEDAD', 'REPORTADO POR', 'COSTO S/']],
         body: lista.map(i => ([
-          i.codigoIncidente || '—', i.tipo || '—', i.lugar || '—', i.fecha || '—',
+          i.codigoIncidente || '—', i.tipo || '—', i.lugar || '—', txtCoords(i), i.fecha || '—',
           txtEstado(i.estado), txtGravedad(i.gravedad), i.usuario || '—',
           (datos[String(i.id)]?.total || 0).toFixed(2),
         ])),
-        foot: [['', '', '', '', '', '', 'TOTAL GENERAL', totalGeneral.toFixed(2)]],
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [20, 99, 165], textColor: 255, fontSize: 8 },
+        foot: [['', '', '', '', '', '', '', 'TOTAL GENERAL', totalGeneral.toFixed(2)]],
+        styles: { fontSize: 7.5, cellPadding: 2 },
+        headStyles: { fillColor: [20, 99, 165], textColor: 255, fontSize: 7.5 },
         footStyles: { fillColor: [224, 242, 254], textColor: [20, 99, 165], fontStyle: 'bold' },
-        columnStyles: { 7: { halign: 'right' } },
+        columnStyles: { 3: { fontSize: 7 }, 8: { halign: 'right' } },
         alternateRowStyles: { fillColor: [248, 250, 252] },
         margin: { left: 10, right: 10 },
       });
@@ -1422,6 +1436,17 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         doc.text(`${inc.lugar || '—'}  |  ${inc.fecha || '—'}  |  ${txtEstado(inc.estado)} · ${txtGravedad(inc.gravedad)}`, 10, 15.5);
 
         let y = 26;
+        // Coordenadas GPS con enlace a Google Maps.
+        if (inc.latitud != null && inc.longitud != null) {
+          doc.setTextColor(71, 85, 105);
+          doc.setFontSize(8.5); doc.setFont(undefined, 'bold');
+          doc.text('Coordenadas GPS:', 10, y);
+          doc.setFont(undefined, 'normal');
+          doc.text(txtCoords(inc), 42, y);
+          doc.setTextColor(20, 99, 165);
+          doc.textWithLink('Ver en Google Maps', 90, y, { url: urlMaps(inc) });
+          y += 7;
+        }
         const bloque = (titulo, head, body, foots) => {
           if (!body.length) return;
           doc.setTextColor(20, 99, 165);
@@ -1501,9 +1526,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
 
       // ══ HOJA 1: RESUMEN ══
       const ws = wb.addWorksheet('Resumen');
-      ws.columns = [{ width: 26 }, { width: 30 }, { width: 32 }, { width: 18 },
-                    { width: 14 }, { width: 13 }, { width: 18 }, { width: 15 }];
-      for (let r = 1; r <= 3; r++) for (let c = 1; c <= 8; c++) ws.getCell(r, c).fill = azul;
+      ws.columns = [{ width: 26 }, { width: 30 }, { width: 32 }, { width: 13 }, { width: 13 },
+                    { width: 20 }, { width: 18 }, { width: 14 }, { width: 13 }, { width: 18 }, { width: 15 }];
+      for (let r = 1; r <= 3; r++) for (let c = 1; c <= 11; c++) ws.getCell(r, c).fill = azul;
       ws.getRow(1).height = 28; ws.getRow(2).height = 20; ws.getRow(3).height = 18;
       try {
         const logoB64 = await imgToBase64(logo);
@@ -1512,21 +1537,22 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 75, height: 65 } });
         }
       } catch (e) {}
-      ws.mergeCells('B1:H1');
+      ws.mergeCells('B1:K1');
       ws.getCell('B1').value = 'JUNTA DE RIEGO PRESURIZADO';
       ws.getCell('B1').font = { bold: true, color: { argb: 'FFFFFF' }, size: 12 };
       ws.getCell('B1').alignment = { vertical: 'middle' };
-      ws.mergeCells('B2:H2');
+      ws.mergeCells('B2:K2');
       ws.getCell('B2').value = 'Reporte General de Incidencias';
       ws.getCell('B2').font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
       ws.getCell('B2').alignment = { vertical: 'middle' };
-      ws.mergeCells('B3:H3');
+      ws.mergeCells('B3:K3');
       ws.getCell('B3').value = `Generado: ${new Date().toLocaleString('es-PE')} · ${lista.length} incidencia(s)`;
       ws.getCell('B3').font = { italic: true, size: 9, color: { argb: 'D0D5DD' } };
       ws.getCell('B3').alignment = { vertical: 'middle' };
       ws.getRow(4).height = 6;
 
-      const cab = ['CÓDIGO', 'TIPO', 'UBICACIÓN', 'FECHA', 'ESTADO', 'GRAVEDAD', 'REPORTADO POR', 'COSTO S/'];
+      const cab = ['CÓDIGO', 'TIPO', 'UBICACIÓN', 'LATITUD', 'LONGITUD', 'VER EN MAPA',
+                   'FECHA', 'ESTADO', 'GRAVEDAD', 'REPORTADO POR', 'COSTO S/'];
       cab.forEach((h, i) => {
         const c = ws.getCell(5, i + 1);
         c.value = h; c.fill = azul; c.border = borde;
@@ -1538,27 +1564,41 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       lista.forEach((inc, i) => {
         const r = 6 + i;
         const tot = datos[String(inc.id)]?.total || 0;
-        const fila = [inc.codigoIncidente || '—', inc.tipo || '—', inc.lugar || '—', inc.fecha || '—',
-                      txtEstado(inc.estado), txtGravedad(inc.gravedad), inc.usuario || '—', tot];
+        const tieneGps = inc.latitud != null && inc.longitud != null;
+        const fila = [inc.codigoIncidente || '—', inc.tipo || '—', inc.lugar || '—',
+                      tieneGps ? inc.latitud : '—', tieneGps ? inc.longitud : '—', '',
+                      inc.fecha || '—', txtEstado(inc.estado), txtGravedad(inc.gravedad),
+                      inc.usuario || '—', tot];
         fila.forEach((v, ci) => {
           const c = ws.getCell(r, ci + 1);
           c.value = v; c.border = borde; c.font = { size: 9 };
-          if (ci === 7) { c.numFmt = '#,##0.00'; c.alignment = { horizontal: 'right' }; }
+          if (ci === 3 || ci === 4) { if (tieneGps) c.numFmt = '0.000000'; c.alignment = { horizontal: 'right' }; }
+          if (ci === 10) { c.numFmt = '#,##0.00'; c.alignment = { horizontal: 'right' }; }
         });
+        // Enlace clicable a Google Maps
+        if (tieneGps) {
+          const cMapa = ws.getCell(r, 6);
+          cMapa.value = { text: 'Abrir mapa', hyperlink: urlMaps(inc) };
+          cMapa.font = { size: 9, color: { argb: '1463A5' }, underline: true };
+          cMapa.alignment = { horizontal: 'center' };
+        } else {
+          ws.getCell(r, 6).value = '—';
+          ws.getCell(r, 6).alignment = { horizontal: 'center' };
+        }
       });
 
       const rTot = 6 + lista.length;
-      ws.mergeCells(`A${rTot}:G${rTot}`);
+      ws.mergeCells(`A${rTot}:J${rTot}`);
       ws.getCell(`A${rTot}`).value = 'TOTAL GENERAL';
       ws.getCell(`A${rTot}`).font = { bold: true, size: 10, color: { argb: '1463A5' } };
       ws.getCell(`A${rTot}`).alignment = { horizontal: 'right' };
       ws.getCell(`A${rTot}`).fill = azulClaro;
-      ws.getCell(`H${rTot}`).value = lista.reduce((a, i) => a + (datos[String(i.id)]?.total || 0), 0);
-      ws.getCell(`H${rTot}`).numFmt = '#,##0.00';
-      ws.getCell(`H${rTot}`).font = { bold: true, size: 11, color: { argb: '1463A5' } };
-      ws.getCell(`H${rTot}`).fill = azulClaro;
-      ws.getCell(`H${rTot}`).alignment = { horizontal: 'right' };
-      ws.getCell(`H${rTot}`).border = borde;
+      ws.getCell(`K${rTot}`).value = lista.reduce((a, i) => a + (datos[String(i.id)]?.total || 0), 0);
+      ws.getCell(`K${rTot}`).numFmt = '#,##0.00';
+      ws.getCell(`K${rTot}`).font = { bold: true, size: 11, color: { argb: '1463A5' } };
+      ws.getCell(`K${rTot}`).fill = azulClaro;
+      ws.getCell(`K${rTot}`).alignment = { horizontal: 'right' };
+      ws.getCell(`K${rTot}`).border = borde;
 
       // ══ HOJA 2: DETALLE POR INCIDENCIA ══
       const wd = wb.addWorksheet('Detalle');
@@ -1607,6 +1647,21 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         wd.mergeCells(`A${f}:G${f}`);
         wd.getCell(`A${f}`).value = `${inc.lugar || '—'}  |  ${inc.fecha || '—'}  |  ${txtEstado(inc.estado)} · ${txtGravedad(inc.gravedad)}  |  Reportado por: ${inc.usuario || '—'}`;
         wd.getCell(`A${f}`).font = { size: 9, color: { argb: '64748B' } };
+        f += 1;
+        // Coordenadas GPS con enlace a Google Maps
+        if (inc.latitud != null && inc.longitud != null) {
+          wd.getCell(`A${f}`).value = 'Coordenadas GPS:';
+          wd.getCell(`A${f}`).font = { size: 9, bold: true, color: { argb: '64748B' } };
+          wd.getCell(`B${f}`).value = txtCoords(inc);
+          wd.getCell(`B${f}`).font = { size: 9, color: { argb: '334155' } };
+          wd.getCell(`C${f}`).value = { text: 'Abrir en Google Maps', hyperlink: urlMaps(inc) };
+          wd.getCell(`C${f}`).font = { size: 9, color: { argb: '1463A5' }, underline: true };
+        } else {
+          wd.getCell(`A${f}`).value = 'Coordenadas GPS:';
+          wd.getCell(`A${f}`).font = { size: 9, bold: true, color: { argb: '64748B' } };
+          wd.getCell(`B${f}`).value = 'Sin GPS';
+          wd.getCell(`B${f}`).font = { size: 9, italic: true, color: { argb: '94A3B8' } };
+        }
         f += 2;
 
         tablaDetalle(['CARGO', 'ORIGEN', 'N° PERS.', 'HORAS', 'P. UNIT.', 'TOTAL S/'],
