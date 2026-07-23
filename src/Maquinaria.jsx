@@ -11,6 +11,10 @@ import {
   FaDownload, FaFilePdf, FaMapMarkerAlt, FaTools, FaClock, FaHistory, FaCog, FaSearch, FaExternalLinkAlt,
 } from 'react-icons/fa';
 import MantenedorEquipos from './MantenedorEquipos';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import ExcelJS from 'exceljs';
+import logo from './assets/jurp.png';
 
 const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
@@ -104,6 +108,199 @@ export default function Maquinaria({ irAIncidente }) {
   const abrirPdfParte = async (parteId, nombre) => {
     const url = `${API_OPS}/daily-part-heavy-equipments/${parteId}/pdf/`;
     setPdfModal({ url, nombre: nombre || `Parte ${parteId}` });
+  };
+
+  // Convierte una imagen a base64 (para el logo en los reportes).
+  const imgToBase64 = (src) => new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width; canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+
+  // Unidad legible del metrado (m3 → m³).
+  const uMet = (u) => ({ m: 'm', m2: 'm²', m3: 'm³', glb: 'glb' }[u] || u || 'm³');
+
+  // ── Exportar el historial de partes a Excel ─────────────────────────────
+  const exportarHistorialExcel = async () => {
+    if (!historial || !detalle) return;
+    const maq = detalle;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Historial de Partes');
+    ws.columns = [{ width: 20 }, { width: 12 }, { width: 11 }, { width: 26 }, { width: 14 },
+                  { width: 11 }, { width: 12 }, { width: 22 }, { width: 16 }, { width: 14 }];
+    const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1463A5' } };
+    const grisClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9' } };
+    const borde = { top:{style:'thin',color:{argb:'E2E8F0'}}, bottom:{style:'thin',color:{argb:'E2E8F0'}}, left:{style:'thin',color:{argb:'E2E8F0'}}, right:{style:'thin',color:{argb:'E2E8F0'}} };
+
+    for (let r = 1; r <= 3; r++) for (let c = 1; c <= 10; c++) ws.getCell(r, c).fill = azul;
+    ws.getRow(1).height = 28; ws.getRow(2).height = 20; ws.getRow(3).height = 18;
+    try {
+      const logoB64 = await imgToBase64(logo);
+      if (logoB64) {
+        const imgId = wb.addImage({ base64: logoB64.split(',')[1], extension: 'png' });
+        ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 75, height: 65 } });
+      }
+    } catch (e) {}
+    ws.mergeCells('C1:J1');
+    ws.getCell('C1').value = 'JUNTA DE RIEGO PRESURIZADO';
+    ws.getCell('C1').font = { bold: true, color: { argb: 'FFFFFF' }, size: 12 };
+    ws.getCell('C1').alignment = { vertical: 'middle' };
+    ws.mergeCells('C2:J2');
+    ws.getCell('C2').value = `Historial de Partes Diarios · ${maq.codigo}`;
+    ws.getCell('C2').font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
+    ws.getCell('C2').alignment = { vertical: 'middle' };
+    ws.mergeCells('C3:J3');
+    ws.getCell('C3').value = `Generado: ${new Date().toLocaleString('es-PE')}`;
+    ws.getCell('C3').font = { italic: true, size: 9, color: { argb: 'D0D5DD' } };
+    ws.getCell('C3').alignment = { vertical: 'middle' };
+    ws.getRow(4).height = 6;
+
+    // Datos de la máquina
+    const datos = [
+      ['Código', maq.codigo], ['Equipo', `${maq.equipo} · ${maq.marca}`],
+      ['Modelo', maq.modelo || '—'], ['Placa', maq.placa || '—'],
+      ['Origen', maq.origen === 'JURP' ? 'JURP (propia)' : 'Externa'],
+    ];
+    datos.forEach(([k, v], i) => {
+      const r = 5 + i;
+      ws.getCell(`A${r}`).value = k;
+      ws.getCell(`A${r}`).font = { bold: true, size: 9, color: { argb: '64748B' } };
+      ws.getCell(`A${r}`).fill = grisClaro;
+      ws.mergeCells(`B${r}:J${r}`);
+      ws.getCell(`B${r}`).value = v;
+      ws.getCell(`B${r}`).font = { size: 10 };
+    });
+
+    const hRow = 5 + datos.length + 1;
+    const cabeceras = ['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'VOLUMEN',
+                       'HORAS', 'COMBUST.', 'PROVEEDOR', 'N° INCIDENCIA', 'TOTAL S/'];
+    cabeceras.forEach((h, i) => {
+      const c = ws.getCell(hRow, i + 1);
+      c.value = h; c.fill = azul; c.border = borde;
+      c.font = { bold: true, color: { argb: 'FFFFFF' }, size: 9 };
+      c.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+    ws.getRow(hRow).height = 20;
+
+    historial.partes.forEach((p, i) => {
+      const r = hRow + 1 + i;
+      const fila = [
+        p.part_number,
+        p.date || '—',
+        p.cerrado ? 'CERRADO' : 'ABIERTO',
+        p.activities || '—',
+        `${(parseFloat(p.metrado) || 0).toFixed(2)} ${uMet(p.metrado_unidad)}`,
+        parseFloat(p.horas) || 0,
+        parseFloat(p.fuel_gallons) || 0,
+        p.provider || '—',
+        p.incidente_codigo || (p.incidente_id ? `#${p.incidente_id}` : '—'),
+        parseFloat(p.costo) || 0,
+      ];
+      fila.forEach((v, ci) => {
+        const c = ws.getCell(r, ci + 1);
+        c.value = v; c.border = borde; c.font = { size: 9 };
+        if (ci >= 5 && ci !== 7 && ci !== 8) c.alignment = { horizontal: 'right' };
+        if (ci === 9) c.numFmt = '#,##0.00';
+        if (ci === 5 || ci === 6) c.numFmt = '#,##0.00';
+      });
+    });
+
+    // Totales
+    const tRow = hRow + 1 + historial.partes.length;
+    ws.getCell(tRow, 1).value = `TOTAL · ${historial.total_partes} parte(s)`;
+    ws.getCell(tRow, 1).font = { bold: true, size: 10 };
+    ws.getCell(tRow, 6).value = parseFloat(historial.total_horas) || 0;
+    ws.getCell(tRow, 7).value = historial.partes.reduce((a, p) => a + (parseFloat(p.fuel_gallons) || 0), 0);
+    ws.getCell(tRow, 10).value = parseFloat(historial.total_costo) || 0;
+    [6, 7, 10].forEach(ci => {
+      const c = ws.getCell(tRow, ci);
+      c.font = { bold: true, size: 10 }; c.numFmt = '#,##0.00';
+      c.alignment = { horizontal: 'right' };
+    });
+    for (let c = 1; c <= 10; c++) { ws.getCell(tRow, c).fill = grisClaro; ws.getCell(tRow, c).border = borde; }
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Historial_${maq.codigo}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ── Exportar el historial de partes a PDF ───────────────────────────────
+  const exportarHistorialPDF = async () => {
+    if (!historial || !detalle) return;
+    const maq = detalle;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const W = doc.internal.pageSize.getWidth();
+
+    doc.setFillColor(20, 99, 165);
+    doc.rect(0, 0, W, 26, 'F');
+    try {
+      const logoB64 = await imgToBase64(logo);
+      if (logoB64) doc.addImage(logoB64, 'PNG', 10, 4, 18, 18);
+    } catch (e) {}
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(13); doc.setFont(undefined, 'bold');
+    doc.text('JUNTA DE RIEGO PRESURIZADO', 32, 11);
+    doc.setFontSize(10); doc.setFont(undefined, 'normal');
+    doc.text(`Historial de Partes Diarios · ${maq.codigo}`, 32, 17);
+    doc.setFontSize(8);
+    doc.text(`Generado: ${new Date().toLocaleString('es-PE')}`, 32, 22);
+
+    doc.setTextColor(60, 60, 60);
+    doc.setFontSize(9);
+    const infoY = 33;
+    doc.text(`Equipo: ${maq.equipo} · ${maq.marca}`, 10, infoY);
+    doc.text(`Modelo: ${maq.modelo || '—'}`, 10, infoY + 5);
+    doc.text(`Placa: ${maq.placa || '—'}`, 110, infoY);
+    doc.text(`Origen: ${maq.origen === 'JURP' ? 'JURP (propia)' : 'Externa'}`, 110, infoY + 5);
+
+    const cuerpo = historial.partes.map(p => ([
+      p.part_number,
+      p.date || '—',
+      p.cerrado ? 'CERRADO' : 'ABIERTO',
+      p.activities || '—',
+      `${(parseFloat(p.metrado) || 0).toFixed(2)} ${uMet(p.metrado_unidad)}`,
+      `${(parseFloat(p.horas) || 0).toFixed(2)} HE`,
+      `${(parseFloat(p.fuel_gallons) || 0).toFixed(2)} Gls`,
+      p.provider || '—',
+      p.incidente_codigo || (p.incidente_id ? `#${p.incidente_id}` : '—'),
+      `S/ ${(parseFloat(p.costo) || 0).toFixed(2)}`,
+    ]));
+
+    autoTable(doc, {
+      startY: infoY + 11,
+      head: [['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'VOLUMEN', 'HORAS', 'COMBUST.', 'PROVEEDOR', 'N° INCIDENCIA', 'TOTAL']],
+      body: cuerpo,
+      foot: [[
+        `TOTAL · ${historial.total_partes} parte(s)`, '', '', '', '',
+        `${(parseFloat(historial.total_horas) || 0).toFixed(2)} HE`,
+        `${historial.partes.reduce((a, p) => a + (parseFloat(p.fuel_gallons) || 0), 0).toFixed(2)} Gls`,
+        '', '',
+        `S/ ${(parseFloat(historial.total_costo) || 0).toFixed(2)}`,
+      ]],
+      styles: { fontSize: 7.5, cellPadding: 2 },
+      headStyles: { fillColor: [20, 99, 165], textColor: 255, fontSize: 7.5, halign: 'center' },
+      footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 7.5 },
+      columnStyles: {
+        4: { halign: 'right' }, 5: { halign: 'right' },
+        6: { halign: 'right' }, 9: { halign: 'right' },
+      },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: 10, right: 10 },
+    });
+
+    doc.save(`Historial_${maq.codigo}_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   // Filtra por texto de búsqueda (código, equipo, marca, modelo, placa).
@@ -384,8 +581,22 @@ export default function Maquinaria({ irAIncidente }) {
               )}
 
               {/* Lista de partes */}
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <FaHistory size={11} /> Historial de partes diarios
+              <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <FaHistory size={11} /> Historial de partes diarios
+                </div>
+                {historial && historial.partes && historial.partes.length > 0 && (
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                    <button onClick={exportarHistorialExcel} title="Descargar en Excel"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: '#dcfce7', color: '#15803d', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                      <FaDownload size={11} /> Excel
+                    </button>
+                    <button onClick={exportarHistorialPDF} title="Descargar en PDF"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                      <FaFilePdf size={11} /> PDF
+                    </button>
+                  </div>
+                )}
               </div>
 
               {cargandoHist ? (
@@ -410,8 +621,11 @@ export default function Maquinaria({ irAIncidente }) {
                         <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>FECHA</th>
                         <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>ESTADO</th>
                         <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>ACTIVIDAD</th>
+                        <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>VOLUMEN</th>
                         <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>HORAS</th>
                         <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>COMBUST.</th>
+                        <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>PROVEEDOR</th>
+                        <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>N° INCIDENCIA</th>
                         <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>TOTAL</th>
                         <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '11px', color: '#475569' }}>PDF</th>
                       </tr>
@@ -427,8 +641,11 @@ export default function Maquinaria({ irAIncidente }) {
                             </span>
                           </td>
                           <td style={{ padding: '11px 8px', color: '#475569', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.activities || ''}>{p.activities || '—'}</td>
+                          <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.metrado || 0)} {uMet(p.metrado_unidad)}</td>
                           <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.horas)} HE</td>
                           <td style={{ padding: '11px 8px', textAlign: 'right', color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.fuel_gallons || 0)} Gls</td>
+                          <td style={{ padding: '11px 8px', color: '#475569', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.provider || ''}>{p.provider || '—'}</td>
+                          <td style={{ padding: '11px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{p.incidente_codigo || (p.incidente_id ? `#${p.incidente_id}` : '—')}</td>
                           <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 700, color: '#1463A5', whiteSpace: 'nowrap' }}>S/ {fmtNum(p.costo)}</td>
                           <td style={{ padding: '11px 14px', textAlign: 'right' }}>
                             <button onClick={() => abrirPdfParte(p.id, p.part_number)} title="Ver PDF"
@@ -442,8 +659,11 @@ export default function Maquinaria({ irAIncidente }) {
                     <tfoot>
                       <tr style={{ background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
                         <td colSpan="4" style={{ padding: '13px 14px', fontWeight: 700, color: '#334155' }}>TOTAL · {historial.total_partes} parte{historial.total_partes !== 1 ? 's' : ''}</td>
+                        <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(historial.partes.reduce((s, p) => s + (parseFloat(p.metrado) || 0), 0))}</td>
                         <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(historial.total_horas)} HE</td>
                         <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(historial.partes.reduce((s, p) => s + (parseFloat(p.fuel_gallons) || 0), 0))} Gls</td>
+                        <td style={{ padding: '13px 8px' }}></td>
+                        <td style={{ padding: '13px 8px' }}></td>
                         <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 800, fontSize: '15px', color: '#1463A5', whiteSpace: 'nowrap' }}>S/ {fmtNum(historial.total_costo)}</td>
                         <td style={{ padding: '13px 14px' }}></td>
                       </tr>
