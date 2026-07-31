@@ -38,8 +38,15 @@ function Login({ onLoginSuccess }) {
             localStorage.setItem('userToken', token);
             // 2. GUARDAMOS EL NOMBRE DE USUARIO
             localStorage.setItem('userName', username); 
+            // 3. GUARDAMOS LOS GRUPOS DEL USUARIO (para permisos, ej. subir reportes)
+            const grupos = resultado.user?.groups || [];
+            localStorage.setItem('userGroups', JSON.stringify(grupos));
+            // 4. GUARDAMOS EL ID DEL USUARIO
+            if (resultado.user?.id != null) {
+              localStorage.setItem('userId', String(resultado.user.id));
+            }
             
-            // 3. Le pasamos AMBOS datos a App.jsx
+            // 5. Le pasamos los datos a App.jsx
             onLoginSuccess(token, username);
         } else {
             setError('Error de servidor: No se recibió un token válido.');
