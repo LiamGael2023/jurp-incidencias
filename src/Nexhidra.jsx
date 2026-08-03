@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import logoJurp from './assets/nexhidra/logo-jurp.png';
 import heroCanal from './assets/nexhidra/hero-canal.jpg';
-import appHydrometric from './assets/nexhidra/app-caudixa.jpg';
+import appHydrometrix from './assets/nexhidra/app-caudixa.jpg';
 import appPluvira from './assets/nexhidra/app-pluvira.jpg';
 import appSentria from './assets/nexhidra/app-sentria.jpg';
 
@@ -100,8 +100,8 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
 
   const soluciones = [
     {
-      key: 'hydrometric', src: appHydrometric, color: AZUL, tint: '#e3f0fc',
-      pre: 'HYDROMETRI', fin: 'C', tagline: 'MONITOREO INTELIGENTE DEL AGUA', icono: P.gota,
+      key: 'hydrometrix', src: appHydrometrix, color: AZUL, tint: '#e3f0fc',
+      pre: 'HYDROMETRI', fin: 'X', tagline: 'MONITOREO INTELIGENTE DEL AGUA', icono: P.gota,
       desc: 'Monitoreamos en tiempo real el caudal y la calidad del agua para una operación eficiente y sostenible.',
       features: [
         { d: P.gota, label: 'CAUDAL EN TIEMPO REAL' },

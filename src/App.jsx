@@ -11,7 +11,7 @@ import Maquinaria from './Maquinaria';
 import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
-const URL_HYDROMETRIC = 'http://sistema.jriegopresurizado.org.pe/';
+const URL_HYDROMETRIX = 'http://sistema.jriegopresurizado.org.pe/';
 
 /* Menu completo. "apps" indica desde que tarjeta de NEXHIDRO se ve cada opcion. */
 const MENU = [
@@ -107,16 +107,16 @@ function App() {
   // 1) Intro NEXHIDRO
   //    PLUVIRA  -> login, menu completo sin Vigilancia
   //    SENTRIA  -> login, solo el menu Vigilancia
-  //    HYDROMETRIC -> sale al sistema de riego presurizado
+  //    HYDROMETRIX -> sale al sistema de riego presurizado
   if (mostrarIntro) {
     return (
       <Nexhidra
         onEntrar={() => salirDeIntro('pluvira')}
         onSentria={() => salirDeIntro('sentria')}
-        onCaudixa={() => { window.location.href = URL_HYDROMETRIC; }}
+        onCaudixa={() => { window.location.href = URL_HYDROMETRIX; }}
         hrefPluvira="?app=pluvira"
         hrefSentria="?app=sentria"
-        hrefCaudixa={URL_HYDROMETRIC}
+        hrefCaudixa={URL_HYDROMETRIX}
       />
     );
   }
