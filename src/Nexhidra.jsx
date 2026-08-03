@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import logoJurp from './assets/nexhidra/logo-jurp.png';
 import heroCanal from './assets/nexhidra/hero-canal.jpg';
-import appCaudixa from './assets/nexhidra/app-caudixa.jpg';
+import appHydrometric from './assets/nexhidra/app-caudixa.jpg';
 import appPluvira from './assets/nexhidra/app-pluvira.jpg';
 import appSentria from './assets/nexhidra/app-sentria.jpg';
 
@@ -100,8 +100,8 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
 
   const soluciones = [
     {
-      key: 'caudixa', src: appCaudixa, color: AZUL, tint: '#e3f0fc',
-      pre: 'CAUDI', fin: 'XA', tagline: 'MONITOREO INTELIGENTE DEL AGUA', icono: P.gota,
+      key: 'hydrometric', src: appHydrometric, color: AZUL, tint: '#e3f0fc',
+      pre: 'HYDROMETRI', fin: 'C', tagline: 'MONITOREO INTELIGENTE DEL AGUA', icono: P.gota,
       desc: 'Monitoreamos en tiempo real el caudal y la calidad del agua para una operación eficiente y sostenible.',
       features: [
         { d: P.gota, label: 'CAUDAL EN TIEMPO REAL' },
@@ -155,7 +155,7 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
               <img className="nx-logo" src={logoJurp} alt="Logo JURP" />
               <div>
                 <div className="nx-jurp">JURP</div>
-                <div className="nx-nex"><span>NEX</span><span className="nx-hidra">HIDRA</span></div>
+                <div className="nx-nex"><span>NEX</span><span className="nx-hidra">HIDRO</span></div>
               </div>
             </div>
             <p className="nx-eyebrow">PLATAFORMA DIGITAL DE GESTIÓN INTELIGENTE</p>

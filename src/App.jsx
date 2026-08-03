@@ -11,9 +11,9 @@ import Maquinaria from './Maquinaria';
 import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
-const URL_CAUDIXA = 'http://sistema.jriegopresurizado.org.pe/';
+const URL_HYDROMETRIC = 'http://sistema.jriegopresurizado.org.pe/';
 
-/* Menu completo. "apps" indica desde que tarjeta de NEXHIDRA se ve cada opcion. */
+/* Menu completo. "apps" indica desde que tarjeta de NEXHIDRO se ve cada opcion. */
 const MENU = [
   { clave: 'mapa',         titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />, apps: ['pluvira'] },
   { clave: 'lista',        titulo: 'Incidentes',    icono: <FaListUl />,       apps: ['pluvira'] },
@@ -36,12 +36,12 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('userToken'));
   const [nombreUsuario, setNombreUsuario] = useState(localStorage.getItem('userName') || '');
 
-  // Que tarjeta de NEXHIDRA se eligio: define que opciones de menu se muestran.
+  // Que tarjeta de NEXHIDRO se eligio: define que opciones de menu se muestran.
   const [appElegida, setAppElegida] = useState(
     () => appDeURL() || localStorage.getItem('appElegida') || 'pluvira'
   );
 
-  // Intro NEXHIDRA: se muestra antes del login. Si ya hay sesión activa se salta.
+  // Intro NEXHIDRO: se muestra antes del login. Si ya hay sesión activa se salta.
   const [mostrarIntro, setMostrarIntro] = useState(
     () => !appDeURL() && !localStorage.getItem('userToken')
   );
@@ -65,7 +65,7 @@ function App() {
   const menuVisible = MENU.filter((m) => m.apps.includes(appElegida));
 
   // Sale de la intro y deja una entrada en el historial, para que el boton
-  // "atras" del navegador regrese a NEXHIDRA.
+  // "atras" del navegador regrese a NEXHIDRO.
   const salirDeIntro = (app) => {
     localStorage.setItem('appElegida', app);
     setAppElegida(app);
@@ -95,7 +95,7 @@ function App() {
     setToken(null);
     setNombreUsuario('');
     setMenuPerfilAbierto(false);
-    setMostrarIntro(true);   // al cerrar sesión vuelve a la intro NEXHIDRA
+    setMostrarIntro(true);   // al cerrar sesión vuelve a la intro NEXHIDRO
   };
 
   // Navega a la vista Incidentes y solicita abrir un incidente concreto.
@@ -104,19 +104,19 @@ function App() {
     setVistaActual('lista');
   };
 
-  // 1) Intro NEXHIDRA
+  // 1) Intro NEXHIDRO
   //    PLUVIRA  -> login, menu completo sin Vigilancia
   //    SENTRIA  -> login, solo el menu Vigilancia
-  //    CAUDIXA  -> sale al sistema de riego presurizado
+  //    HYDROMETRIC -> sale al sistema de riego presurizado
   if (mostrarIntro) {
     return (
       <Nexhidra
         onEntrar={() => salirDeIntro('pluvira')}
         onSentria={() => salirDeIntro('sentria')}
-        onCaudixa={() => { window.location.href = URL_CAUDIXA; }}
+        onCaudixa={() => { window.location.href = URL_HYDROMETRIC; }}
         hrefPluvira="?app=pluvira"
         hrefSentria="?app=sentria"
-        hrefCaudixa={URL_CAUDIXA}
+        hrefCaudixa={URL_HYDROMETRIC}
       />
     );
   }
