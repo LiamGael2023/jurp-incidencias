@@ -181,12 +181,25 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
           <div className="nx-cards">
             {soluciones.map((s) => {
               const activo = typeof s.onClick === 'function';
+              // La tarjeta entera es un enlace: asi el clic con la rueda o
+              // ctrl+clic en cualquier punto abre una pestaña nueva.
+              const Tarjeta = activo ? 'a' : 'article';
+              const propsTarjeta = activo
+                ? {
+                    href: s.href || '#',
+                    onClick: (e) => {
+                      if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+                      e.preventDefault();
+                      s.onClick();
+                    },
+                  }
+                : {};
               return (
-                <article
+                <Tarjeta
                   key={s.key}
                   className={`nx-card ${activo ? 'nx-card-on' : ''}`}
                   style={{ '--c': s.color, '--tint': s.tint }}
-                  onClick={activo ? (e) => { if (!(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) s.onClick(); } : undefined}
+                  {...propsTarjeta}
                 >
                   <div className="nx-card-top">
                     <div className="nx-phone">
@@ -212,24 +225,13 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
                   </ul>
 
                   {activo ? (
-                    <a
-                      className="nx-btn"
-                      href={s.href || '#'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // ctrl / cmd / shift / alt: dejamos que el navegador
-                        // abra la pestaña o ventana nueva
-                        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-                        e.preventDefault();
-                        s.onClick();
-                      }}
-                    >
+                    <span className="nx-btn">
                       INGRESAR <Ico d={P.flecha} color="#fff" size={20} />
-                    </a>
+                    </span>
                   ) : (
                     <span className="nx-btn nx-btn-off">PRÓXIMAMENTE</span>
                   )}
-                </article>
+                </Tarjeta>
               );
             })}
           </div>
@@ -309,6 +311,7 @@ const CSS = `
 .nx-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:44px;margin-top:12px;}
 
 .nx-card{display:flex;flex-direction:column;gap:18px;padding:16px 14px 18px;border-radius:20px;
+  text-decoration:none;color:inherit;
   border:2px solid transparent;transition:background .25s,transform .25s,box-shadow .25s,border-color .25s;}
 .nx-card-on{cursor:pointer;}
 .nx-card-on:hover{background:var(--tint);border-color:var(--c);transform:translateY(-6px);
