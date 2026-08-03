@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css';
 import MapaChavimochic from './Mapa';
 import Login from './Login';
+import Nexhidra from './Nexhidra';
 import Incidentes from './Incidentes';
 import Estadisticas from './Estadisticas';
 import Vigilancia from './Vigilancia';
@@ -10,16 +11,58 @@ import Maquinaria from './Maquinaria';
 import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
+/* Menu completo. "apps" indica desde que tarjeta de NEXHIDRA se ve cada opcion. */
+const MENU = [
+  { clave: 'mapa',         titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />, apps: ['pluvira'] },
+  { clave: 'lista',        titulo: 'Incidentes',    icono: <FaListUl />,       apps: ['pluvira'] },
+  { clave: 'vigilancia',   titulo: 'Vigilancia',    icono: <FaShieldAlt />,    apps: ['sentria'] },
+  { clave: 'estadisticas', titulo: 'Estadísticas',  icono: <FaChartPie />,     apps: ['pluvira'] },
+  { clave: 'reportes',     titulo: 'Reportes',      icono: <FaFilePdf />,      apps: ['pluvira'] },
+  { clave: 'maquinaria',   titulo: 'Maquinaria',    icono: <FaTruck />,        apps: ['pluvira'] },
+];
+
+const vistaInicial = (app) => (app === 'sentria' ? 'vigilancia' : 'mapa');
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('userToken'));
   const [nombreUsuario, setNombreUsuario] = useState(localStorage.getItem('userName') || '');
 
+  // Que tarjeta de NEXHIDRA se eligio: define que opciones de menu se muestran.
+  const [appElegida, setAppElegida] = useState(
+    () => localStorage.getItem('appElegida') || 'pluvira'
+  );
+
+  // Intro NEXHIDRA: se muestra antes del login. Si ya hay sesión activa se salta.
+  const [mostrarIntro, setMostrarIntro] = useState(() => !localStorage.getItem('userToken'));
+
   const [menuPerfilAbierto, setMenuPerfilAbierto] = useState(false);
   const [menuLateralAbierto, setMenuLateralAbierto] = useState(true);
-  const [vistaActual, setVistaActual] = useState('mapa');
+  const [vistaActual, setVistaActual] = useState(
+    () => vistaInicial(localStorage.getItem('appElegida') || 'pluvira')
+  );
   // ID del incidente que se debe abrir automáticamente al entrar a la vista
   // Incidentes (usado por el enlace desde el Panel de Maquinaria).
   const [incidenteAbrir, setIncidenteAbrir] = useState(null);
+
+  // Opciones visibles segun la app elegida.
+  const menuVisible = MENU.filter((m) => m.apps.includes(appElegida));
+
+  // Sale de la intro y deja una entrada en el historial, para que el boton
+  // "atras" del navegador regrese a NEXHIDRA.
+  const salirDeIntro = (app) => {
+    localStorage.setItem('appElegida', app);
+    setAppElegida(app);
+    setVistaActual(vistaInicial(app));
+    window.history.pushState({ nexhidra: app }, '');
+    setMostrarIntro(false);
+  };
+
+  // El boton "atras" vuelve a mostrar la intro.
+  useEffect(() => {
+    const alRetroceder = () => setMostrarIntro(true);
+    window.addEventListener('popstate', alRetroceder);
+    return () => window.removeEventListener('popstate', alRetroceder);
+  }, []);
 
   const handleLoginSuccess = (newToken, newUserName) => {
     setToken(newToken);
@@ -31,9 +74,11 @@ function App() {
     localStorage.removeItem('userName');
     localStorage.removeItem('userGroups');
     localStorage.removeItem('userId');
+    localStorage.removeItem('appElegida');
     setToken(null);
     setNombreUsuario('');
     setMenuPerfilAbierto(false);
+    setMostrarIntro(true);   // al cerrar sesión vuelve a la intro NEXHIDRA
   };
 
   // Navega a la vista Incidentes y solicita abrir un incidente concreto.
@@ -42,6 +87,21 @@ function App() {
     setVistaActual('lista');
   };
 
+  // 1) Intro NEXHIDRA
+  //    PLUVIRA  -> login, menu completo sin Vigilancia
+  //    SENTRIA  -> login, solo el menu Vigilancia
+  //    CAUDIXA  -> sale al sistema de riego presurizado
+  if (mostrarIntro) {
+    return (
+      <Nexhidra
+        onEntrar={() => salirDeIntro('pluvira')}
+        onSentria={() => salirDeIntro('sentria')}
+        onCaudixa={() => { window.location.href = 'http://sistema.jriegopresurizado.org.pe/'; }}
+      />
+    );
+  }
+
+  // 2) Login
   if (!token) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
@@ -59,44 +119,18 @@ function App() {
         <ul className="tbl-nav">
           <li className="tbl-nav-label">{menuLateralAbierto ? 'Menú Principal' : '...'}</li>
 
-          <li className={`tbl-nav-item ${vistaActual === 'mapa' ? 'active' : ''}`} onClick={() => setVistaActual('mapa')}>
-            <div className="tbl-nav-link">
-              <span className="tbl-nav-icon"><FaMapMarkedAlt /></span>
-              {menuLateralAbierto && <span className="tbl-nav-title">Monitoreo GIS</span>}
-            </div>
-          </li>
-
-          <li className={`tbl-nav-item ${vistaActual === 'lista' ? 'active' : ''}`} onClick={() => setVistaActual('lista')}>
-            <div className="tbl-nav-link">
-              <span className="tbl-nav-icon"><FaListUl /></span>
-              {menuLateralAbierto && <span className="tbl-nav-title">Incidentes</span>}
-            </div>
-          </li>
-          <li className={`tbl-nav-item ${vistaActual === 'vigilancia' ? 'active' : ''}`} onClick={() => setVistaActual('vigilancia')}>
-            <div className="tbl-nav-link">
-              <span className="tbl-nav-icon"><FaShieldAlt /></span>
-              {menuLateralAbierto && <span className="tbl-nav-title">Vigilancia</span>}
-            </div>
-          </li>
-
-          <li className={`tbl-nav-item ${vistaActual === 'estadisticas' ? 'active' : ''}`} onClick={() => setVistaActual('estadisticas')}>
-            <div className="tbl-nav-link">
-              <span className="tbl-nav-icon"><FaChartPie /></span>
-              {menuLateralAbierto && <span className="tbl-nav-title">Estadísticas</span>}
-            </div>
-          </li>
-          <li className={`tbl-nav-item ${vistaActual === 'reportes' ? 'active' : ''}`} onClick={() => setVistaActual('reportes')}>
-            <div className="tbl-nav-link">
-              <span className="tbl-nav-icon"><FaFilePdf /></span>
-              {menuLateralAbierto && <span className="tbl-nav-title">Reportes</span>}
-            </div>
-          </li>
-          <li className={`tbl-nav-item ${vistaActual === 'maquinaria' ? 'active' : ''}`} onClick={() => setVistaActual('maquinaria')}>
-            <div className="tbl-nav-link">
-              <span className="tbl-nav-icon"><FaTruck /></span>
-              {menuLateralAbierto && <span className="tbl-nav-title">Maquinaria</span>}
-            </div>
-          </li>
+          {menuVisible.map((m) => (
+            <li
+              key={m.clave}
+              className={`tbl-nav-item ${vistaActual === m.clave ? 'active' : ''}`}
+              onClick={() => setVistaActual(m.clave)}
+            >
+              <div className="tbl-nav-link">
+                <span className="tbl-nav-icon">{m.icono}</span>
+                {menuLateralAbierto && <span className="tbl-nav-title">{m.titulo}</span>}
+              </div>
+            </li>
+          ))}
         </ul>
       </aside>
       <div className="tbl-main-content">
