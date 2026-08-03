@@ -11,6 +11,8 @@ import Maquinaria from './Maquinaria';
 import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
+const URL_CAUDIXA = 'http://sistema.jriegopresurizado.org.pe/';
+
 /* Menu completo. "apps" indica desde que tarjeta de NEXHIDRA se ve cada opcion. */
 const MENU = [
   { clave: 'mapa',         titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />, apps: ['pluvira'] },
@@ -23,23 +25,38 @@ const MENU = [
 
 const vistaInicial = (app) => (app === 'sentria' ? 'vigilancia' : 'mapa');
 
+/* Lee ?app=pluvira | ?app=sentria de la URL. Sirve para abrir cada login
+   directo en una pestaña nueva, saltando la intro. */
+const appDeURL = () => {
+  const a = new URLSearchParams(window.location.search).get('app');
+  return a === 'pluvira' || a === 'sentria' ? a : null;
+};
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('userToken'));
   const [nombreUsuario, setNombreUsuario] = useState(localStorage.getItem('userName') || '');
 
   // Que tarjeta de NEXHIDRA se eligio: define que opciones de menu se muestran.
   const [appElegida, setAppElegida] = useState(
-    () => localStorage.getItem('appElegida') || 'pluvira'
+    () => appDeURL() || localStorage.getItem('appElegida') || 'pluvira'
   );
 
   // Intro NEXHIDRA: se muestra antes del login. Si ya hay sesión activa se salta.
-  const [mostrarIntro, setMostrarIntro] = useState(() => !localStorage.getItem('userToken'));
+  const [mostrarIntro, setMostrarIntro] = useState(
+    () => !appDeURL() && !localStorage.getItem('userToken')
+  );
 
   const [menuPerfilAbierto, setMenuPerfilAbierto] = useState(false);
   const [menuLateralAbierto, setMenuLateralAbierto] = useState(true);
   const [vistaActual, setVistaActual] = useState(
-    () => vistaInicial(localStorage.getItem('appElegida') || 'pluvira')
+    () => vistaInicial(appDeURL() || localStorage.getItem('appElegida') || 'pluvira')
   );
+
+  // Si se entro por URL directa, dejamos la eleccion guardada.
+  useEffect(() => {
+    const desdeURL = appDeURL();
+    if (desdeURL) localStorage.setItem('appElegida', desdeURL);
+  }, []);
   // ID del incidente que se debe abrir automáticamente al entrar a la vista
   // Incidentes (usado por el enlace desde el Panel de Maquinaria).
   const [incidenteAbrir, setIncidenteAbrir] = useState(null);
@@ -96,7 +113,10 @@ function App() {
       <Nexhidra
         onEntrar={() => salirDeIntro('pluvira')}
         onSentria={() => salirDeIntro('sentria')}
-        onCaudixa={() => { window.location.href = 'http://sistema.jriegopresurizado.org.pe/'; }}
+        onCaudixa={() => { window.location.href = URL_CAUDIXA; }}
+        hrefPluvira="?app=pluvira"
+        hrefSentria="?app=sentria"
+        hrefCaudixa={URL_CAUDIXA}
       />
     );
   }

@@ -47,7 +47,8 @@ const P = {
   flecha: ['M5 12h13', 'M13 6l6 6-6 6'],
 };
 
-export default function Nexhidra({ onEntrar, onCaudixa, onSentria }) {
+export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
+  hrefPluvira, hrefCaudixa, hrefSentria }) {
   const stageRef = useRef(null);
   const [movil, setMovil] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= CORTE_MOVIL
@@ -107,7 +108,7 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria }) {
         { d: P.matraz, label: 'CALIDAD DEL AGUA' },
         { d: P.barras, label: 'REPORTES AUTOMÁTICOS' },
       ],
-      onClick: onCaudixa,
+      onClick: onCaudixa, href: hrefCaudixa,
     },
     {
       key: 'pluvira', src: appPluvira, color: NARANJA, tint: '#fdeede',
@@ -118,7 +119,7 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria }) {
         { d: P.pin, label: 'MAPAS DE RIESGO' },
         { d: P.campana, label: 'ALERTAS TEMPRANAS' },
       ],
-      onClick: onEntrar,
+      onClick: onEntrar, href: hrefPluvira,
     },
     {
       key: 'sentria', src: appSentria, color: VERDE, tint: '#e4f4e9',
@@ -129,7 +130,7 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria }) {
         { d: P.reporte, label: 'INCIDENTES Y REPORTES' },
         { d: P.camara, label: 'VIGILANCIA EN TIEMPO REAL' },
       ],
-      onClick: onSentria,
+      onClick: onSentria, href: hrefSentria,
     },
   ];
 
@@ -185,7 +186,7 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria }) {
                   key={s.key}
                   className={`nx-card ${activo ? 'nx-card-on' : ''}`}
                   style={{ '--c': s.color, '--tint': s.tint }}
-                  onClick={activo ? s.onClick : undefined}
+                  onClick={activo ? (e) => { if (!(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) s.onClick(); } : undefined}
                 >
                   <div className="nx-card-top">
                     <div className="nx-phone">
@@ -210,14 +211,24 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria }) {
                     ))}
                   </ul>
 
-                  <button
-                    type="button"
-                    className="nx-btn"
-                    disabled={!activo}
-                    onClick={activo ? (e) => { e.stopPropagation(); s.onClick(); } : undefined}
-                  >
-                    {activo ? <>INGRESAR <Ico d={P.flecha} color="#fff" size={20} /></> : 'PRÓXIMAMENTE'}
-                  </button>
+                  {activo ? (
+                    <a
+                      className="nx-btn"
+                      href={s.href || '#'}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // ctrl / cmd / shift / alt: dejamos que el navegador
+                        // abra la pestaña o ventana nueva
+                        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+                        e.preventDefault();
+                        s.onClick();
+                      }}
+                    >
+                      INGRESAR <Ico d={P.flecha} color="#fff" size={20} />
+                    </a>
+                  ) : (
+                    <span className="nx-btn nx-btn-off">PRÓXIMAMENTE</span>
+                  )}
                 </article>
               );
             })}
@@ -326,13 +337,13 @@ const CSS = `
   display:flex;align-items:center;justify-content:center;}
 .nx-flabel{font-weight:800;font-size:13px;letter-spacing:.8px;color:var(--navy);line-height:1.35;}
 
-.nx-btn{width:100%;border:none;border-radius:12px;padding:13px 18px;
+.nx-btn{width:100%;border:none;border-radius:12px;padding:13px 18px;text-decoration:none;
   font-family:'Sora',sans-serif;font-weight:700;font-size:16px;letter-spacing:1.8px;
   display:flex;align-items:center;justify-content:center;gap:10px;
   background:var(--c);color:#fff;cursor:pointer;transition:filter .2s,transform .2s;}
-.nx-btn:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-2px);}
+.nx-btn:hover:not(.nx-btn-off){filter:brightness(1.08);transform:translateY(-2px);}
 .nx-btn:focus-visible{outline:3px solid var(--navy);outline-offset:3px;}
-.nx-btn:disabled{background:#eef4fa;color:#93aac2;cursor:not-allowed;}
+.nx-btn-off{background:#eef4fa;color:#93aac2;cursor:not-allowed;}
 
 /* ---------- beneficios ---------- */
 .nx-benef{margin:28px 40px 0;background:var(--navy);border-radius:24px;color:#fff;
