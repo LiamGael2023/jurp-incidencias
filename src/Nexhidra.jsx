@@ -249,14 +249,14 @@ const CSS = `
 .nx-hero-txt{padding:0 48px 36px 64px;display:flex;flex-direction:column;justify-content:center;}
 .nx-brand{display:flex;align-items:center;gap:28px;margin-top:44px;}
 .nx-logo{width:120px;height:120px;object-fit:contain;flex-shrink:0;}
-.nx-jurp{font-family:'Sora',sans-serif;font-weight:800;font-size:44px;line-height:1;color:var(--navy);}
-.nx-nex{font-family:'Sora',sans-serif;font-weight:800;font-size:72px;line-height:1.02;letter-spacing:-1px;color:var(--navy);}
+.nx-jurp{font-family:'Sora',sans-serif;font-weight:800;font-size:48px;line-height:1;color:var(--navy);}
+.nx-nex{font-family:'Sora',sans-serif;font-weight:800;font-size:78px;line-height:1.02;letter-spacing:-1px;color:var(--navy);}
 .nx-hidra{color:var(--azul);}
-.nx-eyebrow{font-family:'Sora',sans-serif;font-weight:700;font-size:22px;letter-spacing:2px;color:var(--azul);margin:18px 0 0;}
-.nx-junta{font-family:'Sora',sans-serif;font-weight:600;font-size:18px;letter-spacing:2.5px;
+.nx-eyebrow{font-family:'Sora',sans-serif;font-weight:700;font-size:24px;letter-spacing:2px;color:var(--azul);margin:18px 0 0;}
+.nx-junta{font-family:'Sora',sans-serif;font-weight:600;font-size:19.5px;letter-spacing:2.5px;
   margin:10px 0 0;padding-top:10px;border-top:3px solid var(--cielo);align-self:flex-start;
   color:var(--navy);}
-.nx-lead{font-size:21px;line-height:1.55;color:var(--texto);max-width:560px;margin:14px 0 0;text-wrap:pretty;}
+.nx-lead{font-size:23px;line-height:1.55;color:var(--texto);max-width:560px;margin:14px 0 0;text-wrap:pretty;}
 
 .nx-hero-img{position:relative;aspect-ratio:900/387;}
 /* la foto se vuelve transparente en el borde inferior y en el izquierdo:
@@ -269,7 +269,7 @@ const CSS = `
   mask-image:var(--mascara-abajo),var(--mascara-izq);
   mask-composite:intersect;}
 .nx-hero-cap{position:absolute;right:32px;bottom:58px;margin:0;max-width:330px;
-  background:rgba(11,42,91,.82);color:#fff;font-weight:600;font-size:19px;line-height:1.5;
+  background:rgba(11,42,91,.82);color:#fff;font-weight:600;font-size:21px;line-height:1.5;
   padding:20px 26px;border-radius:14px;backdrop-filter:blur(4px);}
 
 /* ---------- panel soluciones ---------- */
@@ -294,21 +294,21 @@ const CSS = `
 .nx-card-id{padding-top:6px;min-width:0;}
 .nx-badge{width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   background:var(--tint);}
-.nx-name{font-family:'Sora',sans-serif;font-weight:800;font-size:33px;letter-spacing:.5px;
+.nx-name{font-family:'Sora',sans-serif;font-weight:800;font-size:36px;letter-spacing:.5px;
   color:var(--navy);margin:12px 0 0;}
 .nx-name span{color:var(--c);}
-.nx-tag{font-family:'Sora',sans-serif;font-weight:700;font-size:15.5px;letter-spacing:1.5px;
+.nx-tag{font-family:'Sora',sans-serif;font-weight:700;font-size:17px;letter-spacing:1.5px;
   color:var(--c);margin:8px 0 0;line-height:1.4;}
-.nx-desc{font-size:17.5px;line-height:1.55;color:var(--texto);margin:0;text-wrap:pretty;}
+.nx-desc{font-size:19px;line-height:1.55;color:var(--texto);margin:0;text-wrap:pretty;}
 
 .nx-feats{display:flex;gap:12px;list-style:none;padding:0;margin:0 0 auto;}
 .nx-feats li{flex:1;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;}
 .nx-fcircle{width:62px;height:62px;border-radius:50%;border:2.5px solid var(--c);background:#fff;
   display:flex;align-items:center;justify-content:center;}
-.nx-flabel{font-weight:800;font-size:13px;letter-spacing:.8px;color:var(--navy);line-height:1.35;}
+.nx-flabel{font-weight:800;font-size:14.5px;letter-spacing:.8px;color:var(--navy);line-height:1.35;}
 
 .nx-btn{width:100%;border:none;border-radius:12px;padding:13px 18px;text-decoration:none;
-  font-family:'Sora',sans-serif;font-weight:700;font-size:16px;letter-spacing:1.8px;
+  font-family:'Sora',sans-serif;font-weight:700;font-size:17.5px;letter-spacing:1.8px;
   display:flex;align-items:center;justify-content:center;gap:10px;
   background:var(--c);color:#fff;cursor:pointer;transition:filter .2s,transform .2s;}
 .nx-btn:hover:not(.nx-btn-off){filter:brightness(1.08);transform:translateY(-2px);}
@@ -325,11 +325,11 @@ const CSS = `
 .nx-movil .nx-hero-txt{padding:26px 20px 22px;text-align:center;align-items:center;}
 .nx-movil .nx-brand{justify-content:center;gap:16px;margin-top:0;}
 .nx-movil .nx-logo{width:72px;height:72px;}
-.nx-movil .nx-jurp{font-size:26px;}
-.nx-movil .nx-nex{font-size:42px;}
+.nx-movil .nx-jurp{font-size:28px;}
+.nx-movil .nx-nex{font-size:45px;}
 .nx-movil .nx-eyebrow{font-size:14px;letter-spacing:1.4px;margin-top:14px;}
 .nx-movil .nx-junta{font-size:12.5px;letter-spacing:1.6px;align-self:center;}
-.nx-movil .nx-lead{font-size:16px;margin-left:auto;margin-right:auto;}
+.nx-movil .nx-lead{font-size:17px;margin-left:auto;margin-right:auto;}
 .nx-movil .nx-hero-img{aspect-ratio:16/10;}
 .nx-movil .nx-hero-img img{--mascara-izq:linear-gradient(to right,#000,#000);}
 .nx-movil .nx-hero-cap{left:14px;right:14px;bottom:30px;max-width:none;font-size:14px;padding:12px 16px;}
@@ -337,10 +337,10 @@ const CSS = `
 .nx-movil .nx-cards{grid-template-columns:1fr;gap:26px;}
 .nx-movil .nx-card-top{flex-direction:column;align-items:center;text-align:center;gap:14px;}
 .nx-movil .nx-badge{margin:0 auto;width:50px;height:50px;}
-.nx-movil .nx-name{font-size:28px;margin-top:10px;}
-.nx-movil .nx-tag{font-size:13px;}
-.nx-movil .nx-desc{font-size:15.5px;}
-.nx-movil .nx-flabel{font-size:11px;}
+.nx-movil .nx-name{font-size:30px;margin-top:10px;}
+.nx-movil .nx-tag{font-size:14px;}
+.nx-movil .nx-desc{font-size:16.5px;}
+.nx-movil .nx-flabel{font-size:12px;}
 .nx-movil .nx-fcircle{width:52px;height:52px;}
 .nx-movil .nx-espacio{height:24px;}
 
