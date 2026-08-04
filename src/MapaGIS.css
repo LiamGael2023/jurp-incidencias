@@ -382,7 +382,9 @@
    Viene de MapaHerramientas.css anclado abajo a la derecha, justo donde va
    el panel de recursos. Lo pasamos al lado izquierdo, sobre las herramientas. */
 .gis .jurp-minimapa-wrap {
-  left: 162px; right: auto; bottom: 56px; z-index: 20;
+  /* z-index alto: está dentro del contenedor Leaflet, cuyos paneles usan 200-700.
+     No tapa el panel de capas porque ese vive en otro contexto de apilado. */
+  left: 162px; right: auto; bottom: 56px; z-index: 800;
   width: 210px; border: 1px solid rgba(116, 192, 252, .28); border-radius: 12px;
   background: rgba(8, 19, 30, .82);
   box-shadow: 0 8px 26px rgba(0, 0, 0, .45);
