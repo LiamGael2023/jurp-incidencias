@@ -126,6 +126,21 @@ function App() {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
+  // 3) Monitoreo GIS: se monta a pantalla completa, con su propio rail.
+  //    El resto de vistas sigue con el layout de siempre.
+  if (vistaActual === 'mapa') {
+    return (
+      <MapaChavimochic
+        menu={menuVisible}
+        vistaActual={vistaActual}
+        onNavegar={setVistaActual}
+        usuario={nombreUsuario}
+        onLogout={handleLogout}
+        onVerIncidente={irAIncidente}
+      />
+    );
+  }
+
   return (
     <div className="tbl-layout">
 

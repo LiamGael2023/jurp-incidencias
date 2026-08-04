@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap, useMapEvents } from 'react-leaflet';
 import L, { divIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -6,7 +6,8 @@ import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import './MapaDashboard.css';
-import { FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint, FaFilePdf, FaFileExcel, FaDownload } from 'react-icons/fa';
+import './MapaGIS.css';
+import { FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint, FaFilePdf, FaFileExcel, FaDownload, FaRulerCombined, FaDrawPolygon, FaEraser, FaCamera, FaShareAlt, FaPlus, FaMinus, FaSignOutAlt, FaChevronUp, FaChevronDown } from 'react-icons/fa';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
@@ -20,6 +21,7 @@ import geoCanalMadre from './data/Canal_Madre.json';
 import geoLateral10 from './data/Lateral_10.json';
 import geoRedes from './data/Redes_Presurizado.json';
 import logo from './assets/logo1.png';
+import iconoJURP from './assets/jurp-icono.png';
 
 import icoBocatoma from './assets/simbologia/bocatoma.png';
 import icoEntrega from './assets/simbologia/entrega.png';
@@ -134,11 +136,64 @@ function ClusteredLayer({ data, icon, color, label, buildPopup }) {
   return null;
 }
 
+// Icono de incidente. Fuera del componente para que su identidad no cambie
+// en cada render y no rearme el cluster.
+const crearIconoIncidente = (g) => {
+  let c = '#f59f00';
+  if (g === 'mod') c = '#f76707';
+  if (g === 'gra') c = '#ef4444';
+  return divIcon({ className: 'icono-vacio', html: `<div style="position:relative;width:20px;height:20px"><div style="position:absolute;inset:0;background:${c};opacity:0.4;border-radius:50%;animation:pulse 1.5s infinite"></div><div style="position:absolute;top:4px;left:4px;width:12px;height:12px;background:${c};border:2px solid rgba(0,0,0,0.3);border-radius:50%;box-shadow:0 0 8px ${c}88"></div></div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
+};
+const badge = (e) => ({ pat: ['#f59f00', 'Pendiente'], ate: ['#0ea5e9', 'En Atención'], cer: ['#22c55e', 'Cerrado'] }[e] || ['#64748b', e]);
+
+// Agrupa los incidentes en clusters. Al hacer clic en uno avisa al panel.
+function ClusterIncidentes({ incidentes, onSeleccionar }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!incidentes.length) return;
+    const grupo = L.markerClusterGroup({
+      maxClusterRadius: 45, showCoverageOnHover: false, spiderfyOnMaxZoom: true,
+      disableClusteringAtZoom: 15,
+      iconCreateFunction: (cl) => {
+        const n = cl.getChildCount();
+        const hijos = cl.getAllChildMarkers();
+        const grave = hijos.some(m => m.options.gravedad === 'gra');
+        const c = grave ? '#ef4444' : '#f59f00';
+        const sz = n > 20 ? 42 : n > 8 ? 36 : 30;
+        return L.divIcon({
+          html: `<div style="background:${c};color:#fff;border-radius:50%;width:${sz}px;height:${sz}px;display:flex;align-items:center;justify-content:center;font-size:${sz > 36 ? 14 : 12}px;font-weight:700;border:2px solid rgba(255,255,255,.45);box-shadow:0 0 14px ${c}88">${n}</div>`,
+          className: 'icono-vacio', iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2],
+        });
+      },
+    });
+    for (const inc of incidentes) {
+      const m = L.marker([inc.lat, inc.lng], { icon: crearIconoIncidente(inc.gravedad), gravedad: inc.gravedad });
+      m.bindTooltip(inc.tipo || 'Incidente', { direction: 'top', offset: [0, -14], className: 'tooltip-infra' });
+      m.on('click', () => onSeleccionar(inc));
+      grupo.addLayer(m);
+    }
+    map.addLayer(grupo);
+    return () => { map.removeLayer(grupo); };
+  }, [incidentes, map, onSeleccionar]);
+  return null;
+}
+
+// "hace 3 min" a partir de un timestamp
+const haceRato = (ts, ahora) => {
+  if (!ts) return 'sin datos';
+  const seg = Math.max(0, Math.floor((ahora - ts) / 1000));
+  if (seg < 60) return 'hace un momento';
+  const min = Math.floor(seg / 60);
+  if (min < 60) return `hace ${min} min`;
+  const hrs = Math.floor(min / 60);
+  return `hace ${hrs} h`;
+};
+
 // Formatea números con separador de miles y 2 decimales (es-PE).
 const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // ── Componente principal ────────────────────────────────────────────────────
-function MapaChavimochic() {
+function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVerIncidente }) {
   const centroMapa = [-8.4186, -78.7533];
   const [mapaBase, setMapaBase] = useState('satelite');
   const [filtroTiempo, setFiltroTiempo] = useState(0);
@@ -164,6 +219,11 @@ function MapaChavimochic() {
   const [rawRecursos, setRawRecursos] = useState({ pers: [], mats: [], maqs: [] });
   const [grupoAbierto, setGrupoAbierto] = useState(null); // 'personal' | 'maquinaria' | 'insumos' | null
   const [incSeleccionado, setIncSeleccionado] = useState(null); // incidente filtrado en panel recursos
+  const [panelMin, setPanelMin] = useState({ incidentes: false, recursos: false, infra: false });
+  const toggleMin = (k) => setPanelMin(p => ({ ...p, [k]: !p[k] }));
+  const [filtroEstadoInc, setFiltroEstadoInc] = useState('');   // '' | 'pat' | 'ate' | 'cer'
+  const [ultimaAct, setUltimaAct] = useState(null);             // timestamp real de la última carga
+  const [ahora, setAhora] = useState(Date.now());               // reloj para el "hace X min"
 
   const mapRef = useRef(null);
   const contenedorRef = useRef(null);
@@ -437,8 +497,22 @@ function MapaChavimochic() {
 
   // Filtered
   const getFilteredData = (cfg) => { if (!cfg.data?.features?.length || (!filtroTramo && !filtroEstado)) return cfg.data; return { ...cfg.data, features: cfg.data.features.filter(f => { const p = f.properties || {}; if (filtroTramo && (p.TRAMO || '') !== filtroTramo) return false; if (filtroEstado && (p.ESTADO || '') !== filtroEstado) return false; return true; }) }; };
-  const tiempoLimite = Date.now() - (filtroTiempo * 864e5);
-  const incFiltrados = filtroTiempo === 0 ? incidentesAPI : incidentesAPI.filter(i => i.timestamp >= tiempoLimite);
+  const incFiltrados = useMemo(() => {
+    const limite = Date.now() - (filtroTiempo * 864e5);
+    return filtroTiempo === 0 ? incidentesAPI : incidentesAPI.filter(i => i.timestamp >= limite);
+  }, [incidentesAPI, filtroTiempo]);
+
+  // Los que se dibujan en el mapa, según las capas activas
+  const incEnMapa = useMemo(() => {
+    if (!capas.Incidentes_Nuevos && !capas.Incidentes_Atencion) return [];
+    return incFiltrados.filter(i => (capas.Incidentes_Nuevos && i.estado !== 'eat') || (capas.Incidentes_Atencion && i.estado === 'eat'));
+  }, [incFiltrados, capas.Incidentes_Nuevos, capas.Incidentes_Atencion]);
+
+  // Los que se listan en el panel, ordenados del más reciente al más viejo
+  const incLista = useMemo(() => {
+    const l = filtroEstadoInc ? incFiltrados.filter(i => i.estado === filtroEstadoInc) : incFiltrados;
+    return [...l].sort((a, b) => b.timestamp - a.timestamp);
+  }, [incFiltrados, filtroEstadoInc]);
   const incPend = incidentesAPI.filter(i => i.estado === 'pat').length;
   const incAte = incidentesAPI.filter(i => i.estado === 'ate').length;
   const lluviaMax = lluviasAPI.length ? Math.max(...lluviasAPI.map(l => l.totalRain)) : 0;
@@ -458,9 +532,21 @@ function MapaChavimochic() {
       if (resD.ok) { const dd = await resD.json(); const now = new Date(), p24 = new Date(now.getTime() - 864e5), fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; const nd = [];
         for (const eq of (dd.results || [])) { const la = parseFloat(eq.latitude), lo = parseFloat(eq.longitude); if (isNaN(la) || isNaN(lo)) continue; let rain = 0; try { const rr = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(p24)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=rainfall_mm`, { headers: { 'Authorization': `Token ${token}` } }); if (rr.ok) { const rd = await rr.json(); for (const rec of (rd.data || [])) rain += parseFloat(rec.value) || 0; } } catch(e) {} nd.push({ id: eq.id, name: eq.nombre || 'Pluviómetro', lat: la, lng: lo, totalRain: rain, isCritical: rain > 20 }); }
         setLluviasAPI(nd); }
-    } catch(e) { console.error(e); } finally { setCargandoAPIs(false); }
+    } catch(e) { console.error(e); } finally { setCargandoAPIs(false); setUltimaAct(Date.now()); }
   };
   useEffect(() => { obtenerDatosDeApis(); }, []);
+
+  // Auto-refresh cada 3 min, en pausa si la pestaña está oculta
+  useEffect(() => {
+    const id = setInterval(() => { if (!document.hidden) obtenerDatosDeApis(); }, 180000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Reloj para que el "hace X min" avance solo
+  useEffect(() => {
+    const id = setInterval(() => setAhora(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   // ── Cargar costeos de gestión ──────────────────────────────────────────
   const cargarCosteos = async () => {
@@ -484,7 +570,16 @@ function MapaChavimochic() {
   };
   useEffect(() => { cargarCosteos(); }, []);
 
-  const cargarDetalleIncidente = async (id) => { setDetalleActivo(null); setCargandoDetalle(true); const tk = localStorage.getItem('userToken'); try { const r = await fetch(`/api/v1/mobile/hi-incidents/${id}/`, { headers: { 'Authorization': `Token ${tk}` } }); if (r.ok) { const j = await r.json(); setDetalleActivo(j.data || j); } } catch(e) {} finally { setCargandoDetalle(false); } };
+  const cargarDetalleIncidente = useCallback(async (id) => { setDetalleActivo(null); setCargandoDetalle(true); const tk = localStorage.getItem('userToken'); try { const r = await fetch(`/api/v1/mobile/hi-incidents/${id}/`, { headers: { 'Authorization': `Token ${tk}` } }); if (r.ok) { const j = await r.json(); setDetalleActivo(j.data || j); } } catch(e) {} finally { setCargandoDetalle(false); } }, []);
+
+  // Selecciona un incidente: lo enfoca en el mapa, carga su detalle y lo fija
+  // en el panel de recursos. Lo usan el cluster y la lista.
+  const seleccionarIncidente = useCallback((inc, volar = true) => {
+    setIncSeleccionado(inc);
+    setGrupoAbierto(null);
+    cargarDetalleIncidente(inc.id);
+    if (volar) { setFlyTarget([inc.lat, inc.lng]); setTimeout(() => setFlyTarget(null), 2000); }
+  }, [cargarDetalleIncidente]);
 
   // ── Handlers ──────────────────────────────────────────────────────────
   const toggleCapa = (n) => setCapas(p => ({ ...p, [n]: !p[n] }));
@@ -493,355 +588,479 @@ function MapaChavimochic() {
   const obtenerUrlMapa = () => ({ satelite: "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", calles: "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", topografico: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", oscuro: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" })[mapaBase] || "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}";
 
   // ── Iconos ────────────────────────────────────────────────────────────
-  const crearIconoIncidente = (g) => { let c = '#f59f00'; if (g === 'mod') c = '#f76707'; if (g === 'gra') c = '#ef4444'; return divIcon({ className: 'icono-vacio', html: `<div style="position:relative;width:20px;height:20px"><div style="position:absolute;inset:0;background:${c};opacity:0.4;border-radius:50%;animation:pulse 1.5s infinite"></div><div style="position:absolute;top:4px;left:4px;width:12px;height:12px;background:${c};border:2px solid rgba(0,0,0,0.3);border-radius:50%;box-shadow:0 0 8px ${c}88"></div></div>`, iconSize: [20, 20], iconAnchor: [10, 10] }); };
   const iconoGPS = divIcon({ className: 'icono-vacio', html: '<div style="background:#0ea5e9;border:3px solid #fff;width:16px;height:16px;border-radius:50%;box-shadow:0 0 12px #0ea5e988"></div>', iconSize: [22, 22], iconAnchor: [11, 11] });
   const crearIconoLluvia = (r, cr) => divIcon({ className: 'icono-vacio', html: `<div style="display:flex;flex-direction:column;align-items:center;margin-top:-30px"><div style="background:${cr?'#1e293b':'#111827'};border:1px solid ${cr?'#ef4444':'#0ea5e9'};color:${cr?'#ef4444':'#0ea5e9'};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${r.toFixed(1)} mm</div><div style="font-size:22px;line-height:1;margin-top:2px">🌧️</div></div>`, iconSize: [60, 60], iconAnchor: [30, 45] });
-  const badge = (e) => ({ pat: ['#f59f00', 'Pendiente'], ate: ['#0ea5e9', 'En Atención'], cer: ['#22c55e', 'Cerrado'] }[e] || ['#64748b', e]);
 
   const buildPopup = useMemo(() => (props, iconUrl, label) => {
     const skip = new Set(['name', 'folder', 'FID', 'nro_ord', 'N_', 'Nº', 'Label', 'Field', '_tipo']);
     const lm = { NOMBRE: 'Nombre', PROGRESIVA: 'Progresiva', ESTADO: 'Estado', TRAMO: 'Tramo', ESTRUCTURA: 'Estructura', COD_EST: 'Canal/Sistema', ESTE: 'Este', NORTE: 'Norte' };
-    const rows = Object.entries(props).filter(([k, v]) => !skip.has(k) && v && String(v).trim()).map(([k, v]) => `<tr><td style="color:#64748b;padding:3px 8px 3px 0;font-size:11px">${lm[k] || k}</td><td style="font-weight:500;font-size:11px;color:#e2e8f0">${v}</td></tr>`).join('');
-    return `<div style="font-family:system-ui;min-width:200px;background:#fff;color:#1d273b;border-radius:6px;padding:10px"><div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:6px">${iconUrl ? `<img src="${iconUrl}" style="width:24px;height:24px"/>` : ''}<div><div style="font-weight:700;font-size:13px">${props.name || ''}</div><div style="font-size:10px;color:#64748b">${label}</div></div></div>${rows ? `<table style="border-collapse:collapse;width:100%">${rows}</table>` : '<span style="font-size:11px;color:#475569">Sin datos</span>'}</div>`;
+    const rows = Object.entries(props).filter(([k, v]) => !skip.has(k) && v && String(v).trim()).map(([k, v]) => `<tr><td style="color:#7fa5c0;padding:3px 8px 3px 0;font-size:11px">${lm[k] || k}</td><td style="font-weight:500;font-size:11px;color:#eaf3fa">${v}</td></tr>`).join('');
+    return `<div style="font-family:system-ui;min-width:200px;color:#dce9f5"><div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:6px;margin-bottom:6px">${iconUrl ? `<img src="${iconUrl}" style="width:24px;height:24px"/>` : ''}<div><div style="font-weight:700;font-size:13px;color:#eef6fd">${props.name || ''}</div><div style="font-size:10px;color:#7fa5c0">${label}</div></div></div>${rows ? `<table style="border-collapse:collapse;width:100%">${rows}</table>` : '<span style="font-size:11px;color:#7fa5c0">Sin datos</span>'}</div>`;
   }, []);
 
+  // Iniciales para el avatar del rail
+  const iniciales = (usuario || 'JU').replace(/[^a-zA-Z ]/g, ' ').trim().split(/\s+/)
+    .slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'JU';
+
+  const maxInfra = Math.max(1, ...porTipoInfra.map(t => t.value));
+
+  const gruposRecursos = [
+    { key: 'personal',   label: 'Personal',   icono: '👷', tinte: 'rgba(32,107,196,.18)',  color: '#74c0fc',
+      sub: `${recursosGlobales.listaPers.length} cargo${recursosGlobales.listaPers.length !== 1 ? 's' : ''}`,
+      monto: recursosGlobales.totPers },
+    { key: 'maquinaria', label: 'Maquinaria', icono: '🚜', tinte: 'rgba(245,159,10,.16)',  color: '#f5b455',
+      sub: `${recursosGlobales.listaMaqs.length} equipo${recursosGlobales.listaMaqs.length !== 1 ? 's' : ''}${recursosGlobales.enUso > 0 ? ` · ${recursosGlobales.enUso} en uso` : ''}`,
+      monto: recursosGlobales.totMaqs },
+    { key: 'insumos',    label: 'Insumos',    icono: '📦', tinte: 'rgba(47,179,68,.16)',   color: '#74e08a',
+      sub: `${recursosGlobales.listaMats.length} ítem${recursosGlobales.listaMats.length !== 1 ? 's' : ''}`,
+      monto: recursosGlobales.totMats },
+  ];
+
   return (
-    <div className="dash" ref={contenedorRef}>
-      {/* ── KPI Bar ──────────────────────────────────────────────────── */}
-      <div className="dash-kpi-bar">
-        <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#1463A5' }}>🏗️</div><div><div className="dash-kpi-label">Infraestructura</div><div className="dash-kpi-value">{totalKMZ.toLocaleString()}</div><div className="dash-kpi-sub">elementos registrados</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#f59f00' }}>⚠️</div><div><div className="dash-kpi-label">Incidentes</div><div className="dash-kpi-value">{incidentesAPI.length}</div><div className="dash-kpi-sub">{incPend} pendientes · {incAte} atención</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#22c55e' }}>🌧️</div><div><div className="dash-kpi-label">Estaciones</div><div className="dash-kpi-value">{lluviasAPI.length}</div><div className="dash-kpi-sub">pluviómetros activos</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#06b6d4' }}><FaTint /></div><div><div className="dash-kpi-label">Lluvia Máx 24h</div><div className="dash-kpi-value">{lluviaMax.toFixed(1)} <span style={{ fontSize: '12px', color: '#64748b' }}>mm</span></div><div className="dash-kpi-sub">acumulado mayor</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi-icon" style={{ color: '#a855f7' }}>🛡️</div><div><div className="dash-kpi-label">Garitas</div><div className="dash-kpi-value">{(geoGaritasJURP?.features?.length || 0) + (geoGaritasOtros?.features?.length || 0)}</div><div className="dash-kpi-sub">puntos de vigilancia</div></div></div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <select value={mapaBase} onChange={e => setMapaBase(e.target.value)} style={{ background: '#f8fafc', color: '#626976', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '4px 8px', fontSize: '11px', fontFamily: 'inherit' }}>
-            <option value="satelite">Satélite</option><option value="calles">Calles</option><option value="topografico">Topográfico</option><option value="oscuro">Oscuro</option>
+    <div className="gis" ref={contenedorRef}>
+
+      {/* ══════════════ MAPA A SANGRE COMPLETA ══════════════ */}
+      <div className="gis-mapa">
+        <MapContainer center={centroMapa} zoom={10} style={{ height: '100%', width: '100%' }} ref={mapRef} zoomControl={false}>
+          <TileLayer url={obtenerUrlMapa()} maxZoom={20} />
+          <FlyToComp pos={miUbicacion || flyTarget} />
+          <UTMDisplay />
+          <MiniMapa tileUrl={obtenerUrlMapa()} />
+          <HerramientaMedicion modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null} onFinish={() => {}} />
+
+          {miUbicacion && <Marker position={miUbicacion} icon={iconoGPS}><Popup>Mi ubicación</Popup></Marker>}
+
+          {capas.Canales && <>
+            <GeoJSON data={geoCanalMadre} style={{ color: '#4dabf7', weight: 3, opacity: 0.75 }} />
+            <GeoJSON data={geoLateral10} style={{ color: '#4dabf7', weight: 3, opacity: 0.75 }} />
+            <GeoJSON data={geoRedes} style={{ color: '#4dabf7', weight: 3, opacity: 0.75 }} />
+          </>}
+
+          {KMZ_CONFIG.map(cfg => {
+            if (!capasKMZ[cfg.key]) return null;
+            const data = getFilteredData(cfg);
+            if (!data?.features?.length) return null;
+            if (cfg.tipo === 'poly' || cfg.tipo === 'line') {
+              const st = cfg.tipo === 'line'
+                ? () => ({ color: cfg.color, weight: 3, opacity: 0.85, dashArray: '8 4' })
+                : () => ({ color: cfg.color, weight: 2, opacity: 0.85, fillOpacity: 0.25, fillColor: cfg.color });
+              return <GeoJSON key={cfg.key + filtroTramo + filtroEstado} data={data} style={st}
+                onEachFeature={(f, l) => {
+                  l.bindTooltip(f.properties?.name || '', { direction: 'top', className: 'tooltip-infra' });
+                  l.bindPopup(buildPopup(f.properties, cfg.icon, cfg.label), { maxWidth: 320 });
+                }} />;
+            }
+            return <ClusteredLayer key={cfg.key + filtroTramo + filtroEstado} data={data} icon={cfg.icon} color={cfg.color} label={cfg.label} buildPopup={buildPopup} />;
+          })}
+
+          <ClusterIncidentes incidentes={incEnMapa} onSeleccionar={seleccionarIncidente} />
+
+          {capas.Lluvias && lluviasAPI.map(p => (
+            <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical)}>
+              <Popup><b style={{ color: '#eaf3fa' }}>{p.name}</b></Popup>
+            </Marker>
+          ))}
+        </MapContainer>
+      </div>
+      <div className="gis-vineta" />
+
+      {/* ══════════════ RAIL ══════════════ */}
+      <nav className="gis-rail">
+        <img className="gis-rail-logo" src={iconoJURP} alt="JURP" />
+        {(menu || []).map(m => (
+          <button key={m.clave} className={`gis-rail-btn ${vistaActual === m.clave ? 'activo' : ''}`}
+            onClick={() => onNavegar && onNavegar(m.clave)}>
+            {m.icono}
+            <span className="gis-tip">{m.titulo}</span>
+          </button>
+        ))}
+        <span className="gis-rail-sep" />
+        <button className="gis-rail-btn" onClick={onLogout} title="Cerrar sesión">
+          <FaSignOutAlt />
+          <span className="gis-tip">Cerrar sesión</span>
+        </button>
+        <span className="gis-avatar" title={usuario}>{iniciales}</span>
+      </nav>
+
+      {/* ══════════════ BARRA SUPERIOR ══════════════ */}
+      <header className="gis-top">
+        <div className="gis-marca gis-glass">
+          <div>
+            <div className="gis-marca-t1">Sistema Integrado de Monitoreo</div>
+            <div className="gis-marca-t2">JUNTA DE RIEGO PRESURIZADO</div>
+          </div>
+        </div>
+
+        <div className="gis-buscador">
+          <div className="gis-buscador-caja">
+            <FaSearch className="gis-buscador-ico" />
+            <input value={busqueda} onChange={e => handleBusqueda(e.target.value)}
+              onFocus={() => resultadosBusqueda.length && setMostrarResultados(true)}
+              placeholder="Buscar estructura, progresiva…" />
+            {busqueda && (
+              <button className="gis-buscador-x" onClick={() => { setBusqueda(''); setResultadosBusqueda([]); setMostrarResultados(false); }}>
+                <FaTimes />
+              </button>
+            )}
+            {mostrarResultados && resultadosBusqueda.length > 0 && (
+              <div className="gis-resultados gis-glass">
+                {resultadosBusqueda.map((r, i) => (
+                  <div key={i} className="gis-resultado" onClick={() => seleccionarResultado(r)}>
+                    {r.icon && <img src={r.icon} alt="" />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <b>{r.name}</b>
+                      <span>{r.tipo}{r.progresiva ? ` · ${r.progresiva}` : ''}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="gis-acciones gis-glass">
+          <span className="gis-chip-activo"><span className="gis-punto" />ACTIVO</span>
+          <select className="gis-select" value={mapaBase} onChange={e => setMapaBase(e.target.value)}>
+            <option value="satelite">Satélite</option>
+            <option value="calles">Calles</option>
+            <option value="topografico">Topográfico</option>
+            <option value="oscuro">Oscuro</option>
           </select>
-          <button onClick={obtenerDatosDeApis} style={{ background: '#1463A5', color: '#fff', border: 'none', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}><FaSyncAlt className={cargandoAPIs ? 'icon-spin' : ''} /> {cargandoAPIs ? '...' : 'Actualizar'}</button>
+          <button className="gis-btn-primario" onClick={obtenerDatosDeApis}>
+            <FaSyncAlt className={cargandoAPIs ? 'icon-spin' : ''} />{cargandoAPIs ? '…' : 'Actualizar'}
+          </button>
+        </div>
+      </header>
+
+      {/* ══════════════ KPIs ══════════════ */}
+      <div className="gis-kpis">
+        <div className="gis-kpi gis-glass">
+          <span className="gis-kpi-ico" style={{ background: 'rgba(32,107,196,.18)', color: '#74c0fc' }}>🏗️</span>
+          <span>
+            <span className="gis-kpi-label">Infraestructura</span>
+            <span className="gis-kpi-valor">{totalKMZ.toLocaleString('es-PE')}</span>
+          </span>
+        </div>
+        <div className="gis-kpi gis-glass">
+          <span className="gis-kpi-ico" style={{ background: 'rgba(245,159,10,.16)', color: '#f5b455' }}>⚠️</span>
+          <span>
+            <span className="gis-kpi-label">Incidentes</span>
+            <span className="gis-kpi-valor">{incidentesAPI.length}<small>{incPend} pend · {incAte} aten</small></span>
+          </span>
+        </div>
+        <div className="gis-kpi gis-glass">
+          <span className="gis-kpi-ico" style={{ background: 'rgba(47,179,68,.16)', color: '#74e08a' }}>🌧️</span>
+          <span>
+            <span className="gis-kpi-label">Estaciones</span>
+            <span className="gis-kpi-valor">{lluviasAPI.length}</span>
+          </span>
+        </div>
+        <div className="gis-kpi gis-glass">
+          <span className="gis-kpi-ico" style={{ background: 'rgba(6,182,212,.16)', color: '#5ad4e6' }}><FaTint /></span>
+          <span>
+            <span className="gis-kpi-label">Lluvia 24 h</span>
+            <span className="gis-kpi-valor">{lluviaMax.toFixed(1)}<small>mm</small></span>
+          </span>
         </div>
       </div>
 
-      {/* ── Body ─────────────────────────────────────────────────────── */}
-      <div className="dash-body">
-        {/* ── Map Column ──────────────────────────────────────────────── */}
-        <div className="dash-map-col">
-          <div className="dash-map-wrap">
-            {/* Toolbar */}
-            <BarraHerramientas herramienta={herramienta} setHerramienta={setHerramienta} onCaptura={descargar} onCompartir={compartir} capturando={capturando} />
+      {/* ══════════════ HERRAMIENTAS ══════════════ */}
+      <div className="gis-tools gis-glass">
+        <button className="gis-tool" title="Vista general" onClick={() => mapRef.current?.flyTo(centroMapa, 10, { duration: 1 })}><FaGlobe /></button>
+        <button className={`gis-tool ${showLayers ? 'activo' : ''}`} title="Capas" onClick={() => setShowLayers(v => !v)}><FaLayerGroup /></button>
+        <button className="gis-tool" title="Mi ubicación" onClick={() => navigator.geolocation.getCurrentPosition(p => setMiUbicacion([p.coords.latitude, p.coords.longitude]))}><FaLocationArrow /></button>
+        <div className="gis-tool-sep" />
+        <button className={`gis-tool ${herramienta === 'distancia' ? 'activo' : ''}`} title="Medir distancia"
+          onClick={() => setHerramienta(herramienta === 'distancia' ? null : 'distancia')}><FaRulerCombined /></button>
+        <button className={`gis-tool ${herramienta === 'area' ? 'activo' : ''}`} title="Medir área"
+          onClick={() => setHerramienta(herramienta === 'area' ? null : 'area')}><FaDrawPolygon /></button>
+        <button className="gis-tool" title="Limpiar medición" onClick={() => setHerramienta(null)}><FaEraser /></button>
+        <div className="gis-tool-sep" />
+        <button className="gis-tool" title="Capturar mapa" onClick={descargar} disabled={capturando}><FaCamera /></button>
+        <button className="gis-tool" title="Compartir captura" onClick={compartir} disabled={capturando}><FaShareAlt /></button>
+        <div className="gis-tool-sep" />
+        <button className="gis-tool" title="Acercar" onClick={() => mapRef.current?.zoomIn()}><FaPlus /></button>
+        <button className="gis-tool" title="Alejar" onClick={() => mapRef.current?.zoomOut()}><FaMinus /></button>
+      </div>
 
-            {/* Search */}
-            <div className="dash-search">
-              <FaSearch style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#475569', fontSize: '12px', zIndex: 1 }} />
-              <input value={busqueda} onChange={e => handleBusqueda(e.target.value)} onFocus={() => resultadosBusqueda.length && setMostrarResultados(true)} placeholder="Buscar estructura, progresiva..." />
-              {busqueda && <button onClick={() => { setBusqueda(''); setResultadosBusqueda([]); setMostrarResultados(false); }} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#475569', cursor: 'pointer' }}>✕</button>}
-              {mostrarResultados && resultadosBusqueda.length > 0 && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0 0 6px 6px', maxHeight: '200px', overflowY: 'auto' }}>
-                  {resultadosBusqueda.map((r, i) => (
-                    <div key={i} onClick={() => seleccionarResultado(r)} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #0f172a', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px' }} onMouseEnter={e => { e.currentTarget.style.background = '#0f172a'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                      {r.icon && <img src={r.icon} alt="" style={{ width: '18px', height: '18px' }} />}
-                      <div style={{ flex: 1 }}><div style={{ fontWeight: 600, color: '#e2e8f0' }}>{r.name}</div><div style={{ color: '#475569', fontSize: '10px' }}>{r.tipo} · {r.progresiva}</div></div>
-                    </div>
-                  ))}
-                </div>
+      {/* ══════════════ PANEL DE CAPAS ══════════════ */}
+      {showLayers && (
+        <div className="gis-capas gis-glass">
+          <div className="gis-capas-head">
+            <span className="gis-sub">Capas y filtros</span>
+            <button className="gis-tool" style={{ width: 26, height: 26 }} onClick={() => setShowLayers(false)}><FaTimes /></button>
+          </div>
+          <div className="gis-capas-body">
+            <div className="gis-capas-grupo">
+              <div className="gis-capas-titulo">General</div>
+              <div className="gis-capa"><label><input type="checkbox" checked={capas.Canales} onChange={() => toggleCapa('Canales')} /> Trazado de canales</label></div>
+              <div className="gis-capa"><label><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={() => { toggleCapa('Incidentes_Atencion'); toggleCapa('Incidentes_Nuevos'); }} /> Incidentes</label></div>
+              <div className="gis-capa"><label><input type="checkbox" checked={capas.Lluvias} onChange={() => toggleCapa('Lluvias')} /> Pluviómetros</label></div>
+              {(capas.Incidentes_Nuevos || capas.Incidentes_Atencion) && (
+                <select className="gis-mini-select" value={filtroTiempo} onChange={e => setFiltroTiempo(Number(e.target.value))}>
+                  <option value={1}>24 horas</option><option value={7}>7 días</option><option value={30}>30 días</option><option value={0}>Todo</option>
+                </select>
               )}
             </div>
 
-            {/* Map controls */}
-            <div className="dash-map-controls" style={{ top: '50px' }}>
-              <button className="dash-map-btn" onClick={() => mapRef.current?.flyTo(centroMapa, 10, { duration: 1 })} title="Vista general"><FaGlobe /></button>
-              <button className="dash-map-btn" onClick={() => setShowLayers(v => !v)} title="Capas" style={showLayers ? { borderColor: '#1463A5', color: '#1463A5' } : {}}><FaLayerGroup /></button>
-              <button className="dash-map-btn" onClick={() => { navigator.geolocation.getCurrentPosition(p => setMiUbicacion([p.coords.latitude, p.coords.longitude])); }} title="Mi ubicación"><FaLocationArrow /></button>
+            <div className="gis-capas-grupo">
+              <div className="gis-capas-titulo">Filtros</div>
+              <select className="gis-mini-select" value={filtroTramo} onChange={e => setFiltroTramo(e.target.value)}>
+                <option value="">Todos los tramos</option>{tramosUnicos.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select className="gis-mini-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
+                <option value="">Todo estado</option>{estadosUnicos.map(e2 => <option key={e2} value={e2}>{e2}</option>)}
+              </select>
+              {(filtroTramo || filtroEstado) && (
+                <button className="gis-inc-link" style={{ padding: '4px 0' }} onClick={() => { setFiltroTramo(''); setFiltroEstado(''); }}>✕ Limpiar filtros</button>
+              )}
             </div>
 
-            {/* Layer panel */}
-            {showLayers && (
-              <div className="dash-layers" style={{ left: '50px' }}>
-                <div className="dash-layers-header"><span>Capas</span><button onClick={() => setShowLayers(false)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}><FaTimes size={12} /></button></div>
-                <div className="dash-layers-body">
-                  <div className="dash-layer-group">
-                    <div className="dash-layer-group-title">General</div>
-                    <div className="dash-layer-item"><label><input type="checkbox" checked={capas.Canales} onChange={() => toggleCapa('Canales')} /> Trazado Canales</label></div>
-                    <div className="dash-layer-item"><label><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={() => { toggleCapa('Incidentes_Atencion'); toggleCapa('Incidentes_Nuevos'); }} /> Incidentes</label></div>
-                    <div className="dash-layer-item"><label><input type="checkbox" checked={capas.Lluvias} onChange={() => toggleCapa('Lluvias')} /> Pluviómetros</label></div>
-                    {(capas.Incidentes_Nuevos || capas.Incidentes_Atencion) && (
-                      <select value={filtroTiempo} onChange={e => setFiltroTiempo(Number(e.target.value))} style={{ width: '100%', margin: '4px 0', background: '#f8fafc', color: '#626976', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '3px 6px', fontSize: '10px' }}>
-                        <option value={1}>24 horas</option><option value={7}>7 días</option><option value={30}>30 días</option><option value={0}>Todo</option>
-                      </select>
-                    )}
-                  </div>
-                  <div className="dash-layer-group">
-                    <div className="dash-layer-group-title">Filtros</div>
-                    <select value={filtroTramo} onChange={e => setFiltroTramo(e.target.value)} style={{ width: '100%', margin: '2px 0', background: '#f8fafc', color: '#626976', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '3px 6px', fontSize: '10px' }}>
-                      <option value="">Todos los tramos</option>{tramosUnicos.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={{ width: '100%', margin: '2px 0', background: '#f8fafc', color: '#626976', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '3px 6px', fontSize: '10px' }}>
-                      <option value="">Todo estado</option>{estadosUnicos.map(e2 => <option key={e2} value={e2}>{e2}</option>)}
-                    </select>
-                    {(filtroTramo || filtroEstado) && <button onClick={() => { setFiltroTramo(''); setFiltroEstado(''); }} style={{ background: 'none', border: 'none', color: '#1463A5', cursor: 'pointer', fontSize: '10px', padding: '2px 0' }}>✕ Limpiar</button>}
-                  </div>
-                  <div className="dash-layer-group">
-                    <div className="dash-layer-group-title">Infraestructura ({totalKMZ})</div>
-                    <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
-                      <button onClick={() => setCapasKMZ(Object.fromEntries(KMZ_CONFIG.map(c => [c.key, true])))} style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#1463A5', borderRadius: '4px', padding: '2px', fontSize: '10px', cursor: 'pointer' }}>Todas</button>
-                      <button onClick={() => setCapasKMZ(KMZ_CAPAS_DEFAULT)} style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b', borderRadius: '4px', padding: '2px', fontSize: '10px', cursor: 'pointer' }}>Ninguna</button>
-                    </div>
-                    {KMZ_CONFIG.map(c => (
-                      <div key={c.key} className="dash-layer-item">
-                        <label><input type="checkbox" checked={capasKMZ[c.key]} onChange={() => toggleCapaKMZ(c.key)} />
-                          {c.icon ? <img src={c.icon} alt="" style={{ width: '14px', height: '14px' }} /> : <span style={{ display: 'inline-block', width: '14px', height: c.tipo === 'line' ? '3px' : '14px', background: c.color, borderRadius: c.tipo === 'line' ? '2px' : '50%' }} />}
-                          <span style={{ fontSize: '11px' }}>{c.label}</span>
-                        </label>
-                        <span className="dash-layer-badge">{c.data?.features?.length || 0}</span>
-                      </div>
-                    ))}
-                  </div>
+            <div className="gis-capas-grupo">
+              <div className="gis-capas-titulo">Infraestructura ({totalKMZ.toLocaleString('es-PE')})</div>
+              <div className="gis-capas-acciones">
+                <button onClick={() => setCapasKMZ(Object.fromEntries(KMZ_CONFIG.map(c => [c.key, true])))}>Todas</button>
+                <button onClick={() => setCapasKMZ(KMZ_CAPAS_DEFAULT)}>Ninguna</button>
+              </div>
+              {KMZ_CONFIG.map(c => (
+                <div key={c.key} className="gis-capa">
+                  <label>
+                    <input type="checkbox" checked={capasKMZ[c.key]} onChange={() => toggleCapaKMZ(c.key)} />
+                    {c.icon
+                      ? <img src={c.icon} alt="" />
+                      : <span style={{ display: 'inline-block', width: 14, height: c.tipo === 'line' ? 3 : 14, background: c.color, borderRadius: c.tipo === 'line' ? 2 : '50%' }} />}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
+                  </label>
+                  <span className="gis-capa-badge">{c.data?.features?.length || 0}</span>
                 </div>
-              </div>
-            )}
-
-            <MapContainer center={centroMapa} zoom={10} style={{ height: '100%', width: '100%' }} ref={mapRef} zoomControl={false}>
-              <ZoomDerecha />
-              <TileLayer url={obtenerUrlMapa()} maxZoom={20} />
-              <FlyToComp pos={miUbicacion || flyTarget} />
-              <UTMDisplay />
-              <MiniMapa tileUrl={obtenerUrlMapa()} />
-              <HerramientaMedicion modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null} onFinish={() => {}} />
-
-              {miUbicacion && <Marker position={miUbicacion} icon={iconoGPS}><Popup>Mi ubicación</Popup></Marker>}
-              {capas.Canales && <><GeoJSON data={geoCanalMadre} style={{ color: '#1463A5', weight: 3, opacity: 0.7 }} /><GeoJSON data={geoLateral10} style={{ color: '#1463A5', weight: 3, opacity: 0.7 }} /><GeoJSON data={geoRedes} style={{ color: '#1463A5', weight: 3, opacity: 0.7 }} /></>}
-
-              {KMZ_CONFIG.map(cfg => {
-                if (!capasKMZ[cfg.key]) return null;
-                const data = getFilteredData(cfg);
-                if (!data?.features?.length) return null;
-                if (cfg.tipo === 'poly' || cfg.tipo === 'line') {
-                  const st = cfg.tipo === 'line' ? () => ({ color: cfg.color, weight: 3, opacity: 0.8, dashArray: '8 4' }) : () => ({ color: cfg.color, weight: 2, opacity: 0.8, fillOpacity: 0.25, fillColor: cfg.color });
-                  return <GeoJSON key={cfg.key + filtroTramo + filtroEstado} data={data} style={st} onEachFeature={(f, l) => { l.bindTooltip(f.properties?.name || '', { direction: 'top', className: 'tooltip-infra' }); l.bindPopup(buildPopup(f.properties, cfg.icon, cfg.label), { maxWidth: 320 }); }} />;
-                }
-                return <ClusteredLayer key={cfg.key + filtroTramo + filtroEstado} data={data} icon={cfg.icon} color={cfg.color} label={cfg.label} buildPopup={buildPopup} />;
-              })}
-
-              {(capas.Incidentes_Nuevos || capas.Incidentes_Atencion) && incFiltrados.map(inc => {
-                if (!capas.Incidentes_Nuevos && inc.estado !== 'eat') return null;
-                if (!capas.Incidentes_Atencion && inc.estado === 'eat') return null;
-                const [bg, tx] = badge(inc.estado);
-                return (
-                  <Marker key={inc.id} position={[inc.lat, inc.lng]} icon={crearIconoIncidente(inc.gravedad)} eventHandlers={{ click: () => { cargarDetalleIncidente(inc.id); setIncSeleccionado(inc); setGrupoAbierto(null); } }}>
-                    <Popup minWidth={260} maxWidth={300}>
-                      <div style={{ fontFamily: 'system-ui', background: '#f8fafc', color: '#e2e8f0', borderRadius: '6px', padding: '10px', margin: '-14px -19px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #334155', paddingBottom: '6px', marginBottom: '8px' }}><b>{inc.tipo}</b><span className={`dash-badge dash-badge-${inc.estado === 'pat' ? 'orange' : inc.estado === 'ate' ? 'blue' : 'green'}`}>{tx}</span></div>
-                        {cargandoDetalle ? <div style={{ textAlign: 'center', padding: '16px', color: '#1463A5' }}><FaSyncAlt className="icon-spin" /></div>
-                        : detalleActivo && detalleActivo.id === inc.id ? (
-                          <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', marginBottom: '8px' }}>
-                            {detalleActivo.images?.map((it, j) => { const s = it.content?.startsWith('http') ? it.content : `data:image/jpeg;base64,${it.content}`; return <div key={j} onClick={() => setModalMedia({ src: s, type: 'image' })} style={{ flexShrink: 0, cursor: 'pointer' }}><img src={s} alt="" style={{ width: '100px', height: '80px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #e2e8f0' }} /></div>; })}
-                          </div>
-                        ) : inc.imagenUrl && <div onClick={() => setModalMedia({ src: inc.imagenUrl, type: 'image' })} style={{ cursor: 'pointer', marginBottom: '8px' }}><img src={inc.imagenUrl} alt="" style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '4px' }} /></div>}
-                        <div style={{ fontSize: '11px', color: '#626976', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div style={{ fontSize:'10px', fontWeight:700, color:'#1463A5', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'4px', padding:'2px 6px', display:'inline-block', width:'fit-content' }}>{inc.codigoIncidente}</div>
-                          <div><b style={{ color: '#1463A5' }}>{inc.codigo}</b> · {inc.lugar}</div>
-                          <div style={{ background: '#f8fafc', padding: '6px', borderRadius: '4px' }}>{inc.descripcion || 'Sin descripción'}</div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569', fontSize: '10px' }}>👤 {inc.usuario} · 🕒 {inc.fecha}</div>
-                        </div>
-                      </div>
-                    </Popup>
-                  </Marker>
-                );
-              })}
-
-              {capas.Lluvias && lluviasAPI.map(p => <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical)}><Popup><b style={{ color: '#e2e8f0' }}>{p.name}</b></Popup></Marker>)}
-            </MapContainer>
-          </div>
-        </div>
-
-        {/* ── Charts Column ───────────────────────────────────────────── */}
-        <div className="dash-charts-col">
-          <div className="dash-panel" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div className="dash-panel-title" style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-              <span className="accent">📋</span> {incSeleccionado ? 'Recursos del Incidente' : 'Recursos Utilizados'}
-              <button onClick={() => setModalReporteRec(true)} disabled={recursosGlobales.total === 0}
-                title="Descargar reporte de recursos"
-                style={{ marginLeft:'auto', display:'inline-flex', alignItems:'center', gap:'5px', background:'#e0f2fe', color:'#0284c7', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:600, cursor:'pointer', opacity: recursosGlobales.total === 0 ? 0.45 : 1 }}>
-                <FaDownload size={10} /> Reporte
-              </button>
-            </div>
-            {incSeleccionado && (
-              <div style={{ background: '#f0f6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '8px 10px', marginBottom: '8px', flexShrink: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>{incSeleccionado.tipo}</div>
-                    <div style={{ fontSize:'9px', fontWeight:700, color:'#1463A5', marginBottom:'2px' }}>{incSeleccionado.codigoIncidente}</div>
-                    <div style={{ fontSize: '10px', color: '#626976', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{incSeleccionado.codigo} · {incSeleccionado.lugar}</div>
-                    <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px' }}>🕒 {incSeleccionado.fecha}</div>
-                  </div>
-                  <button onClick={() => { setIncSeleccionado(null); setGrupoAbierto(null); }} style={{ background: '#fff', border: '1px solid #cbd5e1', color: '#626976', borderRadius: '4px', padding: '3px 8px', fontSize: '10px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600 }} title="Ver todos los recursos">✕ Ver todos</button>
-                </div>
-              </div>
-            )}
-            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {/* ── PERSONAL ─────────────────────────────────────────── */}
-              <div style={{ background: grupoAbierto === 'personal' ? '#eff6ff' : '#f8fafc', borderRadius: '6px', border: `1px solid ${grupoAbierto === 'personal' ? '#bfdbfe' : '#e2e8f0'}`, overflow: 'hidden' }}>
-                <div onClick={() => setGrupoAbierto(grupoAbierto === 'personal' ? null : 'personal')} style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ color: '#626976', fontSize: '9px' }}>{grupoAbierto === 'personal' ? '▼' : '▶'}</span>
-                  <span style={{ fontSize: '16px' }}>👷</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>Personal</div>
-                    <div style={{ fontSize: '10px', color: '#626976' }}>{recursosGlobales.listaPers.length} cargo{recursosGlobales.listaPers.length !== 1 ? 's' : ''}</div>
-                  </div>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#1463A5' }}>S/ {fmtNum(recursosGlobales.totPers)}</span>
-                </div>
-                {grupoAbierto === 'personal' && (
-                  <div style={{ padding: '0 12px 10px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
-                    {recursosGlobales.listaPers.length === 0 ? <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>Sin personal registrado</div> : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {recursosGlobales.listaPers.map((p, i) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', background: '#fff', padding: '5px 8px', borderRadius: '4px' }}>
-                            <span style={{ fontWeight: 600, color: '#1d273b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</span>
-                            <span style={{ color: '#626976', fontSize: '10px', whiteSpace: 'nowrap' }}>{p.horas.toFixed(1)} HH</span>
-                            <span style={{ fontWeight: 700, color: '#1463A5', fontSize: '11px', whiteSpace: 'nowrap' }}>S/ {fmtNum(p.monto)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* ── MAQUINARIA ───────────────────────────────────────── */}
-              <div style={{ background: grupoAbierto === 'maquinaria' ? '#fffbeb' : '#f8fafc', borderRadius: '6px', border: `1px solid ${grupoAbierto === 'maquinaria' ? '#fde68a' : '#e2e8f0'}`, overflow: 'hidden' }}>
-                <div onClick={() => setGrupoAbierto(grupoAbierto === 'maquinaria' ? null : 'maquinaria')} style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ color: '#626976', fontSize: '9px' }}>{grupoAbierto === 'maquinaria' ? '▼' : '▶'}</span>
-                  <span style={{ fontSize: '16px' }}>🚜</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>Maquinaria</div>
-                    <div style={{ fontSize: '10px', color: '#626976' }}>
-                      {recursosGlobales.listaMaqs.length} equipo{recursosGlobales.listaMaqs.length !== 1 ? 's' : ''}
-                      {recursosGlobales.enUso > 0 && <span style={{ color: '#16a34a', fontWeight: 600 }}> · 🟢 {recursosGlobales.enUso} en uso</span>}
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#b45309' }}>S/ {fmtNum(recursosGlobales.totMaqs)}</span>
-                </div>
-                {grupoAbierto === 'maquinaria' && (
-                  <div style={{ padding: '0 12px 10px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
-                    {recursosGlobales.listaMaqs.length === 0 ? <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>Sin maquinaria registrada</div> : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {recursosGlobales.listaMaqs.map((m, i) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', background: '#fff', padding: '5px 8px', borderRadius: '4px' }}>
-                            <span style={{ background: m.enUso ? '#dcfce7' : '#f1f5f9', color: m.enUso ? '#16a34a' : '#626976', padding: '1px 5px', borderRadius: '3px', fontWeight: 600, fontSize: '9px', whiteSpace: 'nowrap' }}>{m.enUso ? '🟢 En uso' : '✅ Disp.'}</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontWeight: 600, color: '#1d273b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.nombre}</div>
-                              <div style={{ fontSize: '9px', color: '#626976', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.marca} {m.placa}</div>
-                            </div>
-                            <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                              <div style={{ fontSize: '10px', color: '#626976' }}>{m.horas.toFixed(1)} HE</div>
-                              <div style={{ fontWeight: 700, color: '#b45309', fontSize: '11px' }}>S/ {fmtNum(m.monto)}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* ── INSUMOS ──────────────────────────────────────────── */}
-              <div style={{ background: grupoAbierto === 'insumos' ? '#ecfdf5' : '#f8fafc', borderRadius: '6px', border: `1px solid ${grupoAbierto === 'insumos' ? '#a7f3d0' : '#e2e8f0'}`, overflow: 'hidden' }}>
-                <div onClick={() => setGrupoAbierto(grupoAbierto === 'insumos' ? null : 'insumos')} style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ color: '#626976', fontSize: '9px' }}>{grupoAbierto === 'insumos' ? '▼' : '▶'}</span>
-                  <span style={{ fontSize: '16px' }}>📦</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: '12px', color: '#1d273b' }}>Insumos</div>
-                    <div style={{ fontSize: '10px', color: '#626976' }}>{recursosGlobales.listaMats.length} ítem{recursosGlobales.listaMats.length !== 1 ? 's' : ''}</div>
-                  </div>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#047857' }}>S/ {fmtNum(recursosGlobales.totMats)}</span>
-                </div>
-                {grupoAbierto === 'insumos' && (
-                  <div style={{ padding: '0 12px 10px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
-                    {recursosGlobales.listaMats.length === 0 ? <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>Sin insumos registrados</div> : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {recursosGlobales.listaMats.map((m, i) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', background: '#fff', padding: '5px 8px', borderRadius: '4px' }}>
-                            <span style={{ fontWeight: 600, color: '#1d273b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.nombre}</span>
-                            <span style={{ color: '#626976', fontSize: '10px', whiteSpace: 'nowrap' }}>{m.cantidad.toFixed(1)} u</span>
-                            <span style={{ fontWeight: 700, color: '#047857', fontSize: '11px', whiteSpace: 'nowrap' }}>S/ {fmtNum(m.monto)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* ── TOTAL ────────────────────────────────────────────── */}
-              <div style={{ background: '#f0f6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#626976', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Costo Total</span>
-                <span style={{ fontSize: '16px', fontWeight: 700, color: '#1463A5' }}>S/ {fmtNum(recursosGlobales.total)}</span>
-              </div>
+              ))}
             </div>
           </div>
-          <div className="dash-panel">
-            <div className="dash-panel-title"><span className="accent">🏗️</span> Infraestructura por Tipo</div>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={porTipoInfra} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis type="number" tick={{ fontSize: 10 }} stroke="#cbd5e1" /><YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} stroke="#cbd5e1" width={90} /><Tooltip contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '11px' }} /><Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16}>{porTipoInfra.map((d, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Footer ───────────────────────────────────────────────────── */}
-      <div className="dash-footer">
-        <span><span className="dot" /> Sistema Activo</span>
-        <span>Última actualización: {new Date().toLocaleString('es-PE')}</span>
-        <span style={{ marginLeft: 'auto' }}>Sistema Integrado de Monitoreo — JURP</span>
-      </div>
-
-      {/* ── Modal ────────────────────────────────────────────────────── */}
-      {modalMedia && (
-        <div onClick={() => setModalMedia(null)} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}>
-          <button onClick={() => setModalMedia(null)} style={{ position: 'absolute', top: '16px', right: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-          {modalMedia.type === 'image' ? <img src={modalMedia.src} alt="" onClick={e => e.stopPropagation()} style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px' }} />
-          : <video src={modalMedia.src} onClick={e => e.stopPropagation()} controls autoPlay style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: '8px', background: '#000' }} />}
         </div>
       )}
 
-      {/* ── Modal: formato del reporte de recursos ─────────────────────── */}
+      {/* ══════════════ PANEL DERECHO ══════════════ */}
+      <aside className="gis-panel">
+
+        {/* ── Lista de incidentes ── */}
+        <div className="gis-tarjeta gis-glass">
+          <div className="gis-tarjeta-head">
+            <span className="gis-sub">Incidentes ({incLista.length})</span>
+            <button className="gis-btn-plegar" onClick={() => toggleMin('incidentes')}
+              title={panelMin.incidentes ? 'Expandir' : 'Minimizar'}>
+              {panelMin.incidentes ? <FaChevronDown /> : <FaChevronUp />}
+            </button>
+          </div>
+          {!panelMin.incidentes && <>
+            <div className="gis-filtros-inc">
+              {[['', 'Todos'], ['pat', 'Pendientes'], ['ate', 'Atención'], ['cer', 'Cerrados']].map(([v, t]) => (
+                <button key={v} className={`gis-chip ${filtroEstadoInc === v ? 'activo' : ''}`}
+                  onClick={() => setFiltroEstadoInc(v)}>{t}</button>
+              ))}
+            </div>
+            <div className="gis-lista-inc">
+              {incLista.length === 0 && <div className="gis-detalle-vacio" style={{ padding: '4px 16px 12px' }}>Sin incidentes para este filtro</div>}
+              {incLista.map(inc => {
+                const [color, texto] = badge(inc.estado);
+                const activo = incSeleccionado && incSeleccionado.id === inc.id;
+                return (
+                  <button key={inc.id} className={`gis-inc-item ${activo ? 'activo' : ''}`}
+                    onClick={() => seleccionarIncidente(inc)}>
+                    <span className="gis-inc-dot" style={{ background: color }} />
+                    <span className="gis-inc-txt">
+                      <b>{inc.tipo}</b>
+                      <span>{inc.lugar || inc.codigo} · {inc.fecha}</span>
+                    </span>
+                    <span className="gis-inc-estado" style={{ color, borderColor: `${color}55`, background: `${color}18` }}>{texto}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>}
+        </div>
+
+        {/* ── Recursos ── */}
+        <div className="gis-tarjeta gis-glass">
+          <div className="gis-tarjeta-head">
+            <span className="gis-sub">{incSeleccionado ? 'Recursos del incidente' : 'Recursos utilizados'}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button className="gis-btn-mini" onClick={() => setModalReporteRec(true)} disabled={recursosGlobales.total === 0}>
+                <FaDownload size={10} /> Reporte
+              </button>
+              <button className="gis-btn-plegar" onClick={() => toggleMin('recursos')}
+                title={panelMin.recursos ? 'Expandir' : 'Minimizar'}>
+                {panelMin.recursos ? <FaChevronDown /> : <FaChevronUp />}
+              </button>
+            </span>
+          </div>
+
+          {!panelMin.recursos && <>
+          {incSeleccionado && (
+            <div className="gis-inc-chip">
+              <div className="gis-inc-top">
+                <span className="gis-inc-tipo">{incSeleccionado.tipo}</span>
+                <button className="gis-inc-link" onClick={() => { setIncSeleccionado(null); setGrupoAbierto(null); }}>Ver todos</button>
+              </div>
+              <div className="gis-inc-cod">{incSeleccionado.codigoIncidente}</div>
+              <div className="gis-inc-meta">{incSeleccionado.codigo} · {incSeleccionado.lugar} · {incSeleccionado.fecha}</div>
+              {incSeleccionado.descripcion && <div className="gis-inc-desc">{incSeleccionado.descripcion}</div>}
+              {cargandoDetalle ? (
+                <div style={{ textAlign: 'center', padding: 10, color: '#74c0fc' }}><FaSyncAlt className="icon-spin" /></div>
+              ) : detalleActivo && detalleActivo.id === incSeleccionado.id && detalleActivo.images?.length > 0 ? (
+                <div className="gis-inc-fotos">
+                  {detalleActivo.images.map((it, j) => {
+                    const src = it.content?.startsWith('http') ? it.content : `data:image/jpeg;base64,${it.content}`;
+                    return <img key={j} src={src} alt="" onClick={() => setModalMedia({ src, type: 'image' })} />;
+                  })}
+                </div>
+              ) : incSeleccionado.imagenUrl && (
+                <div className="gis-inc-fotos">
+                  <img src={incSeleccionado.imagenUrl} alt="" onClick={() => setModalMedia({ src: incSeleccionado.imagenUrl, type: 'image' })} />
+                </div>
+              )}
+              {onVerIncidente && (
+                <button className="gis-btn-ficha" onClick={() => onVerIncidente(incSeleccionado.id)}>
+                  Ver ficha completa <FaChevronRight size={10} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {gruposRecursos.map(g => (
+            <div key={g.key}>
+              <button className="gis-fila" onClick={() => setGrupoAbierto(grupoAbierto === g.key ? null : g.key)}>
+                <span className="gis-fila-ico" style={{ background: g.tinte, color: g.color }}>{g.icono}</span>
+                <span className="gis-fila-txt"><b>{g.label}</b><span>{g.sub}</span></span>
+                <span className="gis-fila-monto">S/ {fmtNum(g.monto)}</span>
+                <FaChevronRight className={`gis-fila-chev ${grupoAbierto === g.key ? 'abierto' : ''}`} />
+              </button>
+
+              {grupoAbierto === 'personal' && g.key === 'personal' && (
+                <div className="gis-detalle">
+                  {recursosGlobales.listaPers.length === 0 ? <div className="gis-detalle-vacio">Sin personal registrado</div>
+                    : recursosGlobales.listaPers.map((p, i) => (
+                      <div key={i} className="gis-detalle-item">
+                        <span className="nom">{p.nombre}</span>
+                        <span className="uni">{p.horas.toFixed(1)} HH</span>
+                        <span className="mon">S/ {fmtNum(p.monto)}</span>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {grupoAbierto === 'maquinaria' && g.key === 'maquinaria' && (
+                <div className="gis-detalle">
+                  {recursosGlobales.listaMaqs.length === 0 ? <div className="gis-detalle-vacio">Sin maquinaria registrada</div>
+                    : recursosGlobales.listaMaqs.map((m, i) => (
+                      <div key={i} className="gis-detalle-item">
+                        <span className={`gis-uso ${m.enUso ? 'si' : 'no'}`}>{m.enUso ? 'En uso' : 'Disp.'}</span>
+                        <span className="nom">{m.nombre}<span style={{ display: 'block', fontSize: 9, color: '#6f95b1', fontWeight: 400 }}>{m.marca} {m.placa}</span></span>
+                        <span className="uni">{m.horas.toFixed(1)} HE</span>
+                        <span className="mon">S/ {fmtNum(m.monto)}</span>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {grupoAbierto === 'insumos' && g.key === 'insumos' && (
+                <div className="gis-detalle">
+                  {recursosGlobales.listaMats.length === 0 ? <div className="gis-detalle-vacio">Sin insumos registrados</div>
+                    : recursosGlobales.listaMats.map((m, i) => (
+                      <div key={i} className="gis-detalle-item">
+                        <span className="nom">{m.nombre}</span>
+                        <span className="uni">{m.cantidad.toFixed(1)} u</span>
+                        <span className="mon">S/ {fmtNum(m.monto)}</span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+          <div className="gis-total">
+            <span className="gis-sub" style={{ color: '#9ecdf3' }}>Costo total</span>
+            <b>S/ {fmtNum(recursosGlobales.total)}</b>
+          </div>
+          </>}
+        </div>
+
+        <div className="gis-tarjeta gis-glass" style={{ padding: '14px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: panelMin.infra ? 0 : 13 }}>
+            <span className="gis-sub">Infraestructura por tipo</span>
+            <button className="gis-btn-plegar" onClick={() => toggleMin('infra')}
+              title={panelMin.infra ? 'Expandir' : 'Minimizar'}>
+              {panelMin.infra ? <FaChevronDown /> : <FaChevronUp />}
+            </button>
+          </div>
+          {!panelMin.infra && <div className="gis-barras">
+            {porTipoInfra.map((t, i) => (
+              <div className="gis-barra" key={t.name}>
+                <span className="gis-barra-label">{t.name}</span>
+                <div className="gis-barra-track">
+                  <div className="gis-barra-fill" style={{ width: `${(t.value / maxInfra) * 100}%`, background: COLORS[i % COLORS.length] }} />
+                </div>
+                <span className="gis-barra-num">{t.value}</span>
+              </div>
+            ))}
+          </div>}
+        </div>
+      </aside>
+
+      {/* ══════════════ LEYENDA ══════════════ */}
+      <div className="gis-leyenda gis-glass">
+        <span><i style={{ background: '#f59f00' }} />Pendiente</span>
+        <span><i style={{ background: '#d63939' }} />Atención</span>
+        <span><i style={{ background: '#2fb344' }} />Resuelto</span>
+        <span className="gis-leyenda-sep" />
+        <code>{cargandoAPIs ? 'ACTUALIZANDO…' : `ÚLT. ACT. ${haceRato(ultimaAct, ahora)}`}</code>
+      </div>
+
+      {/* ══════════════ MODAL DE IMAGEN ══════════════ */}
+      {modalMedia && (
+        <div onClick={() => setModalMedia(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}>
+          <button onClick={() => setModalMedia(null)}
+            style={{ position: 'absolute', top: 16, right: 20, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+          {modalMedia.type === 'image'
+            ? <img src={modalMedia.src} alt="" onClick={e => e.stopPropagation()} style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 8 }} />
+            : <video src={modalMedia.src} onClick={e => e.stopPropagation()} controls autoPlay style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 8, background: '#000' }} />}
+        </div>
+      )}
+
+      {/* ══════════════ MODAL DE REPORTE ══════════════ */}
       {modalReporteRec && (
         <div onClick={() => !generandoRec && setModalReporteRec(false)}
-          style={{ position:'fixed', inset:0, zIndex:10002, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div onClick={e => e.stopPropagation()}
-            style={{ background:'#fff', borderRadius:'12px', width:'100%', maxWidth:'420px', overflow:'hidden', boxShadow:'0 20px 40px rgba(0,0,0,0.25)' }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', borderBottom:'1px solid #e2e8f0', background:'#f8fafc' }}>
-              <h5 style={{ margin:0, fontSize:'15px', color:'#1e293b', display:'flex', alignItems:'center', gap:'8px' }}>
-                📋 Reporte de Recursos
-              </h5>
+          style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(4,10,18,0.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} className="gis-glass"
+            style={{ borderRadius: 18, width: '100%', maxWidth: 420, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
+              <h5 style={{ margin: 0, fontSize: 15, color: '#eef6fd' }}>📋 Reporte de recursos</h5>
               <button onClick={() => !generandoRec && setModalReporteRec(false)} disabled={generandoRec}
-                style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'17px', display:'flex' }}>
-                <FaTimes />
-              </button>
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8fb4cd', fontSize: 16, display: 'flex' }}><FaTimes /></button>
             </div>
-            <div style={{ padding:'18px' }}>
-              <p style={{ margin:'0 0 6px', fontSize:'13px', color:'#334155' }}>
+            <div style={{ padding: 18 }}>
+              <p style={{ margin: '0 0 6px', fontSize: 13, color: '#cfe1ef' }}>
                 {incSeleccionado
-                  ? <>Recursos de <b>{incSeleccionado.codigoIncidente || incSeleccionado.tipo}</b>.</>
-                  : <>Recursos de <b>todas las incidencias</b>.</>}
+                  ? <>Recursos de <b style={{ color: '#74c0fc' }}>{incSeleccionado.codigoIncidente || incSeleccionado.tipo}</b>.</>
+                  : <>Recursos de <b style={{ color: '#74c0fc' }}>todas las incidencias</b>.</>}
               </p>
-              <p style={{ margin:'0 0 14px', fontSize:'12px', color:'#64748b' }}>
+              <p style={{ margin: '0 0 14px', fontSize: 12, color: '#7fa5c0' }}>
                 {recursosGlobales.listaPers.length} cargo(s) · {recursosGlobales.listaMaqs.length} equipo(s) · {recursosGlobales.listaMats.length} insumo(s)
-                <br />Costo total: <b style={{ color:'#1463A5' }}>S/ {nf(recursosGlobales.total)}</b>
+                <br />Costo total: <b style={{ color: '#eaf3fa' }}>S/ {nf(recursosGlobales.total)}</b>
               </p>
               {generandoRec ? (
-                <div style={{ textAlign:'center', padding:'20px 0' }}>
-                  <FaSyncAlt className="icon-spin" style={{ fontSize:'24px', color:'#0ea5e9' }} />
-                  <p style={{ fontSize:'13px', color:'#64748b', marginTop:'8px' }}>Generando…</p>
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <FaSyncAlt className="icon-spin" style={{ fontSize: 24, color: '#74c0fc' }} />
+                  <p style={{ fontSize: 13, color: '#7fa5c0', marginTop: 8 }}>Generando…</p>
                 </div>
               ) : (
-                <div style={{ display:'flex', gap:'10px' }}>
+                <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={reporteRecursosPDF}
-                    style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'6px', padding:'16px 10px', background:'#fef2f2', color:'#b91c1c', border:'2px solid #fecaca', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:700 }}>
+                    style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px 10px', background: 'rgba(214,57,57,.14)', color: '#ff8f8f', border: '1px solid rgba(214,57,57,.35)', borderRadius: 12, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
                     <FaFilePdf size={24} /> PDF
                   </button>
                   <button onClick={reporteRecursosExcel}
-                    style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'6px', padding:'16px 10px', background:'#f0fdf4', color:'#15803d', border:'2px solid #bbf7d0', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:700 }}>
+                    style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px 10px', background: 'rgba(47,179,68,.14)', color: '#74e08a', border: '1px solid rgba(47,179,68,.35)', borderRadius: 12, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
                     <FaFileExcel size={24} /> Excel
                   </button>
                 </div>
