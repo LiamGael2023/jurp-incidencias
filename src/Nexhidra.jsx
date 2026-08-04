@@ -39,11 +39,6 @@ const P = {
   credencial: ['M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M7 10a1.5 1.5 0 1 0 0-3', 'M6 15c.4-1.4 1.6-2 3-2s2.6.6 3 2', 'M14 9h4', 'M14 13h4'],
   reporte: ['M8 4h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z', 'M9 9h6', 'M9 13h6', 'M9 17h4'],
   camara: ['M4 8a2 2 0 0 1 2-2h1l1.5-2h7L17 6h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z', 'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z'],
-  reloj: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 7v5l3.5 2'],
-  tendencia: ['M4 20V12', 'M9 20V8', 'M14 20v-6', 'M19 20V5', 'M15 5h4v4'],
-  escudoCheck: ['M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z', 'M9 12l2.2 2.2L15.5 10'],
-  hoja: ['M6 21c-1-6 2-13 12-14-1 10-6 13-10 13', 'M6 21c1-4 3-7 7-9'],
-  red: ['M6 13.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z', 'M17 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z', 'M17 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z', 'M8.2 10l6.6-3.2', 'M8.2 12.2l6.6 5'],
   flecha: ['M5 12h13', 'M13 6l6 6-6 6'],
 };
 
@@ -134,14 +129,6 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
     },
   ];
 
-  const beneficios = [
-    { d: P.reloj, titulo: 'INFORMACIÓN EN TIEMPO REAL', texto: 'Datos precisos para decisiones oportunas.' },
-    { d: P.tendencia, titulo: 'EFICIENCIA OPERATIVA', texto: 'Optimización de procesos y reducción de tiempos.' },
-    { d: P.escudoCheck, titulo: 'MAYOR SEGURIDAD Y PREVENCIÓN', texto: 'Respuesta rápida ante eventos e incidentes.' },
-    { d: P.hoja, titulo: 'GESTIÓN SOSTENIBLE DEL RECURSO HÍDRICO', texto: 'Uso eficiente y responsable del agua.' },
-    { d: P.red, titulo: 'PLATAFORMA INTEGRADA Y ESCALABLE', texto: 'Tecnología que crece junto con nuestras necesidades.' },
-  ];
-
   return (
     <div className={`nx-viewport ${movil ? 'nx-movil' : ''}`}>
       <style>{CSS}</style>
@@ -174,10 +161,6 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
 
         {/* ================= SOLUCIONES ================= */}
         <section className="nx-panel">
-          <div className="nx-pill-wrap">
-            <span className="nx-pill">TRES SOLUCIONES, UN MISMO OBJETIVO</span>
-          </div>
-
           <div className="nx-cards">
             {soluciones.map((s) => {
               const activo = typeof s.onClick === 'function';
@@ -237,18 +220,6 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
           </div>
         </section>
 
-        {/* ================= BENEFICIOS ================= */}
-        <section className="nx-benef">
-          <div className="nx-benef-h">BENEFICIOS PARA NUESTRA GESTIÓN</div>
-          {beneficios.map((b) => (
-            <div className="nx-benef-i" key={b.titulo}>
-              <Ico d={b.d} color="#8fd0f5" size={34} />
-              <div className="nx-benef-t">{b.titulo}</div>
-              <div className="nx-benef-p">{b.texto}</div>
-            </div>
-          ))}
-        </section>
-
         <div className="nx-espacio" />
       </div>
     </div>
@@ -303,12 +274,8 @@ const CSS = `
 
 /* ---------- panel soluciones ---------- */
 .nx-panel{position:relative;margin:0 40px;background:#fff;border-radius:28px;
-  box-shadow:0 24px 60px rgba(11,42,91,.12);padding:0 44px 34px;}
-.nx-pill-wrap{display:flex;justify-content:center;transform:translateY(-50%);}
-.nx-pill{background:var(--azul);color:#fff;font-family:'Sora',sans-serif;font-weight:700;
-  font-size:22px;letter-spacing:3px;padding:16px 54px;border-radius:999px;
-  box-shadow:0 10px 26px rgba(18,104,195,.35);}
-.nx-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:44px;margin-top:12px;}
+  box-shadow:0 24px 60px rgba(11,42,91,.12);padding:34px 44px;}
+.nx-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:44px;}
 
 .nx-card{display:flex;flex-direction:column;gap:18px;padding:16px 14px 18px;border-radius:20px;
   text-decoration:none;color:inherit;
@@ -348,16 +315,6 @@ const CSS = `
 .nx-btn:focus-visible{outline:3px solid var(--navy);outline-offset:3px;}
 .nx-btn-off{background:#eef4fa;color:#93aac2;cursor:not-allowed;}
 
-/* ---------- beneficios ---------- */
-.nx-benef{margin:28px 40px 0;background:var(--navy);border-radius:24px;color:#fff;
-  display:grid;grid-template-columns:300px repeat(5,1fr);}
-.nx-benef-h{display:flex;align-items:center;padding:26px 10px 26px 38px;
-  font-family:'Sora',sans-serif;font-weight:800;font-size:27px;line-height:1.25;}
-.nx-benef-i{padding:26px 22px;border-left:1px solid rgba(255,255,255,.16);
-  display:flex;flex-direction:column;gap:12px;}
-.nx-benef-t{font-family:'Sora',sans-serif;font-weight:700;font-size:16.5px;line-height:1.35;color:#8fd0f5;}
-.nx-benef-p{font-size:14.5px;line-height:1.5;color:rgba(255,255,255,.82);}
-
 .nx-espacio{height:36px;}
 
 /* ================= MOVIL: se apila y hace scroll normal ================= */
@@ -376,8 +333,7 @@ const CSS = `
 .nx-movil .nx-hero-img{aspect-ratio:16/10;}
 .nx-movil .nx-hero-img img{--mascara-izq:linear-gradient(to right,#000,#000);}
 .nx-movil .nx-hero-cap{left:14px;right:14px;bottom:30px;max-width:none;font-size:14px;padding:12px 16px;}
-.nx-movil .nx-panel{margin:22px 14px 0;padding:0 16px 22px;border-radius:22px;}
-.nx-movil .nx-pill{font-size:13px;letter-spacing:1.4px;padding:11px 18px;text-align:center;}
+.nx-movil .nx-panel{margin:22px 14px 0;padding:22px 16px;border-radius:22px;}
 .nx-movil .nx-cards{grid-template-columns:1fr;gap:26px;}
 .nx-movil .nx-card-top{flex-direction:column;align-items:center;text-align:center;gap:14px;}
 .nx-movil .nx-badge{margin:0 auto;width:50px;height:50px;}
@@ -386,9 +342,6 @@ const CSS = `
 .nx-movil .nx-desc{font-size:15.5px;}
 .nx-movil .nx-flabel{font-size:11px;}
 .nx-movil .nx-fcircle{width:52px;height:52px;}
-.nx-movil .nx-benef{margin:22px 14px 0;grid-template-columns:1fr;}
-.nx-movil .nx-benef-h{font-size:21px;padding:22px 22px 6px;}
-.nx-movil .nx-benef-i{border-left:none;border-top:1px solid rgba(255,255,255,.16);padding:18px 22px;}
 .nx-movil .nx-espacio{height:24px;}
 
 @media (prefers-reduced-motion:reduce){
