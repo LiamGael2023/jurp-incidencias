@@ -378,14 +378,23 @@
 }
 .gis .leaflet-control-attribution a { color: #74c0fc !important; }
 
-/* ---------- minimapa: fuera de la esquina que ocupa el panel ---------- */
-.gis .leaflet-bottom.leaflet-right > .leaflet-control:not(.leaflet-control-attribution) {
-  position: fixed; left: 162px; bottom: 56px; right: auto; margin: 0; z-index: 20;
-}
-.gis .leaflet-bottom.leaflet-right > .leaflet-control:not(.leaflet-control-attribution) .leaflet-container {
-  border-radius: 12px; border: 1px solid rgba(116, 192, 252, .25);
+/* ---------- minimapa ----------
+   Viene de MapaHerramientas.css anclado abajo a la derecha, justo donde va
+   el panel de recursos. Lo pasamos al lado izquierdo, sobre las herramientas. */
+.gis .jurp-minimapa-wrap {
+  left: 162px; right: auto; bottom: 56px; z-index: 20;
+  width: 210px; border: 1px solid rgba(116, 192, 252, .28); border-radius: 12px;
+  background: rgba(8, 19, 30, .82);
   box-shadow: 0 8px 26px rgba(0, 0, 0, .45);
 }
+.gis .jurp-minimapa-toggle {
+  background: rgba(8, 19, 30, .85); color: #9cc6e4;
+  border: 1px solid rgba(116, 192, 252, .25); border-radius: 6px;
+}
+.gis .jurp-minimapa-toggle:hover { background: rgba(32, 107, 196, .55); color: #fff; }
+
+/* La barra vieja de herramientas ya no se usa en esta vista */
+.gis .jurp-toolbar { display: none; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 1200px) {
