@@ -60,8 +60,8 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
       (u) => new Promise((ok) => { const i = new Image(); i.onload = i.onerror = ok; i.src = u; })
     );
     const fuentes = document.fonts?.ready ?? Promise.resolve();
-    const minimo = new Promise((ok) => setTimeout(ok, 700));    // que no parpadee
-    const tope = new Promise((ok) => setTimeout(ok, 5000));     // por si algo no carga
+    const minimo = new Promise((ok) => setTimeout(ok, 2400));   // tiempo minimo en pantalla
+    const tope = new Promise((ok) => setTimeout(ok, 6500));     // por si algo no carga
 
     let vivo = true;
     Promise.race([Promise.all([...imagenes, fuentes, minimo]), tope]).then(() => {
