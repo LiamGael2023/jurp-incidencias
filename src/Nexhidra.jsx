@@ -5,6 +5,7 @@ import heroCanal from './assets/nexhidra/hero-canal.jpg';
 import appHydrometrix from './assets/nexhidra/app-caudixa.jpg';
 import appPluvira from './assets/nexhidra/app-pluvira.jpg';
 import appSentria from './assets/nexhidra/app-sentria.jpg';
+import logoJurpH from './assets/logo1.png';   // logo horizontal, para la pantalla de carga
 
 /* ---------- paleta ---------- */
 const AZUL = '#1268C3';
@@ -48,6 +49,28 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
   const [movil, setMovil] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= CORTE_MOVIL
   );
+
+  /* pantalla de carga: se va cuando terminan de bajar imagenes y fuentes */
+  const [cargando, setCargando] = useState(true);
+  const [saliendo, setSaliendo] = useState(false);
+
+  useEffect(() => {
+    const urls = [logoJurp, logoJurpH, heroCanal, appHydrometrix, appPluvira, appSentria];
+    const imagenes = urls.map(
+      (u) => new Promise((ok) => { const i = new Image(); i.onload = i.onerror = ok; i.src = u; })
+    );
+    const fuentes = document.fonts?.ready ?? Promise.resolve();
+    const minimo = new Promise((ok) => setTimeout(ok, 700));    // que no parpadee
+    const tope = new Promise((ok) => setTimeout(ok, 5000));     // por si algo no carga
+
+    let vivo = true;
+    Promise.race([Promise.all([...imagenes, fuentes, minimo]), tope]).then(() => {
+      if (!vivo) return;
+      setSaliendo(true);
+      setTimeout(() => vivo && setCargando(false), 500);
+    });
+    return () => { vivo = false; };
+  }, []);
 
   /* fuentes */
   useEffect(() => {
@@ -132,6 +155,13 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
   return (
     <div className={`nx-viewport ${movil ? 'nx-movil' : ''}`}>
       <style>{CSS}</style>
+
+      {cargando && (
+        <div className={`nx-carga ${saliendo ? 'nx-carga-off' : ''}`}>
+          <img src={logoJurpH} alt="Junta de Riego Presurizado" />
+          <span className="nx-spin" />
+        </div>
+      )}
 
       <div className="nx-stage" ref={stageRef}>
 
@@ -344,7 +374,22 @@ const CSS = `
 .nx-movil .nx-fcircle{width:52px;height:52px;}
 .nx-movil .nx-espacio{height:24px;}
 
+/* ---------- pantalla de carga ---------- */
+.nx-carga{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:34px;
+  background:linear-gradient(160deg,#f7fbff 0%,#eaf4fc 45%,#d8e9f8 100%);
+  opacity:1;transition:opacity .5s ease;}
+.nx-carga-off{opacity:0;pointer-events:none;}
+.nx-carga img{width:min(38vw,420px);height:auto;
+  animation:nx-latido 1.8s ease-in-out infinite;}
+.nx-spin{width:42px;height:42px;border-radius:50%;
+  border:4px solid rgba(18,104,195,.18);border-top-color:var(--azul);
+  animation:nx-girar .9s linear infinite;}
+@keyframes nx-girar{to{transform:rotate(360deg);}}
+@keyframes nx-latido{0%,100%{opacity:1;}50%{opacity:.55;}}
+
 @media (prefers-reduced-motion:reduce){
   .nx-card,.nx-btn{transition:none;}
+  .nx-carga img{animation:none;}
 }
 `;
