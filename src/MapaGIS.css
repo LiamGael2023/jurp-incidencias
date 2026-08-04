@@ -25,11 +25,11 @@
 
 /* ---------- cristal: base de todos los paneles ---------- */
 .gis-glass {
-  background: rgba(10, 22, 34, .52);
-  backdrop-filter: blur(22px) saturate(140%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
-  border: 1px solid rgba(116, 192, 252, .18);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, .35);
+  background: rgba(8, 19, 30, .82);
+  backdrop-filter: blur(26px) saturate(120%);
+  -webkit-backdrop-filter: blur(26px) saturate(120%);
+  border: 1px solid rgba(116, 192, 252, .2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .45);
 }
 
 /* ---------- rail ---------- */
@@ -83,15 +83,15 @@
   display: flex; align-items: center; gap: 14px;
 }
 .gis-marca { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-radius: 16px; }
-.gis-marca-t1 { font-size: 14px; font-weight: 700; line-height: 1.2; color: #eef6fd; }
-.gis-marca-t2 { font-size: 10.5px; color: #7fa5c0; letter-spacing: .05em; }
+.gis-marca-t1 { font-size: 14px; font-weight: 800; line-height: 1.2; color: #eef6fd; }
+.gis-marca-t2 { font-size: 10.5px; font-weight: 700; color: #9dc0d8; letter-spacing: .05em; }
 
 .gis-buscador { flex: 1; display: flex; justify-content: center; position: relative; }
 .gis-buscador-caja { position: relative; width: min(440px, 42vw); }
 .gis-buscador-caja input {
   width: 100%; padding: 10px 34px 10px 38px; border-radius: 12px;
-  background: rgba(10, 22, 34, .52); backdrop-filter: blur(22px) saturate(140%);
-  border: 1px solid rgba(116, 192, 252, .18); color: #dce9f5;
+  background: rgba(8, 19, 30, .82); backdrop-filter: blur(26px) saturate(120%);
+  border: 1px solid rgba(116, 192, 252, .2); color: #eaf3fa;
   font-size: 13px; font-family: inherit; outline: none;
   box-shadow: 0 8px 32px rgba(0, 0, 0, .4);
 }
@@ -150,15 +150,15 @@
   display: flex; align-items: center; justify-content: center; font-size: 16px;
 }
 .gis-kpi-label {
-  display: block; font-size: 9.5px; font-weight: 700; letter-spacing: .12em;
-  color: #7fa5c0; text-transform: uppercase;
+  display: block; font-size: 10px; font-weight: 800; letter-spacing: .1em;
+  color: #a6c9e0; text-transform: uppercase;
 }
 .gis-kpi-valor {
   display: flex; align-items: baseline; gap: 4px;
-  font-size: 19px; font-weight: 700; line-height: 1.2; color: #f2f9fe;
+  font-size: 20px; font-weight: 800; line-height: 1.2; color: #ffffff;
   font-variant-numeric: tabular-nums;
 }
-.gis-kpi-valor small { font-size: 10.5px; color: #7fa5c0; font-weight: 500; }
+.gis-kpi-valor small { font-size: 10.5px; color: #a6c9e0; font-weight: 600; }
 
 /* ---------- herramientas ---------- */
 .gis-tools {
@@ -192,7 +192,7 @@
 .gis-tarjeta-head {
   display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px;
 }
-.gis-sub { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #7fa5c0; }
+.gis-sub { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #a6c9e0; }
 .gis-btn-mini {
   display: flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 9px;
   background: transparent; border: 1px solid rgba(116, 192, 252, .3); color: #74c0fc;
@@ -207,10 +207,10 @@
   border: 1px solid rgba(116, 192, 252, .24);
 }
 .gis-inc-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 8px; }
-.gis-inc-tipo { font-size: 13.5px; font-weight: 700; color: #eef6fd; }
+.gis-inc-tipo { font-size: 14px; font-weight: 800; color: #ffffff; }
 .gis-inc-link { background: none; border: none; color: #74c0fc; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; font-family: inherit; }
 .gis-inc-cod { font-size: 10px; font-weight: 700; color: #74c0fc; font-family: ui-monospace, monospace; }
-.gis-inc-meta { font-size: 11.5px; color: #9cbdd4; margin-top: 4px; }
+.gis-inc-meta { font-size: 11.5px; font-weight: 600; color: #b3d3e8; margin-top: 4px; }
 
 .gis-fila {
   display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 16px;
@@ -223,9 +223,9 @@
   display: flex; align-items: center; justify-content: center;
 }
 .gis-fila-txt { flex: 1; min-width: 0; }
-.gis-fila-txt b { display: block; font-size: 13px; font-weight: 600; color: #eaf3fa; }
-.gis-fila-txt span { display: block; font-size: 10.5px; color: #6f95b1; }
-.gis-fila-monto { font-size: 12.5px; font-weight: 700; color: #eaf3fa; font-variant-numeric: tabular-nums; }
+.gis-fila-txt b { display: block; font-size: 13.5px; font-weight: 700; color: #ffffff; }
+.gis-fila-txt span { display: block; font-size: 11px; font-weight: 600; color: #9dc0d8; }
+.gis-fila-monto { font-size: 13px; font-weight: 800; color: #ffffff; font-variant-numeric: tabular-nums; }
 .gis-fila-chev { font-size: 11px; color: #6f95b1; transition: transform .2s; }
 .gis-fila-chev.abierto { transform: rotate(90deg); }
 
@@ -234,9 +234,9 @@
   display: flex; align-items: center; gap: 8px; font-size: 11px;
   background: rgba(255, 255, 255, .04); padding: 6px 9px; border-radius: 8px;
 }
-.gis-detalle-item .nom { flex: 1; min-width: 0; font-weight: 600; color: #dbeaf6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gis-detalle-item .uni { color: #7fa5c0; font-size: 10px; white-space: nowrap; }
-.gis-detalle-item .mon { font-weight: 700; color: #eaf3fa; font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gis-detalle-item .nom { flex: 1; min-width: 0; font-weight: 700; color: #f0f7fc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gis-detalle-item .uni { color: #a6c9e0; font-weight: 600; font-size: 10px; white-space: nowrap; }
+.gis-detalle-item .mon { font-weight: 800; color: #ffffff; font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .gis-detalle-vacio { font-size: 10.5px; color: #6f95b1; font-style: italic; padding: 2px 0; }
 .gis-uso { padding: 1px 6px; border-radius: 5px; font-size: 9px; font-weight: 700; white-space: nowrap; }
 .gis-uso.si { background: rgba(47, 179, 68, .18); color: #74e08a; }
@@ -247,14 +247,14 @@
   background: linear-gradient(135deg, rgba(32, 107, 196, .26), rgba(11, 74, 138, .18));
   border-top: 1px solid rgba(116, 192, 252, .2);
 }
-.gis-total b { font-size: 17px; font-weight: 700; color: #fff; font-family: ui-monospace, monospace; }
+.gis-total b { font-size: 18px; font-weight: 800; color: #fff; font-family: ui-monospace, monospace; }
 
 .gis-barras { display: flex; flex-direction: column; gap: 10px; }
 .gis-barra { display: grid; grid-template-columns: 96px 1fr 40px; align-items: center; gap: 9px; font-size: 11px; }
-.gis-barra-label { color: #8fb4cd; text-align: right; line-height: 1.2; }
+.gis-barra-label { color: #b3d3e8; font-weight: 600; text-align: right; line-height: 1.2; }
 .gis-barra-track { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, .07); overflow: hidden; }
 .gis-barra-fill { height: 100%; border-radius: 4px; }
-.gis-barra-num { font-weight: 700; color: #eaf3fa; text-align: right; font-variant-numeric: tabular-nums; }
+.gis-barra-num { font-weight: 800; color: #ffffff; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---------- lista de incidentes ---------- */
 .gis-filtros-inc { display: flex; gap: 5px; padding: 0 14px 10px; flex-wrap: wrap; }
@@ -277,11 +277,11 @@
 .gis-inc-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .gis-inc-txt { flex: 1; min-width: 0; }
 .gis-inc-txt b {
-  display: block; font-size: 12px; font-weight: 600; color: #eaf3fa;
+  display: block; font-size: 12.5px; font-weight: 700; color: #ffffff;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .gis-inc-txt span {
-  display: block; font-size: 10px; color: #6f95b1;
+  display: block; font-size: 10.5px; font-weight: 600; color: #9dc0d8;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .gis-inc-estado {
@@ -292,7 +292,7 @@
 /* ---------- detalle del incidente en el panel ---------- */
 .gis-inc-desc {
   margin-top: 8px; padding: 7px 9px; border-radius: 8px; font-size: 11.5px;
-  line-height: 1.45; color: #cfe1ef; background: rgba(255, 255, 255, .05);
+  line-height: 1.45; font-weight: 500; color: #e2eef8; background: rgba(255, 255, 255, .07);
 }
 .gis-inc-fotos { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; padding-bottom: 2px; }
 .gis-inc-fotos img {
@@ -311,7 +311,7 @@
 .gis-leyenda {
   position: absolute; bottom: 16px; left: 96px; z-index: 30;
   display: flex; gap: 14px; align-items: center; padding: 9px 16px; border-radius: 14px;
-  font-size: 11px; font-weight: 600; color: #8fb4cd;
+  font-size: 11.5px; font-weight: 700; color: #b3d3e8;
 }
 .gis-leyenda i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 .gis-leyenda-sep { width: 1px; height: 14px; background: rgba(255, 255, 255, .12); }
@@ -334,7 +334,7 @@
 }
 .gis-capa {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 4px 0; font-size: 11.5px; color: #cfe1ef;
+  padding: 4px 0; font-size: 11.5px; font-weight: 600; color: #e2eef8;
 }
 .gis-capa label { display: flex; align-items: center; gap: 7px; cursor: pointer; flex: 1; min-width: 0; }
 .gis-capa input { accent-color: #4dabf7; cursor: pointer; }
@@ -377,6 +377,15 @@
   border-radius: 6px 0 0 0; font-size: 10px;
 }
 .gis .leaflet-control-attribution a { color: #74c0fc !important; }
+
+/* ---------- minimapa: fuera de la esquina que ocupa el panel ---------- */
+.gis .leaflet-bottom.leaflet-right > .leaflet-control:not(.leaflet-control-attribution) {
+  position: fixed; left: 162px; bottom: 56px; right: auto; margin: 0; z-index: 20;
+}
+.gis .leaflet-bottom.leaflet-right > .leaflet-control:not(.leaflet-control-attribution) .leaflet-container {
+  border-radius: 12px; border: 1px solid rgba(116, 192, 252, .25);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .45);
+}
 
 /* ---------- responsive ---------- */
 @media (max-width: 1200px) {
