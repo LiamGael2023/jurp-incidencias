@@ -163,7 +163,7 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
 
       {cargando && (
         <div className={`nx-carga ${saliendo ? 'nx-carga-off' : ''}`}>
-          <img src={logoNexhydro} alt="NEXHYDRO — Ecosistema Digital JURP" />
+          <img src={logoJurpH} alt="Junta de Riego Presurizado" />
           <span className="nx-spin" />
         </div>
       )}
@@ -370,7 +370,7 @@ const CSS = `
   background:linear-gradient(160deg,#f7fbff 0%,#eaf4fc 45%,#d8e9f8 100%);
   opacity:1;transition:opacity .5s ease;}
 .nx-carga-off{opacity:0;pointer-events:none;}
-.nx-carga img{width:min(42vw,520px);height:auto;
+.nx-carga img{width:min(38vw,420px);height:auto;
   animation:nx-latido 1.8s ease-in-out infinite;}
 .nx-spin{width:42px;height:42px;border-radius:50%;
   border:4px solid rgba(18,104,195,.18);border-top-color:var(--azul);
