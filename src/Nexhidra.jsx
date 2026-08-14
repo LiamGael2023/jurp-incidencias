@@ -6,6 +6,10 @@ import appHydrometrix from './assets/nexhidra/app-caudixa.jpg';
 import appPluvira from './assets/nexhidra/app-pluvira.jpg';
 import appSentria from './assets/nexhidra/app-sentria.jpg';
 import logoJurpH from './assets/logo1.png';   // logo horizontal, para la pantalla de carga
+import logoNexhydro from './assets/nexhidra/logo-nexhydro.png';
+import logoHydrometrix from './assets/nexhidra/logo-hydrometrix.png';
+import logoPluvira from './assets/nexhidra/logo-pluvira.png';
+import logoSentria from './assets/nexhidra/logo-sentria.png';
 
 /* ---------- paleta ---------- */
 const AZUL = '#1268C3';
@@ -55,7 +59,8 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
   const [saliendo, setSaliendo] = useState(false);
 
   useEffect(() => {
-    const urls = [logoJurp, logoJurpH, heroCanal, appHydrometrix, appPluvira, appSentria];
+    const urls = [logoJurp, logoJurpH, logoNexhydro, heroCanal, appHydrometrix, appPluvira, appSentria,
+      logoHydrometrix, logoPluvira, logoSentria];
     const imagenes = urls.map(
       (u) => new Promise((ok) => { const i = new Image(); i.onload = i.onerror = ok; i.src = u; })
     );
@@ -118,8 +123,8 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
 
   const soluciones = [
     {
-      key: 'hydrometrix', src: appHydrometrix, color: AZUL, tint: '#e3f0fc',
-      pre: 'HYDROMETRI', fin: 'X', tagline: 'MONITOREO INTELIGENTE DEL AGUA', icono: P.gota,
+      key: 'hydrometrix', src: appHydrometrix, logo: logoHydrometrix, color: AZUL, tint: '#e3f0fc',
+      nombre: 'HYDROMETRIX', tagline: 'MONITOREO INTELIGENTE DEL AGUA',
       desc: 'Monitoreamos en tiempo real el caudal y la calidad del agua para una operación eficiente y sostenible.',
       features: [
         { d: P.gota, label: 'CAUDAL EN TIEMPO REAL' },
@@ -129,8 +134,8 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
       onClick: onCaudixa, href: hrefCaudixa,
     },
     {
-      key: 'pluvira', src: appPluvira, color: NARANJA, tint: '#fdeede',
-      pre: 'PLUVIR', fin: 'A', tagline: 'GESTIÓN INTELIGENTE DE RIESGOS', icono: P.nube,
+      key: 'pluvira', src: appPluvira, logo: logoPluvira, color: NARANJA, tint: '#fdeede',
+      nombre: 'PLUVIRA', tagline: 'GESTIÓN INTELIGENTE DE RIESGOS',
       desc: 'Anticipamos eventos naturales, evaluamos riesgos y activamos acciones oportunas para proteger nuestra infraestructura.',
       features: [
         { d: P.nubeLluvia, label: 'MONITOREO CLIMÁTICO' },
@@ -140,8 +145,8 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
       onClick: onEntrar, href: hrefPluvira,
     },
     {
-      key: 'sentria', src: appSentria, color: VERDE, tint: '#e4f4e9',
-      pre: 'SENTRI', fin: 'A', tagline: 'SEGURIDAD ACTIVA EN TIEMPO REAL', icono: P.escudo,
+      key: 'sentria', src: appSentria, logo: logoSentria, color: VERDE, tint: '#e4f4e9',
+      nombre: 'SENTRIA', tagline: 'SEGURIDAD ACTIVA EN TIEMPO REAL',
       desc: 'Controlamos, vigilamos y respondemos ante incidentes para garantizar la seguridad de personas e instalaciones.',
       features: [
         { d: P.credencial, label: 'CONTROL DE ACCESOS' },
@@ -158,7 +163,7 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
 
       {cargando && (
         <div className={`nx-carga ${saliendo ? 'nx-carga-off' : ''}`}>
-          <img src={logoJurpH} alt="Junta de Riego Presurizado" />
+          <img src={logoNexhydro} alt="NEXHYDRO — Ecosistema Digital JURP" />
           <span className="nx-spin" />
         </div>
       )}
@@ -169,11 +174,7 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
         <header className="nx-hero">
           <div className="nx-hero-txt">
             <div className="nx-brand">
-              <img className="nx-logo" src={logoJurp} alt="Logo JURP" />
-              <div>
-                <div className="nx-jurp">JURP</div>
-                <div className="nx-nex"><span>NEX</span><span className="nx-hidra">HIDRO</span></div>
-              </div>
+              <img className="nx-logo-nex" src={logoNexhydro} alt="NEXHYDRO — Ecosistema Digital JURP" />
             </div>
             <p className="nx-eyebrow">PLATAFORMA DIGITAL DE GESTIÓN INTELIGENTE</p>
             <p className="nx-junta">JUNTA DE USUARIOS DE RIEGO PRESURIZADO</p>
@@ -217,11 +218,10 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
                   <div className="nx-card-top">
                     <div className="nx-phone">
                       <span className="nx-notch" />
-                      <img src={s.src} alt={`App ${s.pre}${s.fin}`} />
+                      <img src={s.src} alt={`App ${s.nombre}`} />
                     </div>
                     <div className="nx-card-id">
-                      <div className="nx-badge"><Ico d={s.icono} color={s.color} size={32} /></div>
-                      <h2 className="nx-name">{s.pre}<span>{s.fin}</span></h2>
+                      <img className="nx-card-logo" src={s.logo} alt={s.nombre} />
                       <p className="nx-tag">{s.tagline}</p>
                     </div>
                   </div>
@@ -277,11 +277,8 @@ const CSS = `
 /* ---------- hero ---------- */
 .nx-hero{display:grid;grid-template-columns:33fr 67fr;}
 .nx-hero-txt{padding:0 48px 36px 64px;display:flex;flex-direction:column;justify-content:center;}
-.nx-brand{display:flex;align-items:center;gap:28px;margin-top:44px;}
-.nx-logo{width:120px;height:120px;object-fit:contain;flex-shrink:0;}
-.nx-jurp{font-family:'Sora',sans-serif;font-weight:800;font-size:48px;line-height:1;color:var(--navy);}
-.nx-nex{font-family:'Sora',sans-serif;font-weight:800;font-size:78px;line-height:1.02;letter-spacing:-1px;color:var(--navy);}
-.nx-hidra{color:var(--azul);}
+.nx-brand{display:flex;align-items:center;margin-top:44px;}
+.nx-logo-nex{width:100%;max-width:540px;height:auto;object-fit:contain;display:block;}
 .nx-eyebrow{font-family:'Sora',sans-serif;font-weight:700;font-size:24px;letter-spacing:2px;color:var(--azul);margin:18px 0 0;}
 .nx-junta{font-family:'Sora',sans-serif;font-weight:600;font-size:19.5px;letter-spacing:2.5px;
   margin:10px 0 0;padding-top:10px;border-top:3px solid var(--cielo);align-self:flex-start;
@@ -321,14 +318,10 @@ const CSS = `
   background:#10203c;border-radius:0 0 12px 12px;z-index:2;}
 .nx-phone img{width:100%;height:264px;object-fit:cover;border-radius:22px;display:block;}
 
-.nx-card-id{padding-top:6px;min-width:0;}
-.nx-badge{width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  background:var(--tint);}
-.nx-name{font-family:'Sora',sans-serif;font-weight:800;font-size:36px;letter-spacing:.5px;
-  color:var(--navy);margin:12px 0 0;}
-.nx-name span{color:var(--c);}
+.nx-card-id{padding-top:10px;min-width:0;flex:1;}
+.nx-card-logo{width:100%;max-width:330px;height:auto;object-fit:contain;display:block;}
 .nx-tag{font-family:'Sora',sans-serif;font-weight:700;font-size:17px;letter-spacing:1.5px;
-  color:var(--c);margin:8px 0 0;line-height:1.4;}
+  color:var(--c);margin:14px 0 0;line-height:1.4;}
 .nx-desc{font-size:19px;line-height:1.55;color:var(--texto);margin:0;text-wrap:pretty;}
 
 .nx-feats{display:flex;gap:12px;list-style:none;padding:0;margin:0 0 auto;}
@@ -354,9 +347,7 @@ const CSS = `
 .nx-movil .nx-hero{grid-template-columns:1fr;}
 .nx-movil .nx-hero-txt{padding:26px 20px 22px;text-align:center;align-items:center;}
 .nx-movil .nx-brand{justify-content:center;gap:16px;margin-top:0;}
-.nx-movil .nx-logo{width:72px;height:72px;}
-.nx-movil .nx-jurp{font-size:28px;}
-.nx-movil .nx-nex{font-size:45px;}
+.nx-movil .nx-logo-nex{max-width:330px;margin:0 auto;}
 .nx-movil .nx-eyebrow{font-size:14px;letter-spacing:1.4px;margin-top:14px;}
 .nx-movil .nx-junta{font-size:12.5px;letter-spacing:1.6px;align-self:center;}
 .nx-movil .nx-lead{font-size:17px;margin-left:auto;margin-right:auto;}
@@ -366,8 +357,7 @@ const CSS = `
 .nx-movil .nx-panel{margin:22px 14px 0;padding:22px 16px;border-radius:22px;}
 .nx-movil .nx-cards{grid-template-columns:1fr;gap:26px;}
 .nx-movil .nx-card-top{flex-direction:column;align-items:center;text-align:center;gap:14px;}
-.nx-movil .nx-badge{margin:0 auto;width:50px;height:50px;}
-.nx-movil .nx-name{font-size:30px;margin-top:10px;}
+.nx-movil .nx-card-logo{max-width:270px;margin:0 auto;}
 .nx-movil .nx-tag{font-size:14px;}
 .nx-movil .nx-desc{font-size:16.5px;}
 .nx-movil .nx-flabel{font-size:12px;}
@@ -380,7 +370,7 @@ const CSS = `
   background:linear-gradient(160deg,#f7fbff 0%,#eaf4fc 45%,#d8e9f8 100%);
   opacity:1;transition:opacity .5s ease;}
 .nx-carga-off{opacity:0;pointer-events:none;}
-.nx-carga img{width:min(38vw,420px);height:auto;
+.nx-carga img{width:min(42vw,520px);height:auto;
   animation:nx-latido 1.8s ease-in-out infinite;}
 .nx-spin{width:42px;height:42px;border-radius:50%;
   border:4px solid rgba(18,104,195,.18);border-top-color:var(--azul);
