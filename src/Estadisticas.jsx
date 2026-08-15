@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FaSyncAlt, FaExclamationTriangle, FaCheckCircle, FaClock, FaClipboardList, FaThermometerHalf, FaTint, FaCloudRain, FaChartBar } from 'react-icons/fa';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import ReactApexChart from 'react-apexcharts';
 import './Incidentes.css';
 import './EstadisticasGIS.css';
 
@@ -8,12 +8,103 @@ const COLORS_TIPO = ['#1268C3','#f76707','#d63939','#2fb344','#ae3ec9','#f59f00'
 const COLORS_GRAVEDAD = {'lev':'#2fb344','mod':'#f76707','gra':'#d63939'};
 const COLORS_ESTADO = {'pat':'#f59f00','ate':'#1268C3','cer':'#2fb344'};
 
-// Estilo común de los gráficos, para que todos hablen el mismo idioma.
-const EJE = { fontSize: 11, fill: '#5b7590' };
-const TOOLTIP = {
-  borderRadius: '10px', border: '1px solid #c9dff2', fontSize: '12px',
-  boxShadow: '0 6px 18px rgba(11,42,91,.14)',
-};
+const FUENTE = "'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
+
+/* Opciones base de las donas: leyenda abajo y total al centro. */
+const opcionesDona = (labels, colors) => ({
+  chart: { type: 'donut', fontFamily: FUENTE, toolbar: { show: false }, animations: { speed: 500 } },
+  labels,
+  colors,
+  stroke: { width: 2, colors: ['#fff'] },
+  dataLabels: {
+    enabled: true,
+    style: { fontSize: '12px', fontWeight: 700, fontFamily: FUENTE },
+    dropShadow: { enabled: false },
+    formatter: (val) => `${Math.round(val)}%`,
+  },
+  legend: {
+    position: 'bottom',
+    horizontalAlign: 'center',
+    fontSize: '12px',
+    fontWeight: 600,
+    fontFamily: FUENTE,
+    labels: { colors: '#5b7590' },
+    markers: { width: 9, height: 9, radius: 9 },
+    itemMargin: { horizontal: 8, vertical: 3 },
+  },
+  plotOptions: {
+    pie: {
+      donut: {
+        size: '62%',
+        labels: {
+          show: true,
+          name: { fontSize: '12px', fontWeight: 600, color: '#7b93ad', offsetY: -4 },
+          value: { fontSize: '26px', fontWeight: 800, color: '#0B2A5B', offsetY: 2 },
+          total: {
+            show: true,
+            showAlways: true,
+            label: 'Total',
+            color: '#7b93ad',
+            fontSize: '11px',
+            fontWeight: 700,
+            formatter: (w) => w.globals.seriesTotals.reduce((a, b) => a + b, 0),
+          },
+        },
+      },
+    },
+  },
+  tooltip: {
+    style: { fontSize: '12px', fontFamily: FUENTE },
+    y: { formatter: (v) => `${v} incidente${v !== 1 ? 's' : ''}` },
+  },
+  states: { hover: { filter: { type: 'lighten', value: 0.08 } } },
+  noData: { text: 'Sin datos', style: { color: '#7b93ad', fontSize: '13px', fontFamily: FUENTE } },
+});
+
+/* Opciones base de las barras: degradado azul → celeste. */
+const opcionesBarras = (categorias, { unidad = '', rotarEtiquetas = false, decimales = false } = {}) => ({
+  chart: { type: 'bar', fontFamily: FUENTE, toolbar: { show: false }, animations: { speed: 500 } },
+  colors: ['#1268C3'],
+  fill: {
+    type: 'gradient',
+    gradient: {
+      shade: 'light', type: 'vertical', shadeIntensity: 0.2,
+      gradientToColors: ['#35B6E9'], inverseColors: true,
+      opacityFrom: 1, opacityTo: 1, stops: [0, 100],
+    },
+  },
+  plotOptions: { bar: { borderRadius: 6, borderRadiusApplication: 'end', columnWidth: '55%' } },
+  dataLabels: { enabled: false },
+  grid: {
+    borderColor: '#e2ecf6', strokeDashArray: 4,
+    xaxis: { lines: { show: false } },
+    yaxis: { lines: { show: true } },
+    padding: { left: 4, right: 8 },
+  },
+  xaxis: {
+    categories: categorias,
+    axisBorder: { color: '#c9dff2' },
+    axisTicks: { show: false },
+    labels: {
+      style: { colors: '#5b7590', fontSize: '11px', fontFamily: FUENTE },
+      rotate: rotarEtiquetas ? -45 : 0,
+      rotateAlways: rotarEtiquetas,
+      hideOverlappingLabels: true,
+    },
+  },
+  yaxis: {
+    labels: {
+      style: { colors: '#5b7590', fontSize: '11px', fontFamily: FUENTE },
+      formatter: (v) => (decimales ? Number(v).toFixed(1) : Math.round(v)) + unidad,
+    },
+  },
+  tooltip: {
+    style: { fontSize: '12px', fontFamily: FUENTE },
+    y: { formatter: (v) => `${decimales ? Number(v).toFixed(1) : v}${unidad}` },
+  },
+  states: { hover: { filter: { type: 'darken', value: 0.92 } } },
+  noData: { text: 'Sin datos', style: { color: '#7b93ad', fontSize: '13px', fontFamily: FUENTE } },
+});
 
 function Estadisticas() {
   const [subMenu, setSubMenu] = useState('incidentes');
@@ -169,6 +260,31 @@ function Estadisticas() {
     return Object.entries(meses).map(([mes, cantidad]) => ({ mes, cantidad }));
   })();
 
+  // ── Series y opciones para ApexCharts ─────────────────────────────────
+  const donaEstado = {
+    series: porEstado.map(d => d.value),
+    options: opcionesDona(porEstado.map(d => d.name), porEstado.map(d => d.color)),
+  };
+  const donaTipo = {
+    series: porTipo.map(d => d.value),
+    options: opcionesDona(porTipo.map(d => d.name), porTipo.map((_, i) => COLORS_TIPO[i % COLORS_TIPO.length])),
+  };
+  const donaGravedad = {
+    series: porGravedad.map(d => d.value),
+    options: opcionesDona(
+      porGravedad.map(d => d.name),
+      porGravedad.map(d => d.name === 'Leve' ? COLORS_GRAVEDAD.lev : d.name === 'Moderada' ? COLORS_GRAVEDAD.mod : COLORS_GRAVEDAD.gra),
+    ),
+  };
+  const barrasMes = {
+    series: [{ name: 'Incidentes', data: porMes.map(d => d.cantidad) }],
+    options: opcionesBarras(porMes.map(d => d.mes)),
+  };
+  const barrasLluvia = {
+    series: [{ name: 'Lluvia', data: lluviaChart.map(d => d.mm) }],
+    options: opcionesBarras(lluviaChart.map(d => d.dia), { unidad: ' mm', rotarEtiquetas: diasRango > 15, decimales: true }),
+  };
+
   // Tarjeta de indicador: el color va por variable CSS (--c).
   const Kpi = ({ color, icono, etiqueta, valor }) => (
     <div className="est-kpi" style={{ '--c': color }}>
@@ -231,65 +347,24 @@ function Estadisticas() {
 
         {/* ── Gráficos de incidentes ─────────────────────────────────────── */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:'14px',marginBottom:'18px'}}>
-          {/* Por Estado */}
           <div className="est-card">
             <div className="est-titulo">Incidentes por Estado</div>
-            <ResponsiveContainer width="100%" height={230}>
-              <PieChart>
-                <Pie data={porEstado} cx="50%" cy="45%" innerRadius={40} outerRadius={75} dataKey="value" paddingAngle={2}>
-                  {porEstado.map((d,i) => <Cell key={i} fill={d.color}/>)}
-                </Pie>
-                <Tooltip formatter={(v,n)=>[v,n]} contentStyle={TOOLTIP}/>
-                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:'12px',color:'#5b7590'}} formatter={(v,entry)=>`${v} (${entry.payload.value})`}/>
-              </PieChart>
-            </ResponsiveContainer>
+            <ReactApexChart options={donaEstado.options} series={donaEstado.series} type="donut" height={265} />
           </div>
-          {/* Por Tipo */}
           <div className="est-card">
             <div className="est-titulo">Incidentes por Tipo</div>
-            <ResponsiveContainer width="100%" height={230}>
-              <PieChart>
-                <Pie data={porTipo} cx="50%" cy="45%" innerRadius={40} outerRadius={75} dataKey="value" paddingAngle={2}>
-                  {porTipo.map((d,i) => <Cell key={i} fill={COLORS_TIPO[i % COLORS_TIPO.length]}/>)}
-                </Pie>
-                <Tooltip formatter={(v,n)=>[v,n]} contentStyle={TOOLTIP}/>
-                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:'12px',color:'#5b7590'}} formatter={(v,entry)=>`${v} (${entry.payload.value})`}/>
-              </PieChart>
-            </ResponsiveContainer>
+            <ReactApexChart options={donaTipo.options} series={donaTipo.series} type="donut" height={265} />
           </div>
-          {/* Por Gravedad */}
           <div className="est-card">
             <div className="est-titulo">Incidentes por Gravedad</div>
-            <ResponsiveContainer width="100%" height={230}>
-              <PieChart>
-                <Pie data={porGravedad} cx="50%" cy="45%" innerRadius={40} outerRadius={75} dataKey="value" paddingAngle={2}>
-                  {porGravedad.map((d,i) => { const c = d.name==='Leve'?COLORS_GRAVEDAD.lev:d.name==='Moderada'?COLORS_GRAVEDAD.mod:COLORS_GRAVEDAD.gra; return <Cell key={i} fill={c}/>; })}
-                </Pie>
-                <Tooltip formatter={(v,n)=>[v,n]} contentStyle={TOOLTIP}/>
-                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:'12px',color:'#5b7590'}} formatter={(v,entry)=>`${v} (${entry.payload.value})`}/>
-              </PieChart>
-            </ResponsiveContainer>
+            <ReactApexChart options={donaGravedad.options} series={donaGravedad.series} type="donut" height={265} />
           </div>
         </div>
 
         {/* ── Tendencia mensual ───────────────────────────────────────────── */}
         <div className="est-card" style={{marginBottom:'18px'}}>
           <div className="est-titulo">Tendencia de Incidentes (Últimos 6 meses)</div>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={porMes}>
-              <defs>
-                <linearGradient id="gradBarra" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#35B6E9"/>
-                  <stop offset="100%" stopColor="#1268C3"/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2ecf6" vertical={false}/>
-              <XAxis dataKey="mes" tick={EJE} stroke="#c9dff2" tickLine={false}/>
-              <YAxis allowDecimals={false} tick={EJE} stroke="#c9dff2" tickLine={false} axisLine={false}/>
-              <Tooltip contentStyle={TOOLTIP} cursor={{fill:'rgba(53,182,233,.08)'}}/>
-              <Bar dataKey="cantidad" name="Incidentes" fill="url(#gradBarra)" radius={[6,6,0,0]} maxBarSize={50}/>
-            </BarChart>
-          </ResponsiveContainer>
+          <ReactApexChart options={barrasMes.options} series={barrasMes.series} type="bar" height={260} />
         </div>
 
         </>)}
@@ -334,21 +409,7 @@ function Estadisticas() {
               </div>
               <div style={{flex:1,minHeight:0,marginTop:'14px'}}>
                 {cargandoLluvia ? <div style={{textAlign:'center',padding:'40px',color:'#5b7590',fontWeight:600}}><FaSyncAlt className="icon-spin"/> Cargando…</div> : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={lluviaChart}>
-                      <defs>
-                        <linearGradient id="gradLluvia" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#35B6E9"/>
-                          <stop offset="100%" stopColor="#1268C3"/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2ecf6" vertical={false}/>
-                      <XAxis dataKey="dia" tick={EJE} stroke="#c9dff2" tickLine={false} interval={diasRango > 15 ? 2 : 0} angle={diasRango > 15 ? -45 : 0} textAnchor={diasRango > 15 ? 'end' : 'middle'} height={diasRango > 15 ? 60 : 30}/>
-                      <YAxis tick={EJE} stroke="#c9dff2" tickLine={false} axisLine={false} unit=" mm"/>
-                      <Tooltip formatter={(v)=>[`${v} mm`,'Lluvia']} contentStyle={TOOLTIP} cursor={{fill:'rgba(53,182,233,.08)'}}/>
-                      <Bar dataKey="mm" name="Lluvia (mm)" fill="url(#gradLluvia)" radius={[6,6,0,0]} maxBarSize={diasRango<=7 ? 40 : 20}/>
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <ReactApexChart options={barrasLluvia.options} series={barrasLluvia.series} type="bar" height="100%" />
                 )}
               </div>
             </>) : (
