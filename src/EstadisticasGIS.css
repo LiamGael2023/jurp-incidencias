@@ -1,0 +1,165 @@
+/* ===========================================================
+   EstadisticasGIS.css
+   Mismo lenguaje visual que Incidentes: lienzo azulado,
+   cabecera con franja de marca y tarjetas blancas.
+   =========================================================== */
+
+.est {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  background: linear-gradient(160deg, #eaf3fc 0%, #dceaf7 48%, #cfe2f3 100%);
+  color: #1d273b;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+}
+.est *, .est *::before, .est *::after { box-sizing: border-box; }
+
+.est-main {
+  position: relative; z-index: 1; flex: 1; min-width: 0; overflow-y: auto;
+  /* el rail es position:absolute y no ocupa espacio en el flex */
+  margin-left: 64px;
+}
+
+/* ---------- cabecera ---------- */
+.est .tbl-page-wrapper { background: transparent; height: auto; min-height: 100%; }
+.est .tbl-page-header {
+  position: relative;
+  padding: 20px 24px 18px; border: none; border-radius: 0;
+  background: linear-gradient(120deg, #0B2A5B 0%, #12508f 55%, #1268C3 100%);
+  box-shadow: 0 6px 22px rgba(11, 42, 91, .22);
+  margin-bottom: 0;
+}
+.est .tbl-page-header::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: linear-gradient(90deg, #35B6E9, rgba(53, 182, 233, 0));
+}
+.est .tbl-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.est .tbl-col { flex: 1; min-width: 0; }
+.est .tbl-col-auto { flex: 0 0 auto; }
+.est .tbl-page-pretitle {
+  font-size: 10.5px !important; font-weight: 800 !important; letter-spacing: .14em;
+  text-transform: uppercase; color: #8fd0f5 !important;
+}
+.est .tbl-page-title {
+  margin: 4px 0 0; font-size: 26px; font-weight: 800;
+  color: #ffffff !important; line-height: 1.15; letter-spacing: -.01em;
+}
+.est .tbl-page-header .tbl-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 17px !important; border-radius: 10px !important; cursor: pointer;
+  font-size: 12.5px !important; font-weight: 700 !important; font-family: inherit;
+  border: 1px solid #35B6E9 !important;
+  background: #35B6E9 !important; color: #05233f !important;
+  box-shadow: 0 3px 12px rgba(53, 182, 233, .4);
+  transition: background .15s;
+}
+.est .tbl-page-header .tbl-btn:hover:not(:disabled) {
+  background: #5fcaf1 !important; border-color: #5fcaf1 !important;
+}
+
+.est .tbl-page-body { background: transparent; }
+.est .tbl-empty { color: #5b7590 !important; background: transparent !important; border: none !important; }
+
+/* ---------- pestañas ---------- */
+.est-tabs {
+  display: flex; gap: 4px; padding: 0 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #c9dff2;
+  position: sticky; top: 0; z-index: 10;
+  box-shadow: 0 2px 10px rgba(11, 42, 91, .06);
+}
+.est-tab {
+  display: flex; align-items: center; gap: 7px;
+  padding: 13px 18px; border: none; background: transparent; cursor: pointer;
+  font-size: 12.5px; font-weight: 600; font-family: inherit; color: #5b7590;
+  border-bottom: 3px solid transparent; margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+.est-tab:hover { color: #1268C3; }
+.est-tab.activa {
+  color: #0B2A5B; font-weight: 800;
+  border-bottom-color: #35B6E9;
+}
+
+/* ---------- tarjetas ---------- */
+.est-card {
+  background: #ffffff;
+  border: 1px solid #d3e4f4;
+  border-radius: 13px;
+  box-shadow: 0 2px 8px rgba(11, 42, 91, .09);
+  padding: 16px 18px;
+}
+.est-titulo {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 800; color: #0B2A5B; margin-bottom: 14px;
+}
+.est-titulo svg { color: #1268C3; }
+
+/* ---------- KPIs ---------- */
+.est-kpi {
+  position: relative; overflow: hidden;
+  background: linear-gradient(135deg, #ffffff 0%, #f2f8fe 100%);
+  border: 1px solid #d3e4f4;
+  border-radius: 13px;
+  padding: 15px 18px;
+  flex: 1; min-width: 165px;
+  box-shadow: 0 2px 8px rgba(11, 42, 91, .09);
+}
+/* barra de color a la izquierda, del color del indicador */
+.est-kpi::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  background: var(--c);
+}
+.est-kpi-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10.5px; font-weight: 800; letter-spacing: .1em;
+  text-transform: uppercase; color: #7b93ad; margin-bottom: 6px;
+}
+.est-kpi-label svg { color: var(--c); }
+.est-kpi-valor {
+  font-size: 27px; font-weight: 800; line-height: 1;
+  color: var(--c); font-variant-numeric: tabular-nums;
+}
+
+/* ---------- estaciones ---------- */
+.est-estacion {
+  padding: 10px 12px; border-radius: 10px; cursor: pointer; flex-shrink: 0;
+  border: 1px solid #dfeaf5; background: #fbfdff;
+  transition: border-color .15s, background .15s;
+}
+.est-estacion:hover { border-color: #9fc9ec; background: #f4f9fe; }
+.est-estacion.activa {
+  border-color: #35B6E9; background: linear-gradient(135deg, #eaf4fd, #dbedfb);
+  box-shadow: 0 2px 8px rgba(53, 182, 233, .18);
+}
+.est-estacion-nombre { font-weight: 700; font-size: 12px; color: #0B2A5B; margin-bottom: 6px; }
+.est-estacion-datos { display: flex; gap: 10px; font-size: 11px; color: #5b7590; flex-wrap: wrap; }
+
+/* ---------- selector de rango ---------- */
+.est-rango {
+  padding: 5px 13px; border-radius: 8px; cursor: pointer;
+  font-size: 11.5px; font-weight: 700; font-family: inherit;
+  border: 1px solid #d5e3f0; background: #f7fafd; color: #5b7590;
+  transition: all .15s;
+}
+.est-rango:hover { border-color: #9fc9ec; color: #1268C3; }
+.est-rango.activo {
+  background: #1268C3; border-color: #1268C3; color: #fff;
+  box-shadow: 0 2px 8px rgba(18, 104, 195, .3);
+}
+
+/* ---------- scrollbars ---------- */
+.est ::-webkit-scrollbar { width: 8px; height: 8px; }
+.est ::-webkit-scrollbar-thumb { background: #c3d6e8; border-radius: 4px; }
+.est ::-webkit-scrollbar-thumb:hover { background: #a8c4dd; }
+.est ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 900px) {
+  .est-main { margin-left: 56px; }
+  .est .tbl-page-header { padding: 14px 16px 12px; }
+  .est .tbl-page-title { font-size: 21px; }
+  .est-tabs { padding: 0 14px; }
+  .est-tab { padding: 12px 12px; font-size: 11.5px; }
+}

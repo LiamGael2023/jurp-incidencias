@@ -5,6 +5,7 @@ import Login from './Login';
 import Nexhidra from './Nexhidra';
 import RailGIS from './RailGIS';
 import './IncidentesGIS.css';
+import './EstadisticasGIS.css';
 import Incidentes from './Incidentes';
 import Estadisticas from './Estadisticas';
 import Vigilancia from './Vigilancia';
@@ -140,6 +141,15 @@ function App() {
 
   if (vistaActual === 'mapa') {
     return <MapaChavimochic {...propsRail} onVerIncidente={irAIncidente} />;
+  }
+
+  if (vistaActual === 'estadisticas') {
+    return (
+      <div className="est">
+        <RailGIS {...propsRail} />
+        <div className="est-main"><Estadisticas /></div>
+      </div>
+    );
   }
 
   if (vistaActual === 'lista') {

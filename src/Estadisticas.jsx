@@ -1,11 +1,19 @@
 import { useState, useEffect } from 'react';
-import { FaSyncAlt, FaExclamationTriangle, FaCheckCircle, FaClock, FaClipboardList, FaThermometerHalf, FaTint, FaCloudRain } from 'react-icons/fa';
+import { FaSyncAlt, FaExclamationTriangle, FaCheckCircle, FaClock, FaClipboardList, FaThermometerHalf, FaTint, FaCloudRain, FaChartBar } from 'react-icons/fa';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import './Incidentes.css';
+import './EstadisticasGIS.css';
 
-const COLORS_TIPO = ['#206bc4','#f76707','#d63939','#2fb344','#ae3ec9','#f59f00'];
+const COLORS_TIPO = ['#1268C3','#f76707','#d63939','#2fb344','#ae3ec9','#f59f00'];
 const COLORS_GRAVEDAD = {'lev':'#2fb344','mod':'#f76707','gra':'#d63939'};
-const COLORS_ESTADO = {'pat':'#f59f00','ate':'#206bc4','cer':'#2fb344'};
+const COLORS_ESTADO = {'pat':'#f59f00','ate':'#1268C3','cer':'#2fb344'};
+
+// Estilo común de los gráficos, para que todos hablen el mismo idioma.
+const EJE = { fontSize: 11, fill: '#5b7590' };
+const TOOLTIP = {
+  borderRadius: '10px', border: '1px solid #c9dff2', fontSize: '12px',
+  boxShadow: '0 6px 18px rgba(11,42,91,.14)',
+};
 
 function Estadisticas() {
   const [subMenu, setSubMenu] = useState('incidentes');
@@ -161,11 +169,21 @@ function Estadisticas() {
     return Object.entries(meses).map(([mes, cantidad]) => ({ mes, cantidad }));
   })();
 
-  const kpiStyle = (color) => ({ background:'#fff', borderRadius:'4px', border:'1px solid rgba(98,105,118,0.16)', padding:'20px', flex:1, minWidth:'180px', borderLeft:`4px solid ${color}` });
-  const sectionTitle = { fontSize:'14px', fontWeight:'700', color:'#1d273b', marginBottom:'16px', display:'flex', alignItems:'center', gap:'8px' };
-  const cardBox = { background:'#fff', borderRadius:'4px', border:'1px solid rgba(98,105,118,0.16)', padding:'20px' };
+  // Tarjeta de indicador: el color va por variable CSS (--c).
+  const Kpi = ({ color, icono, etiqueta, valor }) => (
+    <div className="est-kpi" style={{ '--c': color }}>
+      <div className="est-kpi-label">{icono} {etiqueta}</div>
+      <div className="est-kpi-valor">{valor}</div>
+    </div>
+  );
 
-  if (cargando) return <div className="tbl-page-wrapper"><div className="tbl-empty" style={{height:'60vh',display:'flex',alignItems:'center',justifyContent:'center'}}><FaSyncAlt className="icon-spin" style={{marginRight:'8px'}}/> Cargando estadísticas...</div></div>;
+  if (cargando) return (
+    <div className="tbl-page-wrapper">
+      <div className="tbl-empty" style={{height:'60vh',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',fontWeight:600}}>
+        <FaSyncAlt className="icon-spin"/> Cargando estadísticas…
+      </div>
+    </div>
+  );
 
   return (
     <div className="tbl-page-wrapper">
@@ -177,104 +195,99 @@ function Estadisticas() {
           </div>
           <div className="tbl-col-auto">
             <button className="tbl-btn tbl-btn-primary" onClick={async()=>{setCargando(true);await Promise.all([cargarIncidentes(),cargarEstaciones()]);setCargando(false);}}>
-              <FaSyncAlt style={{marginRight:'8px'}}/> Actualizar
+              <FaSyncAlt/> Actualizar
             </button>
           </div>
         </div>
       </div>
 
-      <div className="tbl-page-body" style={{padding:'0',overflowY:'auto',maxHeight:'calc(100vh - 140px)'}}>
+      <div className="tbl-page-body" style={{padding:'0'}}>
 
         {/* ── Sub-menú ───────────────────────────────────────────────────── */}
-        <div style={{display:'flex',gap:'0',borderBottom:'2px solid #e2e8f0',background:'#fff',padding:'0 20px',position:'sticky',top:0,zIndex:10}}>
+        <div className="est-tabs">
           {[
-            {key:'incidentes', label:'Incidentes', icon:'📊'},
-            {key:'estaciones', label:'Estaciones Meteorológicas', icon:'🌧️'},
+            {key:'incidentes', label:'Incidentes', icon:<FaChartBar/>},
+            {key:'estaciones', label:'Estaciones Meteorológicas', icon:<FaCloudRain/>},
           ].map(tab => (
-            <button key={tab.key} onClick={()=>setSubMenu(tab.key)} style={{padding:'12px 20px',border:'none',background:'transparent',cursor:'pointer',fontSize:'13px',fontWeight:subMenu===tab.key?'700':'500',color:subMenu===tab.key?'#206bc4':'#626976',borderBottom:subMenu===tab.key?'2px solid #206bc4':'2px solid transparent',marginBottom:'-2px',transition:'all 0.2s',display:'flex',alignItems:'center',gap:'6px'}}>
-              <span>{tab.icon}</span> {tab.label}
+            <button key={tab.key} onClick={()=>setSubMenu(tab.key)}
+              className={`est-tab ${subMenu===tab.key ? 'activa' : ''}`}>
+              {tab.icon} {tab.label}
             </button>
           ))}
         </div>
 
-        <div style={{padding:'20px'}}>
+        <div style={{padding:'20px 24px 24px'}}>
 
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* ── TAB: INCIDENTES ──────────────────────────────────────────── */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         {subMenu === 'incidentes' && (<>
-        <div style={{display:'flex',gap:'16px',flexWrap:'wrap',marginBottom:'24px'}}>
-          <div style={kpiStyle('#206bc4')}>
-            <div style={{fontSize:'12px',color:'#626976',textTransform:'uppercase',fontWeight:'600',marginBottom:'4px'}}><FaClipboardList style={{marginRight:'4px'}}/> Total Incidentes</div>
-            <div style={{fontSize:'28px',fontWeight:'700',color:'#1d273b'}}>{totalInc}</div>
-          </div>
-          <div style={kpiStyle('#f59f00')}>
-            <div style={{fontSize:'12px',color:'#626976',textTransform:'uppercase',fontWeight:'600',marginBottom:'4px'}}><FaClock style={{marginRight:'4px'}}/> Pendientes</div>
-            <div style={{fontSize:'28px',fontWeight:'700',color:'#f59f00'}}>{pendientes}</div>
-          </div>
-          <div style={kpiStyle('#206bc4')}>
-            <div style={{fontSize:'12px',color:'#626976',textTransform:'uppercase',fontWeight:'600',marginBottom:'4px'}}><FaExclamationTriangle style={{marginRight:'4px'}}/> En Atención</div>
-            <div style={{fontSize:'28px',fontWeight:'700',color:'#206bc4'}}>{enAtencion}</div>
-          </div>
-          <div style={kpiStyle('#2fb344')}>
-            <div style={{fontSize:'12px',color:'#626976',textTransform:'uppercase',fontWeight:'600',marginBottom:'4px'}}><FaCheckCircle style={{marginRight:'4px'}}/> Cerrados</div>
-            <div style={{fontSize:'28px',fontWeight:'700',color:'#2fb344'}}>{cerrados}</div>
-          </div>
+        <div style={{display:'flex',gap:'14px',flexWrap:'wrap',marginBottom:'18px'}}>
+          <Kpi color="#1268C3" icono={<FaClipboardList/>} etiqueta="Total Incidentes" valor={totalInc} />
+          <Kpi color="#f59f00" icono={<FaClock/>} etiqueta="Pendientes" valor={pendientes} />
+          <Kpi color="#35B6E9" icono={<FaExclamationTriangle/>} etiqueta="En Atención" valor={enAtencion} />
+          <Kpi color="#2fb344" icono={<FaCheckCircle/>} etiqueta="Cerrados" valor={cerrados} />
         </div>
 
         {/* ── Gráficos de incidentes ─────────────────────────────────────── */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'16px',marginBottom:'24px'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:'14px',marginBottom:'18px'}}>
           {/* Por Estado */}
-          <div style={cardBox}>
-            <div style={sectionTitle}>Incidentes por Estado</div>
-            <ResponsiveContainer width="100%" height={250}>
+          <div className="est-card">
+            <div className="est-titulo">Incidentes por Estado</div>
+            <ResponsiveContainer width="100%" height={230}>
               <PieChart>
                 <Pie data={porEstado} cx="50%" cy="45%" innerRadius={40} outerRadius={75} dataKey="value" paddingAngle={2}>
                   {porEstado.map((d,i) => <Cell key={i} fill={d.color}/>)}
                 </Pie>
-                <Tooltip formatter={(v,n)=>[v,n]}/>
-                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:'12px'}} formatter={(v,entry)=>`${v} (${entry.payload.value})`}/>
+                <Tooltip formatter={(v,n)=>[v,n]} contentStyle={TOOLTIP}/>
+                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:'12px',color:'#5b7590'}} formatter={(v,entry)=>`${v} (${entry.payload.value})`}/>
               </PieChart>
             </ResponsiveContainer>
           </div>
           {/* Por Tipo */}
-          <div style={cardBox}>
-            <div style={sectionTitle}>Incidentes por Tipo</div>
-            <ResponsiveContainer width="100%" height={250}>
+          <div className="est-card">
+            <div className="est-titulo">Incidentes por Tipo</div>
+            <ResponsiveContainer width="100%" height={230}>
               <PieChart>
                 <Pie data={porTipo} cx="50%" cy="45%" innerRadius={40} outerRadius={75} dataKey="value" paddingAngle={2}>
                   {porTipo.map((d,i) => <Cell key={i} fill={COLORS_TIPO[i % COLORS_TIPO.length]}/>)}
                 </Pie>
-                <Tooltip formatter={(v,n)=>[v,n]}/>
-                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:'12px'}} formatter={(v,entry)=>`${v} (${entry.payload.value})`}/>
+                <Tooltip formatter={(v,n)=>[v,n]} contentStyle={TOOLTIP}/>
+                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:'12px',color:'#5b7590'}} formatter={(v,entry)=>`${v} (${entry.payload.value})`}/>
               </PieChart>
             </ResponsiveContainer>
           </div>
           {/* Por Gravedad */}
-          <div style={cardBox}>
-            <div style={sectionTitle}>Incidentes por Gravedad</div>
-            <ResponsiveContainer width="100%" height={250}>
+          <div className="est-card">
+            <div className="est-titulo">Incidentes por Gravedad</div>
+            <ResponsiveContainer width="100%" height={230}>
               <PieChart>
                 <Pie data={porGravedad} cx="50%" cy="45%" innerRadius={40} outerRadius={75} dataKey="value" paddingAngle={2}>
                   {porGravedad.map((d,i) => { const c = d.name==='Leve'?COLORS_GRAVEDAD.lev:d.name==='Moderada'?COLORS_GRAVEDAD.mod:COLORS_GRAVEDAD.gra; return <Cell key={i} fill={c}/>; })}
                 </Pie>
-                <Tooltip formatter={(v,n)=>[v,n]}/>
-                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:'12px'}} formatter={(v,entry)=>`${v} (${entry.payload.value})`}/>
+                <Tooltip formatter={(v,n)=>[v,n]} contentStyle={TOOLTIP}/>
+                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:'12px',color:'#5b7590'}} formatter={(v,entry)=>`${v} (${entry.payload.value})`}/>
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* ── Tendencia mensual ───────────────────────────────────────────── */}
-        <div style={{...cardBox, marginBottom:'24px'}}>
-          <div style={sectionTitle}>Tendencia de Incidentes (Últimos 6 meses)</div>
-          <ResponsiveContainer width="100%" height={250}>
+        <div className="est-card" style={{marginBottom:'18px'}}>
+          <div className="est-titulo">Tendencia de Incidentes (Últimos 6 meses)</div>
+          <ResponsiveContainer width="100%" height={240}>
             <BarChart data={porMes}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0"/>
-              <XAxis dataKey="mes" tick={{fontSize:12}} stroke="#626976"/>
-              <YAxis allowDecimals={false} tick={{fontSize:12}} stroke="#626976"/>
-              <Tooltip contentStyle={{borderRadius:'4px',border:'1px solid #e2e8f0'}}/>
-              <Bar dataKey="cantidad" name="Incidentes" fill="#206bc4" radius={[4,4,0,0]} maxBarSize={50}/>
+              <defs>
+                <linearGradient id="gradBarra" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#35B6E9"/>
+                  <stop offset="100%" stopColor="#1268C3"/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2ecf6" vertical={false}/>
+              <XAxis dataKey="mes" tick={EJE} stroke="#c9dff2" tickLine={false}/>
+              <YAxis allowDecimals={false} tick={EJE} stroke="#c9dff2" tickLine={false} axisLine={false}/>
+              <Tooltip contentStyle={TOOLTIP} cursor={{fill:'rgba(53,182,233,.08)'}}/>
+              <Bar dataKey="cantidad" name="Incidentes" fill="url(#gradBarra)" radius={[6,6,0,0]} maxBarSize={50}/>
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -286,19 +299,20 @@ function Estadisticas() {
         {/* ══════════════════════════════════════════════════════════════════ */}
         {subMenu === 'estaciones' && (<>
 
-        <div style={{display:'flex',gap:'16px',height:'calc(100vh - 240px)'}}>
+        <div style={{display:'flex',gap:'14px',height:'calc(100vh - 250px)'}}>
           {/* ── Panel izquierdo: Estaciones ─────────────────────────────── */}
-          <div style={{...cardBox, width:'320px', flexShrink:0, display:'flex', flexDirection:'column', overflow:'hidden'}}>
-            <div style={{...sectionTitle, marginBottom:'12px'}}><FaCloudRain/> Estaciones</div>
-            {estaciones.length === 0 ? <div style={{color:'#626976',fontSize:'13px'}}>No se encontraron estaciones.</div> : (
+          <div className="est-card" style={{width:'320px', flexShrink:0, display:'flex', flexDirection:'column', overflow:'hidden'}}>
+            <div className="est-titulo" style={{marginBottom:'12px'}}><FaCloudRain/> Estaciones</div>
+            {estaciones.length === 0 ? <div style={{color:'#5b7590',fontSize:'13px'}}>No se encontraron estaciones.</div> : (
               <div style={{overflowY:'auto',flex:1,display:'flex',flexDirection:'column',gap:'8px',paddingRight:'4px'}}>
                 {estaciones.map(eq => (
-                  <div key={eq.id} onClick={()=>setEstacionSeleccionada(eq.id)} style={{padding:'10px 12px',borderRadius:'4px',border: estacionSeleccionada===eq.id ? '2px solid #206bc4' : '1px solid rgba(98,105,118,0.16)',cursor:'pointer',background: estacionSeleccionada===eq.id ? '#f0f6ff' : '#fff',transition:'all 0.2s',flexShrink:0}}>
-                    <div style={{fontWeight:'600',fontSize:'12px',color:'#1d273b',marginBottom:'6px'}}>{eq.nombre || `Estación ${eq.id}`}</div>
-                    <div style={{display:'flex',gap:'8px',fontSize:'11px',color:'#475569',flexWrap:'wrap'}}>
-                      <span style={{color: eq.isCritical ? '#d63939' : '#206bc4', fontWeight:'700'}}><FaCloudRain style={{marginRight:'2px'}}/>{eq.totalRain.toFixed(1)} mm</span>
-                      <span><FaThermometerHalf style={{marginRight:'2px',color:'#f76707'}}/>{eq.temp}°C</span>
-                      <span><FaTint style={{marginRight:'2px',color:'#206bc4'}}/>{eq.hum}%</span>
+                  <div key={eq.id} onClick={()=>setEstacionSeleccionada(eq.id)}
+                    className={`est-estacion ${estacionSeleccionada===eq.id ? 'activa' : ''}`}>
+                    <div className="est-estacion-nombre">{eq.nombre || `Estación ${eq.id}`}</div>
+                    <div className="est-estacion-datos">
+                      <span style={{color: eq.isCritical ? '#d63939' : '#1268C3', fontWeight:'700'}}><FaCloudRain style={{marginRight:'3px'}}/>{eq.totalRain.toFixed(1)} mm</span>
+                      <span><FaThermometerHalf style={{marginRight:'3px',color:'#f76707'}}/>{eq.temp}°C</span>
+                      <span><FaTint style={{marginRight:'3px',color:'#35B6E9'}}/>{eq.hum}%</span>
                     </div>
                   </div>
                 ))}
@@ -307,31 +321,38 @@ function Estadisticas() {
           </div>
 
           {/* ── Panel derecho: Gráfico de lluvias ──────────────────────── */}
-          <div style={{...cardBox, flex:1, display:'flex', flexDirection:'column', overflow:'hidden'}}>
+          <div className="est-card" style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden'}}>
             {estacionSeleccionada ? (<>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px',flexShrink:0}}>
-                <div style={sectionTitle}><FaCloudRain/> Historial — {estaciones.find(e=>e.id===estacionSeleccionada)?.nombre || 'Estación'}</div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap',flexShrink:0}}>
+                <div className="est-titulo" style={{marginBottom:0}}><FaCloudRain/> Historial — {estaciones.find(e=>e.id===estacionSeleccionada)?.nombre || 'Estación'}</div>
                 <div style={{display:'flex',gap:'6px'}}>
                   {[7,15,30].map(d => (
-                    <button key={d} onClick={()=>setDiasRango(d)} style={{padding:'4px 12px',borderRadius:'4px',border: diasRango===d ? '1px solid #206bc4' : '1px solid rgba(98,105,118,0.16)',background: diasRango===d ? '#206bc4' : '#fff',color: diasRango===d ? '#fff' : '#626976',fontSize:'12px',fontWeight:'600',cursor:'pointer'}}>{d} días</button>
+                    <button key={d} onClick={()=>setDiasRango(d)}
+                      className={`est-rango ${diasRango===d ? 'activo' : ''}`}>{d} días</button>
                   ))}
                 </div>
               </div>
-              <div style={{flex:1,minHeight:0}}>
-                {cargandoLluvia ? <div style={{textAlign:'center',padding:'40px',color:'#626976'}}><FaSyncAlt className="icon-spin"/> Cargando...</div> : (
+              <div style={{flex:1,minHeight:0,marginTop:'14px'}}>
+                {cargandoLluvia ? <div style={{textAlign:'center',padding:'40px',color:'#5b7590',fontWeight:600}}><FaSyncAlt className="icon-spin"/> Cargando…</div> : (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={lluviaChart}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0"/>
-                      <XAxis dataKey="dia" tick={{fontSize:11}} stroke="#626976" interval={diasRango > 15 ? 2 : 0} angle={diasRango > 15 ? -45 : 0} textAnchor={diasRango > 15 ? 'end' : 'middle'} height={diasRango > 15 ? 60 : 30}/>
-                      <YAxis tick={{fontSize:11}} stroke="#626976" unit=" mm"/>
-                      <Tooltip formatter={(v)=>[`${v} mm`,'Lluvia']} contentStyle={{borderRadius:'4px',border:'1px solid #e2e8f0'}}/>
-                      <Bar dataKey="mm" name="Lluvia (mm)" fill="#206bc4" radius={[4,4,0,0]} maxBarSize={diasRango<=7 ? 40 : 20}/>
+                      <defs>
+                        <linearGradient id="gradLluvia" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#35B6E9"/>
+                          <stop offset="100%" stopColor="#1268C3"/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2ecf6" vertical={false}/>
+                      <XAxis dataKey="dia" tick={EJE} stroke="#c9dff2" tickLine={false} interval={diasRango > 15 ? 2 : 0} angle={diasRango > 15 ? -45 : 0} textAnchor={diasRango > 15 ? 'end' : 'middle'} height={diasRango > 15 ? 60 : 30}/>
+                      <YAxis tick={EJE} stroke="#c9dff2" tickLine={false} axisLine={false} unit=" mm"/>
+                      <Tooltip formatter={(v)=>[`${v} mm`,'Lluvia']} contentStyle={TOOLTIP} cursor={{fill:'rgba(53,182,233,.08)'}}/>
+                      <Bar dataKey="mm" name="Lluvia (mm)" fill="url(#gradLluvia)" radius={[6,6,0,0]} maxBarSize={diasRango<=7 ? 40 : 20}/>
                     </BarChart>
                   </ResponsiveContainer>
                 )}
               </div>
             </>) : (
-              <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:'#626976',fontSize:'14px'}}>
+              <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:'#5b7590',fontSize:'14px'}}>
                 ← Selecciona una estación para ver su historial
               </div>
             )}
