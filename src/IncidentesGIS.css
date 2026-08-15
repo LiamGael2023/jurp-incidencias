@@ -34,6 +34,9 @@
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  /* el rail es position:absolute (MapaGIS.css), o sea que no ocupa espacio
+     en el flex: hay que dejarle su ancho a mano o se monta encima */
+  margin-left: 64px;
 }
 
 /* ---------- cabecera ---------- */
@@ -229,6 +232,7 @@
 
 /* ---------- responsive ---------- */
 @media (max-width: 700px) {
+  .inc-main { margin-left: 56px; }
   .inc .tbl-page-header { padding: 14px 14px 10px; }
   .inc .tbl-page-title { font-size: 20px; }
   .inc .tbl-page-body { padding: 0 14px 14px; }
