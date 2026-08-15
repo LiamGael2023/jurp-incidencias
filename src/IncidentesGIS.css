@@ -133,15 +133,15 @@
 /* ---------- rejilla de tarjetas ---------- */
 .inc .tbl-row-cards {
   display: grid !important;
-  grid-template-columns: repeat(auto-fill, minmax(275px, 1fr)) !important;
-  gap: 18px !important;
+  grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)) !important;
+  gap: 14px !important;
 }
 
 .inc .tbl-card {
   position: relative;
   background: #ffffff !important;
   border: 1px solid #d3e4f4 !important;
-  border-radius: 16px !important;
+  border-radius: 13px !important;
   box-shadow: 0 2px 8px rgba(11, 42, 91, .09) !important;
   overflow: hidden;
   display: flex; flex-direction: column;
@@ -149,7 +149,7 @@
 }
 /* franja de color de marca en el borde superior */
 .inc .tbl-card::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; z-index: 3;
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; z-index: 3;
   background: linear-gradient(90deg, #0B2A5B, #1268C3 45%, #35B6E9);
 }
 .inc .tbl-card:hover {
@@ -159,7 +159,7 @@
 }
 
 .inc .tbl-card-img-top {
-  height: 160px; background: #eef4fa !important;
+  height: 124px; background: #eef4fa !important;
   border-radius: 0 !important; overflow: hidden;
 }
 .inc .tbl-card-img-top img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -170,42 +170,46 @@
   font-size: 11px; font-weight: 600;
 }
 
-.inc .tbl-card-body { padding: 14px 16px 12px !important; flex: 1; background: transparent !important; }
+.inc .tbl-card-body { padding: 10px 12px 8px !important; flex: 1; background: transparent !important; }
 /* código del incidente */
 .inc .tbl-card-body > div:first-child {
   background: linear-gradient(120deg, #e3f1fd, #d5eafb) !important;
   border: 1px solid #a9d3f2 !important;
   color: #0f579f !important;
-  border-radius: 7px !important;
+  border-radius: 6px !important;
   font-family: ui-monospace, monospace;
+  font-size: 9px !important; padding: 2px 7px !important; margin-bottom: 5px !important;
 }
 .inc .tbl-card-title {
-  color: #0B2A5B !important; font-weight: 700 !important; margin-bottom: 10px;
+  color: #0B2A5B !important; font-weight: 700 !important;
+  font-size: .86rem !important; line-height: 1.28 !important;
+  min-height: 2.56em !important; margin: 0 0 7px !important;
 }
-.inc .tbl-text-muted { color: #5b7590 !important; font-size: 11.5px; line-height: 1.45; }
+.inc .tbl-text-muted { color: #5b7590 !important; font-size: 10.5px !important; line-height: 1.35; }
+.inc .tbl-card-body .tbl-text-muted { margin-bottom: 4px !important; }
 .inc .tbl-card-body .tbl-text-muted strong { color: #1d273b !important; }
-.inc .tbl-card-body .tbl-text-muted span { color: #7b93ad !important; }
+.inc .tbl-card-body .tbl-text-muted span { color: #7b93ad !important; font-size: 10px !important; padding-left: 17px !important; }
 .inc .tbl-icon { color: #1268C3 !important; }
 .inc .tbl-text-blue { color: #1268C3 !important; }
 
 .inc .tbl-card-footer {
-  padding: 10px 16px !important;
+  padding: 7px 12px !important;
   background: linear-gradient(135deg, #f4f9fe 0%, #e9f3fc 100%) !important;
   border-top: 1px solid #dce9f6 !important;
-  color: #5b7590 !important; font-size: 11px; font-weight: 700;
+  color: #5b7590 !important; font-size: 10.5px; font-weight: 700;
 }
 .inc .tbl-media-icons { color: #5b7590 !important; }
 .inc .tbl-avatar-group {
   background: #e5f2fc !important; border: 1px solid #c9dff2 !important;
-  border-radius: 7px; padding: 3px 9px;
+  border-radius: 6px; padding: 2px 7px;
 }
 .inc .tbl-avatar-group svg { color: #1268C3 !important; }
-.inc .tbl-avatar-text { color: #48617c !important; font-size: 10.5px; font-weight: 700; }
+.inc .tbl-avatar-text { color: #48617c !important; font-size: 9.5px; font-weight: 700; }
 
 .inc .tbl-card-btn-bottom {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 13px !important; cursor: pointer;
-  font-size: 12.5px !important; font-weight: 700 !important;
+  padding: 9px !important; cursor: pointer;
+  font-size: 11.5px !important; font-weight: 700 !important;
   background: linear-gradient(120deg, #e5f2fc 0%, #d8ecfb 100%) !important;
   border-top: 1px solid #c9dff2 !important;
   color: #0f579f !important;
