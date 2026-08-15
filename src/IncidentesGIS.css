@@ -12,8 +12,8 @@
   position: fixed;
   inset: 0;
   display: flex;
-  background: linear-gradient(150deg, #0c1c2c 0%, #0a1622 55%, #08131f 100%);
-  color: #dce9f5;
+  background: linear-gradient(150deg, #ffffff 0%, #f4f8fc 55%, #e8f1f9 100%);
+  color: #1d273b;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   overflow: hidden;
 }
@@ -24,7 +24,7 @@
   content: '';
   position: absolute; inset: 0; pointer-events: none; z-index: 0;
   background:
-    radial-gradient(900px 500px at 12% -5%, rgba(32, 107, 196, .22), transparent 60%),
+    radial-gradient(900px 500px at 12% -5%, rgba(32, 107, 196, .07), transparent 60%),
     radial-gradient(700px 420px at 95% 8%, rgba(116, 192, 252, .1), transparent 60%);
 }
 
@@ -47,10 +47,10 @@
 .inc .tbl-col-auto { flex: 0 0 auto; }
 .inc .tbl-page-pretitle {
   font-size: 10.5px !important; font-weight: 800 !important; letter-spacing: .14em;
-  text-transform: uppercase; color: #7fa5c0 !important;
+  text-transform: uppercase; color: #64748b !important;
 }
 .inc .tbl-page-title {
-  margin: 3px 0 0; font-size: 25px; font-weight: 800; color: #fff !important; line-height: 1.15;
+  margin: 3px 0 0; font-size: 25px; font-weight: 800; color: #0b2a5b !important; line-height: 1.15;
 }
 
 /* ---------- botones de la cabecera ---------- */
@@ -58,12 +58,13 @@
   display: inline-flex; align-items: center; gap: 7px;
   padding: 9px 16px !important; border-radius: 11px !important; cursor: pointer;
   font-size: 12.5px !important; font-weight: 700 !important; font-family: inherit;
-  border: 1px solid rgba(116, 192, 252, .28) !important;
-  background: rgba(255, 255, 255, .06) !important; color: #cfe9fb !important;
+  border: 1px solid #cbd9e6 !important;
+  background: #ffffff !important; color: #206bc4 !important;
+  box-shadow: 0 2px 8px rgba(11, 42, 91, .08);
   transition: background .15s, color .15s;
 }
 .inc .tbl-page-header .tbl-btn:hover:not(:disabled) {
-  background: rgba(116, 192, 252, .16) !important; color: #fff !important;
+  background: #eef5fc !important; color: #164e8f !important;
 }
 .inc .tbl-page-header .tbl-btn:disabled { opacity: .45 !important; cursor: not-allowed; }
 .inc .tbl-page-header .tbl-btn-primary {
@@ -118,10 +119,10 @@
 .inc .tbl-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 12px; padding: 60px 20px !important; text-align: center;
-  font-size: 14px; font-weight: 600; color: #7fa5c0 !important;
+  font-size: 14px; font-weight: 600; color: #64748b !important;
   background: transparent !important; border: none !important;
 }
-.inc .tbl-empty div { color: #9dc0d8 !important; }
+.inc .tbl-empty div { color: #475569 !important; }
 
 /* ---------- rejilla de tarjetas ---------- */
 .inc .tbl-row-cards {
@@ -227,7 +228,7 @@
 
 /* ---------- scrollbars ---------- */
 .inc ::-webkit-scrollbar { width: 7px; height: 7px; }
-.inc ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .16); border-radius: 4px; }
+.inc ::-webkit-scrollbar-thumb { background: rgba(11, 42, 91, .2); border-radius: 4px; }
 .inc ::-webkit-scrollbar-track { background: transparent; }
 
 /* ---------- responsive ---------- */
