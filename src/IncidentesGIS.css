@@ -41,14 +41,13 @@
   position: relative;
   padding: 20px 24px 18px; border: none;
   background: linear-gradient(120deg, #0B2A5B 0%, #12508f 55%, #1268C3 100%);
-  border-radius: 0 0 20px 20px;
+  border-radius: 0;
   box-shadow: 0 6px 22px rgba(11, 42, 91, .22);
   margin-bottom: 18px;
 }
-/* filo celeste al pie de la cabecera */
+/* filo celeste al pie de la cabecera, de borde a borde */
 .inc .tbl-page-header::after {
-  content: ''; position: absolute; left: 24px; right: 24px; bottom: 0; height: 3px;
-  border-radius: 3px 3px 0 0;
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
   background: linear-gradient(90deg, #35B6E9, rgba(53, 182, 233, 0));
 }
 .inc .tbl-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
