@@ -3,6 +3,8 @@ import './App.css';
 import MapaChavimochic from './Mapa';
 import Login from './Login';
 import Nexhidra from './Nexhidra';
+import RailGIS from './RailGIS';
+import './IncidentesGIS.css';
 import Incidentes from './Incidentes';
 import Estadisticas from './Estadisticas';
 import Vigilancia from './Vigilancia';
@@ -126,18 +128,32 @@ function App() {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // 3) Monitoreo GIS: se monta a pantalla completa, con su propio rail.
-  //    El resto de vistas sigue con el layout de siempre.
+  // 3) Vistas con el diseño nuevo: se montan a pantalla completa con el rail.
+  //    Las que aún no migran siguen con el layout de siempre.
+  const propsRail = {
+    menu: menuVisible,
+    vistaActual,
+    onNavegar: setVistaActual,
+    usuario: nombreUsuario,
+    onLogout: handleLogout,
+  };
+
   if (vistaActual === 'mapa') {
+    return <MapaChavimochic {...propsRail} onVerIncidente={irAIncidente} />;
+  }
+
+  if (vistaActual === 'lista') {
+    // Incidentes no se modifica: se envuelve y el tema lo aplica IncidentesGIS.css
     return (
-      <MapaChavimochic
-        menu={menuVisible}
-        vistaActual={vistaActual}
-        onNavegar={setVistaActual}
-        usuario={nombreUsuario}
-        onLogout={handleLogout}
-        onVerIncidente={irAIncidente}
-      />
+      <div className="inc">
+        <RailGIS {...propsRail} />
+        <div className="inc-main">
+          <Incidentes
+            incidenteAbrir={incidenteAbrir}
+            onIncidenteAbierto={() => setIncidenteAbrir(null)}
+          />
+        </div>
+      </div>
     );
   }
 
