@@ -30,7 +30,6 @@
   z-index: 50;
   width: 264px;
   max-height: calc(100vh - 36px);
-  overflow: hidden;
   border-radius: 22px;
   background: #fff;
   box-shadow: 0 16px 44px rgba(11, 42, 91, .18);
@@ -48,7 +47,11 @@
   flex-direction: column;
   max-height: calc(100vh - 36px);
   padding: 20px 0 16px;
+  border-radius: 22px;
 }
+/* expandida sí recorta (el fondo del ítem activo llega al borde);
+   colapsada no, para que el tooltip pueda salirse */
+.railx:not(.colapsado), .railx:not(.colapsado) .railx-inner { overflow: hidden; }
 
 /* ---------- marca ---------- */
 .railx-brand {
@@ -155,6 +158,30 @@
 .railx-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .railx.colapsado .railx-label,
 .railx.colapsado .railx-perfil-txt { display: none; }
+
+/* ---------- tooltip al pasar el mouse (solo colapsada) ---------- */
+.railx.colapsado .railx-nav button,
+.railx.colapsado .railx-salir { position: relative; }
+.railx.colapsado .railx-tip {
+  position: absolute; left: calc(100% + 14px); top: 50%; translate: 0 -50%;
+  white-space: nowrap; pointer-events: none; opacity: 0;
+  padding: 7px 12px; border-radius: 9px;
+  background: #0B2A5B; color: #eaf5fd;
+  font-size: 12.5px; font-weight: 700;
+  box-shadow: 0 6px 20px rgba(11, 42, 91, .35);
+  transition: opacity .15s;
+  z-index: 60;
+}
+/* punta del globo */
+.railx.colapsado .railx-tip::before {
+  content: ''; position: absolute; right: 100%; top: 50%; translate: 0 -50%;
+  border: 6px solid transparent; border-right-color: #0B2A5B;
+}
+.railx.colapsado .railx-nav button:hover .railx-tip,
+.railx.colapsado .railx-salir:hover .railx-tip { opacity: 1; }
+/* expandida no hace falta: la etiqueta ya se lee */
+.railx .railx-tip { display: none; }
+.railx.colapsado .railx-tip { display: block; }
 .railx.colapsado .railx-perfil { justify-content: center; padding: 0; }
 .railx.colapsado .railx-avatar { width: 40px; height: 40px; font-size: 12px; }
 
@@ -177,5 +204,6 @@
   .railx-nav button.activo::after { display: none; }
   .railx-nav button.activo { border-radius: 12px; }
   .railx-label { display: block !important; flex: 0 0 auto; }
+  .railx .railx-tip { display: none !important; }
   .railx-salir { margin-top: 0; width: auto; padding: 0 12px; }
 }

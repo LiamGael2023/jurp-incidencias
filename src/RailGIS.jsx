@@ -83,6 +83,7 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
                 title={m.titulo}>
                 <span className="railx-ico">{m.icono}</span>
                 <span className="railx-label">{m.titulo}</span>
+                <span className="railx-tip">{m.titulo}</span>
               </button>
             </li>
           ))}
@@ -91,6 +92,7 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
         <button type="button" className="railx-salir" onClick={onLogout} title="Cerrar sesión">
           <span className="railx-ico"><FaSignOutAlt /></span>
           <span className="railx-label">Cerrar sesión</span>
+          <span className="railx-tip">Cerrar sesión</span>
         </button>
 
       </div>
