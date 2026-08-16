@@ -8,10 +8,14 @@
 //    - estado: 0 disponible / 1 no disponible (se crea en 0)
 //  Nota: en el modelo de datos, la POTENCIA/CAPACIDAD se guarda en la tabla
 //  "marcas" (campo nombre). Solo cambia la etiqueta visible.
+//
+//  En el origen Externa hay un botón que copia el catálogo de JURP hasta el
+//  nivel de POTENCIA/CAPACIDAD. Las placas NO se copian: cada máquina física
+//  pertenece a un solo origen.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
-import { FaPlus, FaEdit, FaTrash, FaTimes, FaChevronRight, FaSync, FaCircle, FaSearch, FaTools } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaTimes, FaChevronRight, FaSync, FaCircle, FaSearch, FaTools, FaCopy } from 'react-icons/fa';
 import './MantenedorEquipos.css';
 
 const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
@@ -33,6 +37,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
   const [buscarEquipo, setBuscarEquipo] = useState('');
   const [buscarMarca, setBuscarMarca] = useState('');
   const [cargando, setCargando] = useState(false);
+  const [copiando, setCopiando] = useState(false);
 
   // ── Cargas ──────────────────────────────────────────────────────────────
   // Equipos filtrados por el origen seleccionado (JURP / Externa).
@@ -101,6 +106,93 @@ export default function MantenedorEquipos({ abierto, onClose }) {
     if (typeof e === 'string') return e;
     if (e?.placa) return Array.isArray(e.placa) ? e.placa[0] : e.placa;
     return Object.entries(e).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' · ');
+  };
+
+  // ── Copiar el catálogo de JURP a Externa (hasta POTENCIA/CAPACIDAD) ─────
+  // No copia placas: cada máquina física pertenece a un solo origen.
+  // Compara por nombre, así que se puede repetir sin duplicar nada.
+  const copiarDeJURP = async () => {
+    const c = await Swal.fire({
+      title: 'Copiar catálogo de JURP',
+      html: 'Se copiarán a <b>Externa</b> los <b>equipos</b> y sus <b>potencias / capacidades</b>.'
+          + '<br><br><small style="color:#64748b">Las placas no se copian. Lo que ya exista con el mismo nombre se respeta.</small>',
+      icon: 'question', showCancelButton: true,
+      confirmButtonText: 'Sí, copiar', cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#1268C3',
+    });
+    if (!c.isConfirmed) return;
+
+    setCopiando(true);
+    try {
+      const rEq = await fetch(`${API}/equipos/?origen=JURP`);
+      if (!rEq.ok) throw new Error('No se pudo leer el catálogo de JURP.');
+      const equiposJurp = await rEq.json();
+      if (!equiposJurp.length) {
+        Swal.fire('Sin datos', 'JURP no tiene equipos registrados.', 'info');
+        return;
+      }
+
+      // Equipos externos que ya existen, indexados por nombre.
+      const rExt = await fetch(`${API}/equipos/?origen=EXTERNA`);
+      const equiposExt = rExt.ok ? await rExt.json() : [];
+      const porNombre = new Map(equiposExt.map(e => [(e.nombre || '').trim().toUpperCase(), e]));
+
+      let nuevosEquipos = 0, nuevasPotencias = 0, fallos = 0;
+
+      for (const eq of equiposJurp) {
+        const clave = (eq.nombre || '').trim().toUpperCase();
+        if (!clave) continue;
+
+        // 1) el equipo en Externa: se reutiliza si ya está, si no se crea
+        let destino = porNombre.get(clave);
+        if (!destino) {
+          const r = await fetch(`${API}/equipos/`, {
+            method: 'POST', headers: headers(),
+            body: JSON.stringify({ nombre: clave, origen: 'EXTERNA', requiere_placa: !!eq.requiere_placa, activo: true }),
+          });
+          if (!r.ok) { fallos++; continue; }
+          destino = await r.json();
+          porNombre.set(clave, destino);
+          nuevosEquipos++;
+        }
+
+        // 2) sus potencias / capacidades
+        const [rPotJurp, rPotExt] = await Promise.all([
+          fetch(`${API}/marcas/?equipo=${eq.id}`),
+          fetch(`${API}/marcas/?equipo=${destino.id}`),
+        ]);
+        const potJurp = rPotJurp.ok ? await rPotJurp.json() : [];
+        const potExt = rPotExt.ok ? await rPotExt.json() : [];
+        const yaEstan = new Set(potExt.map(m => (m.nombre || '').trim().toUpperCase()));
+
+        for (const p of potJurp) {
+          const nombre = (p.nombre || '').trim().toUpperCase();
+          if (!nombre || yaEstan.has(nombre)) continue;
+          const r = await fetch(`${API}/marcas/`, {
+            method: 'POST', headers: headers(),
+            body: JSON.stringify({ equipo: destino.id, nombre, activo: true }),
+          });
+          if (r.ok) { yaEstan.add(nombre); nuevasPotencias++; } else { fallos++; }
+        }
+      }
+
+      await cargarEquipos('EXTERNA');
+      setEquipoSel(null); setMarcaSel(null); setMarcas([]); setPlacas([]);
+
+      const sinCambios = nuevosEquipos === 0 && nuevasPotencias === 0;
+      Swal.fire({
+        icon: sinCambios ? 'info' : 'success',
+        title: sinCambios ? 'Ya estaba todo copiado' : 'Catálogo copiado',
+        html: sinCambios
+          ? 'Externa ya tenía los mismos equipos y potencias que JURP.'
+          : `Se agregaron <b>${nuevosEquipos}</b> equipo(s) y <b>${nuevasPotencias}</b> potencia(s) / capacidad(es).`
+            + (fallos ? `<br><br><small style="color:#b45309">${fallos} registro(s) no se pudieron crear.</small>` : ''),
+      });
+    } catch (e) {
+      Swal.fire('Error', e.message || 'No se pudo copiar el catálogo.', 'error');
+    } finally {
+      setCopiando(false);
+    }
   };
 
   // ── Equipos ────────────────────────────────────────────────────────────
@@ -260,6 +352,15 @@ export default function MantenedorEquipos({ abierto, onClose }) {
           <span className="mnt-origen-lbl">1 · Selecciona el origen:</span>
           <button className={`mnt-origen-btn ${origenSel === 'JURP' ? 'on' : ''}`} onClick={() => setOrigenSel('JURP')}>JURP (propia)</button>
           <button className={`mnt-origen-btn ${origenSel === 'EXTERNA' ? 'on ext' : ''}`} onClick={() => setOrigenSel('EXTERNA')}>Externa</button>
+
+          {/* Copiar el catálogo de JURP (solo tiene sentido en Externa) */}
+          {origenSel === 'EXTERNA' && (
+            <button className="mnt-btn-add" onClick={copiarDeJURP} disabled={copiando}
+              title="Copia los equipos y sus potencias / capacidades desde JURP"
+              style={{ marginLeft: 'auto', background: '#1268C3' }}>
+              {copiando ? <><FaSync className="mnt-spin" /> Copiando…</> : <><FaCopy /> Copiar catálogo de JURP</>}
+            </button>
+          )}
         </div>
 
         <div className="mnt-cols">
@@ -276,10 +377,15 @@ export default function MantenedorEquipos({ abierto, onClose }) {
               {buscarEquipo && <button onClick={() => setBuscarEquipo('')} style={{ position:'absolute', right:'18px', top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'#94a3b8', display:'flex', padding:0 }}><FaTimes size={11} /></button>}
             </div>
             <div className="mnt-list">
-              {cargando && <div className="mnt-empty"><FaSync className="mnt-spin" /> Cargando...</div>}
-              {!cargando && equipos.length === 0 && <div className="mnt-empty">Sin equipos {origenSel === 'JURP' ? 'propios' : 'externos'}. Crea el primero.</div>}
-              {!cargando && equipos.length > 0 && equiposFiltrados.length === 0 && <div className="mnt-empty">Ningún equipo coincide con "{buscarEquipo}".</div>}
-              {equiposFiltrados.map(eq => (
+              {(cargando || copiando) && <div className="mnt-empty"><FaSync className="mnt-spin" /> {copiando ? 'Copiando catálogo…' : 'Cargando...'}</div>}
+              {!cargando && !copiando && equipos.length === 0 && (
+                <div className="mnt-empty">
+                  Sin equipos {origenSel === 'JURP' ? 'propios' : 'externos'}.
+                  {origenSel === 'EXTERNA' ? ' Créalos o copia el catálogo de JURP.' : ' Crea el primero.'}
+                </div>
+              )}
+              {!cargando && !copiando && equipos.length > 0 && equiposFiltrados.length === 0 && <div className="mnt-empty">Ningún equipo coincide con "{buscarEquipo}".</div>}
+              {!copiando && equiposFiltrados.map(eq => (
                 <div key={eq.id} className={`mnt-item ${equipoSel?.id === eq.id ? 'sel' : ''}`} onClick={() => setEquipoSel(eq)}>
                   <span className="mnt-item-name">{eq.nombre}</span>
                   <span className="mnt-item-actions">
