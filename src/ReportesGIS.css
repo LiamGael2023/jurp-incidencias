@@ -1,0 +1,171 @@
+/* ===========================================================
+   ReportesGIS.css
+   Mismo lenguaje visual que Incidentes y Estadísticas.
+   =========================================================== */
+
+.rep {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  background: linear-gradient(160deg, #eaf3fc 0%, #dceaf7 48%, #cfe2f3 100%);
+  color: #1d273b;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+}
+.rep *, .rep *::before, .rep *::after { box-sizing: border-box; }
+
+.rep-main {
+  position: relative; z-index: 1; flex: 1; min-width: 0; overflow-y: auto;
+  /* el rail flota encima: RailGIS publica --rail-w según esté abierto o no */
+  margin-left: var(--rail-w, 300px);
+  transition: margin-left .35s ease;
+}
+
+/* ---------- cabecera ---------- */
+.rep-head {
+  position: relative;
+  padding: 20px 24px 18px;
+  background: linear-gradient(120deg, #0B2A5B 0%, #12508f 55%, #1268C3 100%);
+  box-shadow: 0 6px 22px rgba(11, 42, 91, .22);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+.rep-head::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: linear-gradient(90deg, #35B6E9, rgba(53, 182, 233, 0));
+}
+.rep-pretitulo {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .14em;
+  text-transform: uppercase; color: #8fd0f5;
+}
+.rep-titulo {
+  margin: 4px 0 0; font-size: 26px; font-weight: 800;
+  color: #fff; line-height: 1.15; letter-spacing: -.01em;
+}
+.rep-acciones { display: flex; gap: 9px; align-items: center; }
+
+.rep-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 17px; border-radius: 10px; cursor: pointer;
+  font-size: 12.5px; font-weight: 700; font-family: inherit;
+  border: 1px solid rgba(255, 255, 255, .4);
+  background: rgba(255, 255, 255, .12); color: #fff;
+  transition: background .15s, border-color .15s;
+}
+.rep-btn:hover:not(:disabled) { background: rgba(255, 255, 255, .24); border-color: #fff; }
+.rep-btn:disabled { opacity: .55; cursor: not-allowed; }
+.rep-btn-primario {
+  background: #35B6E9; border-color: #35B6E9; color: #05233f;
+  box-shadow: 0 3px 12px rgba(53, 182, 233, .4);
+}
+.rep-btn-primario:hover:not(:disabled) { background: #5fcaf1; border-color: #5fcaf1; }
+
+/* ---------- cuerpo ---------- */
+.rep-body { padding: 20px 24px 28px; max-width: 980px; margin: 0 auto; }
+
+.rep-lista { display: flex; flex-direction: column; gap: 10px; }
+
+.rep-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: #fff;
+  border: 1px solid #d3e4f4;
+  border-left: 4px solid #d63939;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 2px 8px rgba(11, 42, 91, .08);
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+}
+.rep-item:hover {
+  transform: translateY(-2px);
+  border-color: #9fc9ec; border-left-color: #d63939;
+  box-shadow: 0 10px 24px rgba(11, 42, 91, .14);
+}
+
+.rep-item-izq { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.rep-ico {
+  display: flex; align-items: center; justify-content: center;
+  width: 46px; height: 46px; flex-shrink: 0; border-radius: 11px;
+  background: linear-gradient(135deg, #fee2e2, #fecaca);
+  border: 1px solid #fbc4c4;
+}
+.rep-nombre {
+  font-weight: 700; font-size: 14.5px; color: #0B2A5B;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rep-fecha {
+  display: flex; align-items: center; gap: 5px;
+  color: #5b7590; font-size: 11.5px; font-weight: 600; margin-top: 3px;
+}
+.rep-fecha svg { color: #1268C3; }
+
+.rep-ver {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  flex-shrink: 0; padding: 8px 15px; border-radius: 10px; cursor: pointer;
+  font-size: 12px; font-weight: 700; font-family: inherit;
+  background: #eaf4fd; border: 1px solid #bfdcf5; color: #1268C3;
+  transition: background .15s, color .15s;
+}
+.rep-ver:hover { background: #1268C3; border-color: #1268C3; color: #fff; }
+
+/* ---------- estados ---------- */
+.rep-estado {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 70px 20px; text-align: center; color: #5b7590;
+}
+.rep-estado .icono { color: #9fc9ec; }
+.rep-estado .titulo { font-size: 15px; font-weight: 800; color: #0B2A5B; }
+.rep-estado .sub { font-size: 12.5px; color: #7b93ad; }
+
+/* ---------- modal del visor ---------- */
+.rep-modal-fondo {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(6, 20, 36, .78); backdrop-filter: blur(3px);
+  display: flex; align-items: flex-start; justify-content: center; padding: 2vh 16px;
+}
+.rep-modal {
+  width: 100%; max-width: 940px; height: 92vh;
+  display: flex; flex-direction: column;
+  background: #fff; border-radius: 14px; overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
+}
+.rep-modal-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 13px 18px;
+  background: linear-gradient(120deg, #0B2A5B 0%, #1268C3 100%); color: #fff;
+}
+.rep-modal-titulo {
+  margin: 0; display: flex; align-items: center; gap: 9px;
+  font-size: 15px; font-weight: 700; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rep-modal-acciones { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.rep-descargar {
+  display: flex; align-items: center; gap: 6px; text-decoration: none;
+  background: #35B6E9; color: #05233f; border-radius: 9px;
+  padding: 7px 13px; font-size: 12.5px; font-weight: 700;
+}
+.rep-descargar:hover { background: #5fcaf1; }
+.rep-cerrar {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 9px; cursor: pointer;
+  background: rgba(255, 255, 255, .14); border: none; color: #fff; font-size: 15px;
+}
+.rep-cerrar:hover { background: rgba(255, 255, 255, .28); }
+.rep-modal-visor { flex: 1; background: #525659; }
+.rep-modal-visor iframe { width: 100%; height: 100%; border: none; }
+
+/* ---------- scrollbars ---------- */
+.rep ::-webkit-scrollbar { width: 8px; height: 8px; }
+.rep ::-webkit-scrollbar-thumb { background: #c3d6e8; border-radius: 4px; }
+.rep ::-webkit-scrollbar-thumb:hover { background: #a8c4dd; }
+.rep ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 700px) {
+  .rep-main { margin-left: 0; padding-bottom: 66px; }
+  .rep-head { padding: 14px 16px 12px; }
+  .rep-titulo { font-size: 21px; }
+  .rep-body { padding: 14px; }
+  .rep-ver span { display: none; }
+  .rep-ver { padding: 8px 11px; }
+}

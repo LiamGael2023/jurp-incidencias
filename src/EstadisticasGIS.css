@@ -17,8 +17,9 @@
 
 .est-main {
   position: relative; z-index: 1; flex: 1; min-width: 0; overflow-y: auto;
-  /* el rail es position:absolute y no ocupa espacio en el flex */
-  margin-left: 64px;
+  /* el rail flota encima: RailGIS publica --rail-w según esté abierto o no */
+  margin-left: var(--rail-w, 300px);
+  transition: margin-left .35s ease;
 }
 
 /* ---------- cabecera ---------- */
@@ -157,7 +158,7 @@
 
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
-  .est-main { margin-left: 56px; }
+  .est-main { margin-left: 0; padding-bottom: 66px; }
   .est .tbl-page-header { padding: 14px 16px 12px; }
   .est .tbl-page-title { font-size: 21px; }
   .est-tabs { padding: 0 14px; }

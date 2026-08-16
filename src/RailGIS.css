@@ -1,0 +1,174 @@
+/* ===========================================================
+   RailGIS.css
+   Barra lateral flotante, adaptada del sidebar-12 de frontend-joe
+   a la paleta JURP. Se expande / colapsa con el botón superior.
+
+   Publica --rail-w en :root para que el contenido de cada vista
+   sepa cuánto espacio dejarle (lo escribe RailGIS.jsx).
+   =========================================================== */
+
+:root {
+  --rail-w: 300px;          /* ancho reservado al rail, con sus márgenes */
+}
+
+.railx {
+  --pad: 22px;
+  --icono: 21px;
+  --azul: #1268C3;
+  --marino: #0B2A5B;
+  --celeste: #35B6E9;
+  --banda: #eaf4fd;
+  --apagado: #8fa5bd;
+  --superficie: #f1f6fc;
+  --superficie-hover: #e2edf8;
+  --divisor: #e8eff7;
+
+  position: fixed;
+  top: 50%;
+  left: 18px;
+  translate: 0 -50%;
+  z-index: 50;
+  width: 264px;
+  max-height: calc(100vh - 36px);
+  overflow: hidden;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 16px 44px rgba(11, 42, 91, .18);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: width .35s ease, box-shadow .3s;
+}
+.railx * { box-sizing: border-box; }
+
+.railx.colapsado {
+  width: calc(var(--icono) + var(--pad) * 2);
+}
+
+.railx-inner {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 36px);
+  padding: 20px 0 16px;
+}
+
+/* ---------- marca ---------- */
+.railx-brand {
+  display: flex; align-items: center; gap: 11px;
+  min-height: 44px; padding: 0 var(--pad); margin-bottom: 12px;
+}
+.railx.colapsado .railx-brand { visibility: hidden; }
+
+.railx-logo { width: 34px; height: 34px; flex: 0 0 auto; object-fit: contain; }
+.railx-nombre {
+  flex: 1 1 auto; min-width: 0;
+  font-size: 17px; font-weight: 800; letter-spacing: .01em;
+  color: var(--marino); white-space: nowrap; line-height: 1.15;
+}
+.railx-nombre small {
+  display: block; font-size: 9.5px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--apagado);
+}
+
+/* ---------- botón colapsar ---------- */
+.railx-colapsar {
+  position: absolute; top: 20px; right: 14px;
+  display: grid; place-items: center;
+  width: 44px; height: 44px; border: 0; border-radius: 12px;
+  background: var(--superficie); color: var(--apagado);
+  cursor: pointer; font-size: 16px;
+  transition: background .25s, color .25s, right .35s ease;
+}
+.railx-colapsar:hover { background: var(--superficie-hover); color: var(--marino); }
+.railx.colapsado .railx-colapsar { right: 11px; }
+
+.railx-divisor {
+  height: 1px; border: 0; margin: 16px 16px; background: var(--divisor);
+}
+
+/* ---------- perfil ---------- */
+.railx-perfil {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 12px; margin-bottom: 16px;
+}
+.railx-avatar {
+  flex: 0 0 auto; display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 3px solid #fff;
+  background: linear-gradient(135deg, #1268C3, #35B6E9);
+  color: #fff; font-size: 13px; font-weight: 800; letter-spacing: .5px;
+  box-shadow: 0 6px 16px rgba(11, 42, 91, .22);
+}
+.railx-perfil-txt {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px; white-space: nowrap;
+}
+.railx-perfil-nombre {
+  font-size: 13.5px; font-weight: 700; color: var(--marino);
+  overflow: hidden; text-overflow: ellipsis;
+}
+.railx-perfil-rol { font-size: 11px; font-weight: 600; color: var(--apagado); }
+
+/* ---------- navegación ---------- */
+.railx-nav {
+  flex: 0 1 auto; list-style: none; margin: 0; padding: 0;
+  overflow-y: auto; scrollbar-width: none;
+}
+.railx-nav::-webkit-scrollbar { display: none; }
+
+.railx-nav button,
+.railx-salir {
+  position: relative;
+  display: flex; align-items: center; gap: 15px;
+  width: 100%; height: 50px; padding: 0 var(--pad);
+  border: 0; background: transparent;
+  font-family: inherit; font-size: 14px; font-weight: 600;
+  color: var(--apagado); text-align: left; white-space: nowrap;
+  cursor: pointer; transition: background .25s, color .25s;
+}
+.railx-nav button:hover,
+.railx-salir:hover { color: var(--marino); background: #f7fbff; }
+
+.railx-nav button.activo {
+  background: var(--banda); color: var(--azul); font-weight: 800;
+}
+/* pastilla de color al borde derecho del ítem activo */
+.railx-nav button.activo::after {
+  content: ''; position: absolute; top: 50%; right: 0; translate: 0 -50%;
+  width: 5px; height: 30px; border-radius: 8px 0 0 8px;
+  background: linear-gradient(180deg, var(--celeste), var(--azul));
+}
+
+.railx-salir { margin-top: 10px; color: #c0576b; }
+.railx-salir:hover { color: #d63939; background: #fff5f5; }
+
+/* el icono siempre ocupa lo mismo, esté abierta o colapsada */
+.railx-ico {
+  flex: 0 0 auto; display: grid; place-items: center;
+  width: var(--icono); height: var(--icono); font-size: var(--icono);
+}
+.railx-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.railx.colapsado .railx-label,
+.railx.colapsado .railx-perfil-txt { display: none; }
+.railx.colapsado .railx-perfil { justify-content: center; padding: 0; }
+.railx.colapsado .railx-avatar { width: 40px; height: 40px; font-size: 12px; }
+
+/* ---------- móvil: barra inferior, sin ocupar ancho ---------- */
+@media (max-width: 700px) {
+  :root { --rail-w: 0px; }
+  .railx {
+    top: auto; bottom: 0; left: 0; right: 0; translate: 0;
+    width: 100% !important; max-height: none; border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 26px rgba(11, 42, 91, .2);
+  }
+  .railx-inner { flex-direction: row; align-items: center; padding: 6px 8px; max-height: none; }
+  .railx-brand, .railx-colapsar, .railx-divisor, .railx-perfil { display: none; }
+  .railx-nav { display: flex; flex: 1 1 auto; overflow-x: auto; }
+  .railx-nav li { flex: 1 1 auto; }
+  .railx-nav button, .railx-salir {
+    flex-direction: column; gap: 3px; height: 54px; padding: 0 6px;
+    font-size: 9.5px; font-weight: 700; justify-content: center; text-align: center;
+  }
+  .railx-nav button.activo::after { display: none; }
+  .railx-nav button.activo { border-radius: 12px; }
+  .railx-label { display: block !important; flex: 0 0 auto; }
+  .railx-salir { margin-top: 0; width: auto; padding: 0 12px; }
+}

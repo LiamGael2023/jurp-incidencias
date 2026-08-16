@@ -7,6 +7,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import './MapaDashboard.css';
 import './MapaGIS.css';
+import RailGIS from './RailGIS';
 import { FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint, FaFilePdf, FaFileExcel, FaDownload, FaRulerCombined, FaDrawPolygon, FaEraser, FaCamera, FaShareAlt, FaPlus, FaMinus, FaSignOutAlt, FaChevronUp, FaChevronDown } from 'react-icons/fa';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -21,7 +22,6 @@ import geoCanalMadre from './data/Canal_Madre.json';
 import geoLateral10 from './data/Lateral_10.json';
 import geoRedes from './data/Redes_Presurizado.json';
 import logo from './assets/logo1.png';
-import iconoJURP from './assets/jurp-icono.png';
 
 import icoBocatoma from './assets/simbologia/bocatoma.png';
 import icoEntrega from './assets/simbologia/entrega.png';
@@ -598,10 +598,6 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     return `<div style="font-family:system-ui;min-width:200px;color:#dce9f5"><div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:6px;margin-bottom:6px">${iconUrl ? `<img src="${iconUrl}" style="width:24px;height:24px"/>` : ''}<div><div style="font-weight:700;font-size:13px;color:#eef6fd">${props.name || ''}</div><div style="font-size:10px;color:#7fa5c0">${label}</div></div></div>${rows ? `<table style="border-collapse:collapse;width:100%">${rows}</table>` : '<span style="font-size:11px;color:#7fa5c0">Sin datos</span>'}</div>`;
   }, []);
 
-  // Iniciales para el avatar del rail
-  const iniciales = (usuario || 'JU').replace(/[^a-zA-Z ]/g, ' ').trim().split(/\s+/)
-    .slice(0, 2).map(p => p[0]).join('').toUpperCase() || 'JU';
-
   const maxInfra = Math.max(1, ...porTipoInfra.map(t => t.value));
 
   const gruposRecursos = [
@@ -665,22 +661,13 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       <div className="gis-vineta" />
 
       {/* ══════════════ RAIL ══════════════ */}
-      <nav className="gis-rail">
-        <img className="gis-rail-logo" src={iconoJURP} alt="JURP" />
-        {(menu || []).map(m => (
-          <button key={m.clave} className={`gis-rail-btn ${vistaActual === m.clave ? 'activo' : ''}`}
-            onClick={() => onNavegar && onNavegar(m.clave)}>
-            {m.icono}
-            <span className="gis-tip">{m.titulo}</span>
-          </button>
-        ))}
-        <span className="gis-rail-sep" />
-        <button className="gis-rail-btn" onClick={onLogout} title="Cerrar sesión">
-          <FaSignOutAlt />
-          <span className="gis-tip">Cerrar sesión</span>
-        </button>
-        <span className="gis-avatar" title={usuario}>{iniciales}</span>
-      </nav>
+      <RailGIS
+        menu={menu}
+        vistaActual={vistaActual}
+        onNavegar={onNavegar}
+        usuario={usuario}
+        onLogout={onLogout}
+      />
 
       {/* ══════════════ BARRA SUPERIOR ══════════════ */}
       <header className="gis-top">

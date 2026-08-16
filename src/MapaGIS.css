@@ -32,54 +32,14 @@
   box-shadow: 0 8px 32px rgba(0, 0, 0, .45);
 }
 
-/* ---------- rail ---------- */
-.gis-rail {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 64px; z-index: 40;
-  display: flex; flex-direction: column; align-items: center;
-  padding: 12px 0; gap: 4px;
-  background: rgba(255, 255, 255, .96);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border-right: 1px solid rgba(13, 40, 64, .1);
-  box-shadow: 2px 0 18px rgba(0, 0, 0, .25);
+/* los paneles se corren cuando el rail se abre o cierra */
+.gis-top, .gis-kpis, .gis-tools, .gis-leyenda, .gis-capas, .gis .jurp-minimapa-wrap {
+  transition: left .35s ease, max-width .35s ease;
 }
-.gis-rail-logo {
-  width: 40px; height: 40px; border-radius: 11px; margin-bottom: 14px;
-  display: block; object-fit: contain;
-  box-shadow: 0 4px 14px rgba(32, 107, 196, .3);
-}
-.gis-rail-btn {
-  position: relative; width: 44px; height: 44px; border: none; cursor: pointer;
-  border-radius: 10px; display: flex; align-items: center; justify-content: center;
-  background: transparent; color: #6b7f96; font-size: 19px; transition: all .15s;
-}
-.gis-rail-btn:hover { background: rgba(32, 107, 196, .1); color: #206bc4; }
-.gis-rail-btn.activo { background: rgba(32, 107, 196, .12); color: #206bc4; }
-.gis-rail-btn.activo::before {
-  content: ''; position: absolute; left: -10px; top: 10px; bottom: 10px;
-  width: 3px; border-radius: 2px; background: #206bc4;
-}
-.gis-rail-btn .gis-tip {
-  position: absolute; left: calc(100% + 14px); top: 50%; transform: translateY(-50%);
-  white-space: nowrap; background: #ffffff; color: #206bc4;
-  font-size: 12.5px; font-weight: 600; padding: 7px 12px; border-radius: 8px;
-  border: 1px solid rgba(32, 107, 196, .2); box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
-  opacity: 0; pointer-events: none; transition: opacity .15s; z-index: 60;
-}
-.gis-rail-btn:hover .gis-tip { opacity: 1; }
-.gis-rail-sep { flex: 1; }
-.gis-avatar {
-  width: 38px; height: 38px; border-radius: 50%; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  background: #e3eefb; color: #206bc4;
-  border: 1.5px solid rgba(32, 107, 196, .35);
-  font-weight: 700; font-size: 12px; letter-spacing: .5px;
-}
-.gis-avatar:hover { background: #d3e5fa; }
 
 /* ---------- barra superior ---------- */
 .gis-top {
-  position: absolute; top: 16px; left: 80px; right: 16px; z-index: 35;
+  position: absolute; top: 16px; left: calc(var(--rail-w, 300px) + 4px); right: 16px; z-index: 35;
   display: flex; align-items: center; gap: 14px;
 }
 .gis-marca { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-radius: 16px; }
@@ -139,8 +99,8 @@
 
 /* ---------- KPIs ---------- */
 .gis-kpis {
-  position: absolute; top: 82px; left: 96px; z-index: 30;
-  display: flex; gap: 10px; flex-wrap: wrap; max-width: calc(100% - 500px);
+  position: absolute; top: 82px; left: calc(var(--rail-w, 300px) + 4px); z-index: 30;
+  display: flex; gap: 10px; flex-wrap: wrap; max-width: calc(100% - var(--rail-w, 300px) - 380px);
   pointer-events: none;
 }
 .gis-kpis > * { pointer-events: auto; }
@@ -162,7 +122,7 @@
 
 /* ---------- herramientas ---------- */
 .gis-tools {
-  position: absolute; left: 96px; bottom: 56px; z-index: 30;
+  position: absolute; left: calc(var(--rail-w, 300px) + 4px); bottom: 56px; z-index: 30;
   display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 14px;
 }
 .gis-tool {
@@ -309,7 +269,7 @@
 
 /* ---------- leyenda ---------- */
 .gis-leyenda {
-  position: absolute; bottom: 16px; left: 96px; z-index: 30;
+  position: absolute; bottom: 16px; left: calc(var(--rail-w, 300px) + 4px); z-index: 30;
   display: flex; gap: 14px; align-items: center; padding: 9px 16px; border-radius: 14px;
   font-size: 11.5px; font-weight: 700; color: #b3d3e8;
 }
@@ -319,7 +279,7 @@
 
 /* ---------- panel de capas ---------- */
 .gis-capas {
-  position: absolute; left: 162px; bottom: 56px; width: 290px; max-height: 62vh; z-index: 45;
+  position: absolute; left: calc(var(--rail-w, 300px) + 70px); bottom: 56px; width: 290px; max-height: 62vh; z-index: 45;
   border-radius: 16px; display: flex; flex-direction: column; overflow: hidden;
 }
 .gis-capas-head {
@@ -384,7 +344,7 @@
 .gis .jurp-minimapa-wrap {
   /* z-index alto: está dentro del contenedor Leaflet, cuyos paneles usan 200-700.
      No tapa el panel de capas porque ese vive en otro contexto de apilado. */
-  left: 162px; right: auto; bottom: 56px; z-index: 800;
+  left: calc(var(--rail-w, 300px) + 70px); right: auto; bottom: 56px; z-index: 800;
   width: 210px; border: 1px solid rgba(116, 192, 252, .28); border-radius: 12px;
   background: rgba(8, 19, 30, .82);
   box-shadow: 0 8px 26px rgba(0, 0, 0, .45);
@@ -405,7 +365,12 @@
 }
 @media (max-width: 900px) {
   .gis-panel { display: none; }
-  .gis-kpis { max-width: calc(100% - 120px); top: 78px; }
-  .gis-top { left: 72px; right: 10px; }
+  .gis-kpis { max-width: calc(100% - 24px); top: 74px; left: 12px; }
+  .gis-top { left: 12px; right: 12px; }
   .gis-marca { display: none; }
+  .gis-tools, .gis-leyenda { left: 12px; }
+  .gis-capas { left: 70px; }
+  .gis .jurp-minimapa-wrap { left: 70px; bottom: 130px; }
+  .gis-tools { bottom: 130px; }
+  .gis-leyenda { bottom: 78px; }
 }
