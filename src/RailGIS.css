@@ -24,13 +24,12 @@
   --divisor: #e8eff7;
 
   position: fixed;
-  top: 50%;
-  left: 18px;
-  translate: 0 -50%;
+  top: 0;
+  left: 0;
   z-index: 50;
   width: 264px;
-  max-height: calc(100vh - 36px);
-  border-radius: 22px;
+  height: 100vh;
+  border-radius: 0 22px 22px 0;
   background: #fff;
   box-shadow: 0 16px 44px rgba(11, 42, 91, .18);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -45,7 +44,7 @@
 .railx-inner {
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 36px);
+  height: 100%;
   padding: 20px 0 16px;
   border-radius: 22px;
 }
@@ -147,7 +146,7 @@
   background: linear-gradient(180deg, var(--celeste), var(--azul));
 }
 
-.railx-salir { margin-top: 10px; color: #c0576b; }
+.railx-salir { margin-top: auto; color: #c0576b; }
 .railx-salir:hover { color: #d63939; background: #fff5f5; }
 
 /* el icono siempre ocupa lo mismo, esté abierta o colapsada */
@@ -190,10 +189,10 @@
   :root { --rail-w: 0px; }
   .railx {
     top: auto; bottom: 0; left: 0; right: 0; translate: 0;
-    width: 100% !important; max-height: none; border-radius: 18px 18px 0 0;
+    width: 100% !important; height: auto; border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 26px rgba(11, 42, 91, .2);
   }
-  .railx-inner { flex-direction: row; align-items: center; padding: 6px 8px; max-height: none; }
+  .railx-inner { flex-direction: row; align-items: center; padding: 6px 8px; height: auto; }
   .railx-brand, .railx-colapsar, .railx-divisor, .railx-perfil { display: none; }
   .railx-nav { display: flex; flex: 1 1 auto; overflow-x: auto; }
   .railx-nav li { flex: 1 1 auto; }

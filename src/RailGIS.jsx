@@ -17,8 +17,8 @@ import './RailGIS.css';
  * RailGIS, así que sin eso se volvería a abrir en cada navegación.
  * También publica --rail-w en :root para que el contenido se corra solo.
  */
-const ANCHO_ABIERTO = '300px';    // 18 (margen) + 264 (rail) + 18 (aire)
-const ANCHO_CERRADO = '102px';    // 18 + 66 + 18
+const ANCHO_ABIERTO = '286px';    // 264 (rail) + 22 (aire)
+const ANCHO_CERRADO = '88px';     // 66 + 22
 
 export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogout }) {
   const [colapsado, setColapsado] = useState(
