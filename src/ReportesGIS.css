@@ -16,19 +16,16 @@
 
 .rep-main {
   position: relative; z-index: 1; flex: 1; min-width: 0; overflow-y: auto;
-  /* el rail flota encima: RailGIS publica --rail-w según esté abierto o no */
-  margin-left: var(--rail-w, 300px);
-  transition: margin-left .35s ease;
+  /* sin margen: el rail flota encima y cada bloque se aparta
+     solo, así la franja de cabecera llega al borde de la pantalla */
 }
 
 /* ---------- cabecera ---------- */
 .rep-head {
   position: relative;
   padding: 20px 24px 18px;
-  /* la franja se estira por debajo del rail hasta el borde de la pantalla */
-  margin-left: calc(var(--rail-w, 286px) * -1);
   padding-left: calc(var(--rail-w, 286px) + 24px);
-  transition: margin-left .35s ease, padding-left .35s ease;
+  transition: padding-left .35s ease;
   background: linear-gradient(120deg, #0B2A5B 0%, #12508f 55%, #1268C3 100%);
   box-shadow: 0 6px 22px rgba(11, 42, 91, .22);
   display: flex; align-items: center; justify-content: space-between;
@@ -65,7 +62,11 @@
 .rep-btn-primario:hover:not(:disabled) { background: #5fcaf1; border-color: #5fcaf1; }
 
 /* ---------- cuerpo ---------- */
-.rep-body { padding: 20px 24px 28px; max-width: 980px; margin: 0 auto; }
+.rep-body {
+  padding: 20px 24px 28px; max-width: 980px;
+  margin-left: var(--rail-w, 286px);
+  transition: margin-left .35s ease;
+}
 
 .rep-lista { display: flex; flex-direction: column; gap: 10px; }
 
@@ -166,10 +167,10 @@
 
 /* ---------- responsive ---------- */
 @media (max-width: 700px) {
-  .rep-main { margin-left: 0; padding-bottom: 66px; }
+  .rep-main { padding-bottom: 66px; }
   .rep-head { margin-left: 0; padding: 14px 16px 12px; }
   .rep-titulo { font-size: 21px; }
-  .rep-body { padding: 14px; }
+  .rep-body { padding: 14px; margin-left: 0; }
   .rep-ver span { display: none; }
   .rep-ver { padding: 8px 11px; }
 }

@@ -30,10 +30,8 @@
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  /* el rail es position:absolute (MapaGIS.css) y no ocupa espacio en el
-     flex: hay que reservarle el ancho o se monta encima del contenido */
-  margin-left: var(--rail-w, 300px);
-  transition: margin-left .35s ease;
+  /* sin margen: el rail flota encima y cada bloque se aparta
+     solo, así la franja de cabecera llega al borde de la pantalla */
 }
 
 /* ---------- cabecera ---------- */
@@ -41,10 +39,8 @@
 .inc .tbl-page-header {
   position: relative;
   padding: 20px 24px 18px; border: none;
-  /* la franja se estira por debajo del rail hasta el borde de la pantalla */
-  margin-left: calc(var(--rail-w, 286px) * -1);
   padding-left: calc(var(--rail-w, 286px) + 24px);
-  transition: margin-left .35s ease, padding-left .35s ease;
+  transition: padding-left .35s ease;
   background: linear-gradient(120deg, #0B2A5B 0%, #12508f 55%, #1268C3 100%);
   border-radius: 0;
   box-shadow: 0 6px 22px rgba(11, 42, 91, .22);
@@ -89,7 +85,7 @@
 }
 
 /* ---------- cuerpo ---------- */
-.inc .tbl-page-body { padding: 0 24px 24px; background: transparent; }
+.inc .tbl-page-body { padding: 0 24px 24px; padding-left: calc(var(--rail-w, 286px) + 24px); background: transparent; transition: padding-left .35s ease; }
 
 /* ---------- barra de filtros (trae estilos en línea desde el JSX) ---------- */
 .inc .tbl-page-body > div:first-child {
@@ -253,9 +249,9 @@
 
 /* ---------- responsive ---------- */
 @media (max-width: 700px) {
-  .inc-main { margin-left: 0; padding-bottom: 66px; }
+  .inc-main { padding-bottom: 66px; }
   .inc .tbl-page-header { margin-left: 0; padding: 14px 14px 10px; }
   .inc .tbl-page-title { font-size: 21px; }
-  .inc .tbl-page-body { padding: 0 14px 14px; }
+  .inc .tbl-page-body { padding: 0 14px 14px !important; }
   .inc .tbl-row-cards { grid-template-columns: 1fr !important; }
 }
