@@ -5,6 +5,9 @@ import logoNexhydroMin from './assets/nexhidra/logo-nexhydro-min.png';
 import logoHydrometrix from './assets/nexhidra/logo-hydrometrix.png';
 import logoPluvira from './assets/nexhidra/logo-pluvira.png';
 import logoSentria from './assets/nexhidra/logo-sentria.png';
+import minHydrometrix from './assets/nexhidra/logo-hydrometrix-min.png';
+import minPluvira from './assets/nexhidra/logo-pluvira-min.png';
+import minSentria from './assets/nexhidra/logo-sentria-min.png';
 import './RailGIS.css';
 
 /**
@@ -26,9 +29,9 @@ const ANCHO_CERRADO = '88px';     // 66 + 22
 
 // La app por la que se entró: tiñe el rail y se muestra bajo el logo NEXHYDRO.
 const APPS = {
-  pluvira:     { logo: logoPluvira,     color: '#EE7B12', nombre: 'PLUVIRA' },
-  sentria:     { logo: logoSentria,     color: '#2E9E4F', nombre: 'SENTRIA' },
-  hydrometrix: { logo: logoHydrometrix, color: '#1268C3', nombre: 'HYDROMETRIX' },
+  pluvira:     { logo: logoPluvira,     min: minPluvira,     color: '#EE7B12', nombre: 'PLUVIRA' },
+  sentria:     { logo: logoSentria,     min: minSentria,     color: '#2E9E4F', nombre: 'SENTRIA' },
+  hydrometrix: { logo: logoHydrometrix, min: minHydrometrix, color: '#1268C3', nombre: 'HYDROMETRIX' },
 };
 
 export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogout, app }) {
@@ -79,7 +82,7 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
         <div className="railx-app">
           <span className="railx-app-etq">Módulo</span>
           <img className="railx-app-logo" src={info.logo} alt={info.nombre} />
-          <span className="railx-app-punto" title={info.nombre} />
+          <img className="railx-app-min" src={info.min} alt={info.nombre} title={info.nombre} />
         </div>
 
         {/* ── navegación ── */}

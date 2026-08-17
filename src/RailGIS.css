@@ -104,23 +104,21 @@
   font-size: 9px; font-weight: 800; letter-spacing: .16em;
   text-transform: uppercase; color: var(--apagado);
 }
-/* discreto: más chico que el logo de NEXHYDRO y con un punto de transparencia */
+/* discreto: algo más chico que el logo de NEXHYDRO */
 .railx-app-logo {
-  width: 100%; max-width: 132px; height: auto;
-  object-fit: contain; display: block; opacity: .92;
+  width: 100%; max-width: 172px; height: auto;
+  object-fit: contain; display: block;
 }
-/* colapsada: en vez del logo, un punto del color de la app */
-.railx-app-punto {
-  display: none; width: 9px; height: 9px; border-radius: 50%;
-  background: var(--app, #1268C3);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app, #1268C3) 22%, transparent);
+/* colapsada: solo la gota de la app */
+.railx-app-min {
+  display: none; width: 26px; height: auto; object-fit: contain;
 }
 .railx.colapsado .railx-app {
   align-items: center; padding: 0; margin: 2px 0 12px;
 }
 .railx.colapsado .railx-app-etq,
 .railx.colapsado .railx-app-logo { display: none; }
-.railx.colapsado .railx-app-punto { display: block; }
+.railx.colapsado .railx-app-min { display: block; }
 
 /* ---------- perfil ---------- */
 .railx-perfil {
