@@ -797,6 +797,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       fd.append('archivo', capa.archivo);
       fd.append('color', capa.color);
       fd.append('creado_por', usuario || '');
+      // Los booleanos hay que mandarlos siempre: en multipart, DRF asume que
+      // un BooleanField ausente vale False (los checkboxes HTML no se envían
+      // cuando están desmarcados), y la capa quedaría inactiva y oculta.
+      fd.append('activo', 'true');
+      fd.append('visible_por_defecto', 'false');
       const r = await fetch(`${API_CAPAS}/`, { method: 'POST', body: fd });
       if (!r.ok) {
         const e = await r.json().catch(() => ({}));
