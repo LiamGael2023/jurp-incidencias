@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FaSignOutAlt, FaBars } from 'react-icons/fa';
-import iconoJURP from './assets/jurp-icono.png';
+import logoNexhydro from './assets/nexhidra/logo-nexhydro.png';
+import logoNexhydroMin from './assets/nexhidra/logo-nexhydro-min.png';
 import './RailGIS.css';
 
 /**
@@ -47,13 +48,11 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
     <aside className={`railx ${colapsado ? 'colapsado' : ''}`}>
       <div className="railx-inner">
 
-        {/* ── marca ── */}
+        {/* ── marca: logo completo abierta, solo la gota al colapsar ── */}
         <div className="railx-brand">
-          <img className="railx-logo" src={iconoJURP} alt="JURP" />
-          <span className="railx-nombre">
-            NEXHYDRO
-            <small>Ecosistema JURP</small>
-          </span>
+          <img className="railx-logo" src={logoNexhydro}
+            alt="NEXHYDRO — Ecosistema Digital JURP" />
+          <img className="railx-logo-min" src={logoNexhydroMin} alt="NEXHYDRO" />
         </div>
 
         <button type="button" className="railx-colapsar" onClick={alternar}
