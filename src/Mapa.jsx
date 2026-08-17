@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON, ImageOverlay, useMap, useMapEvents } from 'react-leaflet';
 import L, { divIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
@@ -604,7 +604,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     };
     const m = t.match(/<kml\b([^>]*)>/);
     if (!m) return t;
-    const attrs = m.group ? m.group(1) : m[1];
+    const attrs = m[1];
     let faltan = '';
     for (const [pref, uri] of Object.entries(NS)) {
       if (t.includes(`${pref}:`) && !attrs.includes(`xmlns:${pref}=`)) {
@@ -634,11 +634,12 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     setCargandoKmz(true);
     try {
       let textoKml = '';
+      let zipKmz = null;
       if (esKmz) {
-        const zip = await JSZip.loadAsync(file);
-        const entrada = Object.keys(zip.files).find(n => /\.kml$/i.test(n) && !zip.files[n].dir);
+        zipKmz = await JSZip.loadAsync(file);
+        const entrada = Object.keys(zipKmz.files).find(n => /\.kml$/i.test(n) && !zipKmz.files[n].dir);
         if (!entrada) throw new Error('El KMZ no contiene ningún archivo .kml.');
-        textoKml = await zip.files[entrada].async('string');
+        textoKml = await zipKmz.files[entrada].async('string');
       } else {
         textoKml = await file.text();
       }
@@ -648,13 +649,56 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       if (err) throw new Error(`El KML está mal formado. ${err.textContent.trim().slice(0, 160)}`);
 
       const geo = kmlAGeoJSON(doc);
-      const total = geo?.features?.length || 0;
+
+      // togeojson convierte cada <GroundOverlay> en un rectángulo y tira la
+      // imagen. Los separamos: el rectángulo no se dibuja y en su lugar se
+      // monta la imagen real, que vive dentro del propio KMZ.
+      const overlays = [];
+      const vectores = [];
+      for (const f of (geo.features || [])) {
+        if (f.properties?.['@geometry-type'] === 'groundoverlay') overlays.push(f);
+        else vectores.push(f);
+      }
+      geo.features = vectores;
+
+      // Resuelve la imagen de cada overlay a una URL utilizable.
+      const imagenes = [];
+      for (const f of overlays) {
+        const href = f.properties?.icon || '';
+        const coords = f.geometry?.coordinates?.[0] || [];
+        if (!href || coords.length < 3) continue;
+
+        const lats = coords.map(c => c[1]);
+        const lngs = coords.map(c => c[0]);
+        const bounds = [
+          [Math.min(...lats), Math.min(...lngs)],
+          [Math.max(...lats), Math.max(...lngs)],
+        ];
+
+        let url = null;
+        if (/^https?:\/\//i.test(href)) {
+          url = href;                       // la imagen está en internet
+        } else if (zipKmz) {
+          // Ruta relativa dentro del KMZ; puede venir con %20 o mayúsculas.
+          const buscada = decodeURIComponent(href).replace(/^\.\//, '').toLowerCase();
+          const entrada = Object.keys(zipKmz.files).find(n =>
+            !zipKmz.files[n].dir && n.toLowerCase() === buscada);
+          if (entrada) {
+            const blob = await zipKmz.files[entrada].async('blob');
+            url = URL.createObjectURL(blob);
+          }
+        }
+        if (url) imagenes.push({ url, bounds, nombre: f.properties?.name || 'Imagen' });
+      }
+
+      const total = geo.features.length + imagenes.length;
       if (!total) throw new Error('El archivo no tiene elementos dibujables.');
 
       const capa = {
         id: `usr-${Date.now()}`,
         nombre,
         data: geo,
+        imagenes,
         color: COLORS_USUARIO[capasUsuario.length % COLORS_USUARIO.length],
         visible: true,
         total,
@@ -678,9 +722,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
   // Encuadra el mapa sobre una capa cargada.
   const volarACapa = (capa) => {
-    if (!mapRef.current || !capa?.data) return;
+    if (!mapRef.current || !capa) return;
     try {
-      const b = L.geoJSON(capa.data).getBounds();
+      const b = L.latLngBounds([]);
+      if (capa.data?.features?.length) b.extend(L.geoJSON(capa.data).getBounds());
+      (capa.imagenes || []).forEach(im => b.extend(im.bounds));
       if (b.isValid()) mapRef.current.flyToBounds(b, { padding: [50, 50], maxZoom: 16, duration: 1 });
     } catch (e) { /* geometría vacía */ }
   };
@@ -689,7 +735,14 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     setCapasUsuario(prev => prev.map(c => c.id === id ? { ...c, visible: !c.visible } : c));
 
   const quitarCapaUsuario = (id) =>
-    setCapasUsuario(prev => prev.filter(c => c.id !== id));
+    setCapasUsuario(prev => {
+      const c = prev.find(x => x.id === id);
+      // Las imágenes son blobs en memoria: hay que soltarlas al quitar la capa.
+      (c?.imagenes || []).forEach(im => {
+        if (im.url.startsWith('blob:')) URL.revokeObjectURL(im.url);
+      });
+      return prev.filter(x => x.id !== id);
+    });
 
   // ── Handlers ──────────────────────────────────────────────────────────
   const toggleCapa = (n) => setCapas(p => ({ ...p, [n]: !p[n] }));
@@ -759,8 +812,15 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             return <ClusteredLayer key={cfg.key + filtroTramo + filtroEstado} data={data} icon={cfg.icon} color={cfg.color} label={cfg.label} buildPopup={buildPopup} />;
           })}
 
+          {/* imágenes (GroundOverlay) de las capas cargadas */}
+          {capasUsuario.filter(c => c.visible).flatMap(c =>
+            (c.imagenes || []).map((im, i) => (
+              <ImageOverlay key={`${c.id}-img-${i}`} url={im.url} bounds={im.bounds} opacity={0.75} />
+            ))
+          )}
+
           {/* capas KMZ/KML cargadas por el usuario */}
-          {capasUsuario.filter(c => c.visible).map(c => (
+          {capasUsuario.filter(c => c.visible && c.data?.features?.length).map(c => (
             <GeoJSON key={c.id} data={c.data}
               style={() => ({ color: c.color, weight: 3, opacity: .9, fillColor: c.color, fillOpacity: .22 })}
               pointToLayer={(f, latlng) => L.circleMarker(latlng, {
