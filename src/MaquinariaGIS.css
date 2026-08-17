@@ -1,0 +1,262 @@
+/* ===========================================================
+   MaquinariaGIS.css
+   Mismo lenguaje visual que Incidentes, Estadísticas y Reportes.
+   Los modales (historial, visor PDF, reporte) siguen en claro.
+   =========================================================== */
+
+.maq {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  background: linear-gradient(160deg, #eaf3fc 0%, #dceaf7 48%, #cfe2f3 100%);
+  color: #1d273b;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+}
+.maq *, .maq *::before, .maq *::after { box-sizing: border-box; }
+
+.maq-main {
+  position: relative; z-index: 1; flex: 1; min-width: 0; overflow-y: auto;
+  /* el rail flota encima: cada bloque se aparta con --rail-w */
+}
+
+/* ---------- cabecera ---------- */
+.maq-head {
+  position: relative;
+  padding: 20px 24px 18px;
+  padding-left: calc(var(--rail-w, 286px) + 24px);
+  transition: padding-left .35s ease;
+  background: linear-gradient(120deg, #0B2A5B 0%, #12508f 55%, #1268C3 100%);
+  box-shadow: 0 6px 22px rgba(11, 42, 91, .22);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+.maq-head::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: linear-gradient(90deg, #35B6E9, rgba(53, 182, 233, 0));
+}
+.maq-pretitulo {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .14em;
+  text-transform: uppercase; color: #8fd0f5;
+}
+.maq-titulo {
+  margin: 4px 0 0; font-size: 26px; font-weight: 800;
+  color: #fff; line-height: 1.15; letter-spacing: -.01em;
+}
+.maq-acciones { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+
+.maq-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 16px; border-radius: 10px; cursor: pointer;
+  font-size: 12.5px; font-weight: 700; font-family: inherit;
+  border: 1px solid rgba(255, 255, 255, .4);
+  background: rgba(255, 255, 255, .12); color: #fff;
+  transition: background .15s, border-color .15s;
+}
+.maq-btn:hover:not(:disabled) { background: rgba(255, 255, 255, .24); border-color: #fff; }
+.maq-btn:disabled { opacity: .5; cursor: not-allowed; }
+.maq-btn-primario {
+  background: #35B6E9; border-color: #35B6E9; color: #05233f;
+  box-shadow: 0 3px 12px rgba(53, 182, 233, .4);
+}
+.maq-btn-primario:hover:not(:disabled) { background: #5fcaf1; border-color: #5fcaf1; }
+
+/* ---------- cuerpo ---------- */
+.maq-body {
+  padding: 20px 24px 28px;
+  padding-left: calc(var(--rail-w, 286px) + 24px);
+  transition: padding-left .35s ease;
+}
+
+/* ---------- indicadores ---------- */
+.maq-kpis {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 14px; margin-bottom: 18px;
+}
+.maq-kpi {
+  position: relative; overflow: hidden;
+  background: linear-gradient(135deg, #ffffff 0%, #f2f8fe 100%);
+  border: 1px solid #d3e4f4; border-radius: 13px;
+  padding: 15px 18px;
+  box-shadow: 0 2px 8px rgba(11, 42, 91, .09);
+}
+.maq-kpi::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  background: var(--c);
+}
+.maq-kpi-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10.5px; font-weight: 800; letter-spacing: .1em;
+  text-transform: uppercase; color: #7b93ad; margin-bottom: 6px;
+}
+.maq-kpi-label svg { color: var(--c); }
+.maq-kpi-valor {
+  font-size: 27px; font-weight: 800; line-height: 1;
+  color: var(--c); font-variant-numeric: tabular-nums;
+}
+
+/* ---------- filtros ---------- */
+.maq-filtros {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  background: linear-gradient(135deg, #ffffff 0%, #f0f7fe 100%);
+  border: 1px solid #c9dff2; border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(11, 42, 91, .08);
+  padding: 12px 15px; margin-bottom: 18px;
+}
+.maq-filtros-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 800; letter-spacing: .08em;
+  text-transform: uppercase; color: #5b7590;
+}
+.maq-select {
+  padding: 8px 11px; border-radius: 9px; cursor: pointer;
+  font-size: 12px; font-weight: 600; font-family: inherit; outline: none;
+  background: #f7fafd; border: 1px solid #d5e3f0; color: #1d273b; min-width: 165px;
+}
+.maq-buscar { position: relative; flex: 1; min-width: 200px; max-width: 360px; }
+.maq-buscar > svg {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  color: #9db2c7; pointer-events: none;
+}
+.maq-buscar input {
+  width: 100%; padding: 8px 30px 8px 32px; border-radius: 9px;
+  font-size: 12px; font-family: inherit; outline: none; font-weight: 600;
+  background: #f7fafd; border: 1px solid #d5e3f0; color: #1d273b;
+}
+.maq-buscar input::placeholder { color: #9db2c7; font-weight: 500; }
+.maq-buscar input:focus {
+  border-color: #35B6E9; background: #fff;
+  box-shadow: 0 0 0 3px rgba(53, 182, 233, .15);
+}
+.maq-buscar-x {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; color: #9db2c7; display: flex; padding: 2px;
+}
+.maq-contador { font-size: 12px; font-weight: 700; color: #5b7590; white-space: nowrap; }
+
+/* ---------- rejilla de máquinas ---------- */
+.maq-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); gap: 14px;
+}
+
+.maq-card {
+  position: relative;
+  background: #fff; border: 1px solid #d3e4f4; border-radius: 13px;
+  overflow: hidden; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(11, 42, 91, .09);
+  transition: transform .18s, box-shadow .18s, border-color .18s;
+}
+.maq-card:hover {
+  transform: translateY(-3px);
+  border-color: #9fc9ec;
+  box-shadow: 0 12px 28px rgba(11, 42, 91, .16);
+}
+/* franja del color del estado en el borde superior */
+.maq-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; z-index: 2;
+  background: var(--c);
+}
+
+.maq-card-banda {
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 14px; border-bottom: 1px solid #eef3f9;
+  background: var(--tinte);
+}
+.maq-card-estado { font-size: 11px; font-weight: 800; letter-spacing: .04em; color: var(--c); }
+.maq-origen {
+  margin-left: auto; padding: 2px 9px; border-radius: 6px;
+  font-size: 10px; font-weight: 800; color: #fff; letter-spacing: .04em;
+}
+.maq-origen.jurp { background: #1268C3; }
+.maq-origen.ext { background: #EE7B12; }
+
+.maq-card-cuerpo { padding: 13px 14px; }
+.maq-codigo {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 5px;
+  font-size: 15px; font-weight: 800; color: #0B2A5B;
+}
+.maq-codigo svg { color: #1268C3; }
+.maq-equipo { font-size: 12.5px; font-weight: 600; color: #48617c; line-height: 1.4; }
+.maq-modelo { font-size: 12px; color: #5b7590; margin-top: 3px; line-height: 1.4; }
+.maq-modelo b { color: #1d273b; }
+
+.maq-aviso {
+  margin-top: 10px; padding: 10px; border-radius: 9px; font-size: 12px;
+  border: 1px solid;
+}
+.maq-aviso.rojo { background: #fef2f2; border-color: #fecaca; }
+.maq-aviso.ambar { background: #fff7ed; border-color: #fed7aa; }
+.maq-aviso-tit {
+  display: flex; align-items: center; gap: 5px;
+  font-weight: 800; margin-bottom: 3px;
+}
+.maq-aviso.rojo .maq-aviso-tit { color: #991b1b; }
+.maq-aviso.ambar .maq-aviso-tit { color: #b45309; }
+.maq-aviso p { margin: 0 0 3px; color: #7f1d1d; }
+.maq-aviso.ambar p { color: #92400e; }
+.maq-aviso small { color: #a16207; font-size: 11px; }
+.maq-aviso .nota { color: #94a3b8; font-style: italic; font-size: 11px; }
+
+.maq-accion {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; margin-top: 8px; padding: 8px 11px;
+  border: none; border-radius: 9px; cursor: pointer;
+  font-size: 12px; font-weight: 700; font-family: inherit; color: #fff;
+}
+.maq-accion.rojo { background: #d63939; }
+.maq-accion.rojo:hover { background: #b91c1c; }
+.maq-accion.verde { background: #16a34a; }
+.maq-accion.verde:hover { background: #15803d; }
+.maq-accion.ambar { background: #f59e0b; }
+.maq-accion.ambar:hover { background: #d97706; }
+
+.maq-historial {
+  display: flex; align-items: center; gap: 6px; margin-top: 11px;
+  font-size: 11.5px; font-weight: 700; color: #1268C3;
+}
+
+/* ---------- estados ---------- */
+.maq-estado-vacio {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 70px 20px; text-align: center; color: #5b7590;
+}
+.maq-estado-vacio .icono { color: #9fc9ec; }
+.maq-estado-vacio .titulo { font-size: 15px; font-weight: 800; color: #0B2A5B; }
+
+/* ---------- paginador ---------- */
+.maq-paginador {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  flex-wrap: wrap; margin-top: 20px; padding: 12px 16px; border-radius: 14px;
+  background: linear-gradient(135deg, #ffffff 0%, #f0f7fe 100%);
+  border: 1px solid #c9dff2;
+  box-shadow: 0 2px 8px rgba(11, 42, 91, .08);
+}
+.maq-pag {
+  padding: 7px 14px; border-radius: 9px; cursor: pointer;
+  font-size: 12.5px; font-weight: 700; font-family: inherit;
+  background: #f7fafd; border: 1px solid #d5e3f0; color: #5b7590;
+}
+.maq-pag:hover:not(:disabled) { background: #eaf4fd; border-color: #9fc9ec; color: #1268C3; }
+.maq-pag:disabled { opacity: .4; cursor: not-allowed; }
+.maq-pag-num { min-width: 36px; padding: 7px 0; text-align: center; }
+.maq-pag-num.activo {
+  background: #1268C3; border-color: #1268C3; color: #fff;
+  box-shadow: 0 2px 8px rgba(18, 104, 195, .3);
+}
+.maq-pag-info { margin-left: 8px; font-size: 12px; font-weight: 600; color: #5b7590; white-space: nowrap; }
+.maq-pag-puntos { color: #9db2c7; }
+
+/* ---------- scrollbars ---------- */
+.maq ::-webkit-scrollbar { width: 8px; height: 8px; }
+.maq ::-webkit-scrollbar-thumb { background: #c3d6e8; border-radius: 4px; }
+.maq ::-webkit-scrollbar-thumb:hover { background: #a8c4dd; }
+.maq ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 700px) {
+  .maq-main { padding-bottom: 66px; }
+  .maq-head { padding: 14px 16px 12px; }
+  .maq-titulo { font-size: 21px; }
+  .maq-body { padding: 14px; }
+  .maq-grid { grid-template-columns: 1fr; }
+}

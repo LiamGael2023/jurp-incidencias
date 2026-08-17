@@ -7,6 +7,7 @@ import RailGIS from './RailGIS';
 import './IncidentesGIS.css';
 import './EstadisticasGIS.css';
 import './ReportesGIS.css';
+import './MaquinariaGIS.css';
 import Incidentes from './Incidentes';
 import Estadisticas from './Estadisticas';
 import Vigilancia from './Vigilancia';
@@ -143,6 +144,15 @@ function App() {
 
   if (vistaActual === 'mapa') {
     return <MapaChavimochic {...propsRail} onVerIncidente={irAIncidente} />;
+  }
+
+  if (vistaActual === 'maquinaria') {
+    return (
+      <div className="maq">
+        <RailGIS {...propsRail} />
+        <div className="maq-main"><Maquinaria irAIncidente={irAIncidente} /></div>
+      </div>
+    );
   }
 
   if (vistaActual === 'reportes') {
