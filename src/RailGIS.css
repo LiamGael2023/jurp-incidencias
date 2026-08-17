@@ -95,6 +95,33 @@
   height: 1px; border: 0; margin: 16px 16px; background: var(--divisor);
 }
 
+/* ---------- módulo activo (PLUVIRA / SENTRIA / HYDROMETRIX) ---------- */
+.railx-app {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+  padding: 0 18px; margin: -6px 0 14px;
+}
+.railx-app-etq {
+  font-size: 9px; font-weight: 800; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--apagado);
+}
+/* discreto: más chico que el logo de NEXHYDRO y con un punto de transparencia */
+.railx-app-logo {
+  width: 100%; max-width: 132px; height: auto;
+  object-fit: contain; display: block; opacity: .92;
+}
+/* colapsada: en vez del logo, un punto del color de la app */
+.railx-app-punto {
+  display: none; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--app, #1268C3);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app, #1268C3) 22%, transparent);
+}
+.railx.colapsado .railx-app {
+  align-items: center; padding: 0; margin: 2px 0 12px;
+}
+.railx.colapsado .railx-app-etq,
+.railx.colapsado .railx-app-logo { display: none; }
+.railx.colapsado .railx-app-punto { display: block; }
+
 /* ---------- perfil ---------- */
 .railx-perfil {
   display: flex; align-items: center; gap: 10px;
@@ -145,7 +172,7 @@
 .railx-nav button.activo::after {
   content: ''; position: absolute; top: 50%; right: 0; translate: 0 -50%;
   width: 5px; height: 30px; border-radius: 8px 0 0 8px;
-  background: linear-gradient(180deg, var(--celeste), var(--azul));
+  background: var(--app, var(--azul));
 }
 
 .railx-salir { margin-top: auto; color: #c0576b; }
