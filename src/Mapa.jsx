@@ -10,7 +10,7 @@ import './MapaGIS.css';
 import RailGIS from './RailGIS';
 import JSZip from 'jszip';
 import { kml as kmlAGeoJSON } from '@tmcw/togeojson';
-import { FaFileUpload, FaTrash, FaCrosshairs, FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint, FaFilePdf, FaFileExcel, FaDownload, FaRulerCombined, FaDrawPolygon, FaEraser, FaCamera, FaShareAlt, FaPlus, FaMinus, FaSignOutAlt, FaChevronUp, FaChevronDown } from 'react-icons/fa';
+import { FaFileUpload, FaTrash, FaCrosshairs, FaSave, FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint, FaFilePdf, FaFileExcel, FaDownload, FaRulerCombined, FaDrawPolygon, FaEraser, FaCamera, FaShareAlt, FaPlus, FaMinus, FaSignOutAlt, FaChevronUp, FaChevronDown } from 'react-icons/fa';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
@@ -929,15 +929,15 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             return <ClusteredLayer key={cfg.key + filtroTramo + filtroEstado} data={data} icon={cfg.icon} color={cfg.color} label={cfg.label} buildPopup={buildPopup} />;
           })}
 
-          {/* imágenes (GroundOverlay) de las capas cargadas */}
-          {capasUsuario.filter(c => c.visible).flatMap(c =>
+          {/* imágenes (GroundOverlay) de las capas, guardadas y temporales */}
+          {[...capasGuardadas, ...capasUsuario].filter(c => c.visible).flatMap(c =>
             (c.imagenes || []).map((im, i) => (
               <ImageOverlay key={`${c.id}-img-${i}`} url={im.url} bounds={im.bounds} opacity={0.75} />
             ))
           )}
 
-          {/* capas KMZ/KML cargadas por el usuario */}
-          {capasUsuario.filter(c => c.visible && c.data?.features?.length).map(c => (
+          {/* capas KMZ/KML: las guardadas en el servidor y las temporales */}
+          {[...capasGuardadas, ...capasUsuario].filter(c => c.visible && c.data?.features?.length).map(c => (
             <GeoJSON key={c.id} data={c.data}
               style={() => ({ color: c.color, weight: 3, opacity: .9, fillColor: c.color, fillOpacity: .22 })}
               pointToLayer={(f, latlng) => L.circleMarker(latlng, {
@@ -1068,7 +1068,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       <div className="gis-tools gis-glass">
         <button className="gis-tool" title="Vista general" onClick={() => mapRef.current?.flyTo(centroMapa, 10, { duration: 1 })}><FaGlobe /></button>
         <button className={`gis-tool ${showLayers ? 'activo' : ''}`} title="Capas" onClick={() => setShowLayers(v => !v)}><FaLayerGroup /></button>
-        <button className={`gis-tool ${capasUsuario.length ? 'activo' : ''}`}
+        <button className={`gis-tool ${capasUsuario.length || capasGuardadas.some(c => c.visible) ? 'activo' : ''}`}
           title="Cargar un KMZ o KML desde tu equipo"
           onClick={() => inputKmzRef.current?.click()} disabled={cargandoKmz}>
           {cargandoKmz ? <FaSyncAlt className="icon-spin" /> : <FaFileUpload />}
@@ -1111,9 +1111,46 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               )}
             </div>
 
-            {/* capas cargadas desde el equipo */}
+            {/* capas guardadas en el servidor */}
             <div className="gis-capas-grupo">
-              <div className="gis-capas-titulo">Mis capas (KMZ / KML)</div>
+              <div className="gis-capas-titulo">Capas guardadas ({capasGuardadas.length})</div>
+              {capasGuardadas.length === 0 ? (
+                <div style={{ fontSize: '10.5px', color: '#6f95b1', fontStyle: 'italic', padding: '2px 0' }}>
+                  Ninguna todavía. Carga un archivo y guárdalo.
+                </div>
+              ) : capasGuardadas.map(c => (
+                <div key={c.id} className="gis-capa">
+                  <label>
+                    <input type="checkbox" checked={c.visible}
+                      disabled={ocupadaCapa === c.id}
+                      onChange={() => alternarCapaGuardada(c)} />
+                    <span style={{ display: 'inline-block', width: 14, height: 14, background: c.color, borderRadius: '50%' }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.nombre}>
+                      {c.nombre}
+                    </span>
+                  </label>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {ocupadaCapa === c.id
+                      ? <FaSyncAlt className="icon-spin" size={11} style={{ color: '#74c0fc' }} />
+                      : <span className="gis-capa-badge">{c.total || '—'}</span>}
+                    {c.data && (
+                      <button onClick={() => volarACapa(c)} title="Centrar en esta capa"
+                        style={{ background: 'none', border: 'none', color: '#74c0fc', cursor: 'pointer', display: 'flex', padding: 2 }}>
+                        <FaCrosshairs size={11} />
+                      </button>
+                    )}
+                    <button onClick={() => borrarCapaGuardada(c)} title="Eliminar del servidor"
+                      style={{ background: 'none', border: 'none', color: '#f0616d', cursor: 'pointer', display: 'flex', padding: 2 }}>
+                      <FaTrash size={11} />
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* capas cargadas desde el equipo (aún sin guardar) */}
+            <div className="gis-capas-grupo">
+              <div className="gis-capas-titulo">Sin guardar (solo esta sesión)</div>
               <div className="gis-capas-acciones">
                 <button onClick={() => inputKmzRef.current?.click()} disabled={cargandoKmz}>
                   {cargandoKmz ? 'Cargando…' : '+ Cargar archivo'}
@@ -1132,6 +1169,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                   </label>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span className="gis-capa-badge">{c.total}</span>
+                    <button onClick={() => guardarCapaEnServidor(c)} title="Guardar en el servidor"
+                      disabled={ocupadaCapa === c.id}
+                      style={{ background: 'none', border: 'none', color: '#74e08a', cursor: 'pointer', display: 'flex', padding: 2 }}>
+                      {ocupadaCapa === c.id ? <FaSyncAlt className="icon-spin" size={11} /> : <FaSave size={11} />}
+                    </button>
                     <button onClick={() => volarACapa(c)} title="Centrar en esta capa"
                       style={{ background: 'none', border: 'none', color: '#74c0fc', cursor: 'pointer', display: 'flex', padding: 2 }}>
                       <FaCrosshairs size={11} />
