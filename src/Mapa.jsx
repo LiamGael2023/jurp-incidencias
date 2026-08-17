@@ -85,6 +85,8 @@ function latLngToUTM(lat, lng) {
 const COLORS = ['#0ea5e9','#22c55e','#f59f00','#ef4444','#a855f7','#ec4899','#f97316','#06b6d4'];
 // Colores que se van asignando a cada KMZ/KML que cargue el usuario.
 const COLORS_USUARIO = ['#e8590c','#7048e8','#12b886','#f03e3e','#1098ad','#ae3ec9','#f59f00','#4c6ef5'];
+// Capas KMZ/KML guardadas en el servidor.
+const API_CAPAS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations/capas-mapa';
 
 // ── Config KMZ ──────────────────────────────────────────────────────────────
 const KMZ_CONFIG = [
@@ -212,6 +214,10 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   // servidor: viven mientras dure la sesión de la pestaña).
   const [capasUsuario, setCapasUsuario] = useState([]);
   const [cargandoKmz, setCargandoKmz] = useState(false);
+  // Capas que viven en el servidor: se listan al abrir y se descargan bajo
+  // demanda (al marcarlas), para no bajar megas que quizá nadie mire.
+  const [capasGuardadas, setCapasGuardadas] = useState([]);
+  const [ocupadaCapa, setOcupadaCapa] = useState(null);   // id en proceso
   const inputKmzRef = useRef(null);
 
   const [capas, setCapas] = useState({ Incidentes_Nuevos: true, Incidentes_Atencion: true, Lluvias: true, Canales: true });
@@ -615,93 +621,94 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     return t.slice(0, m.index) + `<kml${attrs}${faltan}>` + t.slice(m.index + m[0].length);
   };
 
+  // ── Convertir un KMZ / KML en algo dibujable ───────────────────────────
+  // KMZ es un ZIP con un .kml dentro: se descomprime y se convierte a GeoJSON.
+  // Devuelve { data, imagenes, total }. Lo usan tanto la carga desde el equipo
+  // como la descarga de las capas guardadas en el servidor.
+  const procesarKMZ = async (file, nombreArchivo) => {
+    const esKmz = /\.kmz$/i.test(nombreArchivo);
+    const esKml = /\.kml$/i.test(nombreArchivo);
+    if (!esKmz && !esKml) throw new Error('Solo se admiten archivos .kmz o .kml.');
+
+    let textoKml = '';
+    let zipKmz = null;
+    if (esKmz) {
+      zipKmz = await JSZip.loadAsync(file);
+      const entrada = Object.keys(zipKmz.files).find(n => /\.kml$/i.test(n) && !zipKmz.files[n].dir);
+      if (!entrada) throw new Error('El KMZ no contiene ningún archivo .kml.');
+      textoKml = await zipKmz.files[entrada].async('string');
+    } else {
+      textoKml = await file.text();
+    }
+
+    const doc = new DOMParser().parseFromString(sanearKml(textoKml), 'text/xml');
+    const err = doc.querySelector('parsererror');
+    if (err) throw new Error(`El KML está mal formado. ${err.textContent.trim().slice(0, 160)}`);
+
+    const geo = kmlAGeoJSON(doc);
+
+    // togeojson convierte cada <GroundOverlay> en un rectángulo y tira la
+    // imagen. Los separamos: el rectángulo no se dibuja y en su lugar se
+    // monta la imagen real, que vive dentro del propio KMZ.
+    const overlays = [];
+    const vectores = [];
+    for (const f of (geo.features || [])) {
+      if (f.properties?.['@geometry-type'] === 'groundoverlay') overlays.push(f);
+      else vectores.push(f);
+    }
+    geo.features = vectores;
+
+    // Resuelve la imagen de cada overlay a una URL utilizable.
+    const imagenes = [];
+    for (const f of overlays) {
+      const href = f.properties?.icon || '';
+      const coords = f.geometry?.coordinates?.[0] || [];
+      if (!href || coords.length < 3) continue;
+
+      const lats = coords.map(c => c[1]);
+      const lngs = coords.map(c => c[0]);
+      const bounds = [
+        [Math.min(...lats), Math.min(...lngs)],
+        [Math.max(...lats), Math.max(...lngs)],
+      ];
+
+      let url = null;
+      if (/^https?:\/\//i.test(href)) {
+        url = href;                       // la imagen está en internet
+      } else if (zipKmz) {
+        // Ruta relativa dentro del KMZ; puede venir con %20 o mayúsculas.
+        const buscada = decodeURIComponent(href).replace(/^\.\//, '').toLowerCase();
+        const entrada = Object.keys(zipKmz.files).find(n =>
+          !zipKmz.files[n].dir && n.toLowerCase() === buscada);
+        if (entrada) {
+          const blob = await zipKmz.files[entrada].async('blob');
+          url = URL.createObjectURL(blob);
+        }
+      }
+      if (url) imagenes.push({ url, bounds, nombre: f.properties?.name || 'Imagen' });
+    }
+
+    const total = geo.features.length + imagenes.length;
+    if (!total) throw new Error('El archivo no tiene elementos dibujables.');
+    return { data: geo, imagenes, total };
+  };
+
   // ── Cargar un KMZ / KML desde el equipo ────────────────────────────────
-  // KMZ es un ZIP que contiene un .kml: se descomprime y se convierte a
-  // GeoJSON. El .kml se lee directo.
   const cargarArchivoKMZ = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';                 // permite volver a elegir el mismo
     if (!file) return;
 
-    const nombre = file.name.replace(/\.(kmz|kml)$/i, '');
-    const esKmz = /\.kmz$/i.test(file.name);
-    const esKml = /\.kml$/i.test(file.name);
-    if (!esKmz && !esKml) {
-      Swal.fire('Archivo no válido', 'Selecciona un archivo .kmz o .kml.', 'warning');
-      return;
-    }
-
     setCargandoKmz(true);
     try {
-      let textoKml = '';
-      let zipKmz = null;
-      if (esKmz) {
-        zipKmz = await JSZip.loadAsync(file);
-        const entrada = Object.keys(zipKmz.files).find(n => /\.kml$/i.test(n) && !zipKmz.files[n].dir);
-        if (!entrada) throw new Error('El KMZ no contiene ningún archivo .kml.');
-        textoKml = await zipKmz.files[entrada].async('string');
-      } else {
-        textoKml = await file.text();
-      }
-
-      const doc = new DOMParser().parseFromString(sanearKml(textoKml), 'text/xml');
-      const err = doc.querySelector('parsererror');
-      if (err) throw new Error(`El KML está mal formado. ${err.textContent.trim().slice(0, 160)}`);
-
-      const geo = kmlAGeoJSON(doc);
-
-      // togeojson convierte cada <GroundOverlay> en un rectángulo y tira la
-      // imagen. Los separamos: el rectángulo no se dibuja y en su lugar se
-      // monta la imagen real, que vive dentro del propio KMZ.
-      const overlays = [];
-      const vectores = [];
-      for (const f of (geo.features || [])) {
-        if (f.properties?.['@geometry-type'] === 'groundoverlay') overlays.push(f);
-        else vectores.push(f);
-      }
-      geo.features = vectores;
-
-      // Resuelve la imagen de cada overlay a una URL utilizable.
-      const imagenes = [];
-      for (const f of overlays) {
-        const href = f.properties?.icon || '';
-        const coords = f.geometry?.coordinates?.[0] || [];
-        if (!href || coords.length < 3) continue;
-
-        const lats = coords.map(c => c[1]);
-        const lngs = coords.map(c => c[0]);
-        const bounds = [
-          [Math.min(...lats), Math.min(...lngs)],
-          [Math.max(...lats), Math.max(...lngs)],
-        ];
-
-        let url = null;
-        if (/^https?:\/\//i.test(href)) {
-          url = href;                       // la imagen está en internet
-        } else if (zipKmz) {
-          // Ruta relativa dentro del KMZ; puede venir con %20 o mayúsculas.
-          const buscada = decodeURIComponent(href).replace(/^\.\//, '').toLowerCase();
-          const entrada = Object.keys(zipKmz.files).find(n =>
-            !zipKmz.files[n].dir && n.toLowerCase() === buscada);
-          if (entrada) {
-            const blob = await zipKmz.files[entrada].async('blob');
-            url = URL.createObjectURL(blob);
-          }
-        }
-        if (url) imagenes.push({ url, bounds, nombre: f.properties?.name || 'Imagen' });
-      }
-
-      const total = geo.features.length + imagenes.length;
-      if (!total) throw new Error('El archivo no tiene elementos dibujables.');
-
+      const { data, imagenes, total } = await procesarKMZ(file, file.name);
       const capa = {
         id: `usr-${Date.now()}`,
-        nombre,
-        data: geo,
-        imagenes,
+        nombre: file.name.replace(/\.(kmz|kml)$/i, ''),
+        data, imagenes, total,
+        archivo: file,                   // se conserva para poder guardarla
         color: COLORS_USUARIO[capasUsuario.length % COLORS_USUARIO.length],
         visible: true,
-        total,
       };
       setCapasUsuario(prev => [...prev, capa]);
       setShowLayers(true);
@@ -709,14 +716,124 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
       Swal.fire({
         icon: 'success', title: 'Capa cargada',
-        text: `${nombre}: ${total} elemento(s).`,
-        timer: 1800, showConfirmButton: false,
+        text: `${capa.nombre}: ${total} elemento(s). Puedes guardarla para que quede disponible siempre.`,
+        timer: 2600, showConfirmButton: false,
       });
     } catch (err) {
       console.error(err);
       Swal.fire('No se pudo cargar', err.message || 'Revisa que el archivo sea un KMZ/KML válido.', 'error');
     } finally {
       setCargandoKmz(false);
+    }
+  };
+
+  // ── Capas guardadas en el servidor ─────────────────────────────────────
+  const listarCapasGuardadas = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_CAPAS}/`);
+      if (!r.ok) return;
+      const lista = await r.json();
+      setCapasGuardadas((lista || []).map((c, i) => ({
+        id: c.id,
+        nombre: c.nombre,
+        color: c.color || COLORS_USUARIO[i % COLORS_USUARIO.length],
+        extension: c.extension,
+        tamano: c.tamano,
+        visible: !!c.visible_por_defecto,
+        data: null, imagenes: [], total: 0,   // se llenan al descargarla
+      })));
+    } catch (e) { console.error('Capas guardadas:', e); }
+  }, []);
+  useEffect(() => { listarCapasGuardadas(); }, [listarCapasGuardadas]);
+
+  // Descarga y dibuja una capa guardada (solo la primera vez).
+  const traerCapaGuardada = useCallback(async (capa) => {
+    if (capa.data) return capa;
+    setOcupadaCapa(capa.id);
+    try {
+      const r = await fetch(`${API_CAPAS}/${capa.id}/descargar/`);
+      if (!r.ok) throw new Error(`El servidor respondió ${r.status}.`);
+      const blob = await r.blob();
+      const nombreArchivo = `${capa.nombre}.${capa.extension || 'kmz'}`;
+      const { data, imagenes, total } = await procesarKMZ(blob, nombreArchivo);
+      const llena = { ...capa, data, imagenes, total };
+      setCapasGuardadas(prev => prev.map(c => c.id === capa.id ? llena : c));
+      return llena;
+    } catch (e) {
+      Swal.fire('No se pudo abrir la capa', e.message || 'Inténtalo de nuevo.', 'error');
+      return null;
+    } finally { setOcupadaCapa(null); }
+  }, []);
+
+  const alternarCapaGuardada = async (capa) => {
+    if (capa.visible) {
+      setCapasGuardadas(prev => prev.map(c => c.id === capa.id ? { ...c, visible: false } : c));
+      return;
+    }
+    const llena = capa.data ? capa : await traerCapaGuardada(capa);
+    if (!llena) return;
+    setCapasGuardadas(prev => prev.map(c => c.id === capa.id ? { ...llena, visible: true } : c));
+  };
+
+  // Sube al servidor una capa que se cargó desde el equipo.
+  const guardarCapaEnServidor = async (capa) => {
+    if (!capa.archivo) return;
+    const { value: nombre } = await Swal.fire({
+      title: 'Guardar capa',
+      input: 'text',
+      inputLabel: 'Nombre con el que quedará disponible para todos',
+      inputValue: capa.nombre,
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      confirmButtonColor: '#1268C3',
+      inputValidator: v => !v?.trim() && 'Escribe un nombre',
+    });
+    if (!nombre) return;
+
+    setOcupadaCapa(capa.id);
+    try {
+      const fd = new FormData();
+      fd.append('nombre', nombre.trim());
+      fd.append('archivo', capa.archivo);
+      fd.append('color', capa.color);
+      fd.append('creado_por', usuario || '');
+      const r = await fetch(`${API_CAPAS}/`, { method: 'POST', body: fd });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.archivo || e.detail || `El servidor respondió ${r.status}.`);
+      }
+      // La capa deja de ser temporal: pasa a la lista de guardadas, ya dibujada.
+      const creada = await r.json();
+      setCapasUsuario(prev => prev.filter(c => c.id !== capa.id));
+      setCapasGuardadas(prev => [{
+        id: creada.id, nombre: creada.nombre, color: creada.color,
+        extension: creada.extension, tamano: creada.tamano,
+        visible: true, data: capa.data, imagenes: capa.imagenes, total: capa.total,
+      }, ...prev]);
+      Swal.fire({ icon: 'success', title: 'Capa guardada', timer: 1500, showConfirmButton: false });
+    } catch (e) {
+      Swal.fire('No se pudo guardar', e.message, 'error');
+    } finally { setOcupadaCapa(null); }
+  };
+
+  const borrarCapaGuardada = async (capa) => {
+    const c = await Swal.fire({
+      title: `¿Eliminar "${capa.nombre}"?`,
+      text: 'Se borra del servidor para todos los usuarios.',
+      icon: 'warning', showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#d33',
+    });
+    if (!c.isConfirmed) return;
+    try {
+      const r = await fetch(`${API_CAPAS}/${capa.id}/`, { method: 'DELETE' });
+      if (!r.ok && r.status !== 204) throw new Error(`El servidor respondió ${r.status}.`);
+      (capa.imagenes || []).forEach(im => {
+        if (im.url.startsWith('blob:')) URL.revokeObjectURL(im.url);
+      });
+      setCapasGuardadas(prev => prev.filter(x => x.id !== capa.id));
+    } catch (e) {
+      Swal.fire('No se pudo eliminar', e.message, 'error');
     }
   };
 
