@@ -8,7 +8,9 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import './MapaDashboard.css';
 import './MapaGIS.css';
 import RailGIS from './RailGIS';
-import { FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint, FaFilePdf, FaFileExcel, FaDownload, FaRulerCombined, FaDrawPolygon, FaEraser, FaCamera, FaShareAlt, FaPlus, FaMinus, FaSignOutAlt, FaChevronUp, FaChevronDown } from 'react-icons/fa';
+import JSZip from 'jszip';
+import { kml as kmlAGeoJSON } from '@tmcw/togeojson';
+import { FaFileUpload, FaTrash, FaCrosshairs, FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint, FaFilePdf, FaFileExcel, FaDownload, FaRulerCombined, FaDrawPolygon, FaEraser, FaCamera, FaShareAlt, FaPlus, FaMinus, FaSignOutAlt, FaChevronUp, FaChevronDown } from 'react-icons/fa';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
@@ -81,6 +83,8 @@ function latLngToUTM(lat, lng) {
   return { e: easting.toFixed(1), n: northing.toFixed(1), z: `${zone}S` };
 }
 const COLORS = ['#0ea5e9','#22c55e','#f59f00','#ef4444','#a855f7','#ec4899','#f97316','#06b6d4'];
+// Colores que se van asignando a cada KMZ/KML que cargue el usuario.
+const COLORS_USUARIO = ['#e8590c','#7048e8','#12b886','#f03e3e','#1098ad','#ae3ec9','#f59f00','#4c6ef5'];
 
 // ── Config KMZ ──────────────────────────────────────────────────────────────
 const KMZ_CONFIG = [
@@ -204,6 +208,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [mostrarResultados, setMostrarResultados] = useState(false);
   const [flyTarget, setFlyTarget] = useState(null);
   const [showLayers, setShowLayers] = useState(false);
+  // Capas KMZ/KML que el usuario sube desde su equipo (no se guardan en el
+  // servidor: viven mientras dure la sesión de la pestaña).
+  const [capasUsuario, setCapasUsuario] = useState([]);
+  const [cargandoKmz, setCargandoKmz] = useState(false);
+  const inputKmzRef = useRef(null);
 
   const [capas, setCapas] = useState({ Incidentes_Nuevos: true, Incidentes_Atencion: true, Lluvias: true, Canales: true });
   const [capasKMZ, setCapasKMZ] = useState(KMZ_CAPAS_DEFAULT);
@@ -581,6 +590,81 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     if (volar) { setFlyTarget([inc.lat, inc.lng]); setTimeout(() => setFlyTarget(null), 2000); }
   }, [cargarDetalleIncidente]);
 
+  // ── Cargar un KMZ / KML desde el equipo ────────────────────────────────
+  // KMZ es un ZIP que contiene un .kml: se descomprime y se convierte a
+  // GeoJSON. El .kml se lee directo.
+  const cargarArchivoKMZ = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';                 // permite volver a elegir el mismo
+    if (!file) return;
+
+    const nombre = file.name.replace(/\.(kmz|kml)$/i, '');
+    const esKmz = /\.kmz$/i.test(file.name);
+    const esKml = /\.kml$/i.test(file.name);
+    if (!esKmz && !esKml) {
+      Swal.fire('Archivo no válido', 'Selecciona un archivo .kmz o .kml.', 'warning');
+      return;
+    }
+
+    setCargandoKmz(true);
+    try {
+      let textoKml = '';
+      if (esKmz) {
+        const zip = await JSZip.loadAsync(file);
+        const entrada = Object.keys(zip.files).find(n => /\.kml$/i.test(n) && !zip.files[n].dir);
+        if (!entrada) throw new Error('El KMZ no contiene ningún archivo .kml.');
+        textoKml = await zip.files[entrada].async('string');
+      } else {
+        textoKml = await file.text();
+      }
+
+      const doc = new DOMParser().parseFromString(textoKml, 'text/xml');
+      if (doc.querySelector('parsererror')) throw new Error('El KML está mal formado.');
+
+      const geo = kmlAGeoJSON(doc);
+      const total = geo?.features?.length || 0;
+      if (!total) throw new Error('El archivo no tiene elementos dibujables.');
+
+      const capa = {
+        id: `usr-${Date.now()}`,
+        nombre,
+        data: geo,
+        color: COLORS_USUARIO[capasUsuario.length % COLORS_USUARIO.length],
+        visible: true,
+        total,
+      };
+      setCapasUsuario(prev => [...prev, capa]);
+      setShowLayers(true);
+      volarACapa(capa);
+
+      Swal.fire({
+        icon: 'success', title: 'Capa cargada',
+        text: `${nombre}: ${total} elemento(s).`,
+        timer: 1800, showConfirmButton: false,
+      });
+    } catch (err) {
+      console.error(err);
+      Swal.fire('No se pudo cargar', err.message || 'Revisa que el archivo sea un KMZ/KML válido.', 'error');
+    } finally {
+      setCargandoKmz(false);
+    }
+  };
+
+  // Encuadra el mapa sobre una capa cargada.
+  const volarACapa = (capa) => {
+    if (!mapRef.current || !capa?.data) return;
+    try {
+      const b = L.geoJSON(capa.data).getBounds();
+      if (b.isValid()) mapRef.current.flyToBounds(b, { padding: [50, 50], maxZoom: 16, duration: 1 });
+    } catch (e) { /* geometría vacía */ }
+  };
+
+  const alternarCapaUsuario = (id) =>
+    setCapasUsuario(prev => prev.map(c => c.id === id ? { ...c, visible: !c.visible } : c));
+
+  const quitarCapaUsuario = (id) =>
+    setCapasUsuario(prev => prev.filter(c => c.id !== id));
+
   // ── Handlers ──────────────────────────────────────────────────────────
   const toggleCapa = (n) => setCapas(p => ({ ...p, [n]: !p[n] }));
   const toggleCapaKMZ = (key) => { const v = !capasKMZ[key]; setCapasKMZ(p => ({ ...p, [key]: v })); if (v) { const cfg = KMZ_CONFIG.find(c => c.key === key); if (cfg?.data?.features?.length && mapRef.current) { const b = L.geoJSON(cfg.data).getBounds(); if (b.isValid()) mapRef.current.flyToBounds(b, { padding: [40, 40], maxZoom: 15, duration: 1 }); } } };
@@ -648,6 +732,32 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             }
             return <ClusteredLayer key={cfg.key + filtroTramo + filtroEstado} data={data} icon={cfg.icon} color={cfg.color} label={cfg.label} buildPopup={buildPopup} />;
           })}
+
+          {/* capas KMZ/KML cargadas por el usuario */}
+          {capasUsuario.filter(c => c.visible).map(c => (
+            <GeoJSON key={c.id} data={c.data}
+              style={() => ({ color: c.color, weight: 3, opacity: .9, fillColor: c.color, fillOpacity: .22 })}
+              pointToLayer={(f, latlng) => L.circleMarker(latlng, {
+                radius: 6, color: '#fff', weight: 2, fillColor: c.color, fillOpacity: 1,
+              })}
+              onEachFeature={(f, capa) => {
+                const p = f.properties || {};
+                const nombre = p.name || p.Name || 'Sin nombre';
+                const filas = Object.entries(p)
+                  .filter(([k, v]) => !['name', 'Name', 'styleUrl', 'styleHash', 'stroke', 'fill', 'icon'].includes(k) && v && String(v).trim())
+                  .map(([k, v]) => `<tr><td style="color:#7fa5c0;padding:3px 8px 3px 0;font-size:11px">${k}</td><td style="font-weight:500;font-size:11px;color:#eaf3fa">${String(v).slice(0, 120)}</td></tr>`)
+                  .join('');
+                capa.bindTooltip(nombre, { direction: 'top', className: 'tooltip-infra' });
+                capa.bindPopup(
+                  `<div style="font-family:system-ui;min-width:190px;color:#dce9f5">
+                     <div style="font-weight:700;font-size:13px;color:#eef6fd;border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:6px;margin-bottom:6px">
+                       ${nombre}<div style="font-size:10px;font-weight:600;color:${c.color}">${c.nombre}</div>
+                     </div>
+                     ${filas ? `<table style="border-collapse:collapse;width:100%">${filas}</table>`
+                             : '<span style="font-size:11px;color:#7fa5c0">Sin atributos</span>'}
+                   </div>`, { maxWidth: 320 });
+              }} />
+          ))}
 
           <ClusterIncidentes incidentes={incEnMapa} onSeleccionar={seleccionarIncidente} />
 
@@ -755,6 +865,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       <div className="gis-tools gis-glass">
         <button className="gis-tool" title="Vista general" onClick={() => mapRef.current?.flyTo(centroMapa, 10, { duration: 1 })}><FaGlobe /></button>
         <button className={`gis-tool ${showLayers ? 'activo' : ''}`} title="Capas" onClick={() => setShowLayers(v => !v)}><FaLayerGroup /></button>
+        <button className={`gis-tool ${capasUsuario.length ? 'activo' : ''}`}
+          title="Cargar un KMZ o KML desde tu equipo"
+          onClick={() => inputKmzRef.current?.click()} disabled={cargandoKmz}>
+          {cargandoKmz ? <FaSyncAlt className="icon-spin" /> : <FaFileUpload />}
+        </button>
         <button className="gis-tool" title="Mi ubicación" onClick={() => navigator.geolocation.getCurrentPosition(p => setMiUbicacion([p.coords.latitude, p.coords.longitude]))}><FaLocationArrow /></button>
         <div className="gis-tool-sep" />
         <button className={`gis-tool ${herramienta === 'distancia' ? 'activo' : ''}`} title="Medir distancia"
@@ -769,6 +884,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         <button className="gis-tool" title="Acercar" onClick={() => mapRef.current?.zoomIn()}><FaPlus /></button>
         <button className="gis-tool" title="Alejar" onClick={() => mapRef.current?.zoomOut()}><FaMinus /></button>
       </div>
+
+      {/* selector de archivo, oculto: lo dispara el botón de la barra */}
+      <input ref={inputKmzRef} type="file" accept=".kmz,.kml" onChange={cargarArchivoKMZ} style={{ display: 'none' }} />
 
       {/* ══════════════ PANEL DE CAPAS ══════════════ */}
       {showLayers && (
@@ -788,6 +906,40 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                   <option value={1}>24 horas</option><option value={7}>7 días</option><option value={30}>30 días</option><option value={0}>Todo</option>
                 </select>
               )}
+            </div>
+
+            {/* capas cargadas desde el equipo */}
+            <div className="gis-capas-grupo">
+              <div className="gis-capas-titulo">Mis capas (KMZ / KML)</div>
+              <div className="gis-capas-acciones">
+                <button onClick={() => inputKmzRef.current?.click()} disabled={cargandoKmz}>
+                  {cargandoKmz ? 'Cargando…' : '+ Cargar archivo'}
+                </button>
+              </div>
+              {capasUsuario.length === 0 ? (
+                <div style={{ fontSize: '10.5px', color: '#6f95b1', fontStyle: 'italic', padding: '2px 0' }}>
+                  Ninguna cargada todavía.
+                </div>
+              ) : capasUsuario.map(c => (
+                <div key={c.id} className="gis-capa">
+                  <label>
+                    <input type="checkbox" checked={c.visible} onChange={() => alternarCapaUsuario(c.id)} />
+                    <span style={{ display: 'inline-block', width: 14, height: 14, background: c.color, borderRadius: '50%' }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.nombre}>{c.nombre}</span>
+                  </label>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span className="gis-capa-badge">{c.total}</span>
+                    <button onClick={() => volarACapa(c)} title="Centrar en esta capa"
+                      style={{ background: 'none', border: 'none', color: '#74c0fc', cursor: 'pointer', display: 'flex', padding: 2 }}>
+                      <FaCrosshairs size={11} />
+                    </button>
+                    <button onClick={() => quitarCapaUsuario(c.id)} title="Quitar capa"
+                      style={{ background: 'none', border: 'none', color: '#f0616d', cursor: 'pointer', display: 'flex', padding: 2 }}>
+                      <FaTrash size={11} />
+                    </button>
+                  </span>
+                </div>
+              ))}
             </div>
 
             <div className="gis-capas-grupo">
