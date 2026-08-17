@@ -590,6 +590,31 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     if (volar) { setFlyTarget([inc.lat, inc.lng]); setTimeout(() => setFlyTarget(null), 2000); }
   }, [cargarDetalleIncidente]);
 
+  // Google Earth Pro exporta KML que usan prefijos (xsi:, gx:…) sin
+  // declararlos en la raíz <kml>. Eso es XML inválido y DOMParser lo rechaza,
+  // así que los declaramos antes de parsear.
+  const sanearKml = (texto) => {
+    let t = texto.replace(/^\uFEFF/, '').trim();
+    const NS = {
+      xsi: 'http://www.w3.org/2001/XMLSchema-instance',
+      gx: 'http://www.google.com/kml/ext/2.2',
+      atom: 'http://www.w3.org/2005/Atom',
+      kml: 'http://www.opengis.net/kml/2.2',
+      xsd: 'http://www.w3.org/2001/XMLSchema',
+    };
+    const m = t.match(/<kml\b([^>]*)>/);
+    if (!m) return t;
+    const attrs = m.group ? m.group(1) : m[1];
+    let faltan = '';
+    for (const [pref, uri] of Object.entries(NS)) {
+      if (t.includes(`${pref}:`) && !attrs.includes(`xmlns:${pref}=`)) {
+        faltan += ` xmlns:${pref}="${uri}"`;
+      }
+    }
+    if (!faltan) return t;
+    return t.slice(0, m.index) + `<kml${attrs}${faltan}>` + t.slice(m.index + m[0].length);
+  };
+
   // ── Cargar un KMZ / KML desde el equipo ────────────────────────────────
   // KMZ es un ZIP que contiene un .kml: se descomprime y se convierte a
   // GeoJSON. El .kml se lee directo.
@@ -618,8 +643,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         textoKml = await file.text();
       }
 
-      const doc = new DOMParser().parseFromString(textoKml, 'text/xml');
-      if (doc.querySelector('parsererror')) throw new Error('El KML está mal formado.');
+      const doc = new DOMParser().parseFromString(sanearKml(textoKml), 'text/xml');
+      const err = doc.querySelector('parsererror');
+      if (err) throw new Error(`El KML está mal formado. ${err.textContent.trim().slice(0, 160)}`);
 
       const geo = kmlAGeoJSON(doc);
       const total = geo?.features?.length || 0;
