@@ -125,8 +125,10 @@
 /* ---------- perfil ---------- */
 .railx-perfil {
   display: flex; align-items: center; gap: 10px;
-  padding: 0 12px; margin-bottom: 16px;
+  padding: 0 12px; margin-bottom: 6px;
 }
+/* el divisor empuja el perfil y "cerrar sesión" al pie del rail */
+.railx-divisor-pie { margin-top: auto; }
 .railx-avatar {
   flex: 0 0 auto; display: grid; place-items: center;
   width: 44px; height: 44px; border-radius: 50%;
@@ -175,7 +177,7 @@
   background: var(--app, var(--azul));
 }
 
-.railx-salir { margin-top: auto; color: #c0576b; }
+.railx-salir { color: #c0576b; }
 .railx-salir:hover { color: #d63939; background: #fff5f5; }
 
 /* el icono siempre ocupa lo mismo, esté abierta o colapsada */
@@ -210,7 +212,7 @@
 /* expandida no hace falta: la etiqueta ya se lee */
 .railx .railx-tip { display: none; }
 .railx.colapsado .railx-tip { display: block; }
-.railx.colapsado .railx-perfil { justify-content: center; padding: 0; }
+.railx.colapsado .railx-perfil { justify-content: center; padding: 0; margin-bottom: 8px; }
 .railx.colapsado .railx-avatar { width: 40px; height: 40px; font-size: 12px; }
 
 /* ---------- móvil: barra inferior, sin ocupar ancho ---------- */

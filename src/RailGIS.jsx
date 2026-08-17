@@ -82,15 +82,6 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
           <span className="railx-app-punto" title={info.nombre} />
         </div>
 
-        {/* ── perfil ── */}
-        <div className="railx-perfil">
-          <span className="railx-avatar" title={usuario}>{iniciales}</span>
-          <span className="railx-perfil-txt">
-            <span className="railx-perfil-nombre">{usuario || 'Usuario'}</span>
-            <span className="railx-perfil-rol">Administrador</span>
-          </span>
-        </div>
-
         {/* ── navegación ── */}
         <ul className="railx-nav">
           {(menu || []).map(m => (
@@ -106,6 +97,16 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
             </li>
           ))}
         </ul>
+
+        {/* ── perfil, al pie ── */}
+        <hr className="railx-divisor railx-divisor-pie" />
+        <div className="railx-perfil">
+          <span className="railx-avatar" title={usuario}>{iniciales}</span>
+          <span className="railx-perfil-txt">
+            <span className="railx-perfil-nombre">{usuario || 'Usuario'}</span>
+            <span className="railx-perfil-rol">Administrador</span>
+          </span>
+        </div>
 
         <button type="button" className="railx-salir" onClick={onLogout} title="Cerrar sesión">
           <span className="railx-ico"><FaSignOutAlt /></span>
