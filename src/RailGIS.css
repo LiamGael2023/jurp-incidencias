@@ -55,7 +55,10 @@
 /* ---------- marca ---------- */
 .railx-brand {
   display: flex; align-items: center; gap: 11px;
-  min-height: 44px; padding: 0 var(--pad); margin-bottom: 12px;
+  min-height: 44px; margin-bottom: 14px;
+  /* a la derecha va el botón de menú (44px + 14px de borde): se le
+     reserva el hueco para que no se monte sobre el logo */
+  padding: 0 66px 0 18px;
 }
 /* colapsada: solo la gota, centrada y encima del botón de menú */
 .railx.colapsado .railx-brand {
@@ -66,7 +69,7 @@
 
 /* logo completo (abierta) y solo la gota (colapsada) */
 .railx-logo {
-  width: 100%; max-width: 190px; height: auto;
+  width: 100%; max-width: 100%; height: auto;
   flex: 0 1 auto; object-fit: contain; display: block;
 }
 .railx-logo-min {
