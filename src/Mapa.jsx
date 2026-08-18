@@ -85,6 +85,16 @@ function latLngToUTM(lat, lng) {
 }
 const COLORS = ['#0ea5e9','#22c55e','#f59f00','#ef4444','#a855f7','#ec4899','#f97316','#06b6d4'];
 // Colores que se van asignando a cada KMZ/KML que cargue el usuario.
+// Niveles de contingencia. Los colores son el código estándar de alerta
+// meteorológica (amarilla / naranja / roja): no se cambian por los de marca,
+// porque el operario los lee para saber la gravedad.
+const NIVELES_ALERTA = {
+  nor: { texto: 'Normalidad',     color: '#2fb344', marco: false },
+  ama: { texto: 'Alerta amarilla', color: '#FFF200', marco: true },
+  nar: { texto: 'Alerta naranja',  color: '#F37021', marco: true },
+  roj: { texto: 'Alerta roja',     color: '#ED1C24', marco: true },
+};
+
 const COLORS_USUARIO = ['#e8590c','#7048e8','#12b886','#f03e3e','#1098ad','#ae3ec9','#f59f00','#4c6ef5'];
 // Capas KMZ/KML guardadas en el servidor.
 const API_CAPAS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations/capas-mapa';
@@ -233,6 +243,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [incidentesAPI, setIncidentesAPI] = useState([]);
   const [lluviasAPI, setLluviasAPI] = useState([]);
   const [cargandoAPIs, setCargandoAPIs] = useState(false);
+  const [alerta, setAlerta] = useState(null);   // contingencia activa
   const [miUbicacion, setMiUbicacion] = useState(null);
   const [detalleActivo, setDetalleActivo] = useState(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
@@ -541,6 +552,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const lluviaMax = lluviasAPI.length ? Math.max(...lluviasAPI.map(l => l.totalRain)) : 0;
   // El KPI muestra el máximo, no un total: sumar acumulados de estaciones
   // distintas no significa nada. Se indica de cuál es y cuántas registran lluvia.
+  const nivelAlerta = NIVELES_ALERTA[alerta?.level] || NIVELES_ALERTA.nor;
   const estacionMax = lluviasAPI.find(l => l.totalRain === lluviaMax);
   const conLluvia = lluviasAPI.filter(l => l.totalRain > 0).length;
 
@@ -571,11 +583,27 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         setLluviasAPI(nd); }
     } catch(e) { console.error(e); } finally { setCargandoAPIs(false); setUltimaAct(Date.now()); }
   };
-  useEffect(() => { obtenerDatosDeApis(); }, []);
+  // ── Nivel de alerta vigente (plan de contingencia) ────────────────────
+  const cargarNivelAlerta = useCallback(async () => {
+    const tk = localStorage.getItem('userToken');
+    if (!tk) return;
+    try {
+      const r = await fetch('/api/v1/mobile/hi-contingency-plans/list/',
+        { headers: { 'Authorization': `Token ${tk}` } });
+      if (!r.ok) return;
+      const d = await r.json();
+      const lista = d.results || [];
+      // Activa = sin fecha de cierre. Si no hay ninguna, es normalidad.
+      const activa = lista.find(c => !c.end_at) || null;
+      setAlerta(activa);
+    } catch (e) { console.error('Nivel de alerta:', e); }
+  }, []);
+
+  useEffect(() => { obtenerDatosDeApis(); cargarNivelAlerta(); }, [cargarNivelAlerta]);
 
   // Auto-refresh cada 3 min, en pausa si la pestaña está oculta
   useEffect(() => {
-    const id = setInterval(() => { if (!document.hidden) obtenerDatosDeApis(); }, 180000);
+    const id = setInterval(() => { if (!document.hidden) { obtenerDatosDeApis(); cargarNivelAlerta(); } }, 180000);
     return () => clearInterval(id);
   }, []);
 
@@ -1056,6 +1084,12 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       </div>
       <div className="gis-vineta" />
 
+      {/* Marco que late cuando hay una contingencia activa. En normalidad no
+          aparece: si estuviera siempre, dejaría de significar algo. */}
+      {nivelAlerta.marco && (
+        <div className="gis-marco-alerta" style={{ '--alerta': nivelAlerta.color }} />
+      )}
+
       {/* ══════════════ RAIL ══════════════ */}
       <RailGIS
         menu={menu}
@@ -1117,6 +1151,25 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
       {/* ══════════════ KPIs ══════════════ */}
       <div className="gis-kpis">
+        <div className={`gis-kpi gis-glass ${nivelAlerta.marco ? 'gis-kpi-alerta' : ''}`}
+          style={{ '--alerta': nivelAlerta.color }}
+          title={alerta ? `Vigente desde ${new Date(alerta.created_at).toLocaleString('es-PE')}` : 'Sin contingencia activa'}>
+          <span className="gis-kpi-ico" style={{ background: `${nivelAlerta.color}26`, color: nivelAlerta.color }}>
+            <FaExclamationTriangle />
+          </span>
+          <span>
+            <span className="gis-kpi-label">Nivel de alerta</span>
+            <span className="gis-kpi-valor gis-kpi-nivel" style={{ color: nivelAlerta.color }}>
+              {nivelAlerta.texto}
+            </span>
+            {alerta && (
+              <span className="gis-kpi-nota">
+                Desde {new Date(alerta.created_at).toLocaleDateString('es-PE')}
+              </span>
+            )}
+          </span>
+        </div>
+
         <div className="gis-kpi gis-glass">
           <span className="gis-kpi-ico" style={{ background: 'rgba(32,107,196,.18)', color: '#74c0fc' }}>🏗️</span>
           <span>
