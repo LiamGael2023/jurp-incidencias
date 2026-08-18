@@ -148,11 +148,19 @@ function Estadisticas() {
         let totalRain = 0, temp = '--', hum = '--';
         try {
           const [rR, rT, rH] = await Promise.all([
-            fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(past24h)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=rainfall_mm`, { headers:{'Authorization':`Token ${token()}`} }),
+            fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(now)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=rainfall_mm&max_points=9000`, { headers:{'Authorization':`Token ${token()}`} }),
             fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(past24h)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=temp_out`, { headers:{'Authorization':`Token ${token()}`} }),
             fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(past24h)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=hum_out`, { headers:{'Authorization':`Token ${token()}`} }),
           ]);
-          if (rR.ok) { const d = await rR.json(); for (const r of (d.data||[])) totalRain += parseFloat(r.value)||0; }
+          // Acumulado del DÍA ACTUAL. max_points alto: sin él la API entrega
+          // la serie reducida y el total sale corto.
+          if (rR.ok) {
+            const d = await rR.json();
+            for (const r of (d.data||[])) {
+              if (new Date(r.timestamp).toDateString() !== now.toDateString()) continue;
+              totalRain += parseFloat(r.value)||0;
+            }
+          }
           if (rT.ok) { const d = await rT.json(); const recs = d.data||[]; if(recs.length) temp = parseFloat(recs[recs.length-1].value).toFixed(1); }
           if (rH.ok) { const d = await rH.json(); const recs = d.data||[]; if(recs.length) hum = parseFloat(recs[recs.length-1].value).toFixed(1); }
 
