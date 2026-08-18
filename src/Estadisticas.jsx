@@ -152,13 +152,17 @@ function Estadisticas() {
             fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(past24h)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=temp_out`, { headers:{'Authorization':`Token ${token()}`} }),
             fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(past24h)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=hum_out`, { headers:{'Authorization':`Token ${token()}`} }),
           ]);
-          // Acumulado del DÍA ACTUAL. max_points alto: sin él la API entrega
-          // la serie reducida y el total sale corto.
+          // Acumulado del DÍA ACTUAL. Se prefiere 'total_precipitation', que
+          // lo calcula el servidor; si no viene, se suma la serie del día.
           if (rR.ok) {
             const d = await rR.json();
-            for (const r of (d.data||[])) {
-              if (new Date(r.timestamp).toDateString() !== now.toDateString()) continue;
-              totalRain += parseFloat(r.value)||0;
+            if (typeof d.total_precipitation === 'number') {
+              totalRain = d.total_precipitation;
+            } else {
+              for (const r of (d.data||[])) {
+                if (new Date(r.timestamp).toDateString() !== now.toDateString()) continue;
+                totalRain += parseFloat(r.value)||0;
+              }
             }
           }
           if (rT.ok) { const d = await rT.json(); const recs = d.data||[]; if(recs.length) temp = parseFloat(recs[recs.length-1].value).toFixed(1); }
@@ -196,6 +200,35 @@ function Estadisticas() {
       const esHoy = rango === 'hoy';
       const dias = esHoy ? 1 : rango;
       const past = new Date(now.getTime() - (dias - 1) * 24 * 60 * 60 * 1000);
+
+      // ── Rango de varios días ──────────────────────────────────────────
+      // Se pide UN DÍA POR PETICIÓN y se usa 'total_precipitation', que lo
+      // calcula el servidor. Con un rango amplio la API entrega la serie
+      // reducida y sumar sus valores pierde precipitación: el mismo día daba
+      // 8.2 mm en la vista de 7 días y 18.4 mm al consultarlo solo.
+      if (!esHoy) {
+        const dds = [];
+        for (let i = dias - 1; i >= 0; i--) dds.push(new Date(now.getTime() - i * 864e5));
+
+        const totales = await Promise.all(dds.map(async d => {
+          try {
+            const r = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(d)}&end_date=${fmt(d)}&station_id=${stationId}&metric=rainfall_mm&max_points=9000`, { headers:{'Authorization':`Token ${token()}`} });
+            if (!r.ok) return 0;
+            const j = await r.json();
+            if (typeof j.total_precipitation === 'number') return j.total_precipitation;
+            // Plan B: sumar la serie del día (sin reducir, es un solo día).
+            return (j.data || []).reduce((a, x) => a + (parseFloat(x.value) || 0), 0);
+          } catch (e) { return 0; }
+        }));
+
+        setLluviaChart(dds.map((d, i) => ({
+          dia: i === dds.length - 1 ? 'Hoy'
+            : `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`,
+          mm: parseFloat((totales[i] || 0).toFixed(1)),
+        })));
+        setDetalleHoy(null);
+        return;
+      }
 
       const res = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(past)}&end_date=${fmt(now)}&station_id=${stationId}&metric=rainfall_mm&max_points=9000`, { headers:{'Authorization':`Token ${token()}`} });
       if (!res.ok) { setLluviaChart([]); setDetalleHoy(null); return; }
@@ -236,20 +269,6 @@ function Estadisticas() {
           acumDia,
         } : { sinLluvia: true, acumDia });
       } else {
-        // ── Acumulado por día ────────────────────────────────────────────
-        const porDia = {};
-        for (let i = dias - 1; i >= 0; i--) {
-          const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-          const key = i === 0 ? 'Hoy' : `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
-          porDia[key] = 0;
-        }
-        for (const r of records) {
-          const dt = new Date(r.timestamp);
-          const esHoyReg = dt.toDateString() === now.toDateString();
-          const key = esHoyReg ? 'Hoy' : `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`;
-          if (key in porDia) porDia[key] += parseFloat(r.value) || 0;
-        }
-        setLluviaChart(Object.entries(porDia).map(([dia, mm]) => ({ dia, mm: parseFloat(mm.toFixed(1)) })));
         setDetalleHoy(null);
       }
     } catch(e) { console.error(e); } finally { setCargandoLluvia(false); }
