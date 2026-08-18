@@ -320,23 +320,30 @@ function Estadisticas() {
     options: opcionesBarras(porMes.map(d => d.mes)),
   };
   const esModoHoy = rangoSel === 'hoy';
+  const baseBarras = opcionesBarras(lluviaChart.map(d => d.dia), {
+    unidad: ' mm',
+    rotarEtiquetas: rangoSel !== 'hoy' && rangoSel > 15,
+    decimales: true,
+  });
   const barrasLluvia = {
-    // En modo 'hoy' la hora en curso se pinta más clara: todavía no termina.
-    series: [{
-      name: 'Lluvia',
-      data: esModoHoy
-        ? lluviaChart.map(d => ({ x: d.dia, y: d.mm, fillColor: d.enCurso ? '#8fd0f5' : '#1268C3' }))
-        : lluviaChart.map(d => d.mm),
-    }],
-    options: {
-      ...opcionesBarras(lluviaChart.map(d => d.dia), {
-        unidad: ' mm',
-        rotarEtiquetas: rangoSel !== 'hoy' && rangoSel > 15,
-        decimales: true,
-      }),
-      // Con colores por punto no se usa el degradado.
-      ...(esModoHoy ? { fill: { type: 'solid' } } : {}),
-    },
+    // Los datos van como números planos: si se pasan como objetos {x, y},
+    // ApexCharts arma sus propias categorías y desordena las horas.
+    series: [{ name: 'Lluvia', data: lluviaChart.map(d => d.mm) }],
+    options: esModoHoy
+      ? {
+          ...baseBarras,
+          // 'distributed' colorea cada barra por índice: así la hora en curso
+          // sale más clara sin tocar el orden de los datos.
+          colors: lluviaChart.map(d => d.enCurso ? '#8fd0f5' : '#1268C3'),
+          fill: { type: 'solid' },
+          legend: { show: false },
+          plotOptions: {
+            ...baseBarras.plotOptions,
+            bar: { ...baseBarras.plotOptions.bar, distributed: true },
+          },
+          tooltip: { ...baseBarras.tooltip, x: { formatter: (v) => `${v}:00 h` } },
+        }
+      : baseBarras,
   };
 
   // Tarjeta de indicador: el color va por variable CSS (--c).
