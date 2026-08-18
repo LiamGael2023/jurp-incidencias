@@ -197,33 +197,34 @@ function Estadisticas() {
 
       if (esHoy) {
         // ── Acumulado por hora del día en curso ──────────────────────────
-        const porHora = {};
-        for (let h = 0; h < 24; h++) porHora[String(h).padStart(2, '0')] = 0;
+        // Arreglo indexado 0..23: el orden queda fijo, sin depender de cómo
+        // JavaScript recorra las claves de un objeto.
+        const porHora = new Array(24).fill(0);
 
         let ultimo = null;   // último registro con lluvia > 0
         for (const r of records) {
           const dt = new Date(r.timestamp);
           if (dt.toDateString() !== now.toDateString()) continue;
-          const h = String(dt.getHours()).padStart(2, '0');
+          const h = dt.getHours();
           const v = parseFloat(r.value) || 0;
           porHora[h] += v;
           if (v > 0) ultimo = { fecha: dt, valor: v, hora: h };
         }
 
         const horaActual = now.getHours();
-        setLluviaChart(Object.entries(porHora).map(([hora, mm]) => ({
-          dia: hora,
+        setLluviaChart(porHora.map((mm, h) => ({
+          dia: String(h).padStart(2, '0'),
           mm: parseFloat(mm.toFixed(1)),
-          enCurso: parseInt(hora, 10) === horaActual,
+          enCurso: h === horaActual,
         })));
 
-        const acumDia = Object.values(porHora).reduce((a, b) => a + b, 0);
+        const acumDia = porHora.reduce((a, b) => a + b, 0);
         setDetalleHoy(ultimo ? {
-          hora: `${ultimo.hora}:${String(ultimo.fecha.getMinutes()).padStart(2, '0')}`,
+          hora: `${String(ultimo.hora).padStart(2, '0')}:${String(ultimo.fecha.getMinutes()).padStart(2, '0')}`,
           hace: Math.max(0, Math.round((now - ultimo.fecha) / 60000)),
           valor: ultimo.valor,
           acumHora: porHora[ultimo.hora],
-          horaLabel: `${ultimo.hora}:00`,
+          horaLabel: `${String(ultimo.hora).padStart(2, '0')}:00`,
           acumDia,
         } : { sinLluvia: true, acumDia });
       } else {
