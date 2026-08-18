@@ -211,6 +211,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [mostrarResultados, setMostrarResultados] = useState(false);
   const [flyTarget, setFlyTarget] = useState(null);
   const [showLayers, setShowLayers] = useState(false);
+  // Por defecto el mapa solo muestra las estaciones que registran lluvia hoy:
+  // las que están en 0.0 mm llenan el mapa sin aportar información.
+  const [soloConLluvia, setSoloConLluvia] = useState(true);
   // Capas KMZ/KML que el usuario sube desde su equipo (no se guardan en el
   // servidor: viven mientras dure la sesión de la pestaña).
   const [capasUsuario, setCapasUsuario] = useState([]);
@@ -1033,7 +1036,10 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
           <ClusterIncidentes incidentes={incEnMapa} onSeleccionar={seleccionarIncidente} />
 
-          {lluviasAPI.filter(p => p.tipo === 'davis' ? capas.Davis : capas.Lluvias).map(p => (
+          {lluviasAPI
+            .filter(p => p.tipo === 'davis' ? capas.Davis : capas.Lluvias)
+            .filter(p => !soloConLluvia || p.totalRain > 0)
+            .map(p => (
             <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical, p.tipo)}
               eventHandlers={{ click: () => abrirDetalleLluvia(p.id) }} />
           ))}
@@ -1182,6 +1188,13 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={() => { toggleCapa('Incidentes_Atencion'); toggleCapa('Incidentes_Nuevos'); }} /> Incidentes</label></div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Lluvias} onChange={() => toggleCapa('Lluvias')} /> Pluviómetros</label></div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Davis} onChange={() => toggleCapa('Davis')} /> Estaciones Davis</label></div>
+              <div className="gis-capa" style={{ paddingLeft: 21 }}>
+                <label>
+                  <input type="checkbox" checked={!soloConLluvia} onChange={() => setSoloConLluvia(v => !v)} />
+                  <span style={{ fontSize: '11px', color: '#a3c6e2' }}>Mostrar también las que están en 0 mm</span>
+                </label>
+                <span className="gis-capa-badge">{lluviasAPI.filter(l => l.totalRain > 0).length}/{lluviasAPI.length}</span>
+              </div>
               {(capas.Incidentes_Nuevos || capas.Incidentes_Atencion) && (
                 <select className="gis-mini-select" value={filtroTiempo} onChange={e => setFiltroTiempo(Number(e.target.value))}>
                   <option value={1}>24 horas</option><option value={7}>7 días</option><option value={30}>30 días</option><option value={0}>Todo</option>
