@@ -120,6 +120,72 @@
 }
 .gis-kpi-valor small { font-size: 10.5px; color: #a6c9e0; font-weight: 600; }
 
+/* el KPI de lluvia abre el detalle por horas */
+.gis-kpi-click {
+  border: 1px solid rgba(116, 192, 252, .2); cursor: pointer; font-family: inherit;
+  text-align: left; position: relative; transition: border-color .15s, transform .15s;
+}
+.gis-kpi-click:hover:not(:disabled) {
+  border-color: #35B6E9; transform: translateY(-2px);
+}
+.gis-kpi-click:disabled { cursor: default; opacity: .75; }
+.gis-kpi-lupa {
+  position: absolute; top: 9px; right: 10px; font-size: 10px; color: #5ad4e6; opacity: .65;
+}
+
+/* ---------- modal: lluvia de hoy por horas ---------- */
+.gis-modal-fondo {
+  position: fixed; inset: 0; z-index: 9998;
+  background: rgba(4, 12, 20, .74); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.gis-modal-lluvia {
+  width: 100%; max-width: 900px; max-height: 88vh; border-radius: 18px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.gis-modal-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 18px; border-bottom: 1px solid rgba(255, 255, 255, .09);
+  font-size: 14.5px; font-weight: 800; color: #fff;
+}
+.gis-modal-head > span { display: flex; align-items: center; gap: 9px; }
+.gis-modal-head svg { color: #5ad4e6; }
+.gis-modal-head button {
+  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px;
+  background: rgba(255, 255, 255, .07); border: none; color: #9dc0d8;
+  cursor: pointer; font-size: 14px;
+}
+.gis-modal-head button:hover { background: rgba(255, 255, 255, .16); color: #fff; }
+
+.gis-modal-estaciones {
+  display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 18px 0;
+  max-height: 84px; overflow-y: auto;
+}
+
+.gis-modal-resumen {
+  display: flex; gap: 10px; padding: 12px 18px 0; flex-wrap: wrap;
+}
+.gis-modal-resumen > div {
+  flex: 1; min-width: 160px; padding: 10px 14px; border-radius: 12px;
+  background: rgba(53, 182, 233, .1); border: 1px solid rgba(53, 182, 233, .22);
+}
+.gis-modal-resumen span {
+  display: block; font-size: 9.5px; font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; color: #a6c9e0;
+}
+.gis-modal-resumen b {
+  font-size: 19px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums;
+}
+
+.gis-modal-grafico { flex: 1; min-height: 260px; padding: 6px 8px 0; }
+.gis-modal-pie {
+  display: flex; align-items: center; gap: 7px; padding: 0 18px 14px;
+  font-size: 11px; font-weight: 700; color: #9dc0d8;
+}
+.gis-modal-pie .cuadro {
+  width: 11px; height: 11px; border-radius: 3px; background: #8fd0f5;
+}
+
 /* ---------- herramientas ---------- */
 .gis-tools {
   position: absolute; left: calc(var(--rail-w, 300px) + 4px); bottom: 56px; z-index: 30;

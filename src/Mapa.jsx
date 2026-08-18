@@ -10,6 +10,7 @@ import './MapaGIS.css';
 import RailGIS from './RailGIS';
 import JSZip from 'jszip';
 import { kml as kmlAGeoJSON } from '@tmcw/togeojson';
+import ReactApexChart from 'react-apexcharts';
 import { FaFileUpload, FaTrash, FaCrosshairs, FaSave, FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint, FaFilePdf, FaFileExcel, FaDownload, FaRulerCombined, FaDrawPolygon, FaEraser, FaCamera, FaShareAlt, FaPlus, FaMinus, FaSignOutAlt, FaChevronUp, FaChevronDown } from 'react-icons/fa';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -218,6 +219,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   // demanda (al marcarlas), para no bajar megas que quizá nadie mire.
   const [capasGuardadas, setCapasGuardadas] = useState([]);
   const [ocupadaCapa, setOcupadaCapa] = useState(null);   // id en proceso
+  // Detalle de lluvia del día por horas (se abre desde el KPI).
+  const [modalLluvia, setModalLluvia] = useState(false);
+  const [estLluvia, setEstLluvia] = useState(null);
+  const [horasLluvia, setHorasLluvia] = useState([]);
+  const [cargandoHoras, setCargandoHoras] = useState(false);
   const inputKmzRef = useRef(null);
 
   const [capas, setCapas] = useState({ Incidentes_Nuevos: true, Incidentes_Atencion: true, Lluvias: true, Canales: true });
@@ -868,6 +874,44 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       return prev.filter(x => x.id !== id);
     });
 
+  // ── Lluvia del día por horas (para el detalle del KPI) ────────────────
+  const cargarHorasLluvia = useCallback(async (stationId) => {
+    if (!stationId) return;
+    setCargandoHoras(true);
+    try {
+      const tk = localStorage.getItem('userToken');
+      const now = new Date();
+      const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const r = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(now)}&end_date=${fmt(now)}&station_id=${stationId}&metric=rainfall_mm&max_points=9000`,
+        { headers: { 'Authorization': `Token ${tk}` } });
+      if (!r.ok) { setHorasLluvia([]); return; }
+      const d = await r.json();
+      // Arreglo indexado 0..23: el orden no depende del recorrido de claves.
+      const porHora = new Array(24).fill(0);
+      for (const rec of (d.data || [])) {
+        const dt = new Date(rec.timestamp);
+        if (dt.toDateString() !== now.toDateString()) continue;
+        porHora[dt.getHours()] += parseFloat(rec.value) || 0;
+      }
+      const hAhora = now.getHours();
+      setHorasLluvia(porHora.map((mm, h) => ({
+        hora: String(h).padStart(2, '0'),
+        mm: parseFloat(mm.toFixed(1)),
+        enCurso: h === hAhora,
+      })));
+    } catch (e) { console.error(e); setHorasLluvia([]); }
+    finally { setCargandoHoras(false); }
+  }, []);
+
+  // Abre el detalle en la estación que más ha acumulado hoy.
+  const abrirDetalleLluvia = () => {
+    if (!lluviasAPI.length) return;
+    const top = [...lluviasAPI].sort((a, b) => b.totalRain - a.totalRain)[0];
+    setEstLluvia(top.id);
+    setModalLluvia(true);
+    cargarHorasLluvia(top.id);
+  };
+
   // ── Handlers ──────────────────────────────────────────────────────────
   const toggleCapa = (n) => setCapas(p => ({ ...p, [n]: !p[n] }));
   const toggleCapaKMZ = (key) => { const v = !capasKMZ[key]; setCapasKMZ(p => ({ ...p, [key]: v })); if (v) { const cfg = KMZ_CONFIG.find(c => c.key === key); if (cfg?.data?.features?.length && mapRef.current) { const b = L.geoJSON(cfg.data).getBounds(); if (b.isValid()) mapRef.current.flyToBounds(b, { padding: [40, 40], maxZoom: 15, duration: 1 }); } } };
@@ -1062,13 +1106,15 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             <span className="gis-kpi-valor">{lluviasAPI.length}</span>
           </span>
         </div>
-        <div className="gis-kpi gis-glass">
+        <button className="gis-kpi gis-glass gis-kpi-click" onClick={abrirDetalleLluvia}
+          disabled={!lluviasAPI.length} title="Ver cómo llovió hoy, hora por hora">
           <span className="gis-kpi-ico" style={{ background: 'rgba(6,182,212,.16)', color: '#5ad4e6' }}><FaTint /></span>
           <span>
             <span className="gis-kpi-label">Lluvia hoy</span>
             <span className="gis-kpi-valor">{lluviaMax.toFixed(1)}<small>mm</small></span>
           </span>
-        </div>
+          <FaChartBar className="gis-kpi-lupa" />
+        </button>
       </div>
 
       {/* ══════════════ HERRAMIENTAS ══════════════ */}
@@ -1405,6 +1451,74 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         <span className="gis-leyenda-sep" />
         <code>{cargandoAPIs ? 'ACTUALIZANDO…' : `ÚLT. ACT. ${haceRato(ultimaAct, ahora)}`}</code>
       </div>
+
+      {/* ══════════════ MODAL: LLUVIA DE HOY POR HORAS ══════════════ */}
+      {modalLluvia && (() => {
+        const est = lluviasAPI.find(e => e.id === estLluvia);
+        const acum = horasLluvia.reduce((a, b) => a + b.mm, 0);
+        const pico = horasLluvia.reduce((a, b) => b.mm > a.mm ? b : a, { hora: '--', mm: 0 });
+        return (
+          <div className="gis-modal-fondo" onClick={() => setModalLluvia(false)}>
+            <div className="gis-modal-lluvia gis-glass" onClick={e => e.stopPropagation()}>
+              <div className="gis-modal-head">
+                <span><FaTint /> Lluvia de hoy · {est?.name || 'Estación'}</span>
+                <button onClick={() => setModalLluvia(false)}><FaTimes /></button>
+              </div>
+
+              {/* selector de estación */}
+              <div className="gis-modal-estaciones">
+                {[...lluviasAPI].sort((a, b) => b.totalRain - a.totalRain).map(e => (
+                  <button key={e.id}
+                    className={`gis-chip ${estLluvia === e.id ? 'activo' : ''}`}
+                    onClick={() => { setEstLluvia(e.id); cargarHorasLluvia(e.id); }}>
+                    {e.name} · {e.totalRain.toFixed(1)} mm
+                  </button>
+                ))}
+              </div>
+
+              <div className="gis-modal-resumen">
+                <div><span>Acumulado hoy</span><b>{acum.toFixed(1)} mm</b></div>
+                <div><span>Hora más intensa</span><b>{pico.mm > 0 ? `${pico.hora}:00 · ${pico.mm.toFixed(1)} mm` : '—'}</b></div>
+              </div>
+
+              <div className="gis-modal-grafico">
+                {cargandoHoras ? (
+                  <div className="gis-detalle-vacio" style={{ textAlign: 'center', padding: 40 }}>
+                    <FaSyncAlt className="icon-spin" /> Cargando…
+                  </div>
+                ) : (
+                  <ReactApexChart type="bar" height="100%"
+                    series={[{ name: 'Lluvia', data: horasLluvia.map(h => h.mm) }]}
+                    options={{
+                      chart: { type: 'bar', toolbar: { show: false }, background: 'transparent',
+                               fontFamily: "'Inter', sans-serif", animations: { speed: 400 } },
+                      theme: { mode: 'dark' },
+                      // 'distributed' colorea por índice: la hora en curso más clara.
+                      colors: horasLluvia.map(h => h.enCurso ? '#8fd0f5' : '#35B6E9'),
+                      plotOptions: { bar: { distributed: true, borderRadius: 4, borderRadiusApplication: 'end', columnWidth: '58%' } },
+                      legend: { show: false },
+                      dataLabels: { enabled: false },
+                      fill: { type: 'solid' },
+                      grid: { borderColor: 'rgba(255,255,255,.09)', strokeDashArray: 4,
+                              xaxis: { lines: { show: false } } },
+                      xaxis: { categories: horasLluvia.map(h => h.hora),
+                               axisBorder: { color: 'rgba(255,255,255,.15)' }, axisTicks: { show: false },
+                               labels: { style: { colors: '#9dc0d8', fontSize: '10.5px' } } },
+                      yaxis: { labels: { style: { colors: '#9dc0d8', fontSize: '10.5px' },
+                                         formatter: v => `${Number(v).toFixed(1)}` } },
+                      tooltip: { theme: 'dark', x: { formatter: v => `${v}:00 h` },
+                                 y: { formatter: v => `${Number(v).toFixed(1)} mm` } },
+                      noData: { text: 'Sin registros hoy', style: { color: '#7fa5c0' } },
+                    }} />
+                )}
+              </div>
+              <div className="gis-modal-pie">
+                <span className="cuadro" /> Hora en curso: aún no termina
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ══════════════ MODAL DE IMAGEN ══════════════ */}
       {modalMedia && (
