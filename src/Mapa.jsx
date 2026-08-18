@@ -903,13 +903,13 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     finally { setCargandoHoras(false); }
   }, []);
 
-  // Abre el detalle en la estación que más ha acumulado hoy.
-  const abrirDetalleLluvia = () => {
+  // Abre el detalle de una estación (o de la que más acumuló hoy).
+  const abrirDetalleLluvia = (id = null) => {
     if (!lluviasAPI.length) return;
-    const top = [...lluviasAPI].sort((a, b) => b.totalRain - a.totalRain)[0];
-    setEstLluvia(top.id);
+    const destino = id ?? [...lluviasAPI].sort((a, b) => b.totalRain - a.totalRain)[0].id;
+    setEstLluvia(destino);
     setModalLluvia(true);
-    cargarHorasLluvia(top.id);
+    cargarHorasLluvia(destino);
   };
 
   // ── Handlers ──────────────────────────────────────────────────────────
@@ -1016,9 +1016,8 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           <ClusterIncidentes incidentes={incEnMapa} onSeleccionar={seleccionarIncidente} />
 
           {capas.Lluvias && lluviasAPI.map(p => (
-            <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical)}>
-              <Popup><b style={{ color: '#eaf3fa' }}>{p.name}</b></Popup>
-            </Marker>
+            <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical)}
+              eventHandlers={{ click: () => abrirDetalleLluvia(p.id) }} />
           ))}
         </MapContainer>
       </div>
@@ -1106,7 +1105,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             <span className="gis-kpi-valor">{lluviasAPI.length}</span>
           </span>
         </div>
-        <button className="gis-kpi gis-glass gis-kpi-click" onClick={abrirDetalleLluvia}
+        <button className="gis-kpi gis-glass gis-kpi-click" onClick={() => abrirDetalleLluvia()}
           disabled={!lluviasAPI.length} title="Ver cómo llovió hoy, hora por hora">
           <span className="gis-kpi-ico" style={{ background: 'rgba(6,182,212,.16)', color: '#5ad4e6' }}><FaTint /></span>
           <span>
