@@ -226,7 +226,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [cargandoHoras, setCargandoHoras] = useState(false);
   const inputKmzRef = useRef(null);
 
-  const [capas, setCapas] = useState({ Incidentes_Nuevos: true, Incidentes_Atencion: true, Lluvias: true, Canales: true });
+  const [capas, setCapas] = useState({ Incidentes_Nuevos: true, Incidentes_Atencion: true, Lluvias: true, Davis: true, Canales: true });
   const [capasKMZ, setCapasKMZ] = useState(KMZ_CAPAS_DEFAULT);
   const [incidentesAPI, setIncidentesAPI] = useState([]);
   const [lluviasAPI, setLluviasAPI] = useState([]);
@@ -553,11 +553,19 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       const resInc = await fetch('/api/v1/mobile/hi-incidents/list/', { headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` } });
       if (resInc.ok) { const dataInc = await resInc.json(); const tm = { '1': 'Rebose y/o Colapso de canoa o alcantarilla', '2': 'Ingreso de sedimentos al Canal Madre', '3': 'Desborde Canal Madre', '4': 'Desborde Lateral 10', '5': 'Rotura de Canal', '6': 'Interrupción del flujo en el canal en tramos con retenciones', '7': 'Presencia de palizada en canal Madre', '8': 'Corte de camino de acceso y/o servicio', '9': 'Rotura de embalse de usuario', '10': 'Incremento de caudal', '11': 'Erosión de obras de defensa ribereña', '12': 'Desborde e inundación', '13': 'Lluvia', '14': 'Otros' };
         setIncidentesAPI((dataInc.results || []).map(inc => { const lat = parseFloat(inc.latitude_marker || inc.latitude), lng = parseFloat(inc.longitude_marker || inc.longitude); let tp = tm[inc.type?.toString()] || 'Incidente'; const at = inc.another_type; if (at && at.trim() && (tp === 'Otro' || tp === 'Otros')) tp = `Otro (${at.trim()})`; const f = new Date(inc.created_at); const codigoIncidente = `INCIDENTE-${String(inc.id).padStart(3,'0')}-${String(f.getDate()).padStart(2,'0')}${String(f.getMonth()+1).padStart(2,'0')}${f.getFullYear()}`; return { id: inc.id, codigoIncidente, lat, lng, tipo: tp, estado: inc.status || 'pat', gravedad: inc.severity || 'lev', descripcion: inc.description || '', usuario: inc.user?.username || '', lugar: inc.location_text || '', fecha: new Date(inc.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }), timestamp: new Date(inc.created_at).getTime(), imagenUrl: inc.thumbnail || inc.image || null, codigo: inc.code || 'Sin Código' }; }).filter(i => !isNaN(i.lat) && !isNaN(i.lng) && i.lat !== 0)); }
-      const resD = await fetch('/api/v1/mobile/devices/?device_type=pluviometro', { headers: { 'Authorization': `Token ${token}` } });
-      if (resD.ok) { const dd = await resD.json(); const now = new Date(), fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; const nd = [];
+      // Pluviómetros y estaciones Davis: las dos alimentan el mapa.
+      const [resPlu, resDav] = await Promise.all([
+        fetch('/api/v1/mobile/devices/?device_type=pluviometro', { headers: { 'Authorization': `Token ${token}` } }),
+        fetch('/api/v1/mobile/devices/?device_type=estacion_davis', { headers: { 'Authorization': `Token ${token}` } }),
+      ]);
+      const equipos = [];
+      if (resPlu.ok) { const d = await resPlu.json(); equipos.push(...(d.results || []).map(e => ({ ...e, tipo: 'pluviometro' }))); }
+      if (resDav.ok) { const d = await resDav.json(); equipos.push(...(d.results || []).map(e => ({ ...e, tipo: 'davis' }))); }
+      const resD = { ok: equipos.length > 0 };
+      if (resD.ok) { const dd = { results: equipos }; const now = new Date(), fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; const nd = [];
         // Acumulado del DÍA ACTUAL, igual que la app móvil. max_points alto:
         // sin él la API entrega la serie reducida y el total sale corto.
-        for (const eq of (dd.results || [])) { const la = parseFloat(eq.latitude), lo = parseFloat(eq.longitude); if (isNaN(la) || isNaN(lo)) continue; let rain = 0; try { const rr = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(now)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=rainfall_mm&max_points=9000`, { headers: { 'Authorization': `Token ${token}` } }); if (rr.ok) { const rd = await rr.json(); for (const rec of (rd.data || [])) { const dt = new Date(rec.timestamp); if (dt.toDateString() !== now.toDateString()) continue; rain += parseFloat(rec.value) || 0; } } } catch(e) {} nd.push({ id: eq.id, name: eq.nombre || 'Pluviómetro', lat: la, lng: lo, totalRain: rain, isCritical: rain > 20 }); }
+        for (const eq of (dd.results || [])) { const la = parseFloat(eq.latitude), lo = parseFloat(eq.longitude); if (isNaN(la) || isNaN(lo)) continue; let rain = 0; try { const rr = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(now)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=rainfall_mm&max_points=9000`, { headers: { 'Authorization': `Token ${token}` } }); if (rr.ok) { const rd = await rr.json(); for (const rec of (rd.data || [])) { const dt = new Date(rec.timestamp); if (dt.toDateString() !== now.toDateString()) continue; rain += parseFloat(rec.value) || 0; } } } catch(e) {} nd.push({ id: eq.id, name: eq.nombre || (eq.tipo === 'davis' ? 'Estación Davis' : 'Pluviómetro'), tipo: eq.tipo, lat: la, lng: lo, totalRain: rain, isCritical: rain > 20 }); }
         setLluviasAPI(nd); }
     } catch(e) { console.error(e); } finally { setCargandoAPIs(false); setUltimaAct(Date.now()); }
   };
@@ -924,7 +932,13 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
   // ── Iconos ────────────────────────────────────────────────────────────
   const iconoGPS = divIcon({ className: 'icono-vacio', html: '<div style="background:#0ea5e9;border:3px solid #fff;width:16px;height:16px;border-radius:50%;box-shadow:0 0 12px #0ea5e988"></div>', iconSize: [22, 22], iconAnchor: [11, 11] });
-  const crearIconoLluvia = (r, cr) => divIcon({ className: 'icono-vacio', html: `<div style="display:flex;flex-direction:column;align-items:center;margin-top:-30px"><div style="background:${cr?'#1e293b':'#111827'};border:1px solid ${cr?'#ef4444':'#0ea5e9'};color:${cr?'#ef4444':'#0ea5e9'};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${r.toFixed(1)} mm</div><div style="font-size:22px;line-height:1;margin-top:2px">🌧️</div></div>`, iconSize: [60, 60], iconAnchor: [30, 45] });
+    // Los pluviómetros y las estaciones Davis se distinguen por el ícono y el
+  // color del borde: 🌧️ celeste para pluviómetro, 🌡️ violeta para Davis.
+  const crearIconoLluvia = (r, cr, tipo = 'pluviometro') => {
+    const esDavis = tipo === 'davis';
+    const borde = cr ? '#ef4444' : (esDavis ? '#a78bfa' : '#0ea5e9');
+    return divIcon({ className: 'icono-vacio', html: `<div style="display:flex;flex-direction:column;align-items:center;margin-top:-30px"><div style="background:${cr?'#1e293b':'#111827'};border:1px solid ${borde};color:${borde};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${r.toFixed(1)} mm</div><div style="font-size:22px;line-height:1;margin-top:2px">${esDavis ? '🌡️' : '🌧️'}</div></div>`, iconSize: [60, 60], iconAnchor: [30, 45] });
+  };
 
   const buildPopup = useMemo(() => (props, iconUrl, label) => {
     const skip = new Set(['name', 'folder', 'FID', 'nro_ord', 'N_', 'Nº', 'Label', 'Field', '_tipo']);
@@ -1019,8 +1033,8 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
           <ClusterIncidentes incidentes={incEnMapa} onSeleccionar={seleccionarIncidente} />
 
-          {capas.Lluvias && lluviasAPI.map(p => (
-            <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical)}
+          {lluviasAPI.filter(p => p.tipo === 'davis' ? capas.Davis : capas.Lluvias).map(p => (
+            <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical, p.tipo)}
               eventHandlers={{ click: () => abrirDetalleLluvia(p.id) }} />
           ))}
         </MapContainer>
@@ -1107,6 +1121,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           <span>
             <span className="gis-kpi-label">Estaciones</span>
             <span className="gis-kpi-valor">{lluviasAPI.length}</span>
+            <span className="gis-kpi-nota">
+              {lluviasAPI.filter(l => l.tipo !== 'davis').length} pluv · {lluviasAPI.filter(l => l.tipo === 'davis').length} Davis
+            </span>
           </span>
         </div>
         <button className="gis-kpi gis-glass gis-kpi-click" onClick={() => abrirDetalleLluvia()}
@@ -1164,6 +1181,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Canales} onChange={() => toggleCapa('Canales')} /> Trazado de canales</label></div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={() => { toggleCapa('Incidentes_Atencion'); toggleCapa('Incidentes_Nuevos'); }} /> Incidentes</label></div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Lluvias} onChange={() => toggleCapa('Lluvias')} /> Pluviómetros</label></div>
+              <div className="gis-capa"><label><input type="checkbox" checked={capas.Davis} onChange={() => toggleCapa('Davis')} /> Estaciones Davis</label></div>
               {(capas.Incidentes_Nuevos || capas.Incidentes_Atencion) && (
                 <select className="gis-mini-select" value={filtroTiempo} onChange={e => setFiltroTiempo(Number(e.target.value))}>
                   <option value={1}>24 horas</option><option value={7}>7 días</option><option value={30}>30 días</option><option value={0}>Todo</option>
@@ -1478,7 +1496,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                   <button key={e.id}
                     className={`gis-chip ${estLluvia === e.id ? 'activo' : ''}`}
                     onClick={() => { setEstLluvia(e.id); cargarHorasLluvia(e.id); }}>
-                    {e.name} · {e.totalRain.toFixed(1)} mm
+                    {e.tipo === 'davis' ? '🌡️' : '🌧️'} {e.name} · {e.totalRain.toFixed(1)} mm
                   </button>
                 ))}
               </div>
