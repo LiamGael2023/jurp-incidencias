@@ -112,7 +112,9 @@ function Estadisticas() {
   const [estaciones, setEstaciones] = useState([]);
   const [lluviaChart, setLluviaChart] = useState([]);
   const [estacionSeleccionada, setEstacionSeleccionada] = useState(null);
-  const [diasRango, setDiasRango] = useState(7);
+  const [rangoSel, setRangoSel] = useState('hoy');   // 'hoy' | 7 | 15 | 30
+  // Resumen de la última lluvia del día (solo en modo 'hoy').
+  const [detalleHoy, setDetalleHoy] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [cargandoLluvia, setCargandoLluvia] = useState(false);
 
@@ -177,32 +179,69 @@ function Estadisticas() {
   };
 
   // ── Cargar datos de lluvia para gráfico ───────────────────────────────
-  const cargarLluviaChart = async (stationId, days) => {
+  const cargarLluviaChart = async (stationId, rango) => {
     if (!stationId) return;
     setCargandoLluvia(true);
     try {
       const now = new Date();
-      const past = new Date(now.getTime() - (days-1)*24*60*60*1000);
       const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const esHoy = rango === 'hoy';
+      const dias = esHoy ? 1 : rango;
+      const past = new Date(now.getTime() - (dias - 1) * 24 * 60 * 60 * 1000);
+
       const res = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(past)}&end_date=${fmt(now)}&station_id=${stationId}&metric=rainfall_mm&max_points=9000`, { headers:{'Authorization':`Token ${token()}`} });
-      if (res.ok) {
-        const data = await res.json();
-        const records = data.data || [];
-        const dailyRain = {};
-        for (let i = days-1; i >= 0; i--) {
-          const d = new Date(now.getTime() - i*24*60*60*1000);
+      if (!res.ok) { setLluviaChart([]); setDetalleHoy(null); return; }
+
+      const data = await res.json();
+      const records = data.data || [];
+
+      if (esHoy) {
+        // ── Acumulado por hora del día en curso ──────────────────────────
+        const porHora = {};
+        for (let h = 0; h < 24; h++) porHora[String(h).padStart(2, '0')] = 0;
+
+        let ultimo = null;   // último registro con lluvia > 0
+        for (const r of records) {
+          const dt = new Date(r.timestamp);
+          if (dt.toDateString() !== now.toDateString()) continue;
+          const h = String(dt.getHours()).padStart(2, '0');
+          const v = parseFloat(r.value) || 0;
+          porHora[h] += v;
+          if (v > 0) ultimo = { fecha: dt, valor: v, hora: h };
+        }
+
+        const horaActual = now.getHours();
+        setLluviaChart(Object.entries(porHora).map(([hora, mm]) => ({
+          dia: hora,
+          mm: parseFloat(mm.toFixed(1)),
+          enCurso: parseInt(hora, 10) === horaActual,
+        })));
+
+        const acumDia = Object.values(porHora).reduce((a, b) => a + b, 0);
+        setDetalleHoy(ultimo ? {
+          hora: `${ultimo.hora}:${String(ultimo.fecha.getMinutes()).padStart(2, '0')}`,
+          hace: Math.max(0, Math.round((now - ultimo.fecha) / 60000)),
+          valor: ultimo.valor,
+          acumHora: porHora[ultimo.hora],
+          horaLabel: `${ultimo.hora}:00`,
+          acumDia,
+        } : { sinLluvia: true, acumDia });
+      } else {
+        // ── Acumulado por día ────────────────────────────────────────────
+        const porDia = {};
+        for (let i = dias - 1; i >= 0; i--) {
+          const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
           const key = i === 0 ? 'Hoy' : `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
-          dailyRain[key] = 0;
+          porDia[key] = 0;
         }
         for (const r of records) {
-          try {
-            const dt = new Date(r.timestamp);
-            const isToday = dt.toDateString() === now.toDateString();
-            const key = isToday ? 'Hoy' : `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`;
-            if (key in dailyRain) dailyRain[key] += parseFloat(r.value) || 0;
-          } catch(e) {}
+          const dt = new Date(r.timestamp);
+          const esHoyReg = dt.toDateString() === now.toDateString();
+          const key = esHoyReg ? 'Hoy' : `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`;
+          if (key in porDia) porDia[key] += parseFloat(r.value) || 0;
         }
-        setLluviaChart(Object.entries(dailyRain).map(([dia, mm]) => ({ dia, mm: parseFloat(mm.toFixed(1)) })));
+        setLluviaChart(Object.entries(porDia).map(([dia, mm]) => ({ dia, mm: parseFloat(mm.toFixed(1)) })));
+        setDetalleHoy(null);
       }
     } catch(e) { console.error(e); } finally { setCargandoLluvia(false); }
   };
@@ -216,8 +255,8 @@ function Estadisticas() {
   }, []);
 
   useEffect(() => {
-    if (estacionSeleccionada) cargarLluviaChart(estacionSeleccionada, diasRango);
-  }, [estacionSeleccionada, diasRango]);
+    if (estacionSeleccionada) cargarLluviaChart(estacionSeleccionada, rangoSel);
+  }, [estacionSeleccionada, rangoSel]);
 
   // ── Procesamiento de datos ────────────────────────────────────────────
   const tiposMapa = { '1':'Deslizamiento','2':'Obstrucción','3':'Falla Mecánica','4':'Robo','5':'Daño Estructural','6':'Otro' };
@@ -280,9 +319,24 @@ function Estadisticas() {
     series: [{ name: 'Incidentes', data: porMes.map(d => d.cantidad) }],
     options: opcionesBarras(porMes.map(d => d.mes)),
   };
+  const esModoHoy = rangoSel === 'hoy';
   const barrasLluvia = {
-    series: [{ name: 'Lluvia', data: lluviaChart.map(d => d.mm) }],
-    options: opcionesBarras(lluviaChart.map(d => d.dia), { unidad: ' mm', rotarEtiquetas: diasRango > 15, decimales: true }),
+    // En modo 'hoy' la hora en curso se pinta más clara: todavía no termina.
+    series: [{
+      name: 'Lluvia',
+      data: esModoHoy
+        ? lluviaChart.map(d => ({ x: d.dia, y: d.mm, fillColor: d.enCurso ? '#8fd0f5' : '#1268C3' }))
+        : lluviaChart.map(d => d.mm),
+    }],
+    options: {
+      ...opcionesBarras(lluviaChart.map(d => d.dia), {
+        unidad: ' mm',
+        rotarEtiquetas: rangoSel !== 'hoy' && rangoSel > 15,
+        decimales: true,
+      }),
+      // Con colores por punto no se usa el degradado.
+      ...(esModoHoy ? { fill: { type: 'solid' } } : {}),
+    },
   };
 
   // Tarjeta de indicador: el color va por variable CSS (--c).
@@ -401,17 +455,53 @@ function Estadisticas() {
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap',flexShrink:0}}>
                 <div className="est-titulo" style={{marginBottom:0}}><FaCloudRain/> Historial — {estaciones.find(e=>e.id===estacionSeleccionada)?.nombre || 'Estación'}</div>
                 <div style={{display:'flex',gap:'6px'}}>
-                  {[7,15,30].map(d => (
-                    <button key={d} onClick={()=>setDiasRango(d)}
-                      className={`est-rango ${diasRango===d ? 'activo' : ''}`}>{d} días</button>
+                  {[['hoy','Hoy'],[7,'7 días'],[15,'15 días'],[30,'30 días']].map(([v,txt]) => (
+                    <button key={v} onClick={()=>setRangoSel(v)}
+                      className={`est-rango ${rangoSel===v ? 'activo' : ''}`}>{txt}</button>
                   ))}
                 </div>
               </div>
+              {/* Resumen de la última lluvia (solo en modo 'hoy') */}
+              {esModoHoy && detalleHoy && !cargandoLluvia && (
+                <div className="est-ultima">
+                  {detalleHoy.sinLluvia ? (
+                    <div className="est-ultima-vacio">
+                      <FaCloudRain /> Sin lluvia registrada hoy
+                    </div>
+                  ) : (
+                    <>
+                      <div className="est-ultima-cab">
+                        <FaClock />
+                        <div>
+                          <div className="est-ultima-etq">Última lluvia</div>
+                          <div className="est-ultima-hora">{detalleHoy.hora}</div>
+                          <div className="est-ultima-hace">
+                            {detalleHoy.hace < 1 ? 'hace un momento'
+                              : detalleHoy.hace < 60 ? `hace ${detalleHoy.hace} min`
+                              : `hace ${Math.floor(detalleHoy.hace / 60)} h`}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="est-ultima-filas">
+                        <div><span>En ese registro</span><b>{detalleHoy.valor.toFixed(1)} mm</b></div>
+                        <div><span>En la hora {detalleHoy.horaLabel}</span><b>{detalleHoy.acumHora.toFixed(1)} mm</b></div>
+                        <div className="total"><span>Acumulado hoy</span><b>{detalleHoy.acumDia.toFixed(1)} mm</b></div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
               <div style={{flex:1,minHeight:0,marginTop:'14px'}}>
                 {cargandoLluvia ? <div style={{textAlign:'center',padding:'40px',color:'#5b7590',fontWeight:600}}><FaSyncAlt className="icon-spin"/> Cargando…</div> : (
                   <ReactApexChart options={barrasLluvia.options} series={barrasLluvia.series} type="bar" height="100%" />
                 )}
               </div>
+              {esModoHoy && !cargandoLluvia && (
+                <div className="est-leyenda-hora">
+                  <span className="cuadro" /> Hora en curso: aún no termina
+                </div>
+              )}
             </>) : (
               <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:'#5b7590',fontSize:'14px'}}>
                 ← Selecciona una estación para ver su historial
