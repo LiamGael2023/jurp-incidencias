@@ -537,6 +537,10 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const incPend = incidentesAPI.filter(i => i.estado === 'pat').length;
   const incAte = incidentesAPI.filter(i => i.estado === 'ate').length;
   const lluviaMax = lluviasAPI.length ? Math.max(...lluviasAPI.map(l => l.totalRain)) : 0;
+  // El KPI muestra el máximo, no un total: sumar acumulados de estaciones
+  // distintas no significa nada. Se indica de cuál es y cuántas registran lluvia.
+  const estacionMax = lluviasAPI.find(l => l.totalRain === lluviaMax);
+  const conLluvia = lluviasAPI.filter(l => l.totalRain > 0).length;
 
   // ── Search ────────────────────────────────────────────────────────────
   const handleBusqueda = (val) => { setBusqueda(val); if (val.length < 2) { setResultadosBusqueda([]); setMostrarResultados(false); return; } const q = val.toLowerCase(); setResultadosBusqueda(SEARCH_INDEX.filter(it => it.name.toLowerCase().includes(q) || it.progresiva.toLowerCase().includes(q) || it.tipo.toLowerCase().includes(q)).slice(0, 6)); setMostrarResultados(true); };
@@ -1109,8 +1113,12 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           disabled={!lluviasAPI.length} title="Ver cómo llovió hoy, hora por hora">
           <span className="gis-kpi-ico" style={{ background: 'rgba(6,182,212,.16)', color: '#5ad4e6' }}><FaTint /></span>
           <span>
-            <span className="gis-kpi-label">Lluvia hoy</span>
+            <span className="gis-kpi-label">Lluvia hoy · máx</span>
             <span className="gis-kpi-valor">{lluviaMax.toFixed(1)}<small>mm</small></span>
+            <span className="gis-kpi-nota">
+              {estacionMax?.name || '—'}
+              {conLluvia > 0 && ` · ${conLluvia} de ${lluviasAPI.length} con lluvia`}
+            </span>
           </span>
           <FaChartBar className="gis-kpi-lupa" />
         </button>

@@ -129,6 +129,11 @@
   border-color: #35B6E9; transform: translateY(-2px);
 }
 .gis-kpi-click:disabled { cursor: default; opacity: .75; }
+.gis-kpi-nota {
+  display: block; margin-top: 2px; max-width: 190px;
+  font-size: 10px; font-weight: 600; color: #a6c9e0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .gis-kpi-lupa {
   position: absolute; top: 9px; right: 10px; font-size: 10px; color: #5ad4e6; opacity: .65;
 }
