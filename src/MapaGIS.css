@@ -37,6 +37,22 @@
   transition: left .35s ease, max-width .35s ease;
 }
 
+/* ---------- estaciones con lluvia: laten para saltar a la vista ---------- */
+.gis-lluvia-activa { animation: gisLatirLluvia 1.8s ease-in-out infinite; }
+.gis-lluvia-alerta { animation: gisLatirAlerta 1.1s ease-in-out infinite; }
+
+@keyframes gisLatirLluvia {
+  0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(53, 182, 233, 0)); }
+  50%      { transform: scale(1.14); filter: drop-shadow(0 0 9px rgba(53, 182, 233, .85)); }
+}
+@keyframes gisLatirAlerta {
+  0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(239, 68, 68, 0)); }
+  50%      { transform: scale(1.2);  filter: drop-shadow(0 0 12px rgba(239, 68, 68, .9)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gis-lluvia-activa, .gis-lluvia-alerta { animation: none; }
+}
+
 /* ---------- barra superior ---------- */
 .gis-top {
   position: absolute; top: 16px; left: calc(var(--rail-w, 300px) + 4px); right: 16px; z-index: 35;

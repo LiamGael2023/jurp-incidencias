@@ -211,9 +211,8 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [mostrarResultados, setMostrarResultados] = useState(false);
   const [flyTarget, setFlyTarget] = useState(null);
   const [showLayers, setShowLayers] = useState(false);
-  // Por defecto el mapa solo muestra las estaciones que registran lluvia hoy:
-  // las que están en 0.0 mm llenan el mapa sin aportar información.
-  const [soloConLluvia, setSoloConLluvia] = useState(true);
+  // Al iniciar se muestran todas; se puede filtrar a las que registran lluvia.
+  const [soloConLluvia, setSoloConLluvia] = useState(false);
   // Capas KMZ/KML que el usuario sube desde su equipo (no se guardan en el
   // servidor: viven mientras dure la sesión de la pestaña).
   const [capasUsuario, setCapasUsuario] = useState([]);
@@ -937,10 +936,20 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const iconoGPS = divIcon({ className: 'icono-vacio', html: '<div style="background:#0ea5e9;border:3px solid #fff;width:16px;height:16px;border-radius:50%;box-shadow:0 0 12px #0ea5e988"></div>', iconSize: [22, 22], iconAnchor: [11, 11] });
     // Los pluviómetros y las estaciones Davis se distinguen por el ícono y el
   // color del borde: 🌧️ celeste para pluviómetro, 🌡️ violeta para Davis.
+  // Las que registran lluvia hoy laten, para que salten a la vista.
   const crearIconoLluvia = (r, cr, tipo = 'pluviometro') => {
     const esDavis = tipo === 'davis';
-    const borde = cr ? '#ef4444' : (esDavis ? '#a78bfa' : '#0ea5e9');
-    return divIcon({ className: 'icono-vacio', html: `<div style="display:flex;flex-direction:column;align-items:center;margin-top:-30px"><div style="background:${cr?'#1e293b':'#111827'};border:1px solid ${borde};color:${borde};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${r.toFixed(1)} mm</div><div style="font-size:22px;line-height:1;margin-top:2px">${esDavis ? '🌡️' : '🌧️'}</div></div>`, iconSize: [60, 60], iconAnchor: [30, 45] });
+    const llueve = r > 0;
+    const borde = cr ? '#ef4444' : (llueve ? '#35B6E9' : (esDavis ? '#a78bfa' : '#5b7590'));
+    const clase = llueve ? (cr ? 'gis-lluvia-alerta' : 'gis-lluvia-activa') : '';
+    return divIcon({
+      className: 'icono-vacio',
+      html: `<div class="${clase}" style="display:flex;flex-direction:column;align-items:center;margin-top:-30px">
+               <div style="background:${cr ? '#1e293b' : '#111827'};border:1px solid ${borde};color:${borde};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${r.toFixed(1)} mm</div>
+               <div style="font-size:22px;line-height:1;margin-top:2px">${esDavis ? '🌡️' : '🌧️'}</div>
+             </div>`,
+      iconSize: [60, 60], iconAnchor: [30, 45],
+    });
   };
 
   const buildPopup = useMemo(() => (props, iconUrl, label) => {
@@ -1190,8 +1199,8 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Davis} onChange={() => toggleCapa('Davis')} /> Estaciones Davis</label></div>
               <div className="gis-capa" style={{ paddingLeft: 21 }}>
                 <label>
-                  <input type="checkbox" checked={!soloConLluvia} onChange={() => setSoloConLluvia(v => !v)} />
-                  <span style={{ fontSize: '11px', color: '#a3c6e2' }}>Mostrar también las que están en 0 mm</span>
+                  <input type="checkbox" checked={soloConLluvia} onChange={() => setSoloConLluvia(v => !v)} />
+                  <span style={{ fontSize: '11px', color: '#a3c6e2' }}>Solo las que registran lluvia</span>
                 </label>
                 <span className="gis-capa-badge">{lluviasAPI.filter(l => l.totalRain > 0).length}/{lluviasAPI.length}</span>
               </div>
