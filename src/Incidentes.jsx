@@ -508,11 +508,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           horasTrabajo: i.horas_normales ?? parseFloat(i.quantity_hours) ?? 0,
           horasExtras: i.horas_extras ?? 0,
           descripcionResumen: i.description,
-          cantidad: parseFloat(i.quantity_hours), precioUnitario: parseFloat(i.unit_price),
-          total: parseFloat(i.quantity_hours) * parseFloat(i.unit_price), guardadoEnDB: true
+          cantidad: round4(i.quantity_hours), precioUnitario: parseFloat(i.unit_price),
+          total: round2(parseFloat(i.quantity_hours) * parseFloat(i.unit_price)), guardadoEnDB: true
         };
       });
-      const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', descripcionResumen: i.description, unidad: i.unit || 'und', cantidad: parseFloat(i.quantity), precioUnitario: parseFloat(i.unit_price), total: parseFloat(i.quantity) * parseFloat(i.unit_price), guardadoEnDB: true }));
+      const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', descripcionResumen: i.description, unidad: i.unit || 'und', cantidad: round4(i.quantity), precioUnitario: parseFloat(i.unit_price), total: round2(parseFloat(i.quantity) * parseFloat(i.unit_price)), guardadoEnDB: true }));
       const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => {
         // Resuelve la máquina del catálogo para poder agregarle más partes luego.
         const mp = (i.model_plate || '').trim();
@@ -538,9 +538,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           combustible: i.fuel_gallons ?? '', vale: i.fuel_voucher || '',
           fechaParte: i.date || '', turno: i.shift || 'Día', zonaTrabajo: i.work_zone_text || '',
           operador: i.operator || '', observaciones: i.observations || '',
-          cantidad: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)),
+          cantidad: round4(Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer))),
           precioUnitario: parseFloat(i.unit_price),
-          total: Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer)) * parseFloat(i.unit_price),
+          total: round2(round4(Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer))) * parseFloat(i.unit_price)),
           guardadoEnDB: true,
         };
       });
@@ -697,7 +697,15 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     }
   };
 
-  const horasMaquina = (nuevoRecurso.hmFin && nuevoRecurso.hmInicio) ? Math.max(0, (parseFloat(nuevoRecurso.hmFin) - parseFloat(nuevoRecurso.hmInicio))).toFixed(1) : 0;
+  // ── Precisión: se ingresan hasta 4 decimales; los IMPORTES se redondean a 2 ──
+  const round2 = (n) => Math.round(((parseFloat(n) || 0) + Number.EPSILON) * 100) / 100;
+  const round4 = (n) => Math.round(((parseFloat(n) || 0) + Number.EPSILON) * 10000) / 10000;
+  // Cantidades y medidas: hasta 4 decimales (mínimo 2, sin ceros de relleno extra).
+  const fmtCant = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  // Paso de los inputs numéricos en toda la gestión del incidente.
+  const STEP4 = '0.0001';
+
+  const horasMaquina = (nuevoRecurso.hmFin && nuevoRecurso.hmInicio) ? String(round4(Math.max(0, parseFloat(nuevoRecurso.hmFin) - parseFloat(nuevoRecurso.hmInicio)))) : 0;
 
   // ── Cálculo de metrado según actividad ──────────────────────────────────
   // Calcula el metrado de CUALQUIER recurso (no solo el del formulario abierto).
@@ -726,7 +734,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   };
   const calcVolumen = () => calcMetradoDe(nuevoRecurso);
   const volCalc = calcVolumen();
-  const volumenMetrado = volCalc.val.toFixed(2);
+  const volumenMetrado = round4(volCalc.val);
   // Formatea números con separador de miles (1000000.00 → 1,000,000.00)
   const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // OTROS = actividad libre: sin fórmula ni medidas, solo metrado manual.
@@ -898,7 +906,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
 
   const agregarRecurso = () => {
     let descFinal = nuevoRecurso.descripcion;
-    let cantFinal = parseFloat(nuevoRecurso.cantidad) || 0;
+    let cantFinal = round4(parseFloat(nuevoRecurso.cantidad) || 0);
     if (nuevoRecurso.tipo === 'Maquinaria') {
       const totalHM = parseFloat(horasMaquina) || 0;
       if (totalHM <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Horómetro Final debe ser mayor al Inicial' });
@@ -918,7 +926,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       if (efectivas < totalHM && !nuevoRecurso.obsReduccion.trim()) {
         return Swal.fire({ icon: 'warning', title: 'Observación requerida', text: 'Detalla el motivo de la reducción de horas efectivas.' });
       }
-      cantFinal = efectivas;
+      cantFinal = round4(efectivas);
       const equipoFinal = nuevoRecurso.equipo;
       const marcaFinal = nuevoRecurso.marca;
       // Detalle corto: solo código · equipo marca modelo. El resto va en el PDF del parte.
@@ -928,14 +936,14 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       const pers = parseInt(nuevoRecurso.numPersonas) || 0;
       const hrs = parseFloat(nuevoRecurso.horasTrabajo) || 0;
       const ext = parseFloat(nuevoRecurso.horasExtras) || 0;
-      cantFinal = pers * (hrs + ext);
+      cantFinal = round4(pers * (hrs + ext));
       if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa el cargo (Ej. Peón)' });
       if (cantFinal <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa la cantidad de personas y horas' });
       descFinal = `${nuevoRecurso.descripcion}\n(Cuadrilla: ${pers} persona(s) x ${hrs}h normales + ${ext}h extras)`;
     } else {
       if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa una descripción' });
     }
-    const recursoCalculado = { ...nuevoRecurso, idLocal: Date.now(), descripcionResumen: descFinal, cantidad: cantFinal, precioUnitario: parseFloat(nuevoRecurso.precioUnitario) || 0, total: cantFinal * (parseFloat(nuevoRecurso.precioUnitario) || 0), guardadoEnDB: false };
+    const recursoCalculado = { ...nuevoRecurso, idLocal: Date.now(), descripcionResumen: descFinal, cantidad: cantFinal, precioUnitario: parseFloat(nuevoRecurso.precioUnitario) || 0, total: round2(cantFinal * (parseFloat(nuevoRecurso.precioUnitario) || 0)), guardadoEnDB: false };
     setRecursos([...recursos, recursoCalculado]);
     setNuevoRecurso({...estadoInicialRecurso, numeroParte: generarCorrelativo()});
     obtenerCorrelativoParte();
@@ -967,7 +975,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       Swal.fire('Error', 'Fallo de conexión al eliminar.', 'error');
     }
   };
-  const costoTotalIncidente = recursos.reduce((sum, item) => sum + item.total, 0);
+  const costoTotalIncidente = round2(recursos.reduce((sum, item) => sum + item.total, 0));
 
   const normalizar = (txt) => (txt || '')
     .toLowerCase()
@@ -1013,8 +1021,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         g.marcaId = r.marcaId; g.marca = r.marca;
         continue;
       }
-      g.cantidadTotal += r.cantidad;
-      g.totalSum += r.total;
+      g.cantidadTotal = round4(g.cantidadTotal + r.cantidad);
+      g.totalSum = round2(g.totalSum + r.total);
       g.count += 1;
       if (r.guardadoEnDB && r.dbId) g.registros.push({ dbId: r.dbId, endpoint: r.endpoint });
       if (r.tipo === 'Maquinaria') {
@@ -1037,9 +1045,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     { key: 'Insumo',     titulo: 'MATERIALES' },
     { key: 'Maquinaria', titulo: 'EQUIPO' },
   ];
-  const subtotalCategoria = (tipo) => recursosAgrupados
+  const subtotalCategoria = (tipo) => round2(recursosAgrupados
     .filter(r => r.tipo === tipo)
-    .reduce((s, r) => s + r.totalSum, 0);
+    .reduce((s, r) => s + r.totalSum, 0));
 
   const imgToBase64 = (src) => new Promise((resolve) => {
     const img = new Image();
@@ -1113,9 +1121,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               filas.push([
                 n,
                 (r.descripcionResumen || r.descripcion || '').replace(/\n/g, ' '),
-                fmtNum(r.cantidadTotal),
+                fmtCant(r.cantidadTotal),
                 r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad || 'und'),
-                fmtNum(r.precioUnitario),
+                fmtCant(r.precioUnitario),
                 fmtNum(r.totalSum),
                 '',
               ]);
@@ -1244,7 +1252,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           cell.font = { size: 9 };
           cell.border = borde;
           if (j >= 2) cell.alignment = { horizontal: 'right' };
-          if (j === 4 || j === 5) cell.numFmt = '#,##0.00';
+          if (j === 2 || j === 4) cell.numFmt = '#,##0.00##';   // cantidad y P. Unit: hasta 4 decimales
+          if (j === 5) cell.numFmt = '#,##0.00';                 // importe: siempre 2
           if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
         });
       });
@@ -1483,17 +1492,17 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
 
         bloque('MANO DE OBRA',
           ['CARGO', 'ORIGEN', 'N° PERS.', 'HORAS', 'P. UNIT.', 'TOTAL S/'],
-          d.personal.map(x => ([x.descripcion, x.origen, String(x.personas), x.horas.toFixed(2), x.precio.toFixed(2), x.total.toFixed(2)])),
+          d.personal.map(x => ([x.descripcion, x.origen, String(x.personas), fmtCant(x.horas), fmtCant(x.precio), x.total.toFixed(2)])),
           ['', '', '', '', 'SUBTOTAL', d.personal.reduce((a, x) => a + x.total, 0).toFixed(2)]);
 
         bloque('MAQUINARIA',
           ['N° PARTE', 'MÁQUINA', 'PLACA/CÓDIGO', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'P. UNIT.', 'TOTAL S/'],
-          d.maquinaria.map(x => ([x.parte, `${x.equipo}${x.marca ? ' · ' + x.marca : ''}`, x.placa, x.actividad, x.proveedor, `${x.metrado.toFixed(2)} ${uMetrado(x.metradoUnidad)}`, x.horas.toFixed(2), x.precio.toFixed(2), x.total.toFixed(2)])),
+          d.maquinaria.map(x => ([x.parte, `${x.equipo}${x.marca ? ' · ' + x.marca : ''}`, x.placa, x.actividad, x.proveedor, `${fmtCant(x.metrado)} ${uMetrado(x.metradoUnidad)}`, fmtCant(x.horas), fmtCant(x.precio), x.total.toFixed(2)])),
           ['', '', '', '', '', '', '', 'SUBTOTAL', d.maquinaria.reduce((a, x) => a + x.total, 0).toFixed(2)]);
 
         bloque('MATERIALES',
           ['DESCRIPCIÓN', 'UNIDAD', 'CANTIDAD', 'P. UNIT.', 'TOTAL S/'],
-          d.materiales.map(x => ([x.descripcion, x.unidad, x.cantidad.toFixed(2), x.precio.toFixed(2), x.total.toFixed(2)])),
+          d.materiales.map(x => ([x.descripcion, x.unidad, fmtCant(x.cantidad), fmtCant(x.precio), x.total.toFixed(2)])),
           ['', '', '', 'SUBTOTAL', d.materiales.reduce((a, x) => a + x.total, 0).toFixed(2)]);
 
         doc.setTextColor(20, 99, 165);
@@ -1686,7 +1695,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           'SUBTOTAL MANO DE OBRA', d.personal.reduce((a, x) => a + x.total, 0));
 
         tablaDetalle(['N° PARTE', 'MÁQUINA', 'PLACA/CÓDIGO', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'P. UNIT.', 'TOTAL S/'],
-          d.maquinaria.map(x => ([x.parte, `${x.equipo}${x.marca ? ' · ' + x.marca : ''}`, x.placa, x.actividad, x.proveedor, `${x.metrado.toFixed(2)} ${uMetrado(x.metradoUnidad)}`, x.horas, x.precio, x.total])),
+          d.maquinaria.map(x => ([x.parte, `${x.equipo}${x.marca ? ' · ' + x.marca : ''}`, x.placa, x.actividad, x.proveedor, `${fmtCant(x.metrado)} ${uMetrado(x.metradoUnidad)}`, x.horas, x.precio, x.total])),
           'SUBTOTAL MAQUINARIA', d.maquinaria.reduce((a, x) => a + x.total, 0));
 
         tablaDetalle(['DESCRIPCIÓN', 'UNIDAD', 'CANTIDAD', 'P. UNIT.', 'TOTAL S/'],
@@ -1778,7 +1787,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
             // Metrado final: calculado por fórmula o ingresado a mano.
             const mv = calcMetradoDe(r);
             const calculado = r.actividad !== 'OTROS' && !!r.calcularMetrado;
-            formData.append('metrado', mv.val.toFixed(2));
+            formData.append('metrado', mv.val.toFixed(4));
             formData.append('metrado_unidad', calculado ? mv.unit : (r.unidadMetrado || 'm3'));
             formData.append('metrado_calculado', calculado ? 'true' : 'false');
           }
@@ -1855,21 +1864,21 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     const act = nuevoRecurso.actividad;
     const set = (campo, val) => setNuevoRecurso({...nuevoRecurso, [campo]: val});
     const activo = !!nuevoRecurso.calcularMetrado;
-    const inp = (campo, label, step='0.01') => (
+    const inp = (campo, label, step=STEP4) => (
       <div className="tbl-col"><label className="tbl-form-label" style={{ color: activo ? undefined : '#94a3b8' }}>{label}</label><input type="number" step={step} className="tbl-form-control" placeholder="0.00" value={nuevoRecurso[campo]} disabled={!activo} onChange={e => set(campo, e.target.value)} style={{ background: activo ? undefined : '#f1f5f9', cursor: activo ? undefined : 'not-allowed' }} /></div>
     );
     if (act === 'EXCAVACION DE MATERIAL' || act === 'ENROCADO')
       return <>{inp('anchoBase','Base B (m)')}{inp('corona','Corona b (m)')}{inp('altura','Altura h (m)')}{inp('longitud','Longitud L (m)')}</>;
     if (act === 'CARGUIO DE MATERIAL')
-      return <>{inp('nViajes','N° Viajes','1')}{inp('volTolva','Vol. Tolva (m³)','0.1')}{inp('fe','Fe (esponj.)')}</>;
+      return <>{inp('nViajes','N° Viajes','1')}{inp('volTolva','Vol. Tolva (m³)')}{inp('fe','Fe (esponj.)')}</>;
     if (act === 'DESCOLMATACION DE CAUCE')
       return <>{inp('anchoSup','Ancho a (m)')}{inp('hPromedio','h promedio (m)')}{inp('longitud','Longitud L (m)')}</>;
     if (act === 'ELIMINACION')
-      return <>{inp('nViajes','N° Viajes','1')}{inp('volTolva','Vol. Tolva (m³)','0.1')}</>;
+      return <>{inp('nViajes','N° Viajes','1')}{inp('volTolva','Vol. Tolva (m³)')}</>;
     if (act === 'CONFORMACION DE DIQUE')
-      return <>{inp('corona','Corona b (m)')}{inp('altura','Altura h (m)')}{inp('talud','Talud Z (H:V)','0.1')}{inp('longitud','Longitud L (m)')}</>;
+      return <>{inp('corona','Corona b (m)')}{inp('altura','Altura h (m)')}{inp('talud','Talud Z (H:V)')}{inp('longitud','Longitud L (m)')}</>;
     if (act === 'PERFILADO DE TALUD')
-      return <>{inp('altura','Altura h (m)')}{inp('talud','Talud Z (H:V)','0.1')}{inp('longitud','Longitud L (m)')}</>;
+      return <>{inp('altura','Altura h (m)')}{inp('talud','Talud Z (H:V)')}{inp('longitud','Longitud L (m)')}</>;
     if (act === 'HABILITACION DE ACCESO')
       return <div className="tbl-col-4">{inp('longitud','Longitud L (m)')}</div>;
     return null;
@@ -2062,8 +2071,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                             ? `${e.numPersonas} pers × ${e.horasTrabajo}h${parseFloat(e.horasExtras) > 0 ? ` + ${e.horasExtras}h ext` : ''}`
                                             : `Entrada ${idx + 1}`}
                                         </td>
-                                        <td className="tbl-text-end">{e.cantidad.toLocaleString('es-PE', {minimumFractionDigits: r.tipo==='Personal'?1:2, maximumFractionDigits: r.tipo==='Personal'?1:2})} <span style={{fontSize:'10px', color:'#94a3b8'}}>{r.tipo === 'Personal' ? 'HH' : e.unidad}</span></td>
-                                        <td className="tbl-text-end">S/ {fmtNum(e.precioUnitario)}</td>
+                                        <td className="tbl-text-end">{fmtCant(e.cantidad)} <span style={{fontSize:'10px', color:'#94a3b8'}}>{r.tipo === 'Personal' ? 'HH' : e.unidad}</span></td>
+                                        <td className="tbl-text-end">S/ {fmtCant(e.precioUnitario)}</td>
                                         <td className="tbl-text-end" style={{ color:'#475569' }}>S/ {fmtNum(e.total)}</td>
                                         <td>
                                           {!bloqueado && (
@@ -2075,7 +2084,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                     <tr style={{ background:'#f1f5f9', borderBottom:'2px solid #e2e8f0' }}>
                                       <td></td>
                                       <td style={{ fontSize:'11px', fontWeight:700, color:'#334155', textAlign:'right' }}>Total {(r.descripcion || r.descripcionResumen || '').split('\n')[0]}</td>
-                                      <td className="tbl-text-end" style={{ fontWeight:700, color:'#334155' }}>{r.cantidadTotal.toLocaleString('es-PE', {minimumFractionDigits: r.tipo==='Personal'?1:2, maximumFractionDigits: r.tipo==='Personal'?1:2})} <span style={{fontSize:'10px', color:'#626976'}}>{r.tipo === 'Personal' ? 'HH' : (r.unidad||'und')}</span></td>
+                                      <td className="tbl-text-end" style={{ fontWeight:700, color:'#334155' }}>{fmtCant(r.cantidadTotal)} <span style={{fontSize:'10px', color:'#626976'}}>{r.tipo === 'Personal' ? 'HH' : (r.unidad||'und')}</span></td>
                                       <td></td>
                                       <td className="tbl-text-end text-blue" style={{ fontWeight:700 }}>S/ {fmtNum(r.totalSum)}</td>
                                       <td></td>
@@ -2093,8 +2102,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                       : (r.descripcionResumen || r.descripcion)}
                                     {r.count > 1 && <span style={{marginLeft:'6px', backgroundColor:'#e0f2fe', color:'#0284c7', fontWeight:'bold', fontSize:'10px', padding:'1px 6px', borderRadius:'10px'}}>×{r.count}</span>}
                                   </td>
-                                  <td className="tbl-text-end font-bold">{r.cantidadTotal.toLocaleString('es-PE', {minimumFractionDigits: r.tipo==='Personal'?1:2, maximumFractionDigits: r.tipo==='Personal'?1:2})} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und')}</span></td>
-                                  <td className="tbl-text-end">S/ {fmtNum(r.tipo === 'Insumo' && r.cantidadTotal > 0 ? (r.totalSum / r.cantidadTotal) : r.precioUnitario)}</td>
+                                  <td className="tbl-text-end font-bold">{fmtCant(r.cantidadTotal)} <span style={{fontSize: '10px', marginLeft: '4px', color: '#626976'}}>{r.tipo === 'Personal' ? 'HH' : r.tipo === 'Maquinaria' ? 'HE' : (r.unidad||'und')}</span></td>
+                                  <td className="tbl-text-end">S/ {fmtCant(r.tipo === 'Insumo' && r.cantidadTotal > 0 ? (r.totalSum / r.cantidadTotal) : r.precioUnitario)}</td>
                                   <td className="tbl-text-end text-blue font-bold">S/ {fmtNum(r.totalSum)}</td>
                                   <td>
                                     {r.tipo === 'Maquinaria' ? (
@@ -2288,13 +2297,13 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                       </button>
                     </div>
                     <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col-3"><label className="tbl-form-label">Precio Unit. (S/ HE)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
+                      <div className="tbl-col-3"><label className="tbl-form-label">Precio Unit. (S/ HE)</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
                     </div>
                     <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col"><label className="tbl-form-label">HM Inicio <span style={{color:'red'}}>*</span> {parseFloat(nuevoRecurso.hmInicio) > 0 && <span style={{color:'#0284c7', fontSize:'10px', fontWeight:600}}>· viene del parte anterior</span>}</label><input type="number" step="0.1" className="tbl-form-control" value={nuevoRecurso.hmInicio} onChange={e => setNuevoRecurso({...nuevoRecurso, hmInicio: e.target.value})} /></div>
-                      <div className="tbl-col"><label className="tbl-form-label">HM Fin <span style={{color:'red'}}>*</span></label><input type="number" step="0.1" className="tbl-form-control" value={nuevoRecurso.hmFin} onChange={e => setNuevoRecurso({...nuevoRecurso, hmFin: e.target.value})} /></div>
+                      <div className="tbl-col"><label className="tbl-form-label">HM Inicio <span style={{color:'red'}}>*</span> {parseFloat(nuevoRecurso.hmInicio) > 0 && <span style={{color:'#0284c7', fontSize:'10px', fontWeight:600}}>· viene del parte anterior</span>}</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.hmInicio} onChange={e => setNuevoRecurso({...nuevoRecurso, hmInicio: e.target.value})} /></div>
+                      <div className="tbl-col"><label className="tbl-form-label">HM Fin <span style={{color:'red'}}>*</span></label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.hmFin} onChange={e => setNuevoRecurso({...nuevoRecurso, hmFin: e.target.value})} /></div>
                       <div className="tbl-col-auto" style={{display: 'flex', flexDirection: 'column', justifyContent: 'flex-end'}}><div style={{background: '#e0f2fe', color: '#0284c7', padding: '8px 12px', borderRadius: '4px', fontWeight: 'bold', fontSize: '13px', border: '1px solid #bae6fd'}}>Horas: {horasMaquina} h</div></div>
-                      <div className="tbl-col"><label className="tbl-form-label">Combustible (Gls)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.combustible} onChange={e => setNuevoRecurso({...nuevoRecurso, combustible: e.target.value})} /></div>
+                      <div className="tbl-col"><label className="tbl-form-label">Combustible (Gls)</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.combustible} onChange={e => setNuevoRecurso({...nuevoRecurso, combustible: e.target.value})} /></div>
                       <div className="tbl-col"><label className="tbl-form-label">Vale N°</label><input type="text" className="tbl-form-control" value={nuevoRecurso.vale} onChange={e => setNuevoRecurso({...nuevoRecurso, vale: e.target.value})} /></div>
                     </div>
                     {(() => {
@@ -2305,7 +2314,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                         <div className="tbl-row tbl-mb-3">
                           <div className="tbl-col-3">
                             <label className="tbl-form-label">Horas Efectivas (HE)</label>
-                            <input type="number" min="0" max={totalHM} step="0.1" className="tbl-form-control"
+                            <input type="number" min="0" max={totalHM} step={STEP4} className="tbl-form-control"
                               placeholder={String(totalHM)}
                               value={nuevoRecurso.horasEfectivas}
                               onChange={e => setNuevoRecurso({...nuevoRecurso, horasEfectivas: e.target.value})}
@@ -2314,7 +2323,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                           </div>
                           <div className="tbl-col">
                             <label className="tbl-form-label">
-                              Observación {hayReduccion ? <span style={{color:'#d97706',fontSize:'11px',fontWeight:600}}>· requerida (reducción de {(totalHM - efectivas).toFixed(1)} HE)</span> : <span style={{color:'#94a3b8',fontSize:'11px'}}>· opcional</span>}
+                              Observación {hayReduccion ? <span style={{color:'#d97706',fontSize:'11px',fontWeight:600}}>· requerida (reducción de {fmtCant(totalHM - efectivas)} HE)</span> : <span style={{color:'#94a3b8',fontSize:'11px'}}>· opcional</span>}
                             </label>
                             <input type="text" className="tbl-form-control"
                               placeholder={hayReduccion ? 'Detalla el motivo de la reducción de horas...' : 'Sin observaciones de reducción'}
@@ -2387,13 +2396,13 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                           {(!esActividadOtros && nuevoRecurso.calcularMetrado) ? (
                             <>
                               <span style={{ fontSize:'11px', color:'#626976' }}>{formulaMetrado[nuevoRecurso.actividad]}</span>
-                              <span style={{ fontSize:'16px', fontWeight:'700', color: volCalc.val > 0 ? '#1463A5' : '#94a3b8' }}>{fmtNum(volumenMetrado)} {volCalc.unit}</span>
+                              <span style={{ fontSize:'16px', fontWeight:'700', color: volCalc.val > 0 ? '#1463A5' : '#94a3b8' }}>{fmtCant(volumenMetrado)} {volCalc.unit}</span>
                             </>
                           ) : (
                             <>
                               <span style={{ fontSize:'11px', color:'#626976', whiteSpace:'nowrap' }}>Metrado (ingreso manual){esActividadOtros && <span style={{color:'red'}}> *</span>}</span>
                               <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                                <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00"
+                                <input type="number" step={STEP4} className="tbl-form-control" placeholder="0.0000"
                                   value={nuevoRecurso.metradoManual}
                                   onChange={e => setNuevoRecurso({ ...nuevoRecurso, metradoManual: e.target.value })}
                                   style={{ width:'130px', textAlign:'right', fontWeight:700, color:'#1463A5' }} />
@@ -2439,23 +2448,23 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                       </select>
                     </div>
                     <div className="tbl-col-2"><label className="tbl-form-label">N° Personas</label><input type="number" min="1" className="tbl-form-control" value={nuevoRecurso.numPersonas} onChange={e => setNuevoRecurso({...nuevoRecurso, numPersonas: e.target.value})} /></div>
-                    <div className="tbl-col-2"><label className="tbl-form-label">H. Normales</label><input type="number" min="0" className="tbl-form-control" value={nuevoRecurso.horasTrabajo} onChange={e => setNuevoRecurso({...nuevoRecurso, horasTrabajo: e.target.value})} /></div>
-                    <div className="tbl-col-2"><label className="tbl-form-label">H. Extras</label><input type="number" min="0" className="tbl-form-control" value={nuevoRecurso.horasExtras} onChange={e => setNuevoRecurso({...nuevoRecurso, horasExtras: e.target.value})} /></div>
-                    <div className="tbl-col-2"><label className="tbl-form-label">S/ por HH</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
-                    <div className="tbl-col-1"><label className="tbl-form-label">Total</label><input type="text" className="tbl-form-control" disabled value={((parseInt(nuevoRecurso.numPersonas)||0) * ((parseFloat(nuevoRecurso.horasTrabajo)||0) + (parseFloat(nuevoRecurso.horasExtras)||0))) || 0} style={{backgroundColor: '#e0f2fe', color: '#0284c7', fontWeight: 'bold'}} title="Total HH teóricas" /></div>
+                    <div className="tbl-col-2"><label className="tbl-form-label">H. Normales</label><input type="number" min="0" step={STEP4} className="tbl-form-control" value={nuevoRecurso.horasTrabajo} onChange={e => setNuevoRecurso({...nuevoRecurso, horasTrabajo: e.target.value})} /></div>
+                    <div className="tbl-col-2"><label className="tbl-form-label">H. Extras</label><input type="number" min="0" step={STEP4} className="tbl-form-control" value={nuevoRecurso.horasExtras} onChange={e => setNuevoRecurso({...nuevoRecurso, horasExtras: e.target.value})} /></div>
+                    <div className="tbl-col-2"><label className="tbl-form-label">S/ por HH</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
+                    <div className="tbl-col-1"><label className="tbl-form-label">Total</label><input type="text" className="tbl-form-control" disabled value={round4((parseInt(nuevoRecurso.numPersonas)||0) * ((parseFloat(nuevoRecurso.horasTrabajo)||0) + (parseFloat(nuevoRecurso.horasExtras)||0))) || 0} style={{backgroundColor: '#e0f2fe', color: '#0284c7', fontWeight: 'bold'}} title="Total HH teóricas" /></div>
                   </div>
                   </>
                 ) : (
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col"><label className="tbl-form-label">Descripción del Insumo</label><input type="text" className="tbl-form-control" placeholder="Ej. Piedra chancada, Cemento..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
-                    <div className="tbl-col-2"><label className="tbl-form-label">Cant.</label><input type="number" step="0.01" className="tbl-form-control" value={nuevoRecurso.cantidad} onChange={e => setNuevoRecurso({...nuevoRecurso, cantidad: e.target.value})} /></div>
+                    <div className="tbl-col-2"><label className="tbl-form-label">Cant.</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.cantidad} onChange={e => setNuevoRecurso({...nuevoRecurso, cantidad: e.target.value})} /></div>
                     <div className="tbl-col-2">
                       <label className="tbl-form-label">Unidad <button type="button" onClick={gestionarUnidades} title="Gestionar unidades" style={{ background:'none', border:'none', color:'#206bc4', cursor:'pointer', fontSize:'11px', padding:'0 0 0 4px' }}><FaPlus /> gestionar</button></label>
                       <select className="tbl-form-select" value={nuevoRecurso.unidad} onChange={e => setNuevoRecurso({...nuevoRecurso, unidad: e.target.value})}>
                         {catUnidades.map(u => <option key={u} value={u}>{u}</option>)}
                       </select>
                     </div>
-                    <div className="tbl-col-2"><label className="tbl-form-label">Precio Unit. (S/)</label><input type="number" className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
+                    <div className="tbl-col-2"><label className="tbl-form-label">Precio Unit. (S/)</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
                   </div>
                 )}
 
@@ -2518,8 +2527,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                             </span>
                           </td>
                           <td style={{ padding:'12px 10px', color:'#475569', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={actTxt}>{actTxt}</td>
-                          <td style={{ padding:'12px 10px', textAlign:'right', fontWeight:600, color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(horas)} HE</td>
-                          <td style={{ padding:'12px 10px', textAlign:'right', color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(reg.combustible || 0)} Gls</td>
+                          <td style={{ padding:'12px 10px', textAlign:'right', fontWeight:600, color:'#334155', whiteSpace:'nowrap' }}>{fmtCant(horas)} HE</td>
+                          <td style={{ padding:'12px 10px', textAlign:'right', color:'#334155', whiteSpace:'nowrap' }}>{fmtCant(reg.combustible || 0)} Gls</td>
                           <td style={{ padding:'12px 10px', textAlign:'right', fontWeight:700, color:'#1463A5', whiteSpace:'nowrap' }}>S/ {fmtNum(reg.total || 0)}</td>
                           <td style={{ padding:'12px 22px' }}>
                             <div style={{ display:'flex', gap:'6px', justifyContent:'flex-end', alignItems:'center' }}>
@@ -2547,8 +2556,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                       <td colSpan="4" style={{ padding:'14px 22px', fontWeight:700, color:'#334155' }}>
                         TOTAL · {modalPartes.count} parte{modalPartes.count !== 1 ? 's' : ''}
                       </td>
-                      <td style={{ padding:'14px 10px', textAlign:'right', fontWeight:700, color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(modalPartes.cantidadTotal)} HE</td>
-                      <td style={{ padding:'14px 10px', textAlign:'right', fontWeight:700, color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(modalPartes.partesMaq.reduce((s, p) => s + (parseFloat(p.registro?.combustible) || 0), 0))} Gls</td>
+                      <td style={{ padding:'14px 10px', textAlign:'right', fontWeight:700, color:'#334155', whiteSpace:'nowrap' }}>{fmtCant(modalPartes.cantidadTotal)} HE</td>
+                      <td style={{ padding:'14px 10px', textAlign:'right', fontWeight:700, color:'#334155', whiteSpace:'nowrap' }}>{fmtCant(modalPartes.partesMaq.reduce((s, p) => s + (parseFloat(p.registro?.combustible) || 0), 0))} Gls</td>
                       <td style={{ padding:'14px 10px', textAlign:'right', fontWeight:800, fontSize:'15px', color:'#1463A5', whiteSpace:'nowrap' }}>S/ {fmtNum(modalPartes.totalSum)}</td>
                       <td style={{ padding:'14px 22px' }}></td>
                     </tr>
