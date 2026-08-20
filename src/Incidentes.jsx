@@ -104,7 +104,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     marcaId: '', marca: '',
     modeloId: '', placa: '', modeloMaquina: '', codigoMaquina: '',
     hmInicio: '', hmFin: '', combustible: '', vale: '', fotoVale: null,
-    actividad: '', observaciones: '', fotoParte: null,
+    actividad: '', actividadOtros: '', observaciones: '', fotoParte: null,
     incluirMetrado: false, longitud: '', altura: '', anchoSup: '', anchoInf: '',
     nViajes: '', volTolva: '', fe: '1.25', hPromedio: '', anchoBase: '', corona: '', talud: '',
     // Metrado: por defecto se ingresa MANUAL. Al marcar el check se calcula por fórmula.
@@ -702,8 +702,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   // ── Cálculo de metrado según actividad ──────────────────────────────────
   // Calcula el metrado de CUALQUIER recurso (no solo el del formulario abierto).
   const calcMetradoDe = (r) => {
-    // Sin el check marcado, el metrado es el que el usuario escribe a mano.
-    if (!r.calcularMetrado) {
+    // OTROS, o sin el check marcado → el metrado es el que el usuario escribe a mano.
+    if (r.actividad === 'OTROS' || !r.calcularMetrado) {
       return { val: parseFloat(r.metradoManual) || 0, unit: UNIDADES_METRADO_TXT[r.unidadMetrado] || r.unidadMetrado || 'm³' };
     }
     const L = parseFloat(r.longitud)||0, h = parseFloat(r.altura)||0;
@@ -729,7 +729,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const volumenMetrado = volCalc.val.toFixed(2);
   // Formatea números con separador de miles (1000000.00 → 1,000,000.00)
   const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const tieneMetradoActividad = IMG_METRADO[nuevoRecurso.actividad] !== undefined;
+  // OTROS = actividad libre: sin fórmula ni medidas, solo metrado manual.
+  const esActividadOtros = nuevoRecurso.actividad === 'OTROS';
+  const tieneMetradoActividad = IMG_METRADO[nuevoRecurso.actividad] !== undefined || esActividadOtros;
+  // Texto de actividad que se muestra/guarda (en OTROS, la descripción escrita).
+  const textoActividad = (r) => (r.actividad === 'OTROS' ? (r.actividadOtros || '').trim() : (r.actividad || ''));
 
   // Abre el modal de "Añadir". Para maquinaria abre primero el SELECTOR de
   // máquina (paso 1). Personal/Insumo abren su formulario directo.
@@ -901,6 +905,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       if (!nuevoRecurso.numeroParte) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Número de Parte es obligatorio' });
       if (!nuevoRecurso.proveedor || !nuevoRecurso.proveedor.trim()) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Proveedor es obligatorio' });
       if (!nuevoRecurso.equipo) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un equipo' });
+      if (!nuevoRecurso.actividad) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona la actividad realizada' });
+      // OTROS: exige descripción escrita y metrado manual (no hay fórmula).
+      if (nuevoRecurso.actividad === 'OTROS' && !nuevoRecurso.actividadOtros.trim())
+        return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Escribe la descripción de la actividad realizada.' });
+      if (nuevoRecurso.actividad === 'OTROS' && !(parseFloat(nuevoRecurso.metradoManual) > 0))
+        return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa el metrado manual de la actividad.' });
       const efectivas = (nuevoRecurso.horasEfectivas === '' || nuevoRecurso.horasEfectivas === null)
         ? totalHM
         : parseFloat(nuevoRecurso.horasEfectivas) || 0;
@@ -1748,20 +1758,26 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           formData.append('brand_name', r.marca);
           formData.append('model_plate', r.placa ? `${r.modeloMaquina || ''} / ${r.placa}`.trim() : (r.modeloMaquina || '')); formData.append('start_horometer', parseFloat(r.hmInicio) || 0);
           formData.append('end_horometer', parseFloat(r.hmFin) || 0); formData.append('fuel_gallons', parseFloat(r.combustible) || 0);
-          formData.append('fuel_voucher', r.vale); formData.append('activities', r.actividad);
+          formData.append('fuel_voucher', r.vale);
+          // En OTROS se guarda la descripción escrita, no la palabra "OTROS".
+          formData.append('activities', textoActividad(r));
           formData.append('observations', r.observaciones); formData.append('unit_price', r.precioUnitario);
           if (r.fotoParte) formData.append('part_photo', r.fotoParte);
           if (r.fotoVale) formData.append('voucher_photo', r.fotoVale);
-          if (r.incluirMetrado || IMG_METRADO[r.actividad]) {
-            if (r.anchoSup !== '' && r.anchoSup != null) formData.append('width_top', r.anchoSup);
-            if (r.anchoInf !== '' && r.anchoInf != null) formData.append('width_bottom', r.anchoInf);
-            if (r.altura !== '' && r.altura != null) formData.append('height', r.altura);
-            if (r.longitud !== '' && r.longitud != null) formData.append('length', r.longitud);
+          if (r.incluirMetrado || IMG_METRADO[r.actividad] || r.actividad === 'OTROS') {
+            // OTROS no lleva medidas de campo: solo el metrado manual.
+            if (r.actividad !== 'OTROS') {
+              if (r.anchoSup !== '' && r.anchoSup != null) formData.append('width_top', r.anchoSup);
+              if (r.anchoInf !== '' && r.anchoInf != null) formData.append('width_bottom', r.anchoInf);
+              if (r.altura !== '' && r.altura != null) formData.append('height', r.altura);
+              if (r.longitud !== '' && r.longitud != null) formData.append('length', r.longitud);
+            }
             // Metrado final: calculado por fórmula o ingresado a mano.
             const mv = calcMetradoDe(r);
+            const calculado = r.actividad !== 'OTROS' && !!r.calcularMetrado;
             formData.append('metrado', mv.val.toFixed(2));
-            formData.append('metrado_unidad', r.calcularMetrado ? mv.unit : (r.unidadMetrado || 'm3'));
-            formData.append('metrado_calculado', r.calcularMetrado ? 'true' : 'false');
+            formData.append('metrado_unidad', calculado ? mv.unit : (r.unidadMetrado || 'm3'));
+            formData.append('metrado_calculado', calculado ? 'true' : 'false');
           }
         }
         const res = await fetch(endpoint, { method: 'POST', body: formData });
@@ -2308,7 +2324,17 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                     })()}
                     <div className="tbl-row tbl-mb-3">
                       <div className="tbl-col"><label className="tbl-form-label">Actividades Realizadas <span style={{color:'red'}}>*</span></label>
-                        <select className="tbl-form-select" value={nuevoRecurso.actividad} onChange={e => setNuevoRecurso({...nuevoRecurso, actividad: e.target.value})}>
+                        <select className="tbl-form-select" value={nuevoRecurso.actividad} onChange={e => {
+                            const v = e.target.value;
+                            if (v === 'OTROS') {
+                              // OTROS: sin fórmula ni medidas de campo, solo metrado manual.
+                              setNuevoRecurso({ ...nuevoRecurso, actividad: v, calcularMetrado: false,
+                                longitud: '', altura: '', anchoSup: '', anchoInf: '', anchoBase: '', corona: '',
+                                talud: '', hPromedio: '', nViajes: '', volTolva: '', fe: '1.25' });
+                            } else {
+                              setNuevoRecurso({ ...nuevoRecurso, actividad: v, actividadOtros: '' });
+                            }
+                          }}>
                           <option value="">— Seleccionar actividad —</option>
                           <option value="EXCAVACION DE MATERIAL">EXCAVACIÓN DE MATERIAL</option>
                           <option value="CARGUIO DE MATERIAL">CARGUÍO DE MATERIAL</option>
@@ -2318,14 +2344,31 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                           <option value="ENROCADO">ENROCADO</option>
                           <option value="PERFILADO DE TALUD">PERFILADO DE TALUD</option>
                           <option value="HABILITACION DE ACCESO">HABILITACIÓN DE ACCESO</option>
+                          <option value="OTROS">OTROS (metrado manual)</option>
                         </select>
                       </div>
                       <div className="tbl-col"><label className="tbl-form-label">Observaciones</label><input type="text" className="tbl-form-control" placeholder="Condiciones del terreno, clima..." value={nuevoRecurso.observaciones} onChange={e => setNuevoRecurso({...nuevoRecurso, observaciones: e.target.value})} /></div>
                     </div>
-                    {/* ── Metrado por actividad (con imagen de referencia) ────── */}
+                    {/* Descripción libre de la actividad — solo cuando es OTROS */}
+                    {esActividadOtros && (
+                      <div className="tbl-row tbl-mb-3">
+                        <div className="tbl-col">
+                          <label className="tbl-form-label">Descripción de la actividad <span style={{color:'red'}}>*</span></label>
+                          <input type="text" className="tbl-form-control" placeholder="Ej. RIEGO DE PLATAFORMA CON CISTERNA"
+                            value={nuevoRecurso.actividadOtros}
+                            onChange={e => setNuevoRecurso({ ...nuevoRecurso, actividadOtros: e.target.value.toUpperCase() })} />
+                          <small style={{ fontSize:'11px', color:'#64748b' }}>Se guarda como la actividad del parte y aparece en el PDF y en los reportes.</small>
+                        </div>
+                      </div>
+                    )}
                     {/* ── Metrado por actividad (con imagen de referencia) ────── */}
                     {tieneMetradoActividad && (
                       <div style={{ background:'#f0f6ff', padding:'14px', borderRadius:'4px', border:'1px solid #bfdbfe', marginTop:'4px' }}>
+                        {esActividadOtros ? (
+                          <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5' }}>
+                            OTROS · metrado de ingreso manual
+                          </div>
+                        ) : (
                         <div style={{ display:'flex', gap:'14px', alignItems:'flex-start' }}>
                           <div style={{ flexShrink:0, width:'160px' }}>
                             <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5', marginBottom:'6px' }}>📐 Referencia</div>
@@ -2336,15 +2379,16 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                             <div className="tbl-row tbl-mb-2" style={{ gap:'8px' }}>{renderCamposMetrado()}</div>
                           </div>
                         </div>
+                        )}
                         <div style={{ marginTop:'8px', padding:'8px 12px', background:'#fff', borderRadius:'4px', border:'1px solid #bfdbfe', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'10px' }}>
-                          {nuevoRecurso.calcularMetrado ? (
+                          {(!esActividadOtros && nuevoRecurso.calcularMetrado) ? (
                             <>
                               <span style={{ fontSize:'11px', color:'#626976' }}>{formulaMetrado[nuevoRecurso.actividad]}</span>
                               <span style={{ fontSize:'16px', fontWeight:'700', color: volCalc.val > 0 ? '#1463A5' : '#94a3b8' }}>{fmtNum(volumenMetrado)} {volCalc.unit}</span>
                             </>
                           ) : (
                             <>
-                              <span style={{ fontSize:'11px', color:'#626976', whiteSpace:'nowrap' }}>Metrado (ingreso manual)</span>
+                              <span style={{ fontSize:'11px', color:'#626976', whiteSpace:'nowrap' }}>Metrado (ingreso manual){esActividadOtros && <span style={{color:'red'}}> *</span>}</span>
                               <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
                                 <input type="number" step="0.01" className="tbl-form-control" placeholder="0.00"
                                   value={nuevoRecurso.metradoManual}
@@ -2360,13 +2404,15 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                           )}
                         </div>
 
-                        {/* Check para activar el cálculo por fórmula */}
-                        <label style={{ marginTop:'8px', display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:'#1463A5', fontWeight:600, cursor:'pointer', userSelect:'none' }}>
-                          <input type="checkbox" checked={!!nuevoRecurso.calcularMetrado}
-                            onChange={e => setNuevoRecurso({ ...nuevoRecurso, calcularMetrado: e.target.checked })}
-                            style={{ width:'15px', height:'15px', cursor:'pointer' }} />
-                          Calcular metrado con las medidas de campo
-                        </label>
+                        {/* Check para activar el cálculo por fórmula (no aplica en OTROS) */}
+                        {!esActividadOtros && (
+                          <label style={{ marginTop:'8px', display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:'#1463A5', fontWeight:600, cursor:'pointer', userSelect:'none' }}>
+                            <input type="checkbox" checked={!!nuevoRecurso.calcularMetrado}
+                              onChange={e => setNuevoRecurso({ ...nuevoRecurso, calcularMetrado: e.target.checked })}
+                              style={{ width:'15px', height:'15px', cursor:'pointer' }} />
+                            Calcular metrado con las medidas de campo
+                          </label>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2457,6 +2503,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                     {modalPartes.partesMaq.map((p, idx) => {
                       const reg = p.registro || {};
                       const horas = parseFloat(reg.cantidad) || 0;
+                      // En OTROS el texto real de la actividad es la descripción escrita.
+                      const actTxt = textoActividad(reg) || '—';
                       return (
                         <tr key={p.idLocal || idx} style={{ borderBottom:'1px solid #f1f5f9', background: p.cerrado ? '#fff' : '#fffbeb' }}>
                           <td style={{ padding:'12px 22px', fontWeight:700, color:'#1e293b' }}>{p.numeroParte || `#${p.dbId}`}</td>
@@ -2466,7 +2514,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                               {p.cerrado ? 'CERRADO' : 'ABIERTO'}
                             </span>
                           </td>
-                          <td style={{ padding:'12px 10px', color:'#475569', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={reg.actividad || ''}>{reg.actividad || '—'}</td>
+                          <td style={{ padding:'12px 10px', color:'#475569', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={actTxt}>{actTxt}</td>
                           <td style={{ padding:'12px 10px', textAlign:'right', fontWeight:600, color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(horas)} HE</td>
                           <td style={{ padding:'12px 10px', textAlign:'right', color:'#334155', whiteSpace:'nowrap' }}>{fmtNum(reg.combustible || 0)} Gls</td>
                           <td style={{ padding:'12px 10px', textAlign:'right', fontWeight:700, color:'#1463A5', whiteSpace:'nowrap' }}>S/ {fmtNum(reg.total || 0)}</td>
