@@ -1129,7 +1129,6 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           return filas;
         })(),
         foot: [[{ content: 'COSTO TOTAL:', colSpan: 5, styles: { halign: 'right' } }, `S/ ${fmtNum(costoTotalIncidente)}`, '']],
-        showFoot: 'lastPage',   // el total va solo al final, no en cada página
         styles:{fontSize:8,cellPadding:2.5,lineColor:[226,232,240],lineWidth:0.1},
         headStyles:{fillColor:[20,99,165],textColor:[255,255,255],fontStyle:'bold',fontSize:8},
         footStyles:{fillColor:[241,245,249],textColor:[30,41,59],fontStyle:'bold',fontSize:9},
@@ -1430,7 +1429,6 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           (datos[String(i.id)]?.total || 0).toFixed(2),
         ])),
         foot: [['', '', '', '', '', '', '', 'TOTAL GENERAL', totalGeneral.toFixed(2)]],
-        showFoot: 'lastPage',   // el total va solo al final, no en cada página
         styles: { fontSize: 7.5, cellPadding: 2 },
         headStyles: { fillColor: [20, 99, 165], textColor: 255, fontSize: 7.5 },
         footStyles: { fillColor: [224, 242, 254], textColor: [20, 99, 165], fontStyle: 'bold' },
@@ -1471,7 +1469,6 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           autoTable(doc, {
             startY: y + 2,
             head: [head], body, foot: foots ? [foots] : undefined,
-            showFoot: 'lastPage',   // el subtotal va solo al final del bloque
             styles: { fontSize: 7.5, cellPadding: 1.8 },
             headStyles: { fillColor: [100, 116, 139], textColor: 255, fontSize: 7.5 },
             footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 7.5 },
