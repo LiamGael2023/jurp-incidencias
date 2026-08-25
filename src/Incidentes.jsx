@@ -171,6 +171,14 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   // La API no devuelve el código de máquina, así que lo buscamos en el catálogo
   // por placa o por modelo+marca (misma lógica que el backend al liberar).
   const detalleMaquinaDeParte = (parte, catalogo) => {
+    // Si el parte trae el FK de la máquina, esa es la identidad exacta.
+    if (parte.maquina) {
+      const m = catalogo.find(x => String(x.id) === String(parte.maquina));
+      if (m) {
+        return [m.codigo, '·', m.equipo_nombre || parte.equipment_name || '', m.marca_nombre || parte.brand_name || '', m.modelo || '']
+          .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+      }
+    }
     const mp = (parte.model_plate || '').trim();
     const marcaTxt = (parte.brand_name || '').trim();
     const equipoTxt = (parte.equipment_name || '').trim();
@@ -518,8 +526,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         const mp = (i.model_plate || '').trim();
         let modeloTxt = mp, placaTxt = mp;
         if (mp.includes('/')) { const [a, b] = mp.split('/', 2).map(x => x.trim()); modeloTxt = a; placaTxt = b || ''; }
-        let maq = null;
-        if (placaTxt) maq = todosModelos.find(m => m.placa && m.placa.toLowerCase() === placaTxt.toLowerCase());
+        // El FK manda; el texto solo es respaldo para partes antiguos.
+        let maq = i.maquina ? todosModelos.find(m => String(m.id) === String(i.maquina)) : null;
+        if (!maq && placaTxt) maq = todosModelos.find(m => m.placa && m.placa.toLowerCase() === placaTxt.toLowerCase());
         if (!maq && modeloTxt) {
           const porModelo = todosModelos.filter(m => m.modelo && m.modelo.toLowerCase() === modeloTxt.toLowerCase());
           maq = porModelo.find(m => (m.marca_nombre || '').toLowerCase() === (i.brand_name || '').toLowerCase()) || porModelo[0];
@@ -1766,6 +1775,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           formData.append('provider', r.proveedor); formData.append('operator', r.operador);
           formData.append('licencia', r.licencia || ''); formData.append('categoria', r.categoria || '');
           if (r.longitud !== '' && r.longitud != null) formData.append('longitud', r.longitud);
+          // Identidad exacta de la máquina: evita confundir unidades con la
+          // misma marca y modelo cuando ninguna tiene placa.
+          if (r.modeloId) formData.append('maquina', r.modeloId);
           formData.append('equipment_name', r.equipo);
           formData.append('brand_name', r.marca);
           formData.append('model_plate', r.placa ? `${r.modeloMaquina || ''} / ${r.placa}`.trim() : (r.modeloMaquina || '')); formData.append('start_horometer', parseFloat(r.hmInicio) || 0);
