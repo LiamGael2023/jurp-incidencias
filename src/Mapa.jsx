@@ -154,12 +154,18 @@ function ClusteredLayer({ data, icon, color, label, buildPopup }) {
   return null;
 }
 
+// Un incidente atendido (ate) o cerrado (cer) ya no es un problema abierto.
+const estaResuelto = (estado) => estado === 'ate' || estado === 'cer';
+
 // Icono de incidente. Fuera del componente para que su identidad no cambie
 // en cada render y no rearme el cluster.
-const crearIconoIncidente = (g) => {
+// El color dice el ESTADO: verde si ya se resolvió; si sigue abierto, la
+// gravedad (amarillo leve, naranja moderada, rojo grave).
+const crearIconoIncidente = (g, estado) => {
   let c = '#f59f00';
   if (g === 'mod') c = '#f76707';
   if (g === 'gra') c = '#ef4444';
+  if (estaResuelto(estado)) c = '#2fb344';
   return divIcon({ className: 'icono-vacio', html: `<div style="position:relative;width:20px;height:20px"><div style="position:absolute;inset:0;background:${c};opacity:0.4;border-radius:50%;animation:pulse 1.5s infinite"></div><div style="position:absolute;top:4px;left:4px;width:12px;height:12px;background:${c};border:2px solid rgba(0,0,0,0.3);border-radius:50%;box-shadow:0 0 8px ${c}88"></div></div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
 };
 // Estados de JURP: los escribe la app móvil.
@@ -182,8 +188,10 @@ function ClusterIncidentes({ incidentes, onSeleccionar }) {
       iconCreateFunction: (cl) => {
         const n = cl.getChildCount();
         const hijos = cl.getAllChildMarkers();
-        const grave = hijos.some(m => m.options.gravedad === 'gra');
-        const c = grave ? '#ef4444' : '#f59f00';
+        // Solo cuentan los que siguen abiertos: si todos se resolvieron, verde.
+        const abiertos = hijos.filter(m => !estaResuelto(m.options.estado));
+        const grave = abiertos.some(m => m.options.gravedad === 'gra');
+        const c = abiertos.length === 0 ? '#2fb344' : (grave ? '#ef4444' : '#f59f00');
         const sz = n > 20 ? 42 : n > 8 ? 36 : 30;
         return L.divIcon({
           html: `<div style="background:${c};color:#fff;border-radius:50%;width:${sz}px;height:${sz}px;display:flex;align-items:center;justify-content:center;font-size:${sz > 36 ? 14 : 12}px;font-weight:700;border:2px solid rgba(255,255,255,.45);box-shadow:0 0 14px ${c}88">${n}</div>`,
@@ -192,7 +200,7 @@ function ClusterIncidentes({ incidentes, onSeleccionar }) {
       },
     });
     for (const inc of incidentes) {
-      const m = L.marker([inc.lat, inc.lng], { icon: crearIconoIncidente(inc.gravedad), gravedad: inc.gravedad });
+      const m = L.marker([inc.lat, inc.lng], { icon: crearIconoIncidente(inc.gravedad, inc.estado), gravedad: inc.gravedad, estado: inc.estado });
       m.bindTooltip(inc.tipo || 'Incidente', { direction: 'top', offset: [0, -14], className: 'tooltip-infra' });
       m.on('click', () => onSeleccionar(inc));
       grupo.addLayer(m);
@@ -264,7 +272,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [incSeleccionado, setIncSeleccionado] = useState(null); // incidente filtrado en panel recursos
   const [panelMin, setPanelMin] = useState({ incidentes: false, recursos: false, infra: false });
   const toggleMin = (k) => setPanelMin(p => ({ ...p, [k]: !p[k] }));
-  const [filtroEstadoInc, setFiltroEstadoInc] = useState('');   // '' | 'pat' | 'ate' | 'cer'
+  const [filtroEstadoInc, setFiltroEstadoInc] = useState('');   // '' | 'pat' | 'eat' | 'ate'
   const [ultimaAct, setUltimaAct] = useState(null);             // timestamp real de la última carga
   const [ahora, setAhora] = useState(Date.now());               // reloj para el "hace X min"
 
@@ -294,8 +302,8 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     // Si hay incidente seleccionado, filtra solo sus recursos.
     const fil = (arr) => incSeleccionado ? arr.filter(x => String(x.incident_report) === String(incSeleccionado.id)) : arr;
     const pers = fil(allPers), mats = fil(allMats), maqs = fil(allMaqs);
-        // Un incidente resuelto o cerrado ya no tiene maquinaria trabajando.
-    const incCerrado = (id) => { const i = incidentesAPI.find(x => String(x.id) === String(id)); return i?.estado === 'ate' || i?.estado === 'cer'; };
+    // Un incidente resuelto o cerrado ya no tiene maquinaria trabajando.
+    const incCerrado = (id) => { const i = incidentesAPI.find(x => String(x.id) === String(id)); return estaResuelto(i?.estado); };
 
     // Personal: agrupa por descripción (cargo)
     const gPers = {};
@@ -390,6 +398,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         autoTable(doc, {
           startY: y + 2,
           head: [head], body, foot: [foot],
+          showFoot: 'lastPage',
           styles: { fontSize: 8, cellPadding: 2 },
           headStyles: { fillColor: [100, 116, 139], textColor: 255, fontSize: 8 },
           footStyles: { fillColor: [224, 242, 254], textColor: [20, 99, 165], fontStyle: 'bold', fontSize: 8 },
@@ -995,7 +1004,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     const skip = new Set(['name', 'folder', 'FID', 'nro_ord', 'N_', 'Nº', 'Label', 'Field', '_tipo']);
     const lm = { NOMBRE: 'Nombre', PROGRESIVA: 'Progresiva', ESTADO: 'Estado', TRAMO: 'Tramo', ESTRUCTURA: 'Estructura', COD_EST: 'Canal/Sistema', ESTE: 'Este', NORTE: 'Norte' };
     const rows = Object.entries(props).filter(([k, v]) => !skip.has(k) && v && String(v).trim()).map(([k, v]) => `<tr><td style="color:#7fa5c0;padding:3px 8px 3px 0;font-size:11px">${lm[k] || k}</td><td style="font-weight:500;font-size:11px;color:#eaf3fa">${v}</td></tr>`).join('');
-    return `<div style="font-family:system-ui;min-width:200px;color:#dce9f5"><div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:6px;margin-bottom:6px">${iconUrl ? `<img src="${iconUrl}" style="width:24px;height:24px"/>` : ''}<div><div style="font-weight:700;font-size:13px;color:#eef6fd">${props.name || ''}</div><div style="font-size:10px;color:#7fa5c0">${label}</div></div></div>${rows ? `<table style="border-collapse:collapse;width:100%">${rows}</table>` : '<span style="font-size:11px;color:#7fa5c0">Sin datos</span>'}</div>`;
+    return `<div style="font-family:system-ui;min-width:200px;color:#dce9f5"><div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:6px;margin-bottom:6px">${iconUrl ? `<img src="${iconUrl}" style="width:24px;height:24px"/>` : ''}<div><div style="font-weight:700;font-size:13px;color:#eef6fd">${props.name || ''}</div><div style="font-size:10px;color:#7fa5c0">${label}</div></div></div>${rows ? `<table style="border-collapse:collapse;width:100%"><tbody>${rows}</tbody></table>` : '<span style="font-size:11px;color:#7fa5c0">Sin datos</span>'}</div>`;
   }, []);
 
   const maxInfra = Math.max(1, ...porTipoInfra.map(t => t.value));
@@ -1076,7 +1085,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                      <div style="font-weight:700;font-size:13px;color:#eef6fd;border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:6px;margin-bottom:6px">
                        ${nombre}<div style="font-size:10px;font-weight:600;color:${c.color}">${c.nombre}</div>
                      </div>
-                     ${filas ? `<table style="border-collapse:collapse;width:100%">${filas}</table>`
+                     ${filas ? `<table style="border-collapse:collapse;width:100%"><tbody>${filas}</tbody></table>`
                              : '<span style="font-size:11px;color:#7fa5c0">Sin atributos</span>'}
                    </div>`, { maxWidth: 320 });
               }} />
@@ -1192,7 +1201,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           <span className="gis-kpi-ico" style={{ background: 'rgba(245,159,10,.16)', color: '#f5b455' }}>⚠️</span>
           <span>
             <span className="gis-kpi-label">Incidentes</span>
-                        <span className="gis-kpi-valor">{incidentesAPI.length}<small>{incPend} pend · {incEnAte} aten · {incAte} res</small></span>
+            <span className="gis-kpi-valor">{incidentesAPI.length}<small>{incPend} pend · {incEnAte} aten · {incAte} res</small></span>
           </span>
         </div>
         <div className="gis-kpi gis-glass">
@@ -1555,9 +1564,12 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       </aside>
 
       {/* ══════════════ LEYENDA ══════════════ */}
+      {/* El color del pin es el ESTADO: verde si ya se resolvió; si sigue
+          abierto, el color de su gravedad. */}
       <div className="gis-leyenda gis-glass">
-        <span><i style={{ background: '#f59f00' }} />Pendiente</span>
-        <span><i style={{ background: '#d63939' }} />Atención</span>
+        <span><i style={{ background: '#f59f00' }} />Leve</span>
+        <span><i style={{ background: '#f76707' }} />Moderada</span>
+        <span><i style={{ background: '#ef4444' }} />Grave</span>
         <span><i style={{ background: '#2fb344' }} />Resuelto</span>
         <span className="gis-leyenda-sep" />
         <code>{cargandoAPIs ? 'ACTUALIZANDO…' : `ÚLT. ACT. ${haceRato(ultimaAct, ahora)}`}</code>
