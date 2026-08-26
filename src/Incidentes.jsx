@@ -80,6 +80,13 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const [cargandoMedia, setCargandoMedia] = useState(false);
   const [galeriaIncidente, setGaleriaIncidente] = useState(null);
 
+  // --- BITÁCORA DE ATENCIONES (mismas entradas que registra la app móvil) ---
+  const [modalBitacora, setModalBitacora] = useState(null);   // incidente activo
+  const [bitacora, setBitacora] = useState([]);
+  const [cargandoBitacora, setCargandoBitacora] = useState(false);
+  const [fotosAccion, setFotosAccion] = useState({});         // {accionId: [src, ...]}
+  const [accionAbierta, setAccionAbierta] = useState(null);   // acción con fotos desplegadas
+
   // ── Estados que maneja el backend de JURP (los escribe la app móvil) ──
   //   pat = Pendiente de atención
   //   eat = En atención (cuadrilla trabajando)
@@ -503,6 +510,64 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       }
     } catch (e) { console.error(e); } finally { setCargandoMedia(false); }
   };
+  // Trae la bitácora del incidente. Es el mismo endpoint que usa la app:
+  // cada entrada es una atención o avance registrado en campo.
+  const verBitacora = async (inc) => {
+    setModalBitacora(inc);
+    setBitacora([]);
+    setFotosAccion({});
+    setAccionAbierta(null);
+    setCargandoBitacora(true);
+    const token = localStorage.getItem('userToken');
+    try {
+      const res = await fetch(`/api/v1/mobile/hi-incident-actions/list/?incident_id=${inc.id}`, {
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setBitacora(json.results || []);
+      }
+    } catch (e) { console.error(e); } finally { setCargandoBitacora(false); }
+  };
+
+  // Las fotos no vienen en el listado: hay que pedir el detalle de la acción.
+  const verFotosAccion = async (accionId) => {
+    if (accionAbierta === accionId) { setAccionAbierta(null); return; }
+    setAccionAbierta(accionId);
+    if (fotosAccion[accionId]) return;   // ya descargadas
+    const token = localStorage.getItem('userToken');
+    try {
+      const res = await fetch(`/api/v1/mobile/hi-incident-actions/${accionId}/`, {
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const detail = json.data || json;
+        const srcs = (detail.images || []).map(it =>
+          it.content?.startsWith('http') ? it.content : `data:image/jpeg;base64,${it.content}`
+        );
+        setFotosAccion(prev => ({ ...prev, [accionId]: srcs }));
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  // Fecha de la bitácora en formato local legible.
+  const fechaBitacora = (iso) => {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString('es-PE', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+    } catch (e) { return iso; }
+  };
+
+  // El usuario puede venir como objeto {username} o como texto plano.
+  const usuarioAccion = (u) => {
+    if (!u) return 'Usuario';
+    if (typeof u === 'string') return u;
+    return u.username || 'Usuario';
+  };
+
   const galeriaAnterior = () => setGaleriaIndex(i => Math.max(0, i - 1));
   const galeriaSiguiente = () => setGaleriaIndex(i => Math.min(galeriaMedia.length - 1, i + 1));
 
@@ -2026,6 +2091,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                       <span className="tbl-avatar-text">{inc.usuario}</span>
                     </div>
                   </div>
+                  <div className="tbl-card-btn-bottom" style={{ borderBottom:'1px solid #c9dff2' }} onClick={() => verBitacora(inc)}><FaListUl /> Ver bitácora</div>
                   <div className="tbl-card-btn-bottom" onClick={() => abrirModal(inc)}><FaEye /> Gestionar / Parte Diario</div>
                 </div>
               ))}
@@ -2613,6 +2679,100 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                 </button>
               )}
               <button onClick={() => setModalPartes(null)} className="tbl-btn tbl-btn-link">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Modal: BITÁCORA DE ATENCIONES (lo que se registra en la app) ── */}
+      {modalBitacora && (
+        <div onClick={() => setModalBitacora(null)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:'12px', overflow:'hidden', maxWidth:'760px', width:'100%', maxHeight:'88vh', display:'flex', flexDirection:'column' }}>
+            {/* Cabecera */}
+            <div style={{ padding:'16px 22px', background:'#1463A5', color:'#fff' }}>
+              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'12px' }}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:'11px', fontWeight:700, opacity:0.85, letterSpacing:'0.4px' }}>{modalBitacora.codigoIncidente}</div>
+                  <h5 style={{ margin:'3px 0 0', fontSize:'17px', fontWeight:700 }}>Bitácora de Atenciones</h5>
+                  <div style={{ fontSize:'12px', opacity:0.85, marginTop:'3px' }}>{modalBitacora.tipo}</div>
+                </div>
+                <button onClick={() => setModalBitacora(null)} style={{ background:'rgba(255,255,255,0.15)', border:'none', cursor:'pointer', color:'#fff', fontSize:'16px', display:'flex', borderRadius:'6px', padding:'8px', flexShrink:0 }}><FaTimes /></button>
+              </div>
+            </div>
+
+            {/* Línea de tiempo */}
+            <div style={{ overflowY:'auto', padding:'18px 22px', background:'#f8fafc' }}>
+              {cargandoBitacora ? (
+                <div style={{ textAlign:'center', padding:'40px', color:'#64748b', fontSize:'13px' }}>
+                  <FaSyncAlt className="icon-spin" style={{ marginRight:'8px' }} /> Cargando bitácora…
+                </div>
+              ) : bitacora.length === 0 ? (
+                <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8', fontSize:'13px' }}>
+                  Todavía no hay atenciones registradas para este incidente.
+                </div>
+              ) : (
+                bitacora.map((acc, idx) => {
+                  const fotos = fotosAccion[acc.id];
+                  const abierta = accionAbierta === acc.id;
+                  const nFotos = acc.images_count || 0;
+                  return (
+                    <div key={acc.id || idx} style={{ display:'flex', gap:'12px', marginBottom:'4px' }}>
+                      {/* Riel de la línea de tiempo */}
+                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
+                        <div style={{ width:'11px', height:'11px', borderRadius:'50%', background:'#1463A5', border:'2px solid #bfdbfe', marginTop:'5px' }}></div>
+                        {idx < bitacora.length - 1 && <div style={{ flex:1, width:'2px', background:'#dbeafe', minHeight:'24px' }}></div>}
+                      </div>
+                      {/* Contenido de la entrada */}
+                      <div style={{ flex:1, minWidth:0, background:'#fff', border:'1px solid #e2e8f0', borderRadius:'9px', padding:'11px 14px', marginBottom:'14px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'6px' }}>
+                          <span style={{ display:'inline-flex', alignItems:'center', gap:'5px', fontSize:'11px', fontWeight:700, color:'#0284c7', background:'#e0f2fe', borderRadius:'5px', padding:'2px 8px' }}>
+                            <FaUser size={9} /> {usuarioAccion(acc.user)}
+                          </span>
+                          <span style={{ fontSize:'11px', color:'#64748b', display:'inline-flex', alignItems:'center', gap:'5px' }}>
+                            <FaCalendarAlt size={10} /> {fechaBitacora(acc.created_at)}
+                          </span>
+                        </div>
+                        <div style={{ fontSize:'13px', color:'#1e293b', lineHeight:'1.5', whiteSpace:'pre-wrap' }}>
+                          {acc.description || 'Acción registrada sin descripción'}
+                        </div>
+                        {nFotos > 0 && (
+                          <>
+                            <button type="button" onClick={() => verFotosAccion(acc.id)}
+                              style={{ marginTop:'9px', display:'inline-flex', alignItems:'center', gap:'6px', background:'#eff6ff', color:'#1463A5', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:600, cursor:'pointer' }}>
+                              <FaImage size={11} /> {abierta ? 'Ocultar' : `Ver ${nFotos} foto${nFotos > 1 ? 's' : ''}`}
+                            </button>
+                            {abierta && (
+                              <div style={{ marginTop:'10px' }}>
+                                {!fotos ? (
+                                  <div style={{ fontSize:'12px', color:'#64748b' }}><FaSyncAlt className="icon-spin" style={{ marginRight:'6px' }} /> Cargando fotos…</div>
+                                ) : fotos.length === 0 ? (
+                                  <div style={{ fontSize:'12px', color:'#94a3b8', fontStyle:'italic' }}>No se pudieron cargar las fotos.</div>
+                                ) : (
+                                  <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                                    {fotos.map((src, i) => (
+                                      <img key={i} src={src} alt={`Evidencia ${i + 1}`}
+                                        onClick={() => setImgRefModal({ src, titulo: `Atención del ${fechaBitacora(acc.created_at)}` })}
+                                        style={{ width:'104px', height:'104px', objectFit:'cover', borderRadius:'7px', border:'1px solid #e2e8f0', cursor:'pointer' }}
+                                        title="Clic para ampliar" />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Pie */}
+            <div style={{ padding:'12px 22px', borderTop:'1px solid #e2e8f0', background:'#f8fafc', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <span style={{ fontSize:'12px', color:'#64748b' }}>
+                {cargandoBitacora ? '' : `${bitacora.length} atención(es) registrada(s) desde la app`}
+              </span>
+              <button onClick={() => setModalBitacora(null)} className="tbl-btn tbl-btn-link">Cerrar</button>
             </div>
           </div>
         </div>
