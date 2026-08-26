@@ -265,6 +265,12 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [detalleActivo, setDetalleActivo] = useState(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
   const [modalMedia, setModalMedia] = useState(null);
+  // Bitácora de atenciones: lo que la cuadrilla registra desde la app móvil.
+  const [modalBitacora, setModalBitacora] = useState(null);   // incidente activo
+  const [bitacora, setBitacora] = useState([]);
+  const [cargandoBitacora, setCargandoBitacora] = useState(false);
+  const [fotosAccion, setFotosAccion] = useState({});         // {accionId: [src, ...]}
+  const [accionAbierta, setAccionAbierta] = useState(null);
   const [herramienta, setHerramienta] = useState(null);
   const [costeos, setCosteos] = useState({}); // { incidentId: { personal, maquinaria, insumos, total } }
   const [rawRecursos, setRawRecursos] = useState({ pers: [], mats: [], maqs: [] });
@@ -656,6 +662,58 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   useEffect(() => { cargarCosteos(); }, []);
 
   const cargarDetalleIncidente = useCallback(async (id) => { setDetalleActivo(null); setCargandoDetalle(true); const tk = localStorage.getItem('userToken'); try { const r = await fetch(`/api/v1/mobile/hi-incidents/${id}/`, { headers: { 'Authorization': `Token ${tk}` } }); if (r.ok) { const j = await r.json(); setDetalleActivo(j.data || j); } } catch(e) {} finally { setCargandoDetalle(false); } }, []);
+
+  // ── Bitácora de atenciones ────────────────────────────────────────────
+  const verBitacora = useCallback(async (inc) => {
+    setModalBitacora(inc);
+    setBitacora([]);
+    setFotosAccion({});
+    setAccionAbierta(null);
+    setCargandoBitacora(true);
+    const tk = localStorage.getItem('userToken');
+    try {
+      const r = await fetch(`/api/v1/mobile/hi-incident-actions/list/?incident_id=${inc.id}`,
+        { headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${tk}` } });
+      if (r.ok) {
+        const j = await r.json();
+        setBitacora(j.results || []);
+      }
+    } catch (e) { console.error('Bitácora:', e); }
+    finally { setCargandoBitacora(false); }
+  }, []);
+
+  // Las fotos no vienen en el listado: hay que pedir el detalle de la acción.
+  const verFotosAccion = useCallback(async (accionId) => {
+    setAccionAbierta(prev => prev === accionId ? null : accionId);
+    if (fotosAccion[accionId]) return;   // ya descargadas
+    const tk = localStorage.getItem('userToken');
+    try {
+      const r = await fetch(`/api/v1/mobile/hi-incident-actions/${accionId}/`,
+        { headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${tk}` } });
+      if (r.ok) {
+        const j = await r.json();
+        const detail = j.data || j;
+        const srcs = (detail.images || []).map(it =>
+          it.content?.startsWith('http') ? it.content : `data:image/jpeg;base64,${it.content}`);
+        setFotosAccion(prev => ({ ...prev, [accionId]: srcs }));
+      }
+    } catch (e) { console.error(e); }
+  }, [fotosAccion]);
+
+  const fechaBitacora = (iso) => {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString('es-PE', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return iso; }
+  };
+
+  // El usuario puede venir como objeto {username} o como texto plano.
+  const usuarioAccion = (u) => {
+    if (!u) return 'Usuario';
+    if (typeof u === 'string') return u;
+    return u.username || 'Usuario';
+  };
 
   // Selecciona un incidente: lo enfoca en el mapa, carga su detalle y lo fija
   // en el panel de recursos. Lo usan el cluster y la lista.
@@ -1475,6 +1533,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                   <img src={incSeleccionado.imagenUrl} alt="" onClick={() => setModalMedia({ src: incSeleccionado.imagenUrl, type: 'image' })} />
                 </div>
               )}
+              <button className="gis-btn-ficha" onClick={() => verBitacora(incSeleccionado)}>
+                <FaClipboardCheck size={11} /> Ver bitácora
+              </button>
               {onVerIncidente && (
                 <button className="gis-btn-ficha" onClick={() => onVerIncidente(incSeleccionado.id)}>
                   Ver ficha completa <FaChevronRight size={10} />
@@ -1642,6 +1703,86 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           </div>
         );
       })()}
+
+      {/* ══════════════ MODAL: BITÁCORA DE ATENCIONES ══════════════ */}
+      {modalBitacora && (
+        <div className="gis-modal-fondo" onClick={() => setModalBitacora(null)}>
+          <div className="gis-modal-lluvia gis-glass" onClick={e => e.stopPropagation()}>
+            <div className="gis-modal-head">
+              <span><FaClipboardCheck /> Bitácora · {modalBitacora.codigoIncidente || modalBitacora.tipo}</span>
+              <button onClick={() => setModalBitacora(null)}><FaTimes /></button>
+            </div>
+
+            <div style={{ padding: '4px 18px 0', fontSize: 12, color: '#7fa5c0' }}>
+              {modalBitacora.tipo} · {modalBitacora.lugar || modalBitacora.codigo}
+            </div>
+
+            <div style={{ overflowY: 'auto', padding: '14px 18px 18px', flex: 1 }}>
+              {cargandoBitacora ? (
+                <div className="gis-detalle-vacio" style={{ textAlign: 'center', padding: 40 }}>
+                  <FaSyncAlt className="icon-spin" /> Cargando bitácora…
+                </div>
+              ) : bitacora.length === 0 ? (
+                <div className="gis-detalle-vacio" style={{ textAlign: 'center', padding: 40 }}>
+                  Todavía no hay atenciones registradas para este incidente.
+                </div>
+              ) : (
+                bitacora.map((acc, idx) => {
+                  const fotos = fotosAccion[acc.id];
+                  const abierta = accionAbierta === acc.id;
+                  const nFotos = acc.images_count || 0;
+                  return (
+                    <div key={acc.id || idx} style={{ display: 'flex', gap: 11 }}>
+                      {/* riel de la línea de tiempo */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#35B6E9', marginTop: 6 }} />
+                        {idx < bitacora.length - 1 && <div style={{ flex: 1, width: 2, background: 'rgba(255,255,255,.13)', minHeight: 20 }} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.09)', borderRadius: 9, padding: '10px 13px', marginBottom: 13 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 5 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#74c0fc' }}>{usuarioAccion(acc.user)}</span>
+                          <span style={{ fontSize: 11, color: '#7fa5c0' }}>{fechaBitacora(acc.created_at)}</span>
+                        </div>
+                        <div style={{ fontSize: 12.5, color: '#dce9f5', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                          {acc.description || 'Acción registrada sin descripción'}
+                        </div>
+                        {nFotos > 0 && (
+                          <>
+                            <button type="button" onClick={() => verFotosAccion(acc.id)}
+                              style={{ marginTop: 9, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(53,182,233,.14)', color: '#8fd0f5', border: '1px solid rgba(53,182,233,.35)', borderRadius: 7, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                              <FaCamera size={10} /> {abierta ? 'Ocultar' : `Ver ${nFotos} foto${nFotos > 1 ? 's' : ''}`}
+                            </button>
+                            {abierta && (
+                              <div style={{ marginTop: 9 }}>
+                                {!fotos ? (
+                                  <div style={{ fontSize: 11.5, color: '#7fa5c0' }}><FaSyncAlt className="icon-spin" /> Cargando fotos…</div>
+                                ) : fotos.length === 0 ? (
+                                  <div style={{ fontSize: 11.5, color: '#6f95b1', fontStyle: 'italic' }}>No se pudieron cargar las fotos.</div>
+                                ) : (
+                                  <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                                    {fotos.map((src, i) => (
+                                      <img key={i} src={src} alt="" onClick={() => setModalMedia({ src, type: 'image' })}
+                                        style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 7, border: '1px solid rgba(255,255,255,.14)', cursor: 'pointer' }} />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="gis-modal-pie">
+              {cargandoBitacora ? '' : `${bitacora.length} atención(es) registrada(s) desde la app`}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ══════════════ MODAL DE IMAGEN ══════════════ */}
       {modalMedia && (
