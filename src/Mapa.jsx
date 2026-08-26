@@ -21,6 +21,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
 import './MapaHerramientas.css';
 import { useInventario, CapasInventario, PanelInventario, FaClipboardCheck } from './InventarioGIS';
+import { useRuta, CapaRuta, fmtDistancia, fmtTiempo } from './RutaGIS';
 
 import geoCanalMadre from './data/Canal_Madre.json';
 import geoLateral10 from './data/Lateral_10.json';
@@ -238,6 +239,12 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [flyTarget, setFlyTarget] = useState(null);
   const [showLayers, setShowLayers] = useState(false);
   const inv = useInventario();
+  // Ruteo sobre la red de caminos propia (no usa Google ni OSM).
+  const capasRuta = useMemo(
+    () => [geoCaminosServ, geoViasAcceso, geoViaAuxiliar, geoRedNacional],
+    []
+  );
+  const ruta = useRuta(capasRuta);
   // Al iniciar se muestran todas; se puede filtrar a las que registran lluvia.
   const [soloConLluvia, setSoloConLluvia] = useState(false);
   // Capas KMZ/KML que el usuario sube desde su equipo (no se guardan en el
@@ -1151,6 +1158,8 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
           <ClusterIncidentes incidentes={incEnMapa} onSeleccionar={seleccionarIncidente} />
 
+          <CapaRuta ruta={ruta} />
+
           {lluviasAPI
             .filter(p => p.tipo === 'davis' ? capas.Davis : capas.Lluvias)
             .filter(p => !soloConLluvia || p.totalRain > 0)
@@ -1533,6 +1542,35 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                   <img src={incSeleccionado.imagenUrl} alt="" onClick={() => setModalMedia({ src: incSeleccionado.imagenUrl, type: 'image' })} />
                 </div>
               )}
+              {/* Ruta por los caminos de servicio hasta el incidente */}
+              <button className="gis-btn-ficha"
+                onClick={() => ruta.trazar(miUbicacion, [incSeleccionado.lat, incSeleccionado.lng], incSeleccionado.tipo)}
+                disabled={ruta.calculando}>
+                {ruta.calculando
+                  ? <><FaSyncAlt className="icon-spin" size={11} /> Calculando ruta…</>
+                  : <><FaLocationArrow size={11} /> Cómo llegar</>}
+              </button>
+
+              {ruta.error && (
+                <div style={{ margin: '6px 0 0', fontSize: 11, color: '#ffc9c9', background: 'rgba(224,49,49,.14)', border: '1px solid rgba(224,49,49,.3)', borderRadius: 7, padding: '6px 9px' }}>
+                  {ruta.error}
+                </div>
+              )}
+              {ruta.ruta && (
+                <div style={{ margin: '6px 0 0', fontSize: 11.5, color: '#cfe1ef', background: 'rgba(53,182,233,.12)', border: '1px solid rgba(53,182,233,.32)', borderRadius: 7, padding: '7px 9px' }}>
+                  <b style={{ color: '#8fd0f5' }}>{fmtDistancia(ruta.ruta.metros)}</b> por camino · aprox. {fmtTiempo(ruta.ruta.metros)}
+                  {(ruta.ruta.saltoOrigen > 40 || ruta.ruta.saltoDestino > 40) && (
+                    <div style={{ fontSize: 10.5, color: '#7fa5c0', marginTop: 3 }}>
+                      Incluye {Math.round(ruta.ruta.saltoOrigen)} m hasta el camino y {Math.round(ruta.ruta.saltoDestino)} m desde el camino al punto.
+                    </div>
+                  )}
+                  <button onClick={ruta.limpiar}
+                    style={{ marginTop: 5, background: 'none', border: 'none', color: '#74c0fc', cursor: 'pointer', fontSize: 11, padding: 0, fontFamily: 'inherit' }}>
+                    ✕ Quitar ruta del mapa
+                  </button>
+                </div>
+              )}
+
               <button className="gis-btn-ficha" onClick={() => verBitacora(incSeleccionado)}>
                 <FaClipboardCheck size={11} /> Ver bitácora
               </button>
