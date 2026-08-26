@@ -80,6 +80,21 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const [cargandoMedia, setCargandoMedia] = useState(false);
   const [galeriaIncidente, setGaleriaIncidente] = useState(null);
 
+  // ── Estados que maneja el backend de JURP (los escribe la app móvil) ──
+  //   pat = Pendiente de atención
+  //   eat = En atención (cuadrilla trabajando)
+  //   ate = Atendido / Resuelto  ← la app manda este al pulsar "SÍ, FINALIZAR"
+  //   cer = Cerrado
+  // El "cerrado" del costeo es OTRA cosa: vive en IncidenteCerrado (operations)
+  // y se consulta en el arreglo incidentesCerrados.
+  const ESTADOS = {
+    pat: { texto: 'Pendiente',   color: '#f59f00' },
+    eat: { texto: 'En Atención', color: '#206bc4' },
+    ate: { texto: 'Resuelto',    color: '#2fb344' },
+    cer: { texto: 'Cerrado',     color: '#2fb344' },
+  };
+  const txtEstadoInc = (e) => ESTADOS[e]?.texto || e || '-';
+
   const getFechaHoy = () => {
     const hoy = new Date();
     return hoy.toISOString().split('T')[0];
@@ -1076,7 +1091,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     if (!incidenteActivo) return;
     const doc = new jsPDF();
     const inc = incidenteActivo;
-    const estadoTexto = inc.estado === 'pat' ? 'Pendiente' : inc.estado === 'ate' ? 'En Atención' : inc.estado === 'cer' ? 'Cerrado' : inc.estado;
+    const estadoTexto = txtEstadoInc(inc.estado);
     const gravedadTexto = inc.gravedad === 'lev' ? 'Leve' : inc.gravedad === 'mod' ? 'Moderada' : inc.gravedad === 'gra' ? 'Grave' : inc.gravedad;
     const fechaGenerado = new Date().toLocaleString('es-PE');
     doc.setFillColor(20, 99, 165);
@@ -1168,7 +1183,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const exportarExcel = async () => {
     if (!incidenteActivo) return;
     const inc = incidenteActivo;
-    const estadoTexto = inc.estado === 'pat' ? 'Pendiente' : inc.estado === 'ate' ? 'En Atención' : inc.estado === 'cer' ? 'Cerrado' : inc.estado;
+    const estadoTexto = txtEstadoInc(inc.estado);
     const gravedadTexto = inc.gravedad === 'lev' ? 'Leve' : inc.gravedad === 'mod' ? 'Moderada' : inc.gravedad === 'gra' ? 'Grave' : inc.gravedad;
     const fechaGenerado = new Date().toLocaleString('es-PE');
     const wb = new ExcelJS.Workbook();
@@ -1387,7 +1402,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     : 'Sin GPS';
   const urlMaps = (i) => (i.latitud != null && i.longitud != null)
     ? `https://www.google.com/maps?q=${i.latitud},${i.longitud}` : '';
-  const txtEstado = (e) => e === 'pat' ? 'Pendiente' : e === 'ate' ? 'En Atención' : e === 'cer' ? 'Cerrado' : e;
+  const txtEstado = (e) => txtEstadoInc(e);
   const txtGravedad = (g) => g === 'lev' ? 'Leve' : g === 'mod' ? 'Moderada' : g === 'gra' ? 'Grave' : g;
 
   // Abre la ventanita de reporte y calcula cuántas incidencias tienen datos.
@@ -1831,7 +1846,17 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   // ── Aplica los filtros antes de paginar ────────────────────────────────
   const incidentesFiltrados = incidentes.filter(inc => {
     if (filtroTipo && inc.tipoBase !== filtroTipo) return false;
-    if (filtroEstado && inc.estado !== filtroEstado) return false;
+    if (filtroEstado) {
+      // "Cerrado" no es un estado de JURP: es la marca de cierre del costeo.
+      if (filtroEstado === 'cerrado_costeo') {
+        if (!incidentesCerrados.includes(inc.id)) return false;
+      } else {
+        // Un incidente con el costeo cerrado ya no cuenta como pendiente/en
+        // atención/resuelto: se busca por la opción "Cerrado (costeo)".
+        if (incidentesCerrados.includes(inc.id)) return false;
+        if (inc.estado !== filtroEstado) return false;
+      }
+    }
     if (filtroGravedad && inc.gravedad !== filtroGravedad) return false;
     if (busqueda.trim()) {
       const q = busqueda.toLowerCase().trim();
@@ -1854,12 +1879,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
 
   const getEstadoBadge = (estado) => {
     const base = {padding:'3px 10px',borderRadius:'4px',fontSize:'11px',fontWeight:'700',letterSpacing:'0.5px',textShadow:'0 1px 2px rgba(0,0,0,0.15)',border:'1px solid rgba(255,255,255,0.3)'};
-    switch (estado) {
-      case 'pat': return <span style={{...base,backgroundColor:'#f59f00',color:'#fff'}}>Pendiente</span>;
-      case 'ate': return <span style={{...base,backgroundColor:'#206bc4',color:'#fff'}}>En Atención</span>;
-      case 'cer': return <span style={{...base,backgroundColor:'#2fb344',color:'#fff'}}>Cerrado</span>;
-      default: return <span className="tbl-badge bg-secondary-lt">{estado}</span>;
-    }
+    const e = ESTADOS[estado];
+    if (!e) return <span className="tbl-badge bg-secondary-lt">{estado}</span>;
+    return <span style={{...base, backgroundColor: e.color, color:'#fff'}}>{e.texto}</span>;
   };
   const getGravedadBadge = (gravedad) => {
     const base = {padding:'3px 10px',borderRadius:'4px',fontSize:'11px',fontWeight:'700',letterSpacing:'0.5px',textShadow:'0 1px 2px rgba(0,0,0,0.15)',border:'1px solid rgba(255,255,255,0.3)'};
@@ -1936,8 +1958,10 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
             <select className="tbl-form-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={filtroSelStyle}>
               <option value="">Todos los estados</option>
               <option value="pat">Pendiente</option>
-              <option value="ate">En Atención</option>
+              <option value="eat">En Atención</option>
+              <option value="ate">Resuelto</option>
               <option value="cer">Cerrado</option>
+              <option value="cerrado_costeo">Cerrado (costeo)</option>
             </select>
 
             <select className="tbl-form-select" value={filtroGravedad} onChange={e => setFiltroGravedad(e.target.value)} style={filtroSelStyle}>
