@@ -1,0 +1,272 @@
+/* ══════════════════════════════════════════════════════════
+   Inventario JURP — estilos del panel y los marcadores.
+   Hereda la paleta y el cristal de MapaGIS.css; aquí solo va
+   lo propio del módulo.
+   ══════════════════════════════════════════════════════════ */
+
+/* El panel se posiciona igual que .gis-capas pero se distingue
+   por el filo naranja: es un módulo distinto al de capas base. */
+.inv-panel {
+  border-left: 2px solid #f59f00;
+}
+
+/* ── marcadores ─────────────────────────────────────────── */
+.inv-marker-wrap { background: none !important; border: none !important; }
+
+.inv-marker {
+  display: block;
+  width: 12px;
+  height: 12px;
+  margin: 2px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 0 2px var(--e), 0 1px 4px rgba(0, 0, 0, .55);
+  transition: transform .12s ease;
+}
+.inv-marker-wrap:hover .inv-marker { transform: scale(1.35); }
+
+/* ── popup ──────────────────────────────────────────────── */
+.inv-pop { min-width: 210px; max-width: 290px; font-size: 11.5px; }
+
+.inv-pop-tit {
+  font-weight: 700;
+  font-size: 13px;
+  color: #e9f2f9;
+  padding-bottom: 4px;
+  margin-bottom: 2px;
+  border-bottom: 2px solid #4c6ef5;
+}
+
+.inv-pop-sub {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #7ba7c7;
+  margin-bottom: 6px;
+}
+
+.inv-pop-tabla { width: 100%; border-collapse: collapse; }
+.inv-pop-tabla th {
+  text-align: left;
+  font-weight: 500;
+  color: #8fb4cd;
+  padding: 2px 8px 2px 0;
+  white-space: nowrap;
+  vertical-align: top;
+  font-size: 10.5px;
+}
+.inv-pop-tabla td {
+  color: #dbe9f4;
+  padding: 2px 0;
+  word-break: break-word;
+}
+
+/* bloque de evaluación: el color del borde es el del estado */
+.inv-pop-eval {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--e, #868e96);
+  background: rgba(255, 255, 255, .05);
+  border-radius: 0 4px 4px 0;
+}
+.inv-pop-eval-tit { font-size: 10px; color: #8fb4cd; }
+.inv-pop-eval-estado {
+  font-weight: 700;
+  color: var(--e, #dbe9f4);
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.inv-pop-mant {
+  font-size: 9.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: #ffd8a8;
+  background: rgba(245, 159, 0, .18);
+  border: 1px solid rgba(245, 159, 0, .4);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+.inv-pop-eval-obs {
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: #c3d9e8;
+  font-style: italic;
+}
+
+.inv-pop-pend {
+  margin-top: 8px;
+  padding: 5px 8px;
+  font-size: 10.5px;
+  color: #8fb4cd;
+  font-style: italic;
+  background: rgba(255, 255, 255, .04);
+  border-radius: 4px;
+}
+
+/* ── campaña y avance ───────────────────────────────────── */
+.inv-campania {
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  background: rgba(245, 159, 0, .07);
+  border: 1px solid rgba(245, 159, 0, .22);
+  border-radius: 6px;
+}
+
+.inv-campania-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: #8fb4cd;
+}
+.inv-campania-head:hover { color: #cfe3f2; }
+
+.inv-campania-anio {
+  font-weight: 700;
+  font-size: 12px;
+  color: #ffd8a8;
+  margin-right: 6px;
+}
+
+.inv-campania-estado {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.est-en_proceso  { background: rgba(47, 158, 68, .2);  color: #8ce99a; }
+.est-planificada { background: rgba(76, 110, 245, .2); color: #a5b4fc; }
+.est-cerrada     { background: rgba(134, 142, 150, .2); color: #ced4da; }
+
+.inv-barra {
+  height: 5px;
+  margin-top: 8px;
+  background: rgba(255, 255, 255, .09);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.inv-barra-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f59f00, #ffc078);
+  border-radius: 3px;
+  transition: width .4s ease;
+}
+
+.inv-barra-txt {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  color: #8fb4cd;
+}
+.inv-barra-txt span { font-weight: 700; color: #ffd8a8; }
+
+.inv-criticos {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: #ffa8a8;
+}
+
+.inv-avance {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+.inv-avance td {
+  padding: 2px 0;
+  color: #b8d0e0;
+  border-top: 1px solid rgba(255, 255, 255, .06);
+}
+.inv-avance-num { text-align: right; color: #8fb4cd; white-space: nowrap; padding-left: 6px !important; }
+.inv-avance-pct { text-align: right; color: #ffd8a8; width: 38px; }
+.inv-avance-crit { text-align: right; color: #ff8787; font-weight: 700; width: 22px; }
+
+/* ── grupos plegables ───────────────────────────────────── */
+.inv-grupo-tit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.inv-grupo-tit:hover { color: #cfe3f2; }
+
+.inv-visibles {
+  font-size: 10px;
+  color: #7ba7c7;
+  margin-left: auto;
+  align-self: center;
+}
+
+/* ── leyenda ────────────────────────────────────────────── */
+.inv-leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 2px 0;
+}
+.inv-leyenda span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #b8d0e0;
+}
+.inv-leyenda i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.inv-nota {
+  margin-top: 6px;
+  font-size: 9.5px;
+  line-height: 1.35;
+  color: #6f95b1;
+  font-style: italic;
+}
+
+/* ── estados de carga y error ───────────────────────────── */
+.inv-cargando {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 2px;
+  font-size: 11px;
+  color: #8fb4cd;
+}
+
+.inv-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: #ffc9c9;
+  background: rgba(224, 49, 49, .12);
+  border: 1px solid rgba(224, 49, 49, .3);
+  border-radius: 5px;
+}
+.inv-error button {
+  margin-left: auto;
+  background: rgba(255, 255, 255, .1);
+  border: 1px solid rgba(255, 255, 255, .2);
+  color: #ffe3e3;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  cursor: pointer;
+}
+.inv-error button:hover { background: rgba(255, 255, 255, .18); }
