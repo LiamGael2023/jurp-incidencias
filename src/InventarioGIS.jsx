@@ -165,7 +165,12 @@ export function useInventario() {
     setCargando(c => ({ ...c, [codigo]: true }));
     try {
       const r = await fetch(`${API}/capas/${codigo}/?srid=4326`, { headers: cabeceras() });
-      if (r.ok) setDatos(d => ({ ...d, [codigo]: await r.json() }));
+      if (r.ok) {
+        // El JSON se resuelve ANTES de tocar el estado: el actualizador de
+        // useState es síncrono y no admite await dentro.
+        const geo = await r.json();
+        setDatos(d => ({ ...d, [codigo]: geo }));
+      }
     } catch (e) { /* la capa queda vacía; el badge lo refleja */ }
     finally { setCargando(c => ({ ...c, [codigo]: false })); }
   }, [datos]);
@@ -238,7 +243,7 @@ export function CapasInventario({ inv }) {
                   .join('');
                 layer.bindPopup(
                   `<div class="inv-pop"><div class="inv-pop-tit">${capa.label}</div>
-                   <table class="inv-pop-tabla">${filas}</table></div>`
+                   <table class="inv-pop-tabla"><tbody>${filas}</tbody></table></div>`
                 );
               }}
             />
@@ -268,15 +273,18 @@ export function CapasInventario({ inv }) {
                   </div>
                   <div className="inv-pop-sub">{capa.label}</div>
 
+                  {/* tbody explícito: sin él React avisa de anidamiento inválido */}
                   <table className="inv-pop-tabla">
-                    {p.nombre_canal && <tr><th>Canal</th><td>{p.nombre_canal}</td></tr>}
-                    {p.progresiva != null && <tr><th>Progresiva</th><td>{p.progresiva}</td></tr>}
-                    {p.tipo && <tr><th>Tipo</th><td>{p.tipo}</td></tr>}
-                    {p.material && <tr><th>Material</th><td>{p.material}</td></tr>}
-                    {p.estado && <tr><th>Estado (base)</th><td>{p.estado}</td></tr>}
-                    {p.num_usuarios != null && <tr><th>Usuarios</th><td>{p.num_usuarios}</td></tr>}
-                    {p.area_total != null && <tr><th>Área</th><td>{p.area_total} ha</td></tr>}
-                    {p.observaciones && <tr><th>Obs.</th><td>{p.observaciones}</td></tr>}
+                    <tbody>
+                      {p.nombre_canal && <tr><th>Canal</th><td>{p.nombre_canal}</td></tr>}
+                      {p.progresiva != null && <tr><th>Progresiva</th><td>{p.progresiva}</td></tr>}
+                      {p.tipo && <tr><th>Tipo</th><td>{p.tipo}</td></tr>}
+                      {p.material && <tr><th>Material</th><td>{p.material}</td></tr>}
+                      {p.estado && <tr><th>Estado (base)</th><td>{p.estado}</td></tr>}
+                      {p.num_usuarios != null && <tr><th>Usuarios</th><td>{p.num_usuarios}</td></tr>}
+                      {p.area_total != null && <tr><th>Área</th><td>{p.area_total} ha</td></tr>}
+                      {p.observaciones && <tr><th>Obs.</th><td>{p.observaciones}</td></tr>}
+                    </tbody>
                   </table>
 
                   {ev ? (
