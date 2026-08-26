@@ -248,11 +248,19 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [showLayers, setShowLayers] = useState(false);
   const inv = useInventario();
   // Ruteo sobre la red de caminos propia (no usa Google ni OSM).
+  // El trazado de canales entra al ruteo porque el camino de servicio corre
+  // junto al canal y muchos incidentes están sobre él, lejos de toda vía.
+  // Va penalizado (factor > 1) para que, cuando haya un camino de verdad en
+  // paralelo, Dijkstra prefiera ese. Los kilómetros que se muestran siguen
+  // siendo los reales del trazado.
   const capasRuta = useMemo(() => [
     { nombre: 'Caminos de Servicio', data: geoCaminosServ },
     { nombre: 'Vías de Acceso',      data: geoViasAcceso },
     { nombre: 'Vía Auxiliar',        data: geoViaAuxiliar },
     { nombre: 'Red Nacional',        data: geoRedNacional },
+    { nombre: 'Canal Madre',         data: geoCanalMadre, factor: 1.2 },
+    { nombre: 'Lateral 10',          data: geoLateral10,  factor: 1.2 },
+    { nombre: 'Redes Presurizado',   data: geoRedes,      factor: 1.4 },
   ], []);
   const ruta = useRuta(capasRuta);
   // Punto de partida puesto a mano con un clic (tiene prioridad sobre el GPS).

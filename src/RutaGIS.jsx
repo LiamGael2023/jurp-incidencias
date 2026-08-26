@@ -97,21 +97,27 @@ export function construirGrafo(capas, tol = 12) {
     return n;
   };
 
-  const unir = (n1, n2) => {
+  // `m` es la distancia real; `c` es el coste con el que decide Dijkstra.
+  // Así una capa puede penalizarse (el canal) sin falsear los kilómetros.
+  const unir = (n1, n2, factor = 1) => {
     if (n1.id === n2.id) return;
     const m = distanciaM(n1.coord, n2.coord);
-    if (!ady[n1.id].some(e => e.a === n2.id)) ady[n1.id].push({ a: n2.id, m });
-    if (!ady[n2.id].some(e => e.a === n1.id)) ady[n2.id].push({ a: n1.id, m });
+    const c = m * factor;
+    const e1 = ady[n1.id].find(e => e.a === n2.id);
+    const e2 = ady[n2.id].find(e => e.a === n1.id);
+    if (e1) { if (c < e1.c) e1.c = c; } else ady[n1.id].push({ a: n2.id, m, c });
+    if (e2) { if (c < e2.c) e2.c = c; } else ady[n2.id].push({ a: n1.id, m, c });
   };
 
-  for (const c of capas) {
-    const fc = c?.data || c;          // admite { nombre, data } o la FC pelada
+  for (const capa of capas) {
+    const fc = capa?.data || capa;       // admite { nombre, data, factor } o la FC pelada
+    const factor = capa?.factor || 1;
     for (const linea of lineasDe(fc).lineas) {
       let prev = null;
-      for (const c of linea) {
-        if (!Array.isArray(c) || c.length < 2) continue;
-        const n = idDe(c[0], c[1]);
-        if (prev) unir(prev, n);
+      for (const pt of linea) {
+        if (!Array.isArray(pt) || pt.length < 2) continue;
+        const n = idDe(pt[0], pt[1]);
+        if (prev) unir(prev, n, factor);
         prev = n;
       }
     }
@@ -147,8 +153,8 @@ function coserComponentes(grafo, puenteCorto = 50, puenteMax = 350) {
   const hayArista = (i, j) => grafo.ady[i].some(e => e.a === j);
   const conectar = (i, j, m, tipo) => {
     if (hayArista(i, j)) return false;
-    grafo.ady[i].push({ a: j, m, [tipo]: true });
-    grafo.ady[j].push({ a: i, m, [tipo]: true });
+    grafo.ady[i].push({ a: j, m, c: m, [tipo]: true });
+    grafo.ady[j].push({ a: i, m, c: m, [tipo]: true });
     return true;
   };
 
@@ -255,7 +261,7 @@ function dijkstra(grafo, desde, hasta) {
     listo[u] = 1;
     if (u === hasta) break;
     for (const e of grafo.ady[u]) {
-      const nd = d + e.m;
+      const nd = d + (e.c ?? e.m);
       if (nd < dist[e.a]) { dist[e.a] = nd; previo[e.a] = u; meter(nd, e.a); }
     }
   }
@@ -263,7 +269,13 @@ function dijkstra(grafo, desde, hasta) {
   if (dist[hasta] === Infinity) return null;
   const camino = [];
   for (let v = hasta; v !== -1; v = previo[v]) camino.push(v);
-  return { camino: camino.reverse(), metros: dist[hasta] };
+  camino.reverse();
+  // Los metros que se muestran son los REALES del trazado, no el coste.
+  let metros = 0;
+  for (let i = 1; i < camino.length; i++) {
+    metros += distanciaM(grafo.nodos[camino[i - 1]].coord, grafo.nodos[camino[i]].coord);
+  }
+  return { camino, metros };
 }
 
 /** Ruta entre dos [lng,lat]. Devuelve { coords, metros, ... } o { error }. */
