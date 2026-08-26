@@ -2014,7 +2014,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                     )}
                   </div>
                   <div className="tbl-card-body">
-                    <div style={{ fontSize:'10px', fontWeight:700, color:'#1463A5', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'4px', padding:'2px 8px', display:'inline-block', marginBottom:'6px', letterSpacing:'0.3px' }}>{inc.codigoIncidente}</div>
+                    <div style={{ fontSize:'13px', fontWeight:800, color:'#1463A5', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'5px', padding:'4px 11px', display:'inline-block', marginBottom:'8px', letterSpacing:'0.4px' }}>{inc.codigoIncidente}</div>
                     <h3 className="tbl-card-title" title={inc.tipo} style={{ fontSize:'1.4rem', fontWeight:800, color:'#0f172a', lineHeight:'1.25', display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', overflow:'hidden', minHeight:'2.5em', marginBottom:'10px' }}>{inc.tipo}</h3>
                     <div className="tbl-text-muted tbl-mb-2"><FaMapMarkerAlt className="tbl-icon tbl-text-blue" /><strong>{inc.codigo}</strong><br/><span style={{paddingLeft: '20px', fontSize: '0.85rem'}}>{inc.lugar}</span></div>
                     <div className="tbl-text-muted"><FaCalendarAlt className="tbl-icon" /> {inc.fecha}</div>
