@@ -135,6 +135,14 @@ const SEARCH_INDEX = KMZ_CONFIG.flatMap(cfg => (cfg.data?.features || []).filter
 // ── Sub-componentes ─────────────────────────────────────────────────────────
 function ZoomDerecha() { const map = useMap(); useEffect(() => { const zc = L.control.zoom({ position: 'topright' }); zc.addTo(map); return () => zc.remove(); }, [map]); return null; }
 function UTMDisplay() { const [c, setC] = useState(null); useMapEvents({ mousemove(e) { setC(latLngToUTM(e.latlng.lat, e.latlng.lng)); }, mouseout() { setC(null); } }); return c ? <div className="dash-utm">UTM {c.z} E {c.e} N {c.n}</div> : null; }
+// Mientras está activo, el siguiente clic en el mapa fija el punto de partida.
+function SelectorOrigen({ activo, onElegir }) {
+  useMapEvents({
+    click(e) { if (activo) onElegir([e.latlng.lat, e.latlng.lng]); },
+  });
+  return null;
+}
+
 function FlyToComp({ pos }) { const map = useMap(); useEffect(() => { if (pos) map.flyTo(pos, 16, { duration: 1.5 }); }, [pos, map]); return null; }
 
 function ClusteredLayer({ data, icon, color, label, buildPopup }) {
@@ -245,6 +253,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     []
   );
   const ruta = useRuta(capasRuta);
+  // Punto de partida puesto a mano con un clic (tiene prioridad sobre el GPS).
+  const [origenManual, setOrigenManual] = useState(null);
+  const [modoOrigen, setModoOrigen] = useState(false);
   // Al iniciar se muestran todas; se puede filtrar a las que registran lluvia.
   const [soloConLluvia, setSoloConLluvia] = useState(false);
   // Capas KMZ/KML que el usuario sube desde su equipo (no se guardan en el
@@ -731,6 +742,16 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     if (volar) { setFlyTarget([inc.lat, inc.lng]); setTimeout(() => setFlyTarget(null), 2000); }
   }, [cargarDetalleIncidente]);
 
+  // El manual manda; si no hay, se usa el GPS.
+  const puntoPartida = origenManual || miUbicacion;
+
+  // Al elegir un incidente, la ruta se traza sola desde el punto de partida.
+  useEffect(() => {
+    if (!incSeleccionado) { ruta.limpiar(); return; }
+    if (!puntoPartida) return;
+    ruta.trazar(puntoPartida, [incSeleccionado.lat, incSeleccionado.lng], incSeleccionado.tipo);
+  }, [incSeleccionado, puntoPartida, ruta.trazar, ruta.limpiar]);
+
   // Google Earth Pro exporta KML que usan prefijos (xsi:, gx:…) sin
   // declararlos en la raíz <kml>. Eso es XML inválido y DOMParser lo rechaza,
   // así que los declaramos antes de parsear.
@@ -1047,6 +1068,16 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
   // ── Iconos ────────────────────────────────────────────────────────────
   const iconoGPS = divIcon({ className: 'icono-vacio', html: '<div style="background:#0ea5e9;border:3px solid #fff;width:16px;height:16px;border-radius:50%;box-shadow:0 0 12px #0ea5e988"></div>', iconSize: [22, 22], iconAnchor: [11, 11] });
+  // Punto de partida puesto a mano: banderita verde, para no confundirlo con el GPS.
+  const iconoPartida = divIcon({
+    className: 'icono-vacio',
+    html: `<div style="display:flex;flex-direction:column;align-items:center;margin-top:-26px">
+             <div style="background:#2fb344;color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;border:1px solid rgba(255,255,255,.5);white-space:nowrap">PARTIDA</div>
+             <div style="width:2px;height:12px;background:#2fb344"></div>
+             <div style="width:9px;height:9px;border-radius:50%;background:#2fb344;border:2px solid #fff;margin-top:-2px"></div>
+           </div>`,
+    iconSize: [70, 40], iconAnchor: [35, 40],
+  });
     // Los pluviómetros y las estaciones Davis se distinguen por el ícono y el
   // color del borde: 🌧️ celeste para pluviómetro, 🌡️ violeta para Davis.
   // Las que registran lluvia hoy laten, para que salten a la vista.
@@ -1098,7 +1129,20 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           <MiniMapa tileUrl={obtenerUrlMapa()} />
           <HerramientaMedicion modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null} onFinish={() => {}} />
 
+          <SelectorOrigen activo={modoOrigen} onElegir={(p) => { setOrigenManual(p); setModoOrigen(false); }} />
+
           {miUbicacion && <Marker position={miUbicacion} icon={iconoGPS}><Popup>Mi ubicación</Popup></Marker>}
+
+          {origenManual && (
+            <Marker position={origenManual} icon={iconoPartida}>
+              <Popup>
+                <div style={{ fontFamily: 'system-ui', fontSize: 12 }}>
+                  <b>Punto de partida</b><br />
+                  {origenManual[0].toFixed(6)}, {origenManual[1].toFixed(6)}
+                </div>
+              </Popup>
+            </Marker>
+          )}
 
           {capas.Canales && <>
             <GeoJSON data={geoCanalMadre} style={{ color: '#4dabf7', weight: 3, opacity: 0.75 }} />
@@ -1170,6 +1214,20 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         </MapContainer>
       </div>
       <div className="gis-vineta" />
+
+      {/* Aviso mientras el mapa espera el clic del punto de partida */}
+      {modoOrigen && (
+        <div style={{ position: 'absolute', top: 96, left: '50%', transform: 'translateX(-50%)', zIndex: 1200,
+                      background: 'rgba(47,179,68,.92)', color: '#fff', padding: '9px 16px', borderRadius: 10,
+                      fontSize: 13, fontWeight: 700, boxShadow: '0 6px 20px rgba(0,0,0,.35)',
+                      display: 'flex', alignItems: 'center', gap: 10 }}>
+          <FaCrosshairs /> Haz clic en el mapa para fijar tu punto de partida
+          <button onClick={() => setModoOrigen(false)}
+            style={{ background: 'rgba(255,255,255,.22)', border: 'none', color: '#fff', borderRadius: 6, cursor: 'pointer', display: 'flex', padding: 5 }}>
+            <FaTimes size={11} />
+          </button>
+        </div>
+      )}
 
       {/* Marco que late cuando hay una contingencia activa. En normalidad no
           aparece: si estuviera siempre, dejaría de significar algo. */}
@@ -1306,6 +1364,17 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           {cargandoKmz ? <FaSyncAlt className="icon-spin" /> : <FaFileUpload />}
         </button>
         <button className="gis-tool" title="Mi ubicación" onClick={() => navigator.geolocation.getCurrentPosition(p => setMiUbicacion([p.coords.latitude, p.coords.longitude]))}><FaLocationArrow /></button>
+        <button className={`gis-tool ${modoOrigen ? 'activo' : ''}`}
+          title={origenManual ? 'Cambiar el punto de partida (clic en el mapa)' : 'Fijar el punto de partida con un clic en el mapa'}
+          onClick={() => setModoOrigen(v => !v)}>
+          <FaCrosshairs />
+        </button>
+        {origenManual && (
+          <button className="gis-tool" title="Quitar el punto de partida"
+            onClick={() => { setOrigenManual(null); ruta.limpiar(); }}>
+            <FaEraser />
+          </button>
+        )}
         <div className="gis-tool-sep" />
         <button className={`gis-tool ${herramienta === 'distancia' ? 'activo' : ''}`} title="Medir distancia"
           onClick={() => setHerramienta(herramienta === 'distancia' ? null : 'distancia')}><FaRulerCombined /></button>
@@ -1542,14 +1611,21 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                   <img src={incSeleccionado.imagenUrl} alt="" onClick={() => setModalMedia({ src: incSeleccionado.imagenUrl, type: 'image' })} />
                 </div>
               )}
-              {/* Ruta por los caminos de servicio hasta el incidente */}
-              <button className="gis-btn-ficha"
-                onClick={() => ruta.trazar(miUbicacion, [incSeleccionado.lat, incSeleccionado.lng], incSeleccionado.tipo)}
-                disabled={ruta.calculando}>
-                {ruta.calculando
-                  ? <><FaSyncAlt className="icon-spin" size={11} /> Calculando ruta…</>
-                  : <><FaLocationArrow size={11} /> Cómo llegar</>}
-              </button>
+              {/* Ruta por los caminos de servicio. Se traza sola al elegir el
+                  incidente; el botón sirve para fijar la partida o recalcular. */}
+              {!puntoPartida ? (
+                <button className="gis-btn-ficha" onClick={() => setModoOrigen(true)}>
+                  <FaCrosshairs size={11} /> Fijar punto de partida
+                </button>
+              ) : (
+                <button className="gis-btn-ficha"
+                  onClick={() => ruta.trazar(puntoPartida, [incSeleccionado.lat, incSeleccionado.lng], incSeleccionado.tipo)}
+                  disabled={ruta.calculando}>
+                  {ruta.calculando
+                    ? <><FaSyncAlt className="icon-spin" size={11} /> Calculando ruta…</>
+                    : <><FaLocationArrow size={11} /> Recalcular ruta</>}
+                </button>
+              )}
 
               {ruta.error && (
                 <div style={{ margin: '6px 0 0', fontSize: 11, color: '#ffc9c9', background: 'rgba(224,49,49,.14)', border: '1px solid rgba(224,49,49,.3)', borderRadius: 7, padding: '6px 9px' }}>
@@ -1559,6 +1635,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               {ruta.ruta && (
                 <div style={{ margin: '6px 0 0', fontSize: 11.5, color: '#cfe1ef', background: 'rgba(53,182,233,.12)', border: '1px solid rgba(53,182,233,.32)', borderRadius: 7, padding: '7px 9px' }}>
                   <b style={{ color: '#8fd0f5' }}>{fmtDistancia(ruta.ruta.metros)}</b> por camino · aprox. {fmtTiempo(ruta.ruta.metros)}
+                  <div style={{ fontSize: 10.5, color: '#7fa5c0', marginTop: 2 }}>
+                    Desde {origenManual ? 'el punto de partida marcado' : 'tu ubicación GPS'}
+                  </div>
                   {(ruta.ruta.saltoOrigen > 40 || ruta.ruta.saltoDestino > 40) && (
                     <div style={{ fontSize: 10.5, color: '#7fa5c0', marginTop: 3 }}>
                       Incluye {Math.round(ruta.ruta.saltoOrigen)} m hasta el camino y {Math.round(ruta.ruta.saltoDestino)} m desde el camino al punto.
