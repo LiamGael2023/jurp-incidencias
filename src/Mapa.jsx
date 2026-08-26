@@ -20,6 +20,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 // ── Herramientas del visor ───────────────────────────────────────────────────
 import { BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
 import './MapaHerramientas.css';
+import { useInventario, CapasInventario, PanelInventario, FaClipboardCheck } from './InventarioGIS';
 
 import geoCanalMadre from './data/Canal_Madre.json';
 import geoLateral10 from './data/Lateral_10.json';
@@ -161,7 +162,14 @@ const crearIconoIncidente = (g) => {
   if (g === 'gra') c = '#ef4444';
   return divIcon({ className: 'icono-vacio', html: `<div style="position:relative;width:20px;height:20px"><div style="position:absolute;inset:0;background:${c};opacity:0.4;border-radius:50%;animation:pulse 1.5s infinite"></div><div style="position:absolute;top:4px;left:4px;width:12px;height:12px;background:${c};border:2px solid rgba(0,0,0,0.3);border-radius:50%;box-shadow:0 0 8px ${c}88"></div></div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
 };
-const badge = (e) => ({ pat: ['#f59f00', 'Pendiente'], ate: ['#0ea5e9', 'En Atención'], cer: ['#22c55e', 'Cerrado'] }[e] || ['#64748b', e]);
+// Estados de JURP: los escribe la app móvil.
+//   pat = Pendiente · eat = En atención · ate = Atendido/Resuelto · cer = Cerrado
+const badge = (e) => ({
+  pat: ['#f59f00', 'Pendiente'],
+  eat: ['#0ea5e9', 'En Atención'],
+  ate: ['#22c55e', 'Resuelto'],
+  cer: ['#22c55e', 'Cerrado'],
+}[e] || ['#64748b', e]);
 
 // Agrupa los incidentes en clusters. Al hacer clic en uno avisa al panel.
 function ClusterIncidentes({ incidentes, onSeleccionar }) {
@@ -221,6 +229,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [mostrarResultados, setMostrarResultados] = useState(false);
   const [flyTarget, setFlyTarget] = useState(null);
   const [showLayers, setShowLayers] = useState(false);
+  const inv = useInventario();
   // Al iniciar se muestran todas; se puede filtrar a las que registran lluvia.
   const [soloConLluvia, setSoloConLluvia] = useState(false);
   // Capas KMZ/KML que el usuario sube desde su equipo (no se guardan en el
@@ -285,7 +294,8 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     // Si hay incidente seleccionado, filtra solo sus recursos.
     const fil = (arr) => incSeleccionado ? arr.filter(x => String(x.incident_report) === String(incSeleccionado.id)) : arr;
     const pers = fil(allPers), mats = fil(allMats), maqs = fil(allMaqs);
-    const incCerrado = (id) => { const i = incidentesAPI.find(x => String(x.id) === String(id)); return i?.estado === 'cer'; };
+        // Un incidente resuelto o cerrado ya no tiene maquinaria trabajando.
+    const incCerrado = (id) => { const i = incidentesAPI.find(x => String(x.id) === String(id)); return i?.estado === 'ate' || i?.estado === 'cer'; };
 
     // Personal: agrupa por descripción (cargo)
     const gPers = {};
@@ -548,6 +558,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     return [...l].sort((a, b) => b.timestamp - a.timestamp);
   }, [incFiltrados, filtroEstadoInc]);
   const incPend = incidentesAPI.filter(i => i.estado === 'pat').length;
+  const incEnAte = incidentesAPI.filter(i => i.estado === 'eat').length;
   const incAte = incidentesAPI.filter(i => i.estado === 'ate').length;
   const lluviaMax = lluviasAPI.length ? Math.max(...lluviasAPI.map(l => l.totalRain)) : 0;
   // El KPI muestra el máximo, no un total: sumar acumulados de estaciones
@@ -1181,7 +1192,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           <span className="gis-kpi-ico" style={{ background: 'rgba(245,159,10,.16)', color: '#f5b455' }}>⚠️</span>
           <span>
             <span className="gis-kpi-label">Incidentes</span>
-            <span className="gis-kpi-valor">{incidentesAPI.length}<small>{incPend} pend · {incAte} aten</small></span>
+                        <span className="gis-kpi-valor">{incidentesAPI.length}<small>{incPend} pend · {incEnAte} aten · {incAte} res</small></span>
           </span>
         </div>
         <div className="gis-kpi gis-glass">
@@ -1390,7 +1401,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           </div>
           {!panelMin.incidentes && <>
             <div className="gis-filtros-inc">
-              {[['', 'Todos'], ['pat', 'Pendientes'], ['ate', 'Atención'], ['cer', 'Cerrados']].map(([v, t]) => (
+              {[['', 'Todos'], ['pat', 'Pendientes'], ['eat', 'Atención'], ['ate', 'Resueltos']].map(([v, t]) => (
                 <button key={v} className={`gis-chip ${filtroEstadoInc === v ? 'activo' : ''}`}
                   onClick={() => setFiltroEstadoInc(v)}>{t}</button>
               ))}
