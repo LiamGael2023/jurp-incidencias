@@ -90,22 +90,25 @@ export function construirGrafo(capas, tol = 12) {
   }
 
   const grafo = { nodos: [...nodos.values()].sort((a, b) => a.id - b.id), ady };
-  return coserComponentes(grafo, 350);
+  return coserComponentes(grafo);
 }
 
 /**
- * Los KMZ se dibujaron por tramos: entre un camino y el siguiente suele haber
- * un hueco de decenas de metros, así que el grafo queda partido en islas y no
- * habría ruta entre ellas. Aquí se cosen: se buscan los pares de nodos más
- * próximos entre islas distintas y se unen, de menor a mayor distancia, hasta
- * que todo quede conectado (o se agote el límite `puenteMax`).
+ * Los KMZ se dibujaron por tramos, así que el grafo nace partido en islas.
+ * Se cose en DOS pasadas, y el orden importa:
  *
- * Es un Kruskal sobre las componentes, con rejilla espacial para no comparar
- * todos contra todos.
+ *  1. Todos los pares de nodos a menos de `puenteCorto` se unen SIEMPRE.
+ *     Son cruces y empalmes reales entre un camino y otro. Si aquí solo se
+ *     creara un empalme por par de islas, la ruta se vería obligada a rodear
+ *     hasta ese único punto en vez de girar en el cruce que tiene al lado.
+ *
+ *  2. Solo si aún quedan islas sueltas, se tienden puentes de hasta
+ *     `puenteMax`, de menor a mayor y uno por par de islas (Kruskal). Esto
+ *     salva los huecos de digitalización sin inventar caminos largos.
  */
-function coserComponentes(grafo, puenteMax = 350) {
+function coserComponentes(grafo, puenteCorto = 50, puenteMax = 350) {
   const N = grafo.ady.length;
-  if (!N) return { ...grafo, componentes: 0, puentes: 0 };
+  if (!N) return { ...grafo, componentes: 0, puentes: 0, empalmes: 0 };
 
   // Union-Find
   const padre = new Int32Array(N).map((_, i) => i);
@@ -113,46 +116,67 @@ function coserComponentes(grafo, puenteMax = 350) {
   const unir = (a, b) => { const ra = raiz(a), rb = raiz(b); if (ra === rb) return false; padre[ra] = rb; return true; };
   for (let u = 0; u < N; u++) for (const e of grafo.ady[u]) unir(u, e.a);
 
-  const compsIniciales = new Set(); for (let i = 0; i < N; i++) compsIniciales.add(raiz(i));
-  if (compsIniciales.size <= 1) return { ...grafo, componentes: 1, puentes: 0 };
+  const hayArista = (i, j) => grafo.ady[i].some(e => e.a === j);
+  const conectar = (i, j, m, tipo) => {
+    if (hayArista(i, j)) return false;
+    grafo.ady[i].push({ a: j, m, [tipo]: true });
+    grafo.ady[j].push({ a: i, m, [tipo]: true });
+    return true;
+  };
 
-  // Rejilla del tamaño del puente máximo: solo se comparan celdas vecinas.
-  const celLng = puenteMax / 111320, celLat = puenteMax / 110540;
-  const rejilla = new Map();
-  for (let i = 0; i < N; i++) {
-    const [lng, lat] = grafo.nodos[i].coord;
-    const k = `${Math.floor(lng / celLng)}|${Math.floor(lat / celLat)}`;
-    if (!rejilla.has(k)) rejilla.set(k, []);
-    rejilla.get(k).push(i);
+  // Rejilla espacial: solo se comparan celdas vecinas, no todos contra todos.
+  const construirRejilla = (lado) => {
+    const celLng = lado / 111320, celLat = lado / 110540;
+    const rej = new Map();
+    for (let i = 0; i < N; i++) {
+      const [lng, lat] = grafo.nodos[i].coord;
+      const k = `${Math.floor(lng / celLng)}|${Math.floor(lat / celLat)}`;
+      if (!rej.has(k)) rej.set(k, []);
+      rej.get(k).push(i);
+    }
+    return rej;
+  };
+
+  const paresCercanos = (lado) => {
+    const rej = construirRejilla(lado);
+    const pares = [];
+    for (const [k, ids] of rej) {
+      const [gx, gy] = k.split('|').map(Number);
+      const vecinos = [];
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+        const v = rej.get(`${gx + dx}|${gy + dy}`);
+        if (v) vecinos.push(...v);
+      }
+      for (const i of ids) for (const j of vecinos) {
+        if (j <= i) continue;
+        const m = distanciaM(grafo.nodos[i].coord, grafo.nodos[j].coord);
+        if (m <= lado) pares.push([m, i, j]);
+      }
+    }
+    return pares;
+  };
+
+  // ── Pasada 1: todos los empalmes cortos ──
+  let empalmes = 0;
+  for (const [m, i, j] of paresCercanos(puenteCorto)) {
+    if (conectar(i, j, m, 'empalme')) { empalmes++; unir(i, j); }
   }
 
-  const candidatos = [];
-  for (const [k, ids] of rejilla) {
-    const [gx, gy] = k.split('|').map(Number);
-    const vecinos = [];
-    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
-      const v = rejilla.get(`${gx + dx}|${gy + dy}`);
-      if (v) vecinos.push(...v);
-    }
-    for (const i of ids) for (const j of vecinos) {
-      if (j <= i) continue;
-      if (raiz(i) === raiz(j)) continue;   // ya están en la misma isla
-      const m = distanciaM(grafo.nodos[i].coord, grafo.nodos[j].coord);
-      if (m <= puenteMax) candidatos.push([m, i, j]);
-    }
-  }
-  candidatos.sort((a, b) => a[0] - b[0]);
-
+  // ── Pasada 2: puentes largos, solo para lo que siga aislado ──
   let puentes = 0;
-  for (const [m, i, j] of candidatos) {
-    if (!unir(i, j)) continue;             // ya quedaron conectadas
-    grafo.ady[i].push({ a: j, m, puente: true });
-    grafo.ady[j].push({ a: i, m, puente: true });
-    puentes++;
+  const comps = new Set(); for (let i = 0; i < N; i++) comps.add(raiz(i));
+  if (comps.size > 1) {
+    const candidatos = paresCercanos(puenteMax)
+      .filter(([, i, j]) => raiz(i) !== raiz(j))
+      .sort((a, b) => a[0] - b[0]);
+    for (const [m, i, j] of candidatos) {
+      if (raiz(i) === raiz(j)) continue;   // ya quedaron unidas
+      if (conectar(i, j, m, 'puente')) { puentes++; unir(i, j); }
+    }
   }
 
-  const comps = new Set(); for (let i = 0; i < N; i++) comps.add(raiz(i));
-  return { ...grafo, componentes: comps.size, puentes };
+  const finales = new Set(); for (let i = 0; i < N; i++) finales.add(raiz(i));
+  return { ...grafo, componentes: finales.size, puentes, empalmes };
 }
 
 function nodoMasCercano(grafo, punto) {
@@ -282,7 +306,8 @@ export function useRuta(capas) {
     grafo, ruta, error, calculando, trazar, limpiar,
     nodos: grafo.nodos.length,
     componentes: grafo.componentes,   // 1 = red totalmente conectada
-    puentes: grafo.puentes,           // huecos que hubo que coser
+    empalmes: grafo.empalmes,         // cruces cortos conectados
+    puentes: grafo.puentes,           // huecos largos que hubo que salvar
   };
 }
 
