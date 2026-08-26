@@ -179,12 +179,14 @@
   color: #0f579f !important;
   border-radius: 6px !important;
   font-family: ui-monospace, monospace;
-  font-size: 9px !important; padding: 2px 7px !important; margin-bottom: 5px !important;
+    font-size: 15px !important; font-weight: 700 !important;
+  padding: 5px 11px !important; margin-bottom: 8px !important;
+  letter-spacing: .02em;
 }
 .inc .tbl-card-title {
-  color: #0B2A5B !important; font-weight: 700 !important;
-  font-size: .86rem !important; line-height: 1.28 !important;
-  min-height: 2.56em !important; margin: 0 0 7px !important;
+  color: #0B2A5B !important; font-weight: 800 !important;
+  font-size: 1.15rem !important; line-height: 1.25 !important;
+  min-height: 2.5em !important; margin: 0 0 9px !important;
 }
 .inc .tbl-text-muted { color: #5b7590 !important; font-size: 10.5px !important; line-height: 1.35; }
 .inc .tbl-card-body .tbl-text-muted { margin-bottom: 4px !important; }
