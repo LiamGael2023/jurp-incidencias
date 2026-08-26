@@ -89,7 +89,70 @@ export function construirGrafo(capas, tol = 12) {
     }
   }
 
-  return { nodos: [...nodos.values()].sort((a, b) => a.id - b.id), ady };
+  const grafo = { nodos: [...nodos.values()].sort((a, b) => a.id - b.id), ady };
+  return coserComponentes(grafo, 350);
+}
+
+/**
+ * Los KMZ se dibujaron por tramos: entre un camino y el siguiente suele haber
+ * un hueco de decenas de metros, así que el grafo queda partido en islas y no
+ * habría ruta entre ellas. Aquí se cosen: se buscan los pares de nodos más
+ * próximos entre islas distintas y se unen, de menor a mayor distancia, hasta
+ * que todo quede conectado (o se agote el límite `puenteMax`).
+ *
+ * Es un Kruskal sobre las componentes, con rejilla espacial para no comparar
+ * todos contra todos.
+ */
+function coserComponentes(grafo, puenteMax = 350) {
+  const N = grafo.ady.length;
+  if (!N) return { ...grafo, componentes: 0, puentes: 0 };
+
+  // Union-Find
+  const padre = new Int32Array(N).map((_, i) => i);
+  const raiz = (x) => { while (padre[x] !== x) { padre[x] = padre[padre[x]]; x = padre[x]; } return x; };
+  const unir = (a, b) => { const ra = raiz(a), rb = raiz(b); if (ra === rb) return false; padre[ra] = rb; return true; };
+  for (let u = 0; u < N; u++) for (const e of grafo.ady[u]) unir(u, e.a);
+
+  const compsIniciales = new Set(); for (let i = 0; i < N; i++) compsIniciales.add(raiz(i));
+  if (compsIniciales.size <= 1) return { ...grafo, componentes: 1, puentes: 0 };
+
+  // Rejilla del tamaño del puente máximo: solo se comparan celdas vecinas.
+  const celLng = puenteMax / 111320, celLat = puenteMax / 110540;
+  const rejilla = new Map();
+  for (let i = 0; i < N; i++) {
+    const [lng, lat] = grafo.nodos[i].coord;
+    const k = `${Math.floor(lng / celLng)}|${Math.floor(lat / celLat)}`;
+    if (!rejilla.has(k)) rejilla.set(k, []);
+    rejilla.get(k).push(i);
+  }
+
+  const candidatos = [];
+  for (const [k, ids] of rejilla) {
+    const [gx, gy] = k.split('|').map(Number);
+    const vecinos = [];
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      const v = rejilla.get(`${gx + dx}|${gy + dy}`);
+      if (v) vecinos.push(...v);
+    }
+    for (const i of ids) for (const j of vecinos) {
+      if (j <= i) continue;
+      if (raiz(i) === raiz(j)) continue;   // ya están en la misma isla
+      const m = distanciaM(grafo.nodos[i].coord, grafo.nodos[j].coord);
+      if (m <= puenteMax) candidatos.push([m, i, j]);
+    }
+  }
+  candidatos.sort((a, b) => a[0] - b[0]);
+
+  let puentes = 0;
+  for (const [m, i, j] of candidatos) {
+    if (!unir(i, j)) continue;             // ya quedaron conectadas
+    grafo.ady[i].push({ a: j, m, puente: true });
+    grafo.ady[j].push({ a: i, m, puente: true });
+    puentes++;
+  }
+
+  const comps = new Set(); for (let i = 0; i < N; i++) comps.add(raiz(i));
+  return { ...grafo, componentes: comps.size, puentes };
 }
 
 function nodoMasCercano(grafo, punto) {
@@ -215,7 +278,12 @@ export function useRuta(capas) {
 
   const limpiar = useCallback(() => { setRuta(null); setError(null); }, []);
 
-  return { grafo, ruta, error, calculando, trazar, limpiar, nodos: grafo.nodos.length };
+  return {
+    grafo, ruta, error, calculando, trazar, limpiar,
+    nodos: grafo.nodos.length,
+    componentes: grafo.componentes,   // 1 = red totalmente conectada
+    puentes: grafo.puentes,           // huecos que hubo que coser
+  };
 }
 
 /* ══════════════════════════════════════════════════════════

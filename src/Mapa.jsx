@@ -1630,6 +1630,12 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               {ruta.error && (
                 <div style={{ margin: '6px 0 0', fontSize: 11, color: '#ffc9c9', background: 'rgba(224,49,49,.14)', border: '1px solid rgba(224,49,49,.3)', borderRadius: 7, padding: '6px 9px' }}>
                   {ruta.error}
+                  {ruta.componentes > 1 && (
+                    <div style={{ fontSize: 10.5, color: '#ffd8a8', marginTop: 4 }}>
+                      La red de caminos está partida en {ruta.componentes} tramos sin conectar.
+                      Falta camino en los KMZ entre esas zonas.
+                    </div>
+                  )}
                 </div>
               )}
               {ruta.ruta && (
