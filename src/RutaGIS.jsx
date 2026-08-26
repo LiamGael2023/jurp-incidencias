@@ -35,15 +35,42 @@ export function distanciaM(a, b) {
 }
 
 // Todas las líneas de una FeatureCollection, como arreglos de [lng,lat].
+// Soporta también GeometryCollection, que es como Google Earth exporta a
+// veces los trazos: si no se desenvuelve, la capa entera se pierde en silencio.
 function lineasDe(fc) {
   const out = [];
-  for (const f of (fc?.features || [])) {
-    const g = f.geometry;
-    if (!g) continue;
+  const tiposIgnorados = {};
+
+  const tragar = (g) => {
+    if (!g) return;
     if (g.type === 'LineString') out.push(g.coordinates);
     else if (g.type === 'MultiLineString') out.push(...g.coordinates);
-  }
-  return out.filter(l => Array.isArray(l) && l.length >= 2);
+    else if (g.type === 'GeometryCollection') (g.geometries || []).forEach(tragar);
+    else if (g.type === 'Polygon') out.push(...(g.coordinates || []));          // el contorno sirve como camino
+    else if (g.type === 'MultiPolygon') (g.coordinates || []).forEach(p => out.push(...p));
+    else tiposIgnorados[g.type] = (tiposIgnorados[g.type] || 0) + 1;
+  };
+
+  for (const f of (fc?.features || [])) tragar(f.geometry);
+  const lineas = out.filter(l => Array.isArray(l) && l.length >= 2);
+  return { lineas, tiposIgnorados };
+}
+
+/** Resumen por capa: sirve para ver cuál no está aportando nada al grafo. */
+export function resumenCapas(capas) {
+  return capas.map((c, i) => {
+    const fc = c?.data || c;
+    const nombre = c?.nombre || `capa ${i + 1}`;
+    const { lineas, tiposIgnorados } = lineasDe(fc);
+    const vertices = lineas.reduce((a, l) => a + l.length, 0);
+    return {
+      nombre,
+      features: fc?.features?.length || 0,
+      lineas: lineas.length,
+      vertices,
+      ignorados: Object.keys(tiposIgnorados).length ? tiposIgnorados : null,
+    };
+  });
 }
 
 /**
@@ -77,8 +104,9 @@ export function construirGrafo(capas, tol = 12) {
     if (!ady[n2.id].some(e => e.a === n1.id)) ady[n2.id].push({ a: n1.id, m });
   };
 
-  for (const fc of capas) {
-    for (const linea of lineasDe(fc)) {
+  for (const c of capas) {
+    const fc = c?.data || c;          // admite { nombre, data } o la FC pelada
+    for (const linea of lineasDe(fc).lineas) {
       let prev = null;
       for (const c of linea) {
         if (!Array.isArray(c) || c.length < 2) continue;
@@ -276,7 +304,16 @@ export const fmtTiempo = (m, kmh = 30) => {
    ══════════════════════════════════════════════════════════ */
 export function useRuta(capas) {
   // El grafo se arma una sola vez: las capas KMZ son estáticas.
-  const grafo = useMemo(() => construirGrafo(capas), [capas]);
+  const grafo = useMemo(() => {
+    const g = construirGrafo(capas);
+    // Diagnóstico: si una capa aporta 0 líneas, no está entrando al ruteo.
+    const resumen = resumenCapas(capas);
+    console.info('[Ruteo] Capas usadas:', resumen);
+    console.info(`[Ruteo] ${g.nodos.length} nodos · ${g.empalmes} empalmes · ${g.puentes} puentes · ${g.componentes} tramo(s) sin conectar`);
+    const mudas = resumen.filter(r => r.lineas === 0);
+    if (mudas.length) console.warn('[Ruteo] Estas capas NO aportan líneas:', mudas.map(m => m.nombre));
+    return g;
+  }, [capas]);
   const [ruta, setRuta] = useState(null);       // { coords, metros, destino }
   const [error, setError] = useState(null);
   const [calculando, setCalculando] = useState(false);

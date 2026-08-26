@@ -248,10 +248,12 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [showLayers, setShowLayers] = useState(false);
   const inv = useInventario();
   // Ruteo sobre la red de caminos propia (no usa Google ni OSM).
-  const capasRuta = useMemo(
-    () => [geoCaminosServ, geoViasAcceso, geoViaAuxiliar, geoRedNacional],
-    []
-  );
+  const capasRuta = useMemo(() => [
+    { nombre: 'Caminos de Servicio', data: geoCaminosServ },
+    { nombre: 'Vías de Acceso',      data: geoViasAcceso },
+    { nombre: 'Vía Auxiliar',        data: geoViaAuxiliar },
+    { nombre: 'Red Nacional',        data: geoRedNacional },
+  ], []);
   const ruta = useRuta(capasRuta);
   // Punto de partida puesto a mano con un clic (tiene prioridad sobre el GPS).
   const [origenManual, setOrigenManual] = useState(null);
