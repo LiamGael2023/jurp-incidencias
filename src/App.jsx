@@ -13,19 +13,21 @@ import Estadisticas from './Estadisticas';
 import Vigilancia from './Vigilancia';
 import Reportes from './Reportes';
 import Maquinaria from './Maquinaria';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck } from 'react-icons/fa';
+import Partes from './Partes';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
 const URL_HYDROMETRIX = 'http://sistema.jriegopresurizado.org.pe/';
 
 /* Menu completo. "apps" indica desde que tarjeta de NEXHIDRO se ve cada opcion. */
 const MENU = [
-  { clave: 'mapa',         titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />, apps: ['pluvira'] },
-  { clave: 'lista',        titulo: 'Incidentes',    icono: <FaListUl />,       apps: ['pluvira'] },
-  { clave: 'vigilancia',   titulo: 'Vigilancia',    icono: <FaShieldAlt />,    apps: ['sentria'] },
-  { clave: 'estadisticas', titulo: 'Estadísticas',  icono: <FaChartPie />,     apps: ['pluvira'] },
-  { clave: 'reportes',     titulo: 'Reportes',      icono: <FaFilePdf />,      apps: ['pluvira'] },
-  { clave: 'maquinaria',   titulo: 'Maquinaria',    icono: <FaTruck />,        apps: ['pluvira'] },
+  { clave: 'mapa',         titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,  apps: ['pluvira'] },
+  { clave: 'lista',        titulo: 'Incidentes',    icono: <FaListUl />,        apps: ['pluvira'] },
+  { clave: 'vigilancia',   titulo: 'Vigilancia',    icono: <FaShieldAlt />,     apps: ['sentria'] },
+  { clave: 'estadisticas', titulo: 'Estadísticas',  icono: <FaChartPie />,      apps: ['pluvira'] },
+  { clave: 'reportes',     titulo: 'Reportes',      icono: <FaFilePdf />,       apps: ['pluvira'] },
+  { clave: 'maquinaria',   titulo: 'Maquinaria',    icono: <FaTruck />,         apps: ['pluvira'] },
+  { clave: 'partes',       titulo: 'Partes Diarios', icono: <FaClipboardList />, apps: ['pluvira'] },
 ];
 
 const vistaInicial = (app) => (app === 'sentria' ? 'vigilancia' : 'mapa');
@@ -155,6 +157,17 @@ function App() {
     );
   }
 
+  // Partes Diarios reutiliza el layout y el tema de Maquinaria: las dos son
+  // vistas de flota, así que comparten MaquinariaGIS.css sin duplicar estilos.
+  if (vistaActual === 'partes') {
+    return (
+      <div className="maq">
+        <RailGIS {...propsRail} />
+        <div className="maq-main"><Partes irAIncidente={irAIncidente} /></div>
+      </div>
+    );
+  }
+
   if (vistaActual === 'reportes') {
     return (
       <div className="rep">
@@ -255,6 +268,7 @@ function App() {
           {vistaActual === 'estadisticas' && <Estadisticas />}
           {vistaActual === 'reportes' && <Reportes />}
           {vistaActual === 'maquinaria' && <Maquinaria irAIncidente={irAIncidente} />}
+          {vistaActual === 'partes' && <Partes irAIncidente={irAIncidente} />}
         </div>
       </div>
     </div>
