@@ -3,7 +3,6 @@
    Mismo lenguaje visual que Incidentes, Estadísticas y Reportes.
    Los modales (historial, visor PDF, reporte) siguen en claro.
    =========================================================== */
-
 .maq {
   position: fixed;
   inset: 0;
@@ -14,12 +13,10 @@
   overflow: hidden;
 }
 .maq *, .maq *::before, .maq *::after { box-sizing: border-box; }
-
 .maq-main {
   position: relative; z-index: 1; flex: 1; min-width: 0; overflow-y: auto;
   /* el rail flota encima: cada bloque se aparta con --rail-w */
 }
-
 /* ---------- cabecera ---------- */
 .maq-head {
   position: relative;
@@ -44,7 +41,6 @@
   color: #fff; line-height: 1.15; letter-spacing: -.01em;
 }
 .maq-acciones { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
-
 .maq-btn {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 9px 16px; border-radius: 10px; cursor: pointer;
@@ -60,14 +56,12 @@
   box-shadow: 0 3px 12px rgba(53, 182, 233, .4);
 }
 .maq-btn-primario:hover:not(:disabled) { background: #5fcaf1; border-color: #5fcaf1; }
-
 /* ---------- cuerpo ---------- */
 .maq-body {
   padding: 20px 24px 28px;
   padding-left: calc(var(--rail-w, 286px) + 24px);
   transition: padding-left .35s ease;
 }
-
 /* ---------- indicadores ---------- */
 .maq-kpis {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
@@ -94,7 +88,6 @@
   font-size: 27px; font-weight: 800; line-height: 1;
   color: var(--c); font-variant-numeric: tabular-nums;
 }
-
 /* ---------- filtros ---------- */
 .maq-filtros {
   display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
@@ -133,12 +126,10 @@
   background: none; border: none; cursor: pointer; color: #9db2c7; display: flex; padding: 2px;
 }
 .maq-contador { font-size: 12px; font-weight: 700; color: #5b7590; white-space: nowrap; }
-
 /* ---------- rejilla de máquinas ---------- */
 .maq-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); gap: 14px;
 }
-
 .maq-card {
   position: relative;
   background: #fff; border: 1px solid #d3e4f4; border-radius: 13px;
@@ -156,7 +147,6 @@
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; z-index: 2;
   background: var(--c);
 }
-
 .maq-card-banda {
   display: flex; align-items: center; gap: 7px;
   padding: 9px 14px; border-bottom: 1px solid #eef3f9;
@@ -169,7 +159,6 @@
 }
 .maq-origen.jurp { background: #1268C3; }
 .maq-origen.ext { background: #EE7B12; }
-
 .maq-card-cuerpo { padding: 13px 14px; }
 .maq-codigo {
   display: flex; align-items: center; gap: 8px; margin-bottom: 5px;
@@ -179,7 +168,6 @@
 .maq-equipo { font-size: 12.5px; font-weight: 600; color: #48617c; line-height: 1.4; }
 .maq-modelo { font-size: 12px; color: #5b7590; margin-top: 3px; line-height: 1.4; }
 .maq-modelo b { color: #1d273b; }
-
 .maq-aviso {
   margin-top: 10px; padding: 10px; border-radius: 9px; font-size: 12px;
   border: 1px solid;
@@ -196,7 +184,6 @@
 .maq-aviso.ambar p { color: #92400e; }
 .maq-aviso small { color: #a16207; font-size: 11px; }
 .maq-aviso .nota { color: #94a3b8; font-style: italic; font-size: 11px; }
-
 .maq-accion {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   width: 100%; margin-top: 8px; padding: 8px 11px;
@@ -209,12 +196,10 @@
 .maq-accion.verde:hover { background: #15803d; }
 .maq-accion.ambar { background: #f59e0b; }
 .maq-accion.ambar:hover { background: #d97706; }
-
 .maq-historial {
   display: flex; align-items: center; gap: 6px; margin-top: 11px;
   font-size: 11.5px; font-weight: 700; color: #1268C3;
 }
-
 /* ---------- estados ---------- */
 .maq-estado-vacio {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -222,7 +207,6 @@
 }
 .maq-estado-vacio .icono { color: #9fc9ec; }
 .maq-estado-vacio .titulo { font-size: 15px; font-weight: 800; color: #0B2A5B; }
-
 /* ---------- paginador ---------- */
 .maq-paginador {
   display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -245,18 +229,54 @@
 }
 .maq-pag-info { margin-left: 8px; font-size: 12px; font-weight: 600; color: #5b7590; white-space: nowrap; }
 .maq-pag-puntos { color: #9db2c7; }
-
 /* ---------- scrollbars ---------- */
 .maq ::-webkit-scrollbar { width: 8px; height: 8px; }
 .maq ::-webkit-scrollbar-thumb { background: #c3d6e8; border-radius: 4px; }
 .maq ::-webkit-scrollbar-thumb:hover { background: #a8c4dd; }
 .maq ::-webkit-scrollbar-track { background: transparent; }
 
-/* ---------- responsive ---------- */
+/* ===========================================================
+   PARTES DIARIOS
+   Esta vista usa las clases tbl-* (las mismas de Incidentes) en
+   lugar de las maq-*. El rail lateral FLOTA sobre el contenido,
+   así que aquí hay que apartarlo igual que en .maq-head y
+   .maq-body; sin esto el rail tapa el título y el inicio de la
+   tabla. Además, la tabla es más ancha que la pantalla: el
+   scroll horizontal debe ser suyo, no del contenedor.
+   =========================================================== */
+.maq .tbl-page-wrapper { min-width: 0; max-width: 100%; }
+
+.maq .tbl-page-header {
+  padding-left: calc(var(--rail-w, 286px) + 24px);
+  padding-right: 24px;
+  transition: padding-left .35s ease;
+}
+
+.maq .tbl-page-body {
+  padding-left: calc(var(--rail-w, 286px) + 24px);
+  padding-right: 24px;
+  transition: padding-left .35s ease;
+}
+
+/* La tabla hace su propio scroll horizontal dentro del ancho disponible. */
+.maq .tbl-table-responsive {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.maq .tbl-table { min-width: 1180px; }
+
+/* Los modales quedan centrados en la pantalla completa: no llevan el
+   desplazamiento del rail, porque se dibujan por encima de todo. */
+.maq .tbl-modal-backdrop { padding-left: 0; }
+
 @media (max-width: 700px) {
   .maq-main { padding-bottom: 66px; }
   .maq-head { padding: 14px 16px 12px; }
   .maq-titulo { font-size: 21px; }
   .maq-body { padding: 14px; }
   .maq-grid { grid-template-columns: 1fr; }
+
+  /* En móvil el rail pasa a barra inferior: el contenido recupera el ancho. */
+  .maq .tbl-page-header,
+  .maq .tbl-page-body { padding-left: 14px; padding-right: 14px; }
 }
