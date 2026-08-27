@@ -224,13 +224,30 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
   };
 
-  const obtenerCorrelativoParte = async () => {
+  // Partes de maquinaria que están en la lista pero todavía NO se guardaron.
+  // Cada uno ya reservó un correlativo en pantalla, aunque el backend aún no
+  // lo sepa: sin contarlos, el siguiente parte repetiría el mismo número.
+  const partesPendientes = () => recursos.filter(
+    r => r.tipo === 'Maquinaria' && !r.guardadoEnDB && !r.esBorrador
+  ).length;
+
+  // Suma n al correlativo respetando el formato PD-0027-20260827.
+  const correlativoMas = (numero, n) => {
+    if (!numero || n <= 0) return numero;
+    const m = String(numero).match(/^(.*?)(\d+)(-\d+)$/);
+    if (!m) return numero;
+    const [, pre, num, post] = m;
+    return `${pre}${String(parseInt(num, 10) + n).padStart(num.length, '0')}${post}`;
+  };
+
+  const obtenerCorrelativoParte = async (offset = 0) => {
     try {
       const r = await fetch(`${API_OPS}/daily-part-heavy-equipments/siguiente-correlativo/`);
       if (r.ok) {
         const data = await r.json();
         if (data?.numero_parte) {
-          setNuevoRecurso(prev => ({ ...prev, numeroParte: data.numero_parte }));
+          const numero = correlativoMas(data.numero_parte, offset);
+          setNuevoRecurso(prev => ({ ...prev, numeroParte: numero }));
         }
       }
     } catch (e) { console.error(e); }
@@ -949,7 +966,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       codigoMaquina: maq.codigo || '',
       hmInicio: hmInicioPrev,
     });
-    obtenerCorrelativoParte();
+    obtenerCorrelativoParte(partesPendientes());
     setFormTipo('Maquinaria');
   };
 
@@ -967,7 +984,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       precioUnitario: grupo.precioUnitario || 0,
       hmInicio: hmInicioPrev,
     });
-    obtenerCorrelativoParte();
+    obtenerCorrelativoParte(partesPendientes());
     setFormTipo('Maquinaria');
   };
 
@@ -1002,6 +1019,14 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       if (!nuevoRecurso.numeroParte) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Número de Parte es obligatorio' });
       if (!nuevoRecurso.proveedor || !nuevoRecurso.proveedor.trim()) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Proveedor es obligatorio' });
       if (!nuevoRecurso.equipo) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un equipo' });
+      // El correlativo tiene que ser único: si se repite, al guardar quedarían
+      // dos partes distintos con el mismo N° y no se podrían diferenciar.
+      const repetido = recursos.some(r => r.tipo === 'Maquinaria' && !r.esBorrador &&
+        (r.numeroParte || '').trim() === (nuevoRecurso.numeroParte || '').trim());
+      if (repetido) return Swal.fire({
+        icon: 'warning', title: 'N° de Parte repetido',
+        text: `Ya hay un parte ${nuevoRecurso.numeroParte} en esta incidencia. Cámbialo antes de agregarlo.`,
+      });
       if (!nuevoRecurso.actividad) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona la actividad realizada' });
       // OTROS: exige descripción escrita y metrado manual (no hay fórmula).
       if (nuevoRecurso.actividad === 'OTROS' && !nuevoRecurso.actividadOtros.trim())
@@ -1035,7 +1060,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     const recursoCalculado = { ...nuevoRecurso, idLocal: Date.now(), descripcionResumen: descFinal, cantidad: cantFinal, precioUnitario: parseFloat(nuevoRecurso.precioUnitario) || 0, total: round2(cantFinal * (parseFloat(nuevoRecurso.precioUnitario) || 0)), guardadoEnDB: false };
     setRecursos([...recursos, recursoCalculado]);
     setNuevoRecurso({...estadoInicialRecurso, numeroParte: generarCorrelativo()});
-    obtenerCorrelativoParte();
+    // +1: el que se acaba de agregar todavía no está en `recursos` aquí.
+    obtenerCorrelativoParte(partesPendientes() + 1);
     setFormTipo(null);   // cierra el modal de añadir
   };
 
