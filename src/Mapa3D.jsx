@@ -5,7 +5,7 @@ import {
   FaTimes, FaGlobeAmericas, FaMountain, FaLayerGroup,
   FaPlay, FaSyncAlt, FaLocationArrow,
 } from 'react-icons/fa';
-
+import * as maplibregl from 'maplibre-gl';
 /**
  * Vista 3D en globo.
  *
