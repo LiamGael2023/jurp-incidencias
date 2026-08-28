@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import maplibregl from 'maplibre-gl';
+// maplibre-gl 6 eliminó el export default: ahora todo son exports nombrados,
+// así que hay que importar el espacio de nombres completo.
+import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
   FaTimes, FaGlobeAmericas, FaMountain, FaLayerGroup,
   FaPlay, FaSyncAlt, FaLocationArrow,
 } from 'react-icons/fa';
-import * as maplibregl from 'maplibre-gl';
+
 /**
  * Vista 3D en globo.
  *
