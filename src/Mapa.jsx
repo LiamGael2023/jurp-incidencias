@@ -22,6 +22,7 @@ import { BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa } from
 import './MapaHerramientas.css';
 import { useInventario, CapasInventario, PanelInventario, FaClipboardCheck } from './InventarioGIS';
 import { useRuta, CapaRuta, fmtDistancia, fmtTiempo } from './RutaGIS';
+import Mapa3D from './Mapa3D';
 
 import geoCanalMadre from './data/Canal_Madre.json';
 import geoLateral10 from './data/Lateral_10.json';
@@ -263,9 +264,23 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     { nombre: 'Redes Presurizado',   data: geoRedes,      factor: 1.4 },
   ], []);
   const ruta = useRuta(capasRuta);
+
+  // Lo que se dibuja en el globo: canales y caminos. Las capas KMZ de
+  // infraestructura se dejan fuera a propósito — en vista de globo son miles
+  // de puntos que saturan la escena sin aportar lectura.
+  const capasLinea3D = useMemo(() => [
+    { nombre: 'Canal Madre',       data: geoCanalMadre,  color: '#35B6E9' },
+    { nombre: 'Lateral 10',        data: geoLateral10,   color: '#f03e3e' },
+    { nombre: 'Redes Presurizado', data: geoRedes,       color: '#f59f00' },
+    { nombre: 'Caminos Servicio',  data: geoCaminosServ, color: '#e67700' },
+    { nombre: 'Vías de Acceso',    data: geoViasAcceso,  color: '#d6336c' },
+  ], []);
   // Punto de partida puesto a mano con un clic (tiene prioridad sobre el GPS).
   const [origenManual, setOrigenManual] = useState(null);
   const [modoOrigen, setModoOrigen] = useState(false);
+  // Vista 3D en globo (MapLibre). Se monta encima; el visor 2D sigue vivo
+  // debajo, así que al salir se recupera el estado tal cual estaba.
+  const [ver3D, setVer3D] = useState(false);
   // Al iniciar se muestran todas; se puede filtrar a las que registran lluvia.
   const [soloConLluvia, setSoloConLluvia] = useState(false);
   // Capas KMZ/KML que el usuario sube desde su equipo (no se guardan en el
@@ -1367,6 +1382,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       {/* ══════════════ HERRAMIENTAS ══════════════ */}
       <div className="gis-tools gis-glass">
         <button className="gis-tool" title="Vista general" onClick={() => mapRef.current?.flyTo(centroMapa, 10, { duration: 1 })}><FaGlobe /></button>
+        <button className={`gis-tool ${ver3D ? 'activo' : ''}`} title="Vista 3D en globo"
+          onClick={() => setVer3D(true)}
+          style={{ fontWeight: 800, fontSize: 12, letterSpacing: '.02em' }}>3D</button>
         <button className={`gis-tool ${showLayers ? 'activo' : ''}`} title="Capas" onClick={() => setShowLayers(v => !v)}><FaLayerGroup /></button>
         <button className={`gis-tool ${capasUsuario.length || capasGuardadas.some(c => c.visible) ? 'activo' : ''}`}
           title="Cargar un KMZ o KML desde tu equipo"
@@ -1915,6 +1933,16 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             </div>
           </div>
         </div>
+      )}
+
+      {/* ══════════════ VISTA 3D EN GLOBO ══════════════ */}
+      {ver3D && (
+        <Mapa3D
+          incidentes={incEnMapa}
+          capasLinea={capasLinea3D}
+          onCerrar={() => setVer3D(false)}
+          onSeleccionar={(inc) => { setVer3D(false); seleccionarIncidente(inc); }}
+        />
       )}
 
       {/* ══════════════ MODAL DE IMAGEN ══════════════ */}
