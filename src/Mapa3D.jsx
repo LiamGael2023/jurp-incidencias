@@ -222,13 +222,8 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
       {/* Cabecera */}
       <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 10, display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(8,22,40,.62)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 12, padding: '10px 16px' }}>
         <FaGlobeAmericas size={20} color="#35B6E9" />
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: '#8fd0f5' }}>
-            Vista 3D
-          </div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>
-            Chavimochic desde el espacio
-          </div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '.04em' }}>
+          VISTA 3D
         </div>
       </div>
 
