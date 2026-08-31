@@ -2407,7 +2407,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       {/* ── MODAL PRINCIPAL (GESTIÓN) — solo cierra con botón Cerrar ─────── */}
       {modalAbierto && incidenteActivo && (
         <div className="tbl-modal-backdrop">
-          <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{maxWidth: '960px'}}>
+          <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{maxWidth: '1240px', width: '95vw'}}>
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
                 <h5 className="tbl-modal-title">Gestión · {incidenteActivo.codigoIncidente}</h5>
