@@ -1323,7 +1323,10 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         </div>
       </header>
 
-      {/* ══════════════ KPIs ══════════════ */}
+      {/* ══════════════ KPIs ══════════════
+          Se ocultan con el inventario abierto: son dos paneles que compiten
+          por la pantalla y el del inventario necesita el mapa despejado. */}
+      {!inv.abierto && (
       <div className="gis-kpis">
         <div className={`gis-kpi gis-glass ${nivelAlerta.marco ? 'gis-kpi-alerta' : ''}`}
           style={{ '--alerta': nivelAlerta.color }}
@@ -1382,6 +1385,8 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           <FaChartBar className="gis-kpi-lupa" />
         </button>
       </div>
+
+      )}
 
       {/* ══════════════ HERRAMIENTAS ══════════════ */}
       <div className="gis-tools gis-glass">
@@ -1572,6 +1577,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         onVolar={(b) => mapRef.current?.fitBounds(b, { padding: [50, 50], maxZoom: 16 })} />
 
       {/* ══════════════ PANEL DERECHO ══════════════ */}
+      {!inv.abierto && (
       <aside className="gis-panel">
 
         {/* ── Lista de incidentes ── */}
@@ -1785,6 +1791,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           </div>}
         </div>
       </aside>
+      )}
 
       {/* ══════════════ LEYENDA ══════════════ */}
       {/* El color del pin es el ESTADO: verde si ya se resolvió; si sigue
