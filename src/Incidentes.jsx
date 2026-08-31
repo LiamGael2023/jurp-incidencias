@@ -2950,7 +2950,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       {/* ── Modal: partes diarios de una máquina ───────────────────────── */}
       {modalPartes && (
         <div onClick={() => setModalPartes(null)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:'10px', overflow:'hidden', maxWidth:'960px', width:'100%', maxHeight:'88vh', display:'flex', flexDirection:'column' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:'10px', overflow:'hidden', maxWidth:'1280px', width:'96vw', maxHeight:'92vh', display:'flex', flexDirection:'column' }}>
             {/* Header */}
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 22px', background:'#1463A5', color:'#fff' }}>
               <div style={{ display:'flex', alignItems:'center', gap:'12px', minWidth:0 }}>
@@ -2964,21 +2964,21 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
             </div>
 
             {/* Tabla de partes */}
-            <div style={{ overflowY:'auto', padding:'0' }}>
+            <div style={{ overflowY:'auto', overflowX:'hidden', padding:'0', flex:1 }}>
               {modalPartes.partesMaq.length === 0 ? (
                 <div style={{ padding:'40px', textAlign:'center', color:'#94a3b8', fontSize:'14px' }}>Esta máquina aún no tiene partes diarios. Usa "+ Parte Diario" para crear el primero.</div>
               ) : (
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
                   <thead>
                     <tr style={{ background:'#f1f5f9', borderBottom:'2px solid #e2e8f0' }}>
-                      <th style={{ textAlign:'left', padding:'11px 22px', fontSize:'11px', color:'#475569', letterSpacing:'0.4px' }}>N° PARTE</th>
+                      <th style={{ textAlign:'left', padding:'11px 16px', fontSize:'11px', color:'#475569', letterSpacing:'0.4px', whiteSpace:'nowrap' }}>N° PARTE</th>
                       <th style={{ textAlign:'left', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>FECHA</th>
                       <th style={{ textAlign:'left', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>ESTADO</th>
                       <th style={{ textAlign:'left', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>ACTIVIDAD</th>
                       <th style={{ textAlign:'right', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>HORAS</th>
                       <th style={{ textAlign:'right', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>COMBUST.</th>
                       <th style={{ textAlign:'right', padding:'11px 10px', fontSize:'11px', color:'#475569' }}>TOTAL</th>
-                      <th style={{ textAlign:'right', padding:'11px 22px', fontSize:'11px', color:'#475569' }}>ACCIONES</th>
+                      <th style={{ textAlign:'right', padding:'11px 16px', fontSize:'11px', color:'#475569', whiteSpace:'nowrap' }}>ACCIONES</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2989,19 +2989,19 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                       const actTxt = textoActividad(reg) || '—';
                       return (
                         <tr key={p.idLocal || idx} style={{ borderBottom:'1px solid #f1f5f9', background: p.cerrado ? '#fff' : '#fffbeb' }}>
-                          <td style={{ padding:'12px 22px', fontWeight:700, color:'#1e293b' }}>{p.numeroParte || `#${p.dbId}`}</td>
+                          <td style={{ padding:'12px 16px', fontWeight:700, color:'#1e293b', whiteSpace:'nowrap' }}>{p.numeroParte || `#${p.dbId}`}</td>
                           <td style={{ padding:'12px 10px', color:'#475569', whiteSpace:'nowrap' }}>{reg.fechaParte ? (reg.fechaParte.split('T')[0].split('-').reverse().join('/')) : '—'}</td>
                           <td style={{ padding:'12px 10px' }}>
                             <span style={{ fontSize:'10px', fontWeight:700, padding:'3px 9px', borderRadius:'4px', background: p.cerrado ? '#dcfce7' : '#fef3c7', color: p.cerrado ? '#15803d' : '#b45309', whiteSpace:'nowrap' }}>
                               {p.cerrado ? 'CERRADO' : 'ABIERTO'}
                             </span>
                           </td>
-                          <td style={{ padding:'12px 10px', color:'#475569', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={actTxt}>{actTxt}</td>
+                          <td style={{ padding:'12px 10px', color:'#475569', maxWidth:'320px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={actTxt}>{actTxt}</td>
                           <td style={{ padding:'12px 10px', textAlign:'right', fontWeight:600, color:'#334155', whiteSpace:'nowrap' }}>{fmtCant(horas)} HE</td>
                           <td style={{ padding:'12px 10px', textAlign:'right', color:'#334155', whiteSpace:'nowrap' }}>{fmtCant(reg.combustible || 0)} Gls</td>
                           <td style={{ padding:'12px 10px', textAlign:'right', fontWeight:700, color:'#1463A5', whiteSpace:'nowrap' }}>S/ {fmtNum(reg.total || 0)}</td>
-                          <td style={{ padding:'12px 22px' }}>
-                            <div style={{ display:'flex', gap:'6px', justifyContent:'flex-end', alignItems:'center' }}>
+                          <td style={{ padding:'12px 16px' }}>
+                            <div style={{ display:'flex', gap:'6px', justifyContent:'flex-end', alignItems:'center', flexWrap:'nowrap' }}>
                               {p.dbId && (
                                 <button type="button" onClick={() => { setModalPartes(null); abrirModalPdf(p.dbId); }} title="Ver PDF del parte"
                                   style={{ display:'inline-flex', alignItems:'center', gap:'5px', padding:'5px 11px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'5px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:600, whiteSpace:'nowrap' }}>
