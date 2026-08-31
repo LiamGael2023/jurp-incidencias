@@ -1229,6 +1229,10 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
           <CapaRuta ruta={ruta} />
 
+          {/* Capas del inventario JURP (PostGIS). A diferencia de los KMZ,
+              estas llevan el estado de conservación de la campaña vigente. */}
+          <CapasInventario inv={inv} />
+
           {lluviasAPI
             .filter(p => p.tipo === 'davis' ? capas.Davis : capas.Lluvias)
             .filter(p => !soloConLluvia || p.totalRain > 0)
@@ -1385,6 +1389,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         <button className={`gis-tool ${ver3D ? 'activo' : ''}`} title="Vista 3D en globo"
           onClick={() => setVer3D(true)}
           style={{ fontWeight: 800, fontSize: 12, letterSpacing: '.02em' }}>3D</button>
+        <button className={`gis-tool ${inv.abierto ? 'activo' : ''}`}
+          title="Inventario JURP · capas de PostGIS con su estado de evaluación"
+          onClick={inv.alternar}><FaClipboardCheck /></button>
         <button className={`gis-tool ${showLayers ? 'activo' : ''}`} title="Capas" onClick={() => setShowLayers(v => !v)}><FaLayerGroup /></button>
         <button className={`gis-tool ${capasUsuario.length || capasGuardadas.some(c => c.visible) ? 'activo' : ''}`}
           title="Cargar un KMZ o KML desde tu equipo"
@@ -1559,6 +1566,10 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           </div>
         </div>
       )}
+
+      {/* ══════════════ PANEL DEL INVENTARIO JURP ══════════════ */}
+      <PanelInventario inv={inv}
+        onVolar={(b) => mapRef.current?.fitBounds(b, { padding: [50, 50], maxZoom: 16 })} />
 
       {/* ══════════════ PANEL DERECHO ══════════════ */}
       <aside className="gis-panel">
