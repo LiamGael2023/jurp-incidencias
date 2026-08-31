@@ -94,7 +94,10 @@ const ETIQUETA_ESTADO = {
 };
 
 const token = () => localStorage.getItem('userToken');
-const cabeceras = () => ({ Authorization: `Token ${token()}` });
+// El inventario vive en otro backend (gideon), que no comparte la tabla de
+// usuarios con el sistema de riego. Mandar el token de esa sesión hace que
+// DRF intente autenticarlo, falle y devuelva 401 pese al permiso AllowAny.
+const cabeceras = () => ({});
 
 // Punto con anillo de color: relleno = capa, borde = estado evaluado.
 const iconoActivo = (color, estado) => L.divIcon({
