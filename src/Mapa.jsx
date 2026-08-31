@@ -1225,7 +1225,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               }} />
           ))}
 
-          <ClusterIncidentes incidentes={incEnMapa} onSeleccionar={seleccionarIncidente} />
+          {!inv.abierto && (
+            <ClusterIncidentes incidentes={incEnMapa} onSeleccionar={seleccionarIncidente} />
+          )}
 
           <CapaRuta ruta={ruta} />
 
@@ -1233,7 +1235,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               estas llevan el estado de conservación de la campaña vigente. */}
           <CapasInventario inv={inv} />
 
-          {lluviasAPI
+          {!inv.abierto && lluviasAPI
             .filter(p => p.tipo === 'davis' ? capas.Davis : capas.Lluvias)
             .filter(p => !soloConLluvia || p.totalRain > 0)
             .map(p => (
