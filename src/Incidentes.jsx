@@ -656,6 +656,16 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           combustible: i.fuel_gallons ?? '', vale: i.fuel_voucher || '',
           fechaParte: i.date || '', turno: i.shift || 'Día', zonaTrabajo: i.work_zone_text || '',
           operador: i.operator || '', observaciones: i.observations || '',
+          // Sin estos, al abrir la edición del parte los campos salían vacíos
+          // y se sobrescribían con nada al guardar.
+          proveedor: i.provider || '', licencia: i.licencia || '', categoria: i.categoria || '',
+          horasEfectivas: i.horas_efectivas != null ? String(i.horas_efectivas) : '',
+          obsReduccion: i.obs_reduccion || '',
+          metradoManual: i.metrado != null ? String(i.metrado) : '',
+          unidadMetrado: i.metrado_unidad || 'm3',
+          calcularMetrado: !!i.metrado_calculado,
+          anchoSup: i.width_top ?? '', anchoInf: i.width_bottom ?? '',
+          altura: i.height ?? '', longitud: i.length ?? '',
           cantidad: round4(Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer))),
           precioUnitario: parseFloat(i.unit_price),
           total: round2(round4(Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer))) * parseFloat(i.unit_price)),
