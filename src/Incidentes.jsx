@@ -1076,7 +1076,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     setNuevoRecurso({...estadoInicialRecurso, numeroParte: generarCorrelativo()});
     // +1: el que se acaba de agregar todavía no está en `recursos` aquí.
     obtenerCorrelativoParte(partesPendientes() + 1);
-    setFormTipo(null);   // cierra el modal de añadir
+    cerrarFormulario();   // cierra el modal y limpia el modo edición
   };
 
   // Abre el formulario cargado con una entrada existente de mano de obra o
@@ -1120,10 +1120,6 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const editarParte = (reg) => {
     if (incidentesCerrados.includes(incidenteActivo?.id)) {
       Swal.fire('Incidencia cerrada', 'Reábrela para poder editar.', 'info');
-      return;
-    }
-    if (reg.cerrado) {
-      Swal.fire('Parte cerrado', 'Este parte ya fue finalizado y no se puede editar.', 'info');
       return;
     }
     const totalHM = Math.max(0, (parseFloat(reg.hmFin) || 0) - (parseFloat(reg.hmInicio) || 0));
@@ -1365,7 +1361,19 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     for (const g of grupos.values()) {
       g.entradas.sort((a, b) => (b.fechaRecurso || '').localeCompare(a.fechaRecurso || ''));
     }
-    return Array.from(grupos.values());
+
+    // Y los grupos entre sí: mano de obra e insumos por nombre (cargo o
+    // descripción), maquinaria por código de máquina. Así la lista sale
+    // siempre en el mismo orden y no según cómo se fueron cargando.
+    const nombreDe = (g) => (
+      g.tipo === 'Maquinaria' ? (g.codigoMaquina || g.descripcionResumen || '')
+      : g.tipo === 'Personal' ? (g.descripcion || g.descripcionResumen || '')
+      : (g.descripcionResumen || g.descripcion || '')
+    ).split('\n')[0].trim();
+
+    return Array.from(grupos.values()).sort((a, b) =>
+      nombreDe(a).localeCompare(nombreDe(b), 'es', { sensitivity: 'base' })
+    );
   })();
 
   // Categorías del expediente: MANO DE OBRA / MATERIALES / EQUIPO.
@@ -2949,7 +2957,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                   <FaFilePdf size={12} /> Ver PDF
                                 </button>
                               )}
-                              {!p.cerrado && !incidentesCerrados.includes(incidenteActivo?.id) && (
+                              {/* Editable mientras la incidencia siga abierta: cerrar el
+                                  parte solo libera la máquina, el costeo se sigue corrigiendo. */}
+                              {!incidentesCerrados.includes(incidenteActivo?.id) && (
                                 <button type="button" onClick={() => editarParte(p.registro)} title="Editar este parte"
                                   style={{ display:'inline-flex', alignItems:'center', gap:'5px', padding:'5px 11px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'5px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:600, whiteSpace:'nowrap' }}>
                                   <FaPen size={11} /> Editar
