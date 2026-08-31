@@ -2543,7 +2543,17 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                           <button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>
                                         )}
                                       </div>
-                                    ) : (bloqueado ? null : <button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>)}
+                                    ) : (bloqueado ? null : (
+                                      // Registro aún sin guardar: también se
+                                      // puede corregir, no solo descartar.
+                                      <div style={{display:'flex', gap:'6px', alignItems:'center'}}>
+                                        {(r.tipo === 'Personal' || r.tipo === 'Insumo') && r.entradas?.length === 1 && (
+                                          <button type="button" onClick={() => editarEntrada(r.entradas[0], r)} title="Editar este registro"
+                                            style={{padding:'4px 8px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaPen size={13} /></button>
+                                        )}
+                                        <button className="tbl-btn-action text-danger" onClick={() => eliminarRecursosLocales(r.idsLocales)} title="Eliminar"><FaTimes/></button>
+                                      </div>
+                                    ))}
                                   </td>
                                 </tr>
                                 )
