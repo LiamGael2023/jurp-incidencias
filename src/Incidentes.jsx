@@ -896,6 +896,34 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     return isFinite(maxFin) ? maxFin : 0;
   };
 
+  // Datos que se heredan del último parte de la máquina al crear uno nuevo.
+  // Proveedor, operador, licencia, tarifa y zona casi nunca cambian de un día
+  // al siguiente, y volver a teclearlos en cada parte es donde se cuelan los
+  // errores. Lo que SÍ cambia cada día (horómetros, combustible, metrado,
+  // observaciones) se deja en blanco a propósito.
+  const datosDelUltimoParte = (codigo) => {
+    const cod = (codigo || '').toUpperCase();
+    if (!cod) return {};
+    const codigoDeRec = (r) => ((r.codigoMaquina || (r.descripcionResumen || '').split('·')[0]).trim().split(' ')[0] || '').toUpperCase();
+    const partes = recursos.filter(r => r.tipo === 'Maquinaria' && !r.esBorrador && codigoDeRec(r) === cod);
+    if (!partes.length) return {};
+    // El más reciente por fecha; a igualdad de fecha, el de mayor horómetro.
+    const ultimo = [...partes].sort((a, b) => {
+      const f = String(b.fechaParte || '').localeCompare(String(a.fechaParte || ''));
+      return f !== 0 ? f : (parseFloat(b.hmFin) || 0) - (parseFloat(a.hmFin) || 0);
+    })[0];
+    return {
+      proveedor: ultimo.proveedor || '',
+      operador: ultimo.operador || '',
+      licencia: ultimo.licencia || '',
+      categoria: ultimo.categoria || '',
+      zonaTrabajo: ultimo.zonaTrabajo || '',
+      turno: ultimo.turno || 'Día',
+      precioUnitario: ultimo.precioUnitario || 0,
+      actividad: ultimo.actividad || '',
+    };
+  };
+
   // Paso 1: al elegir máquina del selector, la agrega a la lista en BORRADOR
   // (sin parte diario todavía). Vive solo en pantalla hasta que tenga un parte.
   const seleccionarMaquina = (maq) => {
@@ -987,6 +1015,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       placa: maq.placa || '',
       codigoMaquina: maq.codigo || '',
       hmInicio: hmInicioPrev,
+      // Hereda proveedor, operador, tarifa… del parte anterior de esta máquina.
+      ...datosDelUltimoParte(maq.codigo),
     });
     obtenerCorrelativoParte(partesPendientes());
     setFormTipo('Maquinaria');
@@ -1005,6 +1035,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       placa: grupo.placa || '', codigoMaquina: grupo.codigoMaquina || '',
       precioUnitario: grupo.precioUnitario || 0,
       hmInicio: hmInicioPrev,
+      ...datosDelUltimoParte(grupo.codigoMaquina || (grupo.descripcionResumen || '').split('·')[0]),
     });
     obtenerCorrelativoParte(partesPendientes());
     setFormTipo('Maquinaria');
