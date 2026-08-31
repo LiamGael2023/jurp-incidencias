@@ -1379,7 +1379,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   // Categorías del expediente: MANO DE OBRA / MATERIALES / EQUIPO.
   const CATEGORIAS = [
     { key: 'Personal',   titulo: 'MANO DE OBRA' },
-    { key: 'Insumo',     titulo: 'MATERIALES' },
+    { key: 'Insumo',     titulo: 'MATERIALES / INSUMOS' },
     { key: 'Maquinaria', titulo: 'EQUIPO' },
   ];
   // Fecha en formato corto para la tabla (DD/MM).
