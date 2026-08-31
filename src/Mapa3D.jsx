@@ -26,6 +26,12 @@ const TILES_DEM = 'https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{
 
 const CENTRO = [-78.7533, -8.4186];   // [lng, lat] — MapLibre usa este orden
 
+// Por debajo de este zoom los incidentes se muestran como una sola marca con
+// el total. Está alto a propósito: en el 3D la lectura es de conjunto, y los
+// pines sueltos se ven como una hilera de puntos pegados a la costa. El
+// detalle uno por uno se ve en el mapa 2D.
+const ZOOM_AGRUPA = 11;
+
 const COLOR_GRAVEDAD = { lev: '#f59f00', mod: '#f76707', gra: '#ef4444' };
 const resuelto = (e) => e === 'ate' || e === 'cer';
 const colorIncidente = (inc) =>
@@ -200,18 +206,21 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
     // Desde el globo, siete pines separados por décimas de grado se ven como
     // una hilera de puntos pegados que no se pueden distinguir ni pulsar. A
     // poco zoom se agrupan en una sola marca con el total.
-    if (validos.length && zoom < 6) {
+    if (validos.length && zoom < ZOOM_AGRUPA) {
       const lat = validos.reduce((a, i) => a + i.lat, 0) / validos.length;
       const lng = validos.reduce((a, i) => a + i.lng, 0) / validos.length;
       const abiertos = validos.filter(i => !resuelto(i.estado)).length;
       const color = abiertos > 0 ? '#f76707' : '#2fb344';
 
       const el = document.createElement('div');
-      el.style.cssText = 'cursor:pointer;position:relative;width:44px;height:44px';
+      el.style.cssText = 'cursor:pointer;position:relative;width:44px;height:74px;display:flex;flex-direction:column;align-items:center';
       el.title = 'Ver los incidentes en el mapa';
       el.innerHTML = `
-        <div style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:.28;animation:m3d-pulso 2.4s infinite"></div>
-        <div style="position:absolute;inset:7px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.9);box-shadow:0 0 16px ${color};display:flex;align-items:center;justify-content:center;color:#fff;font:700 13px/1 system-ui">${validos.length}</div>`;
+        <div style="position:relative;width:44px;height:44px">
+          <div style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:.28;animation:m3d-pulso 2.4s infinite"></div>
+          <div style="position:absolute;inset:7px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.9);box-shadow:0 0 16px ${color};display:flex;align-items:center;justify-content:center;color:#fff;font:700 13px/1 system-ui">${validos.length}</div>
+        </div>
+        <div style="margin-top:5px;background:rgba(8,22,40,.82);border:1px solid rgba(255,255,255,.25);color:#fff;font:700 10px/1 system-ui;padding:5px 9px;border-radius:6px;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.4)">Clic aquí</div>`;
       // El globo es la vista de contexto; el trabajo se hace en el 2D. Al
       // pulsar la marca se sale del 3D en vez de acercar dentro de él.
       el.addEventListener('click', () => { pararGiro(); if (onCerrar) onCerrar(); });
@@ -320,7 +329,7 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
         <span style={{ color: '#7fa5c0' }}>{incidentes.length} incidente(s)</span>
       </div>
 
-      {listo && zoom < 6 && (
+      {listo && zoom < ZOOM_AGRUPA && (
         <div style={{ position: 'absolute', bottom: 70, left: '50%', transform: 'translateX(-50%)', zIndex: 10,
                       background: 'rgba(8,22,40,.62)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.14)',
                       borderRadius: 10, padding: '8px 16px', fontSize: 12, color: '#cfe1ef', fontWeight: 600 }}>
