@@ -30,7 +30,7 @@ import './InventarioGIS.css';
  *   <PanelInventario inv={inv} onVolar={(b) => mapRef.current?.fitBounds(b)} />
  */
 
-const API = '/api/v1/inventario';
+const API = 'https://gideonstudio.duckdns.org/api/v1/inventario';
 
 // Agrupación para el panel. El orden es el que ve el usuario.
 const GRUPOS = [
