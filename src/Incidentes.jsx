@@ -69,6 +69,10 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const [pdfUrlActivo, setPdfUrlActivo] = useState(null);
   const [imgRefModal, setImgRefModal] = useState(null);
   const [modalPartes, setModalPartes] = useState(null);   // fila agrupada de maquinaria
+  // Rango para acotar el costeo a un periodo (informe semanal, quincena…).
+  // Vacío = todo. Aplica a mano de obra, insumos y partes de maquinaria.
+  const [rangoDesde, setRangoDesde] = useState('');
+  const [rangoHasta, setRangoHasta] = useState('');
   const [formTipo, setFormTipo] = useState(null);         // 'Personal' | 'Maquinaria' | 'Insumo' | null → modal de añadir
   const [selectorMaquina, setSelectorMaquina] = useState(false); // paso 1: elegir máquina
   const [buscarMaquina, setBuscarMaquina] = useState('');
@@ -115,6 +119,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   
   const estadoInicialRecurso = {
     tipo: 'Personal', descripcion: '', cantidad: 1, precioUnitario: 0, unidad: 'und',
+    // Día en que se hizo el trabajo / se usó el insumo. No es la fecha de
+    // carga: sirve para costear por periodo aunque se registre días después.
+    fechaRecurso: getFechaHoy(),
     numPersonas: 1, horasTrabajo: 8, horasExtras: 0, 
     horasEfectivas: '', obsReduccion: '',
     numeroParte: generarCorrelativo(), 
@@ -607,6 +614,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         const descripcion = (i.description || '').split('\n')[0].trim();
         return {
           idLocal: `db-pers-${i.id}`, dbId: i.id, endpoint: 'incident-personnels', tipo: 'Personal',
+          fechaRecurso: i.date || '',
           descripcion,
           numPersonas: i.num_personas ?? 1,
           origen: i.origin || 'JURP',
@@ -617,7 +625,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           total: round2(parseFloat(i.quantity_hours) * parseFloat(i.unit_price)), guardadoEnDB: true
         };
       });
-      const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', descripcionResumen: i.description, unidad: i.unit || 'und', cantidad: round4(i.quantity), precioUnitario: parseFloat(i.unit_price), total: round2(parseFloat(i.quantity) * parseFloat(i.unit_price)), guardadoEnDB: true }));
+      const formatMat = listMat.filter(i => String(i.incident_report) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', fechaRecurso: i.date || '', descripcionResumen: i.description, unidad: i.unit || 'und', cantidad: round4(i.quantity), precioUnitario: parseFloat(i.unit_price), total: round2(parseFloat(i.quantity) * parseFloat(i.unit_price)), guardadoEnDB: true }));
       const formatMaq = listMaq.filter(i => String(i.incident_report) === idStr).map(i => {
         // Resuelve la máquina del catálogo para poder agregarle más partes luego.
         const mp = (i.model_plate || '').trim();
@@ -1051,10 +1059,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       const hrs = parseFloat(nuevoRecurso.horasTrabajo) || 0;
       const ext = parseFloat(nuevoRecurso.horasExtras) || 0;
       cantFinal = round4(pers * (hrs + ext));
+      if (!nuevoRecurso.fechaRecurso) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Indica la fecha del trabajo' });
       if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa el cargo (Ej. Peón)' });
       if (cantFinal <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa la cantidad de personas y horas' });
       descFinal = `${nuevoRecurso.descripcion}\n(Cuadrilla: ${pers} persona(s) x ${hrs}h normales + ${ext}h extras)`;
     } else {
+      if (!nuevoRecurso.fechaRecurso) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Indica la fecha de uso del insumo' });
       if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa una descripción' });
     }
     const recursoCalculado = { ...nuevoRecurso, idLocal: Date.now(), descripcionResumen: descFinal, cantidad: cantFinal, precioUnitario: parseFloat(nuevoRecurso.precioUnitario) || 0, total: round2(cantFinal * (parseFloat(nuevoRecurso.precioUnitario) || 0)), guardadoEnDB: false };
@@ -1090,7 +1100,24 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       Swal.fire('Error', 'Fallo de conexión al eliminar.', 'error');
     }
   };
-  const costoTotalIncidente = round2(recursos.reduce((sum, item) => sum + item.total, 0));
+  // Fecha por la que se filtra cada recurso: la maquinaria usa la del parte,
+  // la mano de obra y los insumos la del trabajo.
+  const fechaDe = (r) => (r.tipo === 'Maquinaria' ? r.fechaParte : r.fechaRecurso) || '';
+
+  // Recursos dentro del rango. Los que no tienen fecha (registros anteriores
+  // al campo) se muestran siempre: ocultarlos sería esconder costos reales.
+  const recursosEnRango = recursos.filter(r => {
+    const f = fechaDe(r);
+    if (!f) return true;
+    const soloFecha = String(f).slice(0, 10);
+    if (rangoDesde && soloFecha < rangoDesde) return false;
+    if (rangoHasta && soloFecha > rangoHasta) return false;
+    return true;
+  });
+  const hayRango = !!(rangoDesde || rangoHasta);
+  const ocultosPorRango = recursos.length - recursosEnRango.length;
+
+  const costoTotalIncidente = round2(recursosEnRango.reduce((sum, item) => sum + item.total, 0));
 
   const normalizar = (txt) => (txt || '')
     .toLowerCase()
@@ -1102,7 +1129,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     const grupos = new Map();
     // Código de máquina desde el detalle (ej. "JURP002 · ...") o del campo.
     const codigoDe = (r) => ((r.codigoMaquina || (r.descripcionResumen || '').split('·')[0]).trim().split(' ')[0] || '').toUpperCase();
-    for (const r of recursos) {
+    for (const r of recursosEnRango) {
       const detalle = r.descripcionResumen || r.descripcion || '';
       let clave;
       if (r.tipo === 'Maquinaria') {
@@ -1145,11 +1172,16 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         g.partesMaq.push({ dbId: r.dbId, idLocal: r.idLocal, cerrado: r.cerrado, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, numeroParte: r.numeroParte || '', registro: r });
       }
       if (r.tipo === 'Insumo') {
-        g.entradas.push({ idLocal: r.idLocal, dbId: r.dbId, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, cantidad: r.cantidad, precioUnitario: r.precioUnitario, total: r.total, unidad: r.unidad || 'und' });
+        g.entradas.push({ idLocal: r.idLocal, dbId: r.dbId, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, cantidad: r.cantidad, precioUnitario: r.precioUnitario, total: r.total, unidad: r.unidad || 'und', fechaRecurso: r.fechaRecurso });
       }
       if (r.tipo === 'Personal') {
-        g.entradas.push({ idLocal: r.idLocal, dbId: r.dbId, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, cantidad: r.cantidad, precioUnitario: r.precioUnitario, total: r.total, numPersonas: r.numPersonas, horasTrabajo: r.horasTrabajo, horasExtras: r.horasExtras });
+        g.entradas.push({ idLocal: r.idLocal, dbId: r.dbId, guardadoEnDB: r.guardadoEnDB, endpoint: r.endpoint, cantidad: r.cantidad, precioUnitario: r.precioUnitario, total: r.total, numPersonas: r.numPersonas, horasTrabajo: r.horasTrabajo, horasExtras: r.horasExtras, fechaRecurso: r.fechaRecurso });
       }
+    }
+    // Dentro de cada grupo, las entradas se ordenan por fecha del trabajo.
+    // Sin fecha (registros anteriores al campo) van al final.
+    for (const g of grupos.values()) {
+      g.entradas.sort((a, b) => (b.fechaRecurso || '').localeCompare(a.fechaRecurso || ''));
     }
     return Array.from(grupos.values());
   })();
@@ -1160,6 +1192,13 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     { key: 'Insumo',     titulo: 'MATERIALES' },
     { key: 'Maquinaria', titulo: 'EQUIPO' },
   ];
+  // Fecha en formato corto para la tabla (DD/MM).
+  const fechaCorta = (iso) => {
+    if (!iso) return '—';
+    const [a, m, d] = String(iso).slice(0, 10).split('-');
+    return d && m ? `${d}/${m}` : iso;
+  };
+
   const subtotalCategoria = (tipo) => round2(recursosAgrupados
     .filter(r => r.tipo === tipo)
     .reduce((s, r) => s + r.totalSum, 0));
@@ -1861,6 +1900,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         formData.append('incident_report', incidenteActivo.id);
         if (r.tipo === 'Personal') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-personnels/`;
+          if (r.fechaRecurso) formData.append('date', r.fechaRecurso);
           formData.append('description', r.descripcionResumen || r.descripcion); 
           formData.append('quantity_hours', r.cantidad);
           formData.append('unit_price', r.precioUnitario);
@@ -1870,6 +1910,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           formData.append('origin', r.origen || 'JURP');
         } else if (r.tipo === 'Insumo') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-materials/`;
+          if (r.fechaRecurso) formData.append('date', r.fechaRecurso);
           formData.append('description', r.descripcion);
           formData.append('quantity', r.cantidad);
           formData.append('unit_price', r.precioUnitario);
@@ -2147,6 +2188,32 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                   <h4 className="tbl-alert-title">{incidenteActivo.tipo} en {incidenteActivo.codigo}</h4>
                   <div className="tbl-text-muted">{incidenteActivo.lugar}</div>
                 </div>
+                {/* Rango de fechas: acota el costeo a un periodo concreto.
+                    Útil para el informe semanal o de quincena. */}
+                <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', margin:'12px 0 4px', padding:'10px 12px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8 }}>
+                  <span style={{ fontSize:12, fontWeight:600, color:'#64748b', display:'flex', alignItems:'center', gap:6 }}>
+                    <FaCalendarAlt size={12} /> Periodo:
+                  </span>
+                  <input type="date" value={rangoDesde} onChange={e => setRangoDesde(e.target.value)}
+                    style={{ padding:'6px 9px', border:'1px solid #cbd5e1', borderRadius:6, fontSize:12, color:'#334155' }} />
+                  <span style={{ fontSize:12, color:'#94a3b8' }}>a</span>
+                  <input type="date" value={rangoHasta} onChange={e => setRangoHasta(e.target.value)}
+                    style={{ padding:'6px 9px', border:'1px solid #cbd5e1', borderRadius:6, fontSize:12, color:'#334155' }} />
+                  {hayRango && (
+                    <>
+                      <button onClick={() => { setRangoDesde(''); setRangoHasta(''); }}
+                        style={{ display:'flex', alignItems:'center', gap:5, background:'#fff', border:'1px solid #cbd5e1', color:'#64748b', borderRadius:6, padding:'6px 11px', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                        <FaTimes size={10} /> Ver todo
+                      </button>
+                      <span style={{ fontSize:11.5, color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:6, padding:'5px 10px' }}>
+                        {ocultosPorRango > 0
+                          ? `${ocultosPorRango} registro(s) fuera del periodo — el costo mostrado es solo del rango`
+                          : 'Todos los registros están dentro del periodo'}
+                      </span>
+                    </>
+                  )}
+                </div>
+
                 {/* La tabla agrupada va aquí abajo (sin formulario inline) */}
 
                 <div className="tbl-table-responsive tbl-border-top">
@@ -2195,6 +2262,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                       <tr key={e.idLocal || idx} style={{ fontSize:'12px' }}>
                                         <td></td>
                                         <td style={{ paddingLeft:'28px', color:'#64748b' }}>
+                                          <span style={{ display:'inline-block', minWidth:46, fontWeight:700, color: e.fechaRecurso ? '#0284c7' : '#cbd5e1' }}>
+                                            {fechaCorta(e.fechaRecurso)}
+                                          </span>
                                           {r.tipo === 'Personal'
                                             ? `${e.numPersonas} pers × ${e.horasTrabajo}h${parseFloat(e.horasExtras) > 0 ? ` + ${e.horasExtras}h ext` : ''}`
                                             : `Entrada ${idx + 1}`}
@@ -2224,6 +2294,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                   <td style={{fontSize: '12px', whiteSpace: 'pre-wrap', maxWidth: '400px', lineHeight: '1.4'}}>
                                     {r.tipo === 'Personal' && (
                                       <span style={{marginRight:'6px', fontSize:'9px', fontWeight:700, padding:'2px 6px', borderRadius:'4px', backgroundColor: r.origen === 'EXTERNA' ? '#fef3c7' : '#e0f2fe', color: r.origen === 'EXTERNA' ? '#b45309' : '#0284c7'}}>{r.origen === 'EXTERNA' ? 'EXTERNA' : 'JURP'}</span>
+                                    )}
+                                    {(r.tipo === 'Personal' || r.tipo === 'Insumo') && (
+                                      <span style={{ marginRight:7, fontSize:10.5, fontWeight:700, padding:'2px 7px', borderRadius:4, background: r.fechaRecurso ? '#e0f2fe' : '#f1f5f9', color: r.fechaRecurso ? '#0284c7' : '#94a3b8' }}>
+                                        {fechaCorta(r.fechaRecurso)}
+                                      </span>
                                     )}
                                     {r.tipo === 'Personal' && r.count > 1
                                       ? (r.descripcion ? `${r.descripcion} (Cuadrilla: ${r.numPersonas} persona(s) x ${r.horasTrabajo}h normales + ${r.horasExtras}h extras)` : (r.descripcionResumen || ''))
@@ -2560,6 +2635,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                   <>
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col-3">
+                      <label className="tbl-form-label">Fecha del trabajo <span style={{color:'red'}}>*</span></label>
+                      <input type="date" className="tbl-form-control" value={nuevoRecurso.fechaRecurso}
+                        onChange={e => setNuevoRecurso({...nuevoRecurso, fechaRecurso: e.target.value})} />
+                    </div>
+                    <div className="tbl-col-3">
                       <label className="tbl-form-label">Origen</label>
                       <select className="tbl-form-select" value={nuevoRecurso.origen} onChange={e => setNuevoRecurso({...nuevoRecurso, origen: e.target.value})}>
                         <option value="JURP">JURP (propia)</option>
@@ -2584,6 +2664,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                   </>
                 ) : (
                   <div className="tbl-row tbl-mb-3">
+                    <div className="tbl-col-2"><label className="tbl-form-label">Fecha de uso <span style={{color:'red'}}>*</span></label>
+                      <input type="date" className="tbl-form-control" value={nuevoRecurso.fechaRecurso}
+                        onChange={e => setNuevoRecurso({...nuevoRecurso, fechaRecurso: e.target.value})} /></div>
                     <div className="tbl-col"><label className="tbl-form-label">Descripción del Insumo</label><input type="text" className="tbl-form-control" placeholder="Ej. Piedra chancada, Cemento..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">Cant.</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.cantidad} onChange={e => setNuevoRecurso({...nuevoRecurso, cantidad: e.target.value})} /></div>
                     <div className="tbl-col-2">
