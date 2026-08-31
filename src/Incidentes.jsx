@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, Fragment } from 'react';
 import { 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
-  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash, FaCheckCircle, FaFilter, FaSearch, FaListUl, FaTruck
+  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash, FaCheckCircle, FaFilter, FaSearch, FaListUl, FaTruck, FaPen
 } from 'react-icons/fa';
 import './Incidentes.css';
 import Swal from 'sweetalert2';
@@ -73,6 +73,10 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   // Vacío = todo. Aplica a mano de obra, insumos y partes de maquinaria.
   const [rangoDesde, setRangoDesde] = useState('');
   const [rangoHasta, setRangoHasta] = useState('');
+  // Registro que se está editando. Reutiliza el mismo formulario de alta:
+  // si está en null se crea, si tiene valor se actualiza ese registro.
+  //   { dbId, endpoint, idLocal, guardadoEnDB, tipo }
+  const [editando, setEditando] = useState(null);
   const [formTipo, setFormTipo] = useState(null);         // 'Personal' | 'Maquinaria' | 'Insumo' | null → modal de añadir
   const [selectorMaquina, setSelectorMaquina] = useState(false); // paso 1: elegir máquina
   const [buscarMaquina, setBuscarMaquina] = useState('');
@@ -1073,6 +1077,184 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     // +1: el que se acaba de agregar todavía no está en `recursos` aquí.
     obtenerCorrelativoParte(partesPendientes() + 1);
     setFormTipo(null);   // cierra el modal de añadir
+  };
+
+  // Abre el formulario cargado con una entrada existente de mano de obra o
+  // insumo. `grupo` aporta lo que no viaja en la entrada (cargo, origen…).
+  const editarEntrada = (entrada, grupo) => {
+    if (incidentesCerrados.includes(incidenteActivo?.id)) {
+      Swal.fire('Incidencia cerrada', 'Reábrela para poder editar.', 'info');
+      return;
+    }
+    const base = {
+      ...estadoInicialRecurso,
+      tipo: grupo.tipo,
+      fechaRecurso: entrada.fechaRecurso || '',
+      precioUnitario: entrada.precioUnitario ?? 0,
+    };
+    if (grupo.tipo === 'Personal') {
+      setNuevoRecurso({
+        ...base,
+        descripcion: (grupo.descripcion || '').split('\n')[0].trim(),
+        origen: grupo.origen || 'JURP',
+        numPersonas: entrada.numPersonas ?? 1,
+        horasTrabajo: entrada.horasTrabajo ?? 0,
+        horasExtras: entrada.horasExtras ?? 0,
+      });
+    } else {
+      setNuevoRecurso({
+        ...base,
+        descripcion: (grupo.descripcionResumen || grupo.descripcion || '').trim(),
+        unidad: entrada.unidad || grupo.unidad || 'und',
+        cantidad: entrada.cantidad ?? 0,
+      });
+    }
+    setEditando({
+      dbId: entrada.dbId, endpoint: entrada.endpoint,
+      idLocal: entrada.idLocal, guardadoEnDB: entrada.guardadoEnDB, tipo: grupo.tipo,
+    });
+    setFormTipo(grupo.tipo);
+  };
+
+  // Igual, para un parte diario de maquinaria.
+  const editarParte = (reg) => {
+    if (incidentesCerrados.includes(incidenteActivo?.id)) {
+      Swal.fire('Incidencia cerrada', 'Reábrela para poder editar.', 'info');
+      return;
+    }
+    if (reg.cerrado) {
+      Swal.fire('Parte cerrado', 'Este parte ya fue finalizado y no se puede editar.', 'info');
+      return;
+    }
+    const totalHM = Math.max(0, (parseFloat(reg.hmFin) || 0) - (parseFloat(reg.hmInicio) || 0));
+    setNuevoRecurso({
+      ...estadoInicialRecurso,
+      ...reg,
+      tipo: 'Maquinaria',
+      fechaParte: (reg.fechaParte || '').slice(0, 10) || getFechaHoy(),
+      // La cantidad guardada son las horas efectivas: se recupera para no
+      // perder la reducción al volver a guardar.
+      horasEfectivas: reg.cantidad != null && reg.cantidad !== totalHM ? String(reg.cantidad) : '',
+      obsReduccion: reg.obsReduccion || '',
+    });
+    setEditando({
+      dbId: reg.dbId, endpoint: reg.endpoint,
+      idLocal: reg.idLocal, guardadoEnDB: reg.guardadoEnDB, tipo: 'Maquinaria',
+    });
+    setModalPartes(null);
+    setFormTipo('Maquinaria');
+  };
+
+  // Cierra el formulario dejando siempre limpio el modo edición.
+  const cerrarFormulario = () => { setFormTipo(null); setEditando(null); };
+
+  // Guarda la edición. Si el registro ya está en la BD va por PATCH; si aún
+  // no se guardó, se actualiza en la lista local y viajará con "Guardar Costeos".
+  const guardarEdicion = async () => {
+    const r = nuevoRecurso;
+    if (!editando) return;
+
+    // ── validaciones, las mismas del alta ──
+    if (editando.tipo === 'Personal') {
+      if (!r.fechaRecurso) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Indica la fecha del trabajo' });
+      if (!r.descripcion) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa el cargo' });
+      if (round4((parseInt(r.numPersonas) || 0) * ((parseFloat(r.horasTrabajo) || 0) + (parseFloat(r.horasExtras) || 0))) <= 0)
+        return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa personas y horas' });
+    } else if (editando.tipo === 'Insumo') {
+      if (!r.fechaRecurso) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Indica la fecha de uso' });
+      if (!r.descripcion) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa una descripción' });
+    } else {
+      const totalHM = parseFloat(horasMaquina) || 0;
+      if (totalHM <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Horómetro Final debe ser mayor al Inicial' });
+      if (!r.proveedor?.trim()) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Proveedor es obligatorio' });
+      if (!r.actividad) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona la actividad realizada' });
+      if (r.actividad === 'OTROS' && !r.actividadOtros.trim())
+        return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Escribe la descripción de la actividad.' });
+    }
+
+    // ── registro aún no guardado: se corrige en memoria ──
+    if (!editando.guardadoEnDB || !editando.dbId) {
+      setRecursos(prev => prev.map(x => {
+        if (x.idLocal !== editando.idLocal) return x;
+        if (editando.tipo === 'Personal') {
+          const pers = parseInt(r.numPersonas) || 0;
+          const hrs = parseFloat(r.horasTrabajo) || 0;
+          const ext = parseFloat(r.horasExtras) || 0;
+          const cant = round4(pers * (hrs + ext));
+          return { ...x, ...r, cantidad: cant,
+            descripcionResumen: `${r.descripcion}\n(Cuadrilla: ${pers} persona(s) x ${hrs}h normales + ${ext}h extras)`,
+            total: round2(cant * (parseFloat(r.precioUnitario) || 0)) };
+        }
+        if (editando.tipo === 'Insumo') {
+          const cant = round4(parseFloat(r.cantidad) || 0);
+          return { ...x, ...r, cantidad: cant, descripcionResumen: r.descripcion,
+            total: round2(cant * (parseFloat(r.precioUnitario) || 0)) };
+        }
+        const totalHM = parseFloat(horasMaquina) || 0;
+        const efec = r.horasEfectivas === '' ? totalHM : round4(parseFloat(r.horasEfectivas) || 0);
+        return { ...x, ...r, cantidad: efec, total: round2(efec * (parseFloat(r.precioUnitario) || 0)) };
+      }));
+      cerrarFormulario();
+      Swal.fire({ icon: 'success', title: 'Actualizado', timer: 1100, showConfirmButton: false });
+      return;
+    }
+
+    // ── registro en la BD: PATCH ──
+    setGuardando(true);
+    const fd = new FormData();
+    try {
+      if (editando.tipo === 'Personal') {
+        const pers = parseInt(r.numPersonas) || 0;
+        const hrs = parseFloat(r.horasTrabajo) || 0;
+        const ext = parseFloat(r.horasExtras) || 0;
+        fd.append('date', r.fechaRecurso);
+        fd.append('description', `${r.descripcion}\n(Cuadrilla: ${pers} persona(s) x ${hrs}h normales + ${ext}h extras)`);
+        fd.append('quantity_hours', round4(pers * (hrs + ext)));
+        fd.append('unit_price', parseFloat(r.precioUnitario) || 0);
+        fd.append('num_personas', pers);
+        fd.append('horas_normales', hrs);
+        fd.append('horas_extras', ext);
+        fd.append('origin', r.origen || 'JURP');
+      } else if (editando.tipo === 'Insumo') {
+        fd.append('date', r.fechaRecurso);
+        fd.append('description', r.descripcion);
+        fd.append('quantity', round4(parseFloat(r.cantidad) || 0));
+        fd.append('unit_price', parseFloat(r.precioUnitario) || 0);
+        fd.append('unit', r.unidad || 'und');
+      } else {
+        fd.append('date', /^\d{4}-\d{2}-\d{2}$/.test(r.fechaParte) ? r.fechaParte : getFechaHoy());
+        fd.append('shift', r.turno);
+        fd.append('work_zone_text', r.zonaTrabajo || '');
+        fd.append('provider', r.proveedor);
+        fd.append('operator', r.operador || '');
+        fd.append('licencia', r.licencia || '');
+        fd.append('categoria', r.categoria || '');
+        fd.append('start_horometer', parseFloat(r.hmInicio) || 0);
+        fd.append('end_horometer', parseFloat(r.hmFin) || 0);
+        fd.append('fuel_gallons', parseFloat(r.combustible) || 0);
+        fd.append('fuel_voucher', r.vale || '');
+        fd.append('activities', textoActividad(r));
+        fd.append('observations', r.observaciones || '');
+        fd.append('unit_price', parseFloat(r.precioUnitario) || 0);
+        const mv = calcMetradoDe(r);
+        const calculado = r.actividad !== 'OTROS' && !!r.calcularMetrado;
+        fd.append('metrado', mv.val.toFixed(4));
+        fd.append('metrado_unidad', calculado ? mv.unit : (r.unidadMetrado || 'm3'));
+        fd.append('metrado_calculado', calculado ? 'true' : 'false');
+      }
+
+      const res = await fetch(`${API_OPS}/${editando.endpoint}/${editando.dbId}/`, { method: 'PATCH', body: fd });
+      if (!res.ok) {
+        let detalle = '';
+        try { detalle = JSON.stringify(await res.json()); } catch (e) { detalle = `código ${res.status}`; }
+        throw new Error(detalle);
+      }
+      cerrarFormulario();
+      if (incidenteActivo) cargarCosteosGuardados(incidenteActivo.id);
+      Swal.fire({ icon: 'success', title: 'Cambios guardados', timer: 1400, showConfirmButton: false });
+    } catch (e) {
+      Swal.fire('Error al actualizar', e.message || 'No se pudo guardar el cambio.', 'error');
+    } finally { setGuardando(false); }
   };
 
   const eliminarRecurso = (idLocal) => setRecursos(recursos.filter(r => r.idLocal !== idLocal));
@@ -2274,7 +2456,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                         <td className="tbl-text-end" style={{ color:'#475569' }}>S/ {fmtNum(e.total)}</td>
                                         <td>
                                           {!bloqueado && (
-                                            <button type="button" onClick={() => (e.guardadoEnDB && e.dbId) ? eliminarEntradaInsumo(e) : eliminarRecursosLocales([e.idLocal])} className="tbl-btn-action text-danger" title="Eliminar esta entrada" style={{padding:'4px 8px', backgroundColor:'#fee2e2', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaTrash size={13} /></button>
+                                            <div style={{ display:'flex', gap:5 }}>
+                                              <button type="button" onClick={() => editarEntrada(e, r)} title="Editar esta entrada"
+                                                style={{padding:'4px 8px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaPen size={12} /></button>
+                                              <button type="button" onClick={() => (e.guardadoEnDB && e.dbId) ? eliminarEntradaInsumo(e) : eliminarRecursosLocales([e.idLocal])} className="tbl-btn-action text-danger" title="Eliminar esta entrada" style={{padding:'4px 8px', backgroundColor:'#fee2e2', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaTrash size={13} /></button>
+                                            </div>
                                           )}
                                         </td>
                                       </tr>
@@ -2341,6 +2527,10 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                     ) : (r.guardadoEnDB || (r.registros && r.registros.length > 0)) ? (
                                       <div style={{display: 'flex', gap: '6px', alignItems: 'center', flexWrap:'wrap'}}>
                                         <span className="tbl-badge bg-green-lt">Guardado{r.count > 1 ? ` (${r.count})` : ''}</span>
+                                        {!bloqueado && r.count === 1 && r.entradas?.length === 1 && (
+                                          <button type="button" onClick={() => editarEntrada(r.entradas[0], r)} title="Editar este registro"
+                                            style={{padding:'4px 8px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'4px', border:'none', cursor:'pointer', display:'inline-flex'}}><FaPen size={13} /></button>
+                                        )}
                                         {!bloqueado && (
                                           <button type="button" onClick={() => eliminarRecursoGuardado(r)} className="tbl-btn-action text-danger" title={r.count > 1 ? `Eliminar los ${r.count} registros` : 'Eliminar de la base'} style={{padding: '4px 8px', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'inline-flex'}}><FaTrash size={14} /></button>
                                         )}
@@ -2464,16 +2654,18 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
                 <h5 className="tbl-modal-title">
-                  {formTipo === 'Personal' ? '👷 Añadir Mano de Obra' : formTipo === 'Maquinaria' ? '🚜 Parte Diario de Maquinaria' : '📦 Añadir Insumo / Material'}
+                  {editando
+                    ? (formTipo === 'Personal' ? '✏️ Editar Mano de Obra' : formTipo === 'Maquinaria' ? '✏️ Editar Parte Diario' : '✏️ Editar Insumo / Material')
+                    : (formTipo === 'Personal' ? '👷 Añadir Mano de Obra' : formTipo === 'Maquinaria' ? '🚜 Parte Diario de Maquinaria' : '📦 Añadir Insumo / Material')}
                 </h5>
-                <button className="tbl-btn-close" onClick={() => setFormTipo(null)}><FaTimes/></button>
+                <button className="tbl-btn-close" onClick={cerrarFormulario}><FaTimes/></button>
               </div>
               <div className="tbl-modal-body">
                 {nuevoRecurso.tipo === 'Maquinaria' ? (
                   <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '4px', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'20px', color:'#206bc4', fontWeight:'bold', fontSize:'16px' }}><FaFileInvoice /> Formulario: Parte Diario de Maquinaria</div>
                     <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col"><label className="tbl-form-label">N° de Parte <span style={{color:'red'}}>*</span></label><input type="text" className="tbl-form-control" value={nuevoRecurso.numeroParte} onChange={e => setNuevoRecurso({...nuevoRecurso, numeroParte: e.target.value})} style={{fontWeight: 'bold', backgroundColor: '#f1f5f9'}}/></div>
+                      <div className="tbl-col"><label className="tbl-form-label">N° de Parte {!editando && <span style={{color:'red'}}>*</span>}</label><input type="text" className="tbl-form-control" value={nuevoRecurso.numeroParte} disabled={!!editando} onChange={e => setNuevoRecurso({...nuevoRecurso, numeroParte: e.target.value})} style={{fontWeight: 'bold', backgroundColor: '#f1f5f9', cursor: editando ? 'not-allowed' : undefined}}/></div>
                       <div className="tbl-col"><label className="tbl-form-label">Fecha</label><input type="date" className="tbl-form-control" value={nuevoRecurso.fechaParte} onChange={e => setNuevoRecurso({...nuevoRecurso, fechaParte: e.target.value})} /></div>
                       <div className="tbl-col"><label className="tbl-form-label">Turno</label><select className="tbl-form-select" value={nuevoRecurso.turno} onChange={e => setNuevoRecurso({...nuevoRecurso, turno: e.target.value})}><option value="Día">Día</option><option value="Noche">Noche</option></select></div>
                       <div className="tbl-col"><label className="tbl-form-label">Zona de Trabajo</label><input type="text" className="tbl-form-control" placeholder="Ej. Tramo 15" value={nuevoRecurso.zonaTrabajo} onChange={e => setNuevoRecurso({...nuevoRecurso, zonaTrabajo: e.target.value})} /></div>
@@ -2494,10 +2686,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                           {nuevoRecurso.codigoMaquina} · {nuevoRecurso.equipo} {nuevoRecurso.marca} {nuevoRecurso.modeloMaquina}{nuevoRecurso.placa ? ` · ${nuevoRecurso.placa}` : ''}
                         </div>
                       </div>
-                      <button type="button" onClick={() => { setFormTipo(null); cargarTodosModelos(); setBuscarMaquina(''); setSelectorMaquina(true); }}
-                        style={{ background:'#fff', border:'1px solid #cbd5e1', color:'#206bc4', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
-                        Cambiar máquina
-                      </button>
+                      {!editando && (
+                        <button type="button" onClick={() => { setFormTipo(null); cargarTodosModelos(); setBuscarMaquina(''); setSelectorMaquina(true); }}
+                          style={{ background:'#fff', border:'1px solid #cbd5e1', color:'#206bc4', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+                          Cambiar máquina
+                        </button>
+                      )}
                     </div>
                     <div className="tbl-row tbl-mb-3">
                       <div className="tbl-col-3"><label className="tbl-form-label">Precio Unit. (S/ HE)</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
@@ -2681,8 +2875,14 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
 
               </div>
               <div className="tbl-modal-footer" style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
-                <button className="tbl-btn tbl-btn-link" onClick={() => setFormTipo(null)}>Cancelar</button>
-                <button className="tbl-btn tbl-btn-success" onClick={agregarRecurso}><FaPlus style={{marginRight:'5px'}}/> Agregar a la lista</button>
+                <button className="tbl-btn tbl-btn-link" onClick={cerrarFormulario}>Cancelar</button>
+                {editando ? (
+                  <button className="tbl-btn tbl-btn-primary" onClick={guardarEdicion} disabled={guardando}>
+                    {guardando ? <><FaSyncAlt className="icon-spin" style={{marginRight:'5px'}}/> Guardando…</> : <><FaSave style={{marginRight:'5px'}}/> Guardar cambios</>}
+                  </button>
+                ) : (
+                  <button className="tbl-btn tbl-btn-success" onClick={agregarRecurso}><FaPlus style={{marginRight:'5px'}}/> Agregar a la lista</button>
+                )}
               </div>
             </div>
           </div>
@@ -2747,6 +2947,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                 <button type="button" onClick={() => { setModalPartes(null); abrirModalPdf(p.dbId); }} title="Ver PDF del parte"
                                   style={{ display:'inline-flex', alignItems:'center', gap:'5px', padding:'5px 11px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'5px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:600, whiteSpace:'nowrap' }}>
                                   <FaFilePdf size={12} /> Ver PDF
+                                </button>
+                              )}
+                              {!p.cerrado && !incidentesCerrados.includes(incidenteActivo?.id) && (
+                                <button type="button" onClick={() => editarParte(p.registro)} title="Editar este parte"
+                                  style={{ display:'inline-flex', alignItems:'center', gap:'5px', padding:'5px 11px', backgroundColor:'#e0f2fe', color:'#0284c7', borderRadius:'5px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:600, whiteSpace:'nowrap' }}>
+                                  <FaPen size={11} /> Editar
                                 </button>
                               )}
                               {!p.cerrado && !incidentesCerrados.includes(incidenteActivo?.id) && (
