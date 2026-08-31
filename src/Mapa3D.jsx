@@ -4,8 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
-  FaTimes, FaGlobeAmericas, FaMountain, FaLayerGroup,
-  FaPlay, FaSyncAlt,
+  FaTimes, FaGlobeAmericas, FaPlay, FaSyncAlt,
 } from 'react-icons/fa';
 
 /**
@@ -38,10 +37,15 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
   const marcadores = useRef([]);
 
   const [listo, setListo] = useState(false);
-  const [relieve, setRelieve] = useState(true);
-  const [verCapas, setVerCapas] = useState(true);
+  // Relieve y capas van siempre encendidos: eran dos interruptores que nadie
+  // tocaba y que quitaban sitio a lo que sí se usa.
+  const [relieve] = useState(true);
+  const [verCapas] = useState(true);
   const [volando, setVolando] = useState(false);
-  const [girando, setGirando] = useState(true);
+  // Arranca quieto: la primera vista debe mostrar el globo con Perú al frente,
+  // no un planeta girando que hay que perseguir. El giro queda a un botón.
+  const [girando, setGirando] = useState(false);
+  const [zoom, setZoom] = useState(0.9);
   const giro = useRef(null);
 
   // Detiene el giro del globo. Se llama en cuanto el usuario toca el mapa:
@@ -161,6 +165,7 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
 
     // Cualquier interacción del usuario detiene el giro automático.
     ['mousedown', 'touchstart', 'wheel', 'dragstart'].forEach(ev => m.on(ev, pararGiro));
+    m.on('zoom', () => setZoom(m.getZoom()));
 
     return () => { m.remove(); mapa.current = null; };
   }, [capasLinea, pararGiro]);
@@ -190,8 +195,34 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
     marcadores.current.forEach(mk => mk.remove());
     marcadores.current = [];
 
-    incidentes.forEach(inc => {
-      if (!Number.isFinite(inc.lat) || !Number.isFinite(inc.lng)) return;
+    const validos = incidentes.filter(i => Number.isFinite(i.lat) && Number.isFinite(i.lng));
+
+    // Desde el globo, siete pines separados por décimas de grado se ven como
+    // una hilera de puntos pegados que no se pueden distinguir ni pulsar. A
+    // poco zoom se agrupan en una sola marca con el total.
+    if (validos.length && zoom < 6) {
+      const lat = validos.reduce((a, i) => a + i.lat, 0) / validos.length;
+      const lng = validos.reduce((a, i) => a + i.lng, 0) / validos.length;
+      const abiertos = validos.filter(i => !resuelto(i.estado)).length;
+      const color = abiertos > 0 ? '#f76707' : '#2fb344';
+
+      const el = document.createElement('div');
+      el.style.cssText = 'cursor:pointer;position:relative;width:44px;height:44px';
+      el.title = 'Acercar a la zona de incidentes';
+      el.innerHTML = `
+        <div style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:.28;animation:m3d-pulso 2.4s infinite"></div>
+        <div style="position:absolute;inset:7px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.9);box-shadow:0 0 16px ${color};display:flex;align-items:center;justify-content:center;color:#fff;font:700 13px/1 system-ui">${validos.length}</div>`;
+      el.addEventListener('click', () => {
+        pararGiro();
+        m.flyTo({ center: [lng, lat], zoom: 10.5, pitch: 45, duration: 2600, essential: true });
+      });
+
+      const marcador = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(m);
+      marcadores.current.push(marcador);
+      return;
+    }
+
+    validos.forEach(inc => {
       const color = colorIncidente(inc);
 
       const el = document.createElement('div');
@@ -217,7 +248,7 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
       if (onSeleccionar) el.addEventListener('click', () => { pararGiro(); onSeleccionar(inc); });
       marcadores.current.push(marcador);
     });
-  }, [incidentes, listo, onSeleccionar, pararGiro]);
+  }, [incidentes, listo, onSeleccionar, pararGiro, zoom]);
 
   // ── Interruptores ────────────────────────────────────────────────────
   useEffect(() => {
@@ -266,19 +297,13 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
       <div style={{ position: 'absolute', top: 16, right: 60, zIndex: 10, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <button onClick={volarAlCanal} disabled={volando} style={btn(false)}>
           {volando ? <FaSyncAlt className="icon-spin" /> : <FaPlay size={11} />}
-          {volando ? 'Volando…' : 'Volar a Chavimochic'}
+          {volando ? 'Volando…' : 'Ir a JURP'}
         </button>
         <button onClick={volverAlGlobo} style={btn(false)}>
           <FaGlobeAmericas size={12} /> Ver el globo
         </button>
         <button onClick={() => (girando ? pararGiro() : setGirando(true))} style={btn(girando)}>
           <FaSyncAlt size={11} /> {girando ? 'Girando' : 'Girar'}
-        </button>
-        <button onClick={() => setRelieve(v => !v)} style={btn(relieve)}>
-          <FaMountain size={12} /> Relieve
-        </button>
-        <button onClick={() => setVerCapas(v => !v)} style={btn(verCapas)}>
-          <FaLayerGroup size={12} /> Capas
         </button>
         <button onClick={onCerrar} style={{ ...btn(false), background: 'rgba(214,57,57,.55)', borderColor: 'rgba(255,255,255,.35)' }}>
           <FaTimes size={12} /> Salir del 3D
@@ -296,11 +321,11 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
         <span style={{ color: '#7fa5c0' }}>{incidentes.length} incidente(s)</span>
       </div>
 
-      {listo && girando && (
+      {listo && zoom < 6 && (
         <div style={{ position: 'absolute', bottom: 70, left: '50%', transform: 'translateX(-50%)', zIndex: 10,
                       background: 'rgba(8,22,40,.62)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.14)',
                       borderRadius: 10, padding: '8px 16px', fontSize: 12, color: '#cfe1ef', fontWeight: 600 }}>
-          Arrastra el globo para explorarlo · toca un incidente para abrirlo en el mapa
+          Arrastra el globo para explorarlo · pulsa la marca de Perú para acercarte
         </div>
       )}
 
