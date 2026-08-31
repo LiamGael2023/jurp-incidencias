@@ -45,7 +45,7 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
   // Arranca quieto: la primera vista debe mostrar el globo con Perú al frente,
   // no un planeta girando que hay que perseguir. El giro queda a un botón.
   const [girando, setGirando] = useState(false);
-  const [zoom, setZoom] = useState(0.9);
+  const [zoom, setZoom] = useState(2.1);
   const giro = useRef(null);
 
   // Detiene el giro del globo. Se llama en cuanto el usuario toca el mapa:
@@ -79,7 +79,7 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
   const volverAlGlobo = useCallback(() => {
     const m = mapa.current;
     if (!m) return;
-    m.flyTo({ center: CENTRO, zoom: 0.9, pitch: 0, bearing: 0, duration: 2600, essential: true });
+    m.flyTo({ center: CENTRO, zoom: 2.1, pitch: 0, bearing: 0, duration: 2600, essential: true });
     setTimeout(() => setGirando(true), 2700);
   }, []);
 
@@ -115,7 +115,7 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
         },
       },
       center: CENTRO,
-      zoom: 0.9,
+      zoom: 2.1,
       pitch: 0,
       bearing: 0,
       attributionControl: false,
