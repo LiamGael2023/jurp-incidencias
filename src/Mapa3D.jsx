@@ -208,14 +208,13 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
 
       const el = document.createElement('div');
       el.style.cssText = 'cursor:pointer;position:relative;width:44px;height:44px';
-      el.title = 'Acercar a la zona de incidentes';
+      el.title = 'Ver los incidentes en el mapa';
       el.innerHTML = `
         <div style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:.28;animation:m3d-pulso 2.4s infinite"></div>
         <div style="position:absolute;inset:7px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.9);box-shadow:0 0 16px ${color};display:flex;align-items:center;justify-content:center;color:#fff;font:700 13px/1 system-ui">${validos.length}</div>`;
-      el.addEventListener('click', () => {
-        pararGiro();
-        m.flyTo({ center: [lng, lat], zoom: 10.5, pitch: 45, duration: 2600, essential: true });
-      });
+      // El globo es la vista de contexto; el trabajo se hace en el 2D. Al
+      // pulsar la marca se sale del 3D en vez de acercar dentro de él.
+      el.addEventListener('click', () => { pararGiro(); if (onCerrar) onCerrar(); });
 
       const marcador = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(m);
       marcadores.current.push(marcador);
@@ -248,7 +247,7 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
       if (onSeleccionar) el.addEventListener('click', () => { pararGiro(); onSeleccionar(inc); });
       marcadores.current.push(marcador);
     });
-  }, [incidentes, listo, onSeleccionar, pararGiro, zoom]);
+  }, [incidentes, listo, onSeleccionar, onCerrar, pararGiro, zoom]);
 
   // ── Interruptores ────────────────────────────────────────────────────
   useEffect(() => {
@@ -325,7 +324,7 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
         <div style={{ position: 'absolute', bottom: 70, left: '50%', transform: 'translateX(-50%)', zIndex: 10,
                       background: 'rgba(8,22,40,.62)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.14)',
                       borderRadius: 10, padding: '8px 16px', fontSize: 12, color: '#cfe1ef', fontWeight: 600 }}>
-          Arrastra el globo para explorarlo · pulsa la marca de Perú para acercarte
+          Arrastra el globo para explorarlo · pulsa la marca de Perú para ir al mapa
         </div>
       )}
 
