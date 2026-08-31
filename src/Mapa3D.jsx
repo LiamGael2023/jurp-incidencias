@@ -5,7 +5,7 @@ import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import {
   FaTimes, FaGlobeAmericas, FaMountain, FaLayerGroup,
-  FaPlay, FaSyncAlt, FaLocationArrow,
+  FaPlay, FaSyncAlt,
 } from 'react-icons/fa';
 
 /**
@@ -41,26 +41,42 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
   const [relieve, setRelieve] = useState(true);
   const [verCapas, setVerCapas] = useState(true);
   const [volando, setVolando] = useState(false);
+  const [girando, setGirando] = useState(true);
+  const giro = useRef(null);
+
+  // Detiene el giro del globo. Se llama en cuanto el usuario toca el mapa:
+  // si siguiera rotando bajo el cursor sería imposible apuntar a nada.
+  const pararGiro = useCallback(() => {
+    if (giro.current) { cancelAnimationFrame(giro.current); giro.current = null; }
+    setGirando(false);
+  }, []);
 
   // ── El vuelo: del espacio a Chavimochic ──────────────────────────────
+  // Ya no se dispara solo al entrar: la vista arranca en el globo y el vuelo
+  // queda a un botón, para quien quiera la aproximación.
   const volarAlCanal = useCallback(() => {
     const m = mapa.current;
     if (!m) return;
+    pararGiro();
     setVolando(true);
-    // Primero atrás, al globo completo; luego la aproximación.
-    m.jumpTo({ center: CENTRO, zoom: 0.8, pitch: 0, bearing: 0 });
-    setTimeout(() => {
-      m.flyTo({
-        center: CENTRO,
-        zoom: 11.5,
-        pitch: 62,        // cámara inclinada: es lo que hace visible el relieve
-        bearing: -18,
-        duration: 6500,
-        curve: 1.5,       // curva de aproximación, no un zoom plano
-        essential: true,
-      });
-      setTimeout(() => setVolando(false), 6600);
-    }, 350);
+    m.flyTo({
+      center: CENTRO,
+      zoom: 11.5,
+      pitch: 62,        // cámara inclinada: es lo que hace visible el relieve
+      bearing: -18,
+      duration: 5000,
+      curve: 1.5,       // curva de aproximación, no un zoom plano
+      essential: true,
+    });
+    setTimeout(() => setVolando(false), 5100);
+  }, [pararGiro]);
+
+  // Vuelve al globo completo y retoma el giro.
+  const volverAlGlobo = useCallback(() => {
+    const m = mapa.current;
+    if (!m) return;
+    m.flyTo({ center: CENTRO, zoom: 0.9, pitch: 0, bearing: 0, duration: 2600, essential: true });
+    setTimeout(() => setGirando(true), 2700);
   }, []);
 
   // ── Construcción del mapa (una sola vez) ─────────────────────────────
@@ -95,7 +111,7 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
         },
       },
       center: CENTRO,
-      zoom: 0.8,
+      zoom: 0.9,
       pitch: 0,
       bearing: 0,
       attributionControl: false,
@@ -141,11 +157,30 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
       });
 
       setListo(true);
-      volarAlCanal();
     });
 
+    // Cualquier interacción del usuario detiene el giro automático.
+    ['mousedown', 'touchstart', 'wheel', 'dragstart'].forEach(ev => m.on(ev, pararGiro));
+
     return () => { m.remove(); mapa.current = null; };
-  }, [capasLinea, volarAlCanal]);
+  }, [capasLinea, pararGiro]);
+
+  // ── Giro lento del globo ─────────────────────────────────────────────
+  // Un globo quieto parece una imagen; girando se lee como un globo. Se para
+  // en cuanto el usuario interactúa, y solo gira si está alejado.
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo || !girando) return;
+    let cancelado = false;
+    const paso = () => {
+      if (cancelado || !mapa.current) return;
+      const c = m.getCenter();
+      m.setCenter([c.lng + 0.12, c.lat]);
+      giro.current = requestAnimationFrame(paso);
+    };
+    giro.current = requestAnimationFrame(paso);
+    return () => { cancelado = true; if (giro.current) cancelAnimationFrame(giro.current); };
+  }, [listo, girando]);
 
   // ── Marcadores de incidentes ─────────────────────────────────────────
   useEffect(() => {
@@ -179,10 +214,10 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
         .setPopup(popup)
         .addTo(m);
 
-      if (onSeleccionar) el.addEventListener('click', () => onSeleccionar(inc));
+      if (onSeleccionar) el.addEventListener('click', () => { pararGiro(); onSeleccionar(inc); });
       marcadores.current.push(marcador);
     });
-  }, [incidentes, listo, onSeleccionar]);
+  }, [incidentes, listo, onSeleccionar, pararGiro]);
 
   // ── Interruptores ────────────────────────────────────────────────────
   useEffect(() => {
@@ -231,16 +266,19 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
       <div style={{ position: 'absolute', top: 16, right: 60, zIndex: 10, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <button onClick={volarAlCanal} disabled={volando} style={btn(false)}>
           {volando ? <FaSyncAlt className="icon-spin" /> : <FaPlay size={11} />}
-          {volando ? 'Volando…' : 'Repetir vuelo'}
+          {volando ? 'Volando…' : 'Volar a Chavimochic'}
+        </button>
+        <button onClick={volverAlGlobo} style={btn(false)}>
+          <FaGlobeAmericas size={12} /> Ver el globo
+        </button>
+        <button onClick={() => (girando ? pararGiro() : setGirando(true))} style={btn(girando)}>
+          <FaSyncAlt size={11} /> {girando ? 'Girando' : 'Girar'}
         </button>
         <button onClick={() => setRelieve(v => !v)} style={btn(relieve)}>
           <FaMountain size={12} /> Relieve
         </button>
         <button onClick={() => setVerCapas(v => !v)} style={btn(verCapas)}>
           <FaLayerGroup size={12} /> Capas
-        </button>
-        <button onClick={() => mapa.current?.flyTo({ center: CENTRO, zoom: 11.5, pitch: 62, bearing: -18, duration: 1800 })} style={btn(false)}>
-          <FaLocationArrow size={11} /> Centrar
         </button>
         <button onClick={onCerrar} style={{ ...btn(false), background: 'rgba(214,57,57,.55)', borderColor: 'rgba(255,255,255,.35)' }}>
           <FaTimes size={12} /> Salir del 3D
@@ -257,6 +295,14 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
         <span style={{ color: '#7fa5c0' }}>·</span>
         <span style={{ color: '#7fa5c0' }}>{incidentes.length} incidente(s)</span>
       </div>
+
+      {listo && girando && (
+        <div style={{ position: 'absolute', bottom: 70, left: '50%', transform: 'translateX(-50%)', zIndex: 10,
+                      background: 'rgba(8,22,40,.62)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.14)',
+                      borderRadius: 10, padding: '8px 16px', fontSize: 12, color: '#cfe1ef', fontWeight: 600 }}>
+          Arrastra el globo para explorarlo · toca un incidente para abrirlo en el mapa
+        </div>
+      )}
 
       {!listo && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8fd0f5', fontSize: 14, fontWeight: 700, gap: 10, zIndex: 5 }}>
