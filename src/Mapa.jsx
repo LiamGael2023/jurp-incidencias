@@ -23,6 +23,7 @@ import './MapaHerramientas.css';
 import { useInventario, CapasInventario, PanelInventario, FaClipboardCheck } from './InventarioGIS';
 import { useRuta, CapaRuta, fmtDistancia, fmtTiempo } from './RutaGIS';
 import Mapa3D from './Mapa3D';
+import { leerTodas as leerInnova, leerEstacion as leerEstacionInnova, lluviaPorHora as lluviaPorHoraInnova } from './InnovaWeather';
 
 import geoCanalMadre from './data/Canal_Madre.json';
 import geoLateral10 from './data/Lateral_10.json';
@@ -649,6 +650,23 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         // Acumulado del DÍA ACTUAL, igual que la app móvil. max_points alto:
         // sin él la API entrega la serie reducida y el total sale corto.
         for (const eq of (dd.results || [])) { const la = parseFloat(eq.latitude), lo = parseFloat(eq.longitude); if (isNaN(la) || isNaN(lo)) continue; let rain = 0; try { const rr = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(now)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=rainfall_mm&max_points=9000`, { headers: { 'Authorization': `Token ${token}` } }); if (rr.ok) { const rd = await rr.json(); for (const rec of (rd.data || [])) { const dt = new Date(rec.timestamp); if (dt.toDateString() !== now.toDateString()) continue; rain += parseFloat(rec.value) || 0; } } } catch(e) {} nd.push({ id: eq.id, name: eq.nombre || (eq.tipo === 'davis' ? 'Estación Davis' : 'Pluviómetro'), tipo: eq.tipo, lat: la, lng: lo, totalRain: rain, isCritical: rain > 20 }); }
+        // Estaciones InnovaWeather (Innova-T): no son Davis ni están en el
+        // backend de JURP, se consultan aparte y se suman a la misma lista
+        // para que el mapa las trate igual que a un pluviómetro.
+        try {
+          const innova = await leerInnova();
+          for (const e of innova) {
+            if (!Number.isFinite(e.lat) || !Number.isFinite(e.lng)) continue;
+            nd.push({
+              id: `innova-${e.did}`, did: e.did,
+              name: e.nombre || e.alias, tipo: 'innova',
+              lat: e.lat, lng: e.lng,
+              totalRain: e.lluviaTotal, isCritical: e.lluviaTotal > 20,
+              temperatura: e.temperatura, humedad: e.humedad, viento: e.viento,
+            });
+          }
+        } catch (err) { console.warn('InnovaWeather:', err.message); }
+
         setLluviasAPI(nd); }
     } catch(e) { console.error(e); } finally { setCargandoAPIs(false); setUltimaAct(Date.now()); }
   };
@@ -1051,6 +1069,22 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const cargarHorasLluvia = useCallback(async (stationId) => {
     if (!stationId) return;
     setCargandoHoras(true);
+
+    // Las InnovaWeather no están en el backend de JURP: su historial se pide
+    // a su propia API, que devuelve una lectura cada 30 minutos.
+    if (String(stationId).startsWith('innova-')) {
+      try {
+        const did = String(stationId).replace('innova-', '');
+        const e = await leerEstacionInnova(did);
+        const hAhora = new Date().getHours();
+        setHorasLluvia(lluviaPorHoraInnova(e.registros).map(x => ({
+          ...x, enCurso: parseInt(x.hora, 10) === hAhora,
+        })));
+      } catch (err) { console.error('InnovaWeather horas:', err); setHorasLluvia([]); }
+      finally { setCargandoHoras(false); }
+      return;
+    }
+
     try {
       const tk = localStorage.getItem('userToken');
       const now = new Date();
@@ -1108,14 +1142,16 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   // Las que registran lluvia hoy laten, para que salten a la vista.
   const crearIconoLluvia = (r, cr, tipo = 'pluviometro') => {
     const esDavis = tipo === 'davis';
+    const esInnova = tipo === 'innova';
     const llueve = r > 0;
-    const borde = cr ? '#ef4444' : (llueve ? '#35B6E9' : (esDavis ? '#a78bfa' : '#5b7590'));
+    const borde = cr ? '#ef4444'
+      : (llueve ? '#35B6E9' : (esInnova ? '#4ade80' : (esDavis ? '#a78bfa' : '#5b7590')));
     const clase = llueve ? (cr ? 'gis-lluvia-alerta' : 'gis-lluvia-activa') : '';
     return divIcon({
       className: 'icono-vacio',
       html: `<div class="${clase}" style="display:flex;flex-direction:column;align-items:center;margin-top:-30px">
                <div style="background:${cr ? '#1e293b' : '#111827'};border:1px solid ${borde};color:${borde};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${r.toFixed(1)} mm</div>
-               <div style="font-size:22px;line-height:1;margin-top:2px">${esDavis ? '🌡️' : '🌧️'}</div>
+               <div style="font-size:22px;line-height:1;margin-top:2px">${esInnova ? '📡' : (esDavis ? '🌡️' : '🌧️')}</div>
              </div>`,
       iconSize: [60, 60], iconAnchor: [30, 45],
     });
@@ -1236,7 +1272,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           <CapasInventario inv={inv} />
 
           {!inv.abierto && lluviasAPI
-            .filter(p => p.tipo === 'davis' ? capas.Davis : capas.Lluvias)
+            .filter(p => p.tipo === 'davis' ? capas.Davis : capas.Lluvias)   // innova va con los pluviómetros
             .filter(p => !soloConLluvia || p.totalRain > 0)
             .map(p => (
             <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical, p.tipo)}
@@ -1369,7 +1405,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             <span className="gis-kpi-label">Estaciones</span>
             <span className="gis-kpi-valor">{lluviasAPI.length}</span>
             <span className="gis-kpi-nota">
-              {lluviasAPI.filter(l => l.tipo !== 'davis').length} pluv · {lluviasAPI.filter(l => l.tipo === 'davis').length} Davis
+              {lluviasAPI.filter(l => l.tipo !== 'davis' && l.tipo !== 'innova').length} pluv
+              · {lluviasAPI.filter(l => l.tipo === 'davis').length} Davis
+              {lluviasAPI.some(l => l.tipo === 'innova') && ` · ${lluviasAPI.filter(l => l.tipo === 'innova').length} Innova`}
             </span>
           </span>
         </div>
@@ -1826,7 +1864,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                   <button key={e.id}
                     className={`gis-chip ${estLluvia === e.id ? 'activo' : ''}`}
                     onClick={() => { setEstLluvia(e.id); cargarHorasLluvia(e.id); }}>
-                    {e.tipo === 'davis' ? '🌡️' : '🌧️'} {e.name} · {e.totalRain.toFixed(1)} mm
+                    {e.tipo === 'innova' ? '📡' : (e.tipo === 'davis' ? '🌡️' : '🌧️')} {e.name} · {e.totalRain.toFixed(1)} mm
                   </button>
                 ))}
               </div>

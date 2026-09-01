@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/innovapi/(.*)",
+      "destination": "https://innovat.com.pe/InnovaWeather/api/$1"
+    },
+    {
       "source": "/vigapi/(.*)",
       "destination": "https://gideonstudio.duckdns.org/api/v1/$1"
     },
