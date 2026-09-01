@@ -3,12 +3,23 @@ import { FaSyncAlt, FaExclamationTriangle, FaCheckCircle, FaClock, FaClipboardLi
 import ReactApexChart from 'react-apexcharts';
 import './Incidentes.css';
 import './EstadisticasGIS.css';
+// Estaciones InnovaWeather (Innova-T): viven en otro servidor y se consultan
+// aparte, pero se muestran en la misma lista que las Davis y los pluviómetros.
+import {
+  leerTodas as leerInnova,
+  leerEstacion as leerEstacionInnova,
+  lluviaPorHora as lluviaPorHoraInnova,
+  fechaInnova,
+} from './InnovaWeather';
 
 const COLORS_TIPO = ['#1268C3','#f76707','#d63939','#2fb344','#ae3ec9','#f59f00'];
 const COLORS_GRAVEDAD = {'lev':'#2fb344','mod':'#f76707','gra':'#d63939'};
 const COLORS_ESTADO = {'pat':'#f59f00','ate':'#1268C3','cer':'#2fb344'};
-
 const FUENTE = "'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
+
+// Identifica a las estaciones de Innova por su id sintético.
+const esInnova = (id) => String(id).startsWith('innova-');
+const didDe = (id) => String(id).replace('innova-', '');
 
 /* Opciones base de las donas: leyenda abajo y total al centro. */
 const opcionesDona = (labels, colors) => ({
@@ -117,7 +128,6 @@ function Estadisticas() {
   const [detalleHoy, setDetalleHoy] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [cargandoLluvia, setCargandoLluvia] = useState(false);
-
   const token = () => localStorage.getItem('userToken');
 
   // ── Cargar incidentes ─────────────────────────────────────────────────
@@ -128,7 +138,7 @@ function Estadisticas() {
     } catch(e) { console.error(e); }
   };
 
-  // ── Cargar estaciones (pluviómetros + Davis) ──────────────────────────
+  // ── Cargar estaciones (pluviómetros + Davis + InnovaWeather) ──────────
   const cargarEstaciones = async () => {
     try {
       const [r1, r2] = await Promise.all([
@@ -138,12 +148,10 @@ function Estadisticas() {
       let all = [];
       if (r1.ok) { const d = await r1.json(); all.push(...(d.results||[])); }
       if (r2.ok) { const d = await r2.json(); all.push(...(d.results||[])); }
-
       // Cargar métricas actuales para cada estación
       const now = new Date();
       const past24h = new Date(now.getTime() - 24*60*60*1000);
       const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-
       const enriched = await Promise.all(all.map(async (eq) => {
         let totalRain = 0, temp = '--', hum = '--';
         try {
@@ -167,7 +175,6 @@ function Estadisticas() {
           }
           if (rT.ok) { const d = await rT.json(); const recs = d.data||[]; if(recs.length) temp = parseFloat(recs[recs.length-1].value).toFixed(1); }
           if (rH.ok) { const d = await rH.json(); const recs = d.data||[]; if(recs.length) hum = parseFloat(recs[recs.length-1].value).toFixed(1); }
-
           // Plan B: metrics endpoint
           if (temp === '--' || hum === '--') {
             const rM = await fetch(`/api/v1/mobile/devices/${eq.id}/metrics/`, { headers:{'Authorization':`Token ${token()}`} });
@@ -185,8 +192,27 @@ function Estadisticas() {
         return { ...eq, totalRain, temp, hum, isCritical: totalRain > 20 };
       }));
 
-      setEstaciones(enriched);
-      if (enriched.length > 0 && !estacionSeleccionada) setEstacionSeleccionada(enriched[0].id);
+      // ── InnovaWeather ──────────────────────────────────────────────────
+      // Se consultan en paralelo y se añaden al final de la lista. Si su
+      // servidor no responde, la vista sigue funcionando con las demás.
+      let innova = [];
+      try {
+        const est = await leerInnova();
+        innova = est.map(e => ({
+          id: `innova-${e.did}`,
+          did: e.did,
+          nombre: e.nombre || e.alias,
+          totalRain: e.lluviaTotal,
+          temp: e.temperatura != null ? e.temperatura.toFixed(1) : '--',
+          hum: e.humedad != null ? e.humedad.toFixed(1) : '--',
+          isCritical: e.lluviaTotal > 20,
+          innova: true,
+        }));
+      } catch (err) { console.warn('InnovaWeather:', err.message); }
+
+      const todas = [...enriched, ...innova];
+      setEstaciones(todas);
+      if (todas.length > 0 && !estacionSeleccionada) setEstacionSeleccionada(todas[0].id);
     } catch(e) { console.error(e); }
   };
 
@@ -194,13 +220,71 @@ function Estadisticas() {
   const cargarLluviaChart = async (stationId, rango) => {
     if (!stationId) return;
     setCargandoLluvia(true);
+
+    // ── Estaciones InnovaWeather ────────────────────────────────────────
+    // Su API entrega una lectura cada 30 min y solo acepta rangos por fecha,
+    // así que se pide un día por petición igual que con las Davis.
+    if (esInnova(stationId)) {
+      try {
+        const did = didDe(stationId);
+        const ahora = new Date();
+        if (rango === 'hoy') {
+          const e = await leerEstacionInnova(did);
+          const hActual = ahora.getHours();
+          const porHora = lluviaPorHoraInnova(e.registros);
+          setLluviaChart(porHora.map(x => ({
+            dia: x.hora, mm: x.mm, enCurso: parseInt(x.hora, 10) === hActual,
+          })));
+          // Último registro con lluvia, para el resumen de arriba.
+          const conLluvia = e.registros.filter(r => parseFloat(r.lluvia_mm) > 0);
+          const ultimo = conLluvia.length ? conLluvia[conLluvia.length - 1] : null;
+          const acumDia = porHora.reduce((a, b) => a + b.mm, 0);
+          if (ultimo) {
+            const [hh, mm] = String(ultimo.hora).split(':');
+            const fecha = new Date(ahora);
+            fecha.setHours(parseInt(hh, 10), parseInt(mm, 10), 0, 0);
+            setDetalleHoy({
+              hora: `${hh}:${mm}`,
+              hace: Math.max(0, Math.round((ahora - fecha) / 60000)),
+              valor: parseFloat(ultimo.lluvia_mm) || 0,
+              acumHora: porHora[parseInt(hh, 10)]?.mm || 0,
+              horaLabel: `${hh}:00`,
+              acumDia,
+            });
+          } else {
+            setDetalleHoy({ sinLluvia: true, acumDia });
+          }
+        } else {
+          const dias = rango;
+          const dds = [];
+          for (let i = dias - 1; i >= 0; i--) dds.push(new Date(ahora.getTime() - i * 864e5));
+          const totales = await Promise.all(dds.map(async d => {
+            try {
+              const f = fechaInnova(d);
+              const e = await leerEstacionInnova(did, f, f);
+              return e.lluviaTotal;
+            } catch (err) { return 0; }
+          }));
+          setLluviaChart(dds.map((d, i) => ({
+            dia: i === dds.length - 1 ? 'Hoy'
+              : `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`,
+            mm: parseFloat((totales[i] || 0).toFixed(1)),
+          })));
+          setDetalleHoy(null);
+        }
+      } catch (err) {
+        console.error('InnovaWeather:', err);
+        setLluviaChart([]); setDetalleHoy(null);
+      } finally { setCargandoLluvia(false); }
+      return;
+    }
+
     try {
       const now = new Date();
       const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       const esHoy = rango === 'hoy';
       const dias = esHoy ? 1 : rango;
       const past = new Date(now.getTime() - (dias - 1) * 24 * 60 * 60 * 1000);
-
       // ── Rango de varios días ──────────────────────────────────────────
       // Se pide UN DÍA POR PETICIÓN y se usa 'total_precipitation', que lo
       // calcula el servidor. Con un rango amplio la API entrega la serie
@@ -209,7 +293,6 @@ function Estadisticas() {
       if (!esHoy) {
         const dds = [];
         for (let i = dias - 1; i >= 0; i--) dds.push(new Date(now.getTime() - i * 864e5));
-
         const totales = await Promise.all(dds.map(async d => {
           try {
             const r = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(d)}&end_date=${fmt(d)}&station_id=${stationId}&metric=rainfall_mm&max_points=9000`, { headers:{'Authorization':`Token ${token()}`} });
@@ -220,7 +303,6 @@ function Estadisticas() {
             return (j.data || []).reduce((a, x) => a + (parseFloat(x.value) || 0), 0);
           } catch (e) { return 0; }
         }));
-
         setLluviaChart(dds.map((d, i) => ({
           dia: i === dds.length - 1 ? 'Hoy'
             : `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`,
@@ -229,19 +311,15 @@ function Estadisticas() {
         setDetalleHoy(null);
         return;
       }
-
       const res = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(past)}&end_date=${fmt(now)}&station_id=${stationId}&metric=rainfall_mm&max_points=9000`, { headers:{'Authorization':`Token ${token()}`} });
       if (!res.ok) { setLluviaChart([]); setDetalleHoy(null); return; }
-
       const data = await res.json();
       const records = data.data || [];
-
       if (esHoy) {
         // ── Acumulado por hora del día en curso ──────────────────────────
         // Arreglo indexado 0..23: el orden queda fijo, sin depender de cómo
         // JavaScript recorra las claves de un objeto.
         const porHora = new Array(24).fill(0);
-
         let ultimo = null;   // último registro con lluvia > 0
         for (const r of records) {
           const dt = new Date(r.timestamp);
@@ -251,14 +329,12 @@ function Estadisticas() {
           porHora[h] += v;
           if (v > 0) ultimo = { fecha: dt, valor: v, hora: h };
         }
-
         const horaActual = now.getHours();
         setLluviaChart(porHora.map((mm, h) => ({
           dia: String(h).padStart(2, '0'),
           mm: parseFloat(mm.toFixed(1)),
           enCurso: h === horaActual,
         })));
-
         const acumDia = porHora.reduce((a, b) => a + b, 0);
         setDetalleHoy(ultimo ? {
           hora: `${String(ultimo.hora).padStart(2, '0')}:${String(ultimo.fecha.getMinutes()).padStart(2, '0')}`,
@@ -292,24 +368,20 @@ function Estadisticas() {
   const pendientes = incidentes.filter(i => i.status === 'pat').length;
   const enAtencion = incidentes.filter(i => i.status === 'ate').length;
   const cerrados = incidentes.filter(i => i.status === 'cer').length;
-
   const porTipo = Object.entries(incidentes.reduce((acc, i) => {
     const t = tiposMapa[i.type?.toString()] || 'Otro';
     acc[t] = (acc[t]||0) + 1; return acc;
   }, {})).map(([name, value]) => ({ name, value }));
-
   const porGravedad = Object.entries(incidentes.reduce((acc, i) => {
     const g = i.severity || 'lev';
     const label = g === 'lev' ? 'Leve' : g === 'mod' ? 'Moderada' : 'Grave';
     acc[label] = (acc[label]||0) + 1; return acc;
   }, {})).map(([name, value]) => ({ name, value }));
-
   const porEstado = [
     { name: 'Pendiente', value: pendientes, color: COLORS_ESTADO.pat },
     { name: 'En Atención', value: enAtencion, color: COLORS_ESTADO.ate },
     { name: 'Cerrado', value: cerrados, color: COLORS_ESTADO.cer },
   ].filter(d => d.value > 0);
-
   // ── Incidentes por mes (últimos 6 meses) ──────────────────────────────
   const porMes = (() => {
     const now = new Date();
@@ -326,7 +398,6 @@ function Estadisticas() {
     }
     return Object.entries(meses).map(([mes, cantidad]) => ({ mes, cantidad }));
   })();
-
   // ── Series y opciones para ApexCharts ─────────────────────────────────
   const donaEstado = {
     series: porEstado.map(d => d.value),
@@ -373,7 +444,6 @@ function Estadisticas() {
         }
       : baseBarras,
   };
-
   // Tarjeta de indicador: el color va por variable CSS (--c).
   const Kpi = ({ color, icono, etiqueta, valor }) => (
     <div className="est-kpi" style={{ '--c': color }}>
@@ -381,7 +451,6 @@ function Estadisticas() {
       <div className="est-kpi-valor">{valor}</div>
     </div>
   );
-
   if (cargando) return (
     <div className="tbl-page-wrapper">
       <div className="tbl-empty" style={{height:'60vh',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',fontWeight:600}}>
@@ -389,7 +458,6 @@ function Estadisticas() {
       </div>
     </div>
   );
-
   return (
     <div className="tbl-page-wrapper">
       <div className="tbl-page-header">
@@ -405,9 +473,7 @@ function Estadisticas() {
           </div>
         </div>
       </div>
-
       <div className="tbl-page-body" style={{padding:'0'}}>
-
         {/* ── Sub-menú ───────────────────────────────────────────────────── */}
         <div className="est-tabs">
           {[
@@ -420,9 +486,7 @@ function Estadisticas() {
             </button>
           ))}
         </div>
-
         <div style={{padding:'20px 24px 24px'}}>
-
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* ── TAB: INCIDENTES ──────────────────────────────────────────── */}
         {/* ══════════════════════════════════════════════════════════════════ */}
@@ -433,7 +497,6 @@ function Estadisticas() {
           <Kpi color="#35B6E9" icono={<FaExclamationTriangle/>} etiqueta="En Atención" valor={enAtencion} />
           <Kpi color="#2fb344" icono={<FaCheckCircle/>} etiqueta="Cerrados" valor={cerrados} />
         </div>
-
         {/* ── Gráficos de incidentes ─────────────────────────────────────── */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:'14px',marginBottom:'18px'}}>
           <div className="est-card">
@@ -449,20 +512,16 @@ function Estadisticas() {
             <ReactApexChart options={donaGravedad.options} series={donaGravedad.series} type="donut" height={265} />
           </div>
         </div>
-
         {/* ── Tendencia mensual ───────────────────────────────────────────── */}
         <div className="est-card" style={{marginBottom:'18px'}}>
           <div className="est-titulo">Tendencia de Incidentes (Últimos 6 meses)</div>
           <ReactApexChart options={barrasMes.options} series={barrasMes.series} type="bar" height={260} />
         </div>
-
         </>)}
-
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* ── TAB: ESTACIONES METEOROLÓGICAS ───────────────────────────── */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         {subMenu === 'estaciones' && (<>
-
         <div style={{display:'flex',gap:'14px',height:'calc(100vh - 250px)'}}>
           {/* ── Panel izquierdo: Estaciones ─────────────────────────────── */}
           <div className="est-card" style={{width:'320px', flexShrink:0, display:'flex', flexDirection:'column', overflow:'hidden'}}>
@@ -472,7 +531,15 @@ function Estadisticas() {
                 {estaciones.map(eq => (
                   <div key={eq.id} onClick={()=>setEstacionSeleccionada(eq.id)}
                     className={`est-estacion ${estacionSeleccionada===eq.id ? 'activa' : ''}`}>
-                    <div className="est-estacion-nombre">{eq.nombre || `Estación ${eq.id}`}</div>
+                    <div className="est-estacion-nombre">
+                      {eq.nombre || `Estación ${eq.id}`}
+                      {/* Marca de origen: estas no vienen del backend de JURP */}
+                      {eq.innova && (
+                        <span style={{marginLeft:'6px',fontSize:'9px',fontWeight:800,letterSpacing:'.04em',
+                                      color:'#15803d',background:'#dcfce7',border:'1px solid #bbf7d0',
+                                      borderRadius:'4px',padding:'1px 5px'}}>INNOVA</span>
+                      )}
+                    </div>
                     <div className="est-estacion-datos">
                       <span style={{color: eq.isCritical ? '#d63939' : '#1268C3', fontWeight:'700'}}><FaCloudRain style={{marginRight:'3px'}}/>{eq.totalRain.toFixed(1)} mm</span>
                       <span><FaThermometerHalf style={{marginRight:'3px',color:'#f76707'}}/>{eq.temp}°C</span>
@@ -483,7 +550,6 @@ function Estadisticas() {
               </div>
             )}
           </div>
-
           {/* ── Panel derecho: Gráfico de lluvias ──────────────────────── */}
           <div className="est-card" style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden'}}>
             {estacionSeleccionada ? (<>
@@ -526,7 +592,6 @@ function Estadisticas() {
                   )}
                 </div>
               )}
-
               <div style={{flex:1,minHeight:0,marginTop:'14px'}}>
                 {cargandoLluvia ? <div style={{textAlign:'center',padding:'40px',color:'#5b7590',fontWeight:600}}><FaSyncAlt className="icon-spin"/> Cargando…</div> : (
                   <ReactApexChart options={barrasLluvia.options} series={barrasLluvia.series} type="bar" height="100%" />
@@ -544,13 +609,10 @@ function Estadisticas() {
             )}
           </div>
         </div>
-
         </>)}
-
         </div>
       </div>
     </div>
   );
 }
-
 export default Estadisticas;
