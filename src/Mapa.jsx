@@ -23,7 +23,7 @@ import './MapaHerramientas.css';
 import { useInventario, CapasInventario, PanelInventario, FaClipboardCheck } from './InventarioGIS';
 import { useRuta, CapaRuta, fmtDistancia, fmtTiempo } from './RutaGIS';
 import Mapa3D from './Mapa3D';
-import { leerTodas as leerInnova, leerEstacion as leerEstacionInnova, lluviaPorHora as lluviaPorHoraInnova } from './InnovaWeather';
+import { leerTodas as leerInnova, horaDeLectura } from './InnovaWeather';
 
 import geoCanalMadre from './data/Canal_Madre.json';
 import geoLateral10 from './data/Lateral_10.json';
@@ -656,13 +656,17 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         try {
           const innova = await leerInnova();
           for (const e of innova) {
-            if (!Number.isFinite(e.lat) || !Number.isFinite(e.lng)) continue;
+            if (!Number.isFinite(e.latitude) || !Number.isFinite(e.longitude)) continue;
             nd.push({
-              id: `innova-${e.did}`, did: e.did,
-              name: e.nombre || e.alias, tipo: 'innova',
-              lat: e.lat, lng: e.lng,
-              totalRain: e.lluviaTotal, isCritical: e.lluviaTotal > 20,
-              temperatura: e.temperatura, humedad: e.humedad, viento: e.viento,
+              id: `innova-${e.did || e.token}`, did: e.did,
+              name: e.nombre, tipo: 'innova',
+              lat: e.latitude, lng: e.longitude,
+              totalRain: e.lluvia_dia || 0, isCritical: (e.lluvia_dia || 0) > 20,
+              temperatura: e.temperatura, humedad: e.humedad, viento: e.viento_kmh,
+              actualizado: horaDeLectura(e.actualizado),
+              // El widget de Innova solo da la lectura del momento: no hay
+              // serie por horas que mostrar en el modal.
+              sinHistorial: true,
             });
           }
         } catch (err) { console.warn('InnovaWeather:', err.message); }
@@ -1070,18 +1074,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     if (!stationId) return;
     setCargandoHoras(true);
 
-    // Las InnovaWeather no están en el backend de JURP: su historial se pide
-    // a su propia API, que devuelve una lectura cada 30 minutos.
+    // Las InnovaWeather no tienen serie por horas: su widget solo entrega la
+    // lectura actual. El modal se abre vacío y el aviso lo explica.
     if (String(stationId).startsWith('innova-')) {
-      try {
-        const did = String(stationId).replace('innova-', '');
-        const e = await leerEstacionInnova(did);
-        const hAhora = new Date().getHours();
-        setHorasLluvia(lluviaPorHoraInnova(e.registros).map(x => ({
-          ...x, enCurso: parseInt(x.hora, 10) === hAhora,
-        })));
-      } catch (err) { console.error('InnovaWeather horas:', err); setHorasLluvia([]); }
-      finally { setCargandoHoras(false); }
+      setHorasLluvia([]);
+      setCargandoHoras(false);
       return;
     }
 

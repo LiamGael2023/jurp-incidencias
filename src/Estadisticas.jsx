@@ -5,12 +5,7 @@ import './Incidentes.css';
 import './EstadisticasGIS.css';
 // Estaciones InnovaWeather (Innova-T): viven en otro servidor y se consultan
 // aparte, pero se muestran en la misma lista que las Davis y los pluviómetros.
-import {
-  leerTodas as leerInnova,
-  leerEstacion as leerEstacionInnova,
-  lluviaPorHora as lluviaPorHoraInnova,
-  fechaInnova,
-} from './InnovaWeather';
+import { leerTodas as leerInnova, horaDeLectura } from './InnovaWeather';
 
 const COLORS_TIPO = ['#1268C3','#f76707','#d63939','#2fb344','#ae3ec9','#f59f00'];
 const COLORS_GRAVEDAD = {'lev':'#2fb344','mod':'#f76707','gra':'#d63939'};
@@ -199,13 +194,19 @@ function Estadisticas() {
       try {
         const est = await leerInnova();
         innova = est.map(e => ({
-          id: `innova-${e.did}`,
+          id: `innova-${e.did || e.token}`,
           did: e.did,
-          nombre: e.nombre || e.alias,
-          totalRain: e.lluviaTotal,
+          nombre: e.nombre,
+          totalRain: e.lluvia_dia || 0,
           temp: e.temperatura != null ? e.temperatura.toFixed(1) : '--',
           hum: e.humedad != null ? e.humedad.toFixed(1) : '--',
-          isCritical: e.lluviaTotal > 20,
+          isCritical: (e.lluvia_dia || 0) > 20,
+          viento: e.viento_kmh,
+          vientoDir: e.viento_dir,
+          presion: e.presion_mb,
+          radiacion: e.radiacion,
+          uv: e.uv,
+          actualizado: horaDeLectura(e.actualizado),
           innova: true,
         }));
       } catch (err) { console.warn('InnovaWeather:', err.message); }
@@ -222,60 +223,12 @@ function Estadisticas() {
     setCargandoLluvia(true);
 
     // ── Estaciones InnovaWeather ────────────────────────────────────────
-    // Su API entrega una lectura cada 30 min y solo acepta rangos por fecha,
-    // así que se pide un día por petición igual que con las Davis.
+    // No hay serie histórica por esta vía (el widget solo da el momento), así
+    // que no se pide nada: la ficha de la derecha muestra la lectura actual.
     if (esInnova(stationId)) {
-      try {
-        const did = didDe(stationId);
-        const ahora = new Date();
-        if (rango === 'hoy') {
-          const e = await leerEstacionInnova(did);
-          const hActual = ahora.getHours();
-          const porHora = lluviaPorHoraInnova(e.registros);
-          setLluviaChart(porHora.map(x => ({
-            dia: x.hora, mm: x.mm, enCurso: parseInt(x.hora, 10) === hActual,
-          })));
-          // Último registro con lluvia, para el resumen de arriba.
-          const conLluvia = e.registros.filter(r => parseFloat(r.lluvia_mm) > 0);
-          const ultimo = conLluvia.length ? conLluvia[conLluvia.length - 1] : null;
-          const acumDia = porHora.reduce((a, b) => a + b.mm, 0);
-          if (ultimo) {
-            const [hh, mm] = String(ultimo.hora).split(':');
-            const fecha = new Date(ahora);
-            fecha.setHours(parseInt(hh, 10), parseInt(mm, 10), 0, 0);
-            setDetalleHoy({
-              hora: `${hh}:${mm}`,
-              hace: Math.max(0, Math.round((ahora - fecha) / 60000)),
-              valor: parseFloat(ultimo.lluvia_mm) || 0,
-              acumHora: porHora[parseInt(hh, 10)]?.mm || 0,
-              horaLabel: `${hh}:00`,
-              acumDia,
-            });
-          } else {
-            setDetalleHoy({ sinLluvia: true, acumDia });
-          }
-        } else {
-          const dias = rango;
-          const dds = [];
-          for (let i = dias - 1; i >= 0; i--) dds.push(new Date(ahora.getTime() - i * 864e5));
-          const totales = await Promise.all(dds.map(async d => {
-            try {
-              const f = fechaInnova(d);
-              const e = await leerEstacionInnova(did, f, f);
-              return e.lluviaTotal;
-            } catch (err) { return 0; }
-          }));
-          setLluviaChart(dds.map((d, i) => ({
-            dia: i === dds.length - 1 ? 'Hoy'
-              : `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`,
-            mm: parseFloat((totales[i] || 0).toFixed(1)),
-          })));
-          setDetalleHoy(null);
-        }
-      } catch (err) {
-        console.error('InnovaWeather:', err);
-        setLluviaChart([]); setDetalleHoy(null);
-      } finally { setCargandoLluvia(false); }
+      setLluviaChart([]);
+      setDetalleHoy(null);
+      setCargandoLluvia(false);
       return;
     }
 
@@ -552,7 +505,43 @@ function Estadisticas() {
           </div>
           {/* ── Panel derecho: Gráfico de lluvias ──────────────────────── */}
           <div className="est-card" style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden'}}>
-            {estacionSeleccionada ? (<>
+            {estacionSeleccionada && esInnova(estacionSeleccionada) ? (() => {
+              // Estación InnovaWeather: solo hay lectura actual, no serie.
+              const e = estaciones.find(x => x.id === estacionSeleccionada) || {};
+              const dato = (etq, val, uni = '') => (
+                <div key={etq} style={{background:'#f7fafd',border:'1px solid #d5e3f0',borderRadius:10,padding:'12px 14px'}}>
+                  <div style={{fontSize:10,fontWeight:800,letterSpacing:'.08em',textTransform:'uppercase',color:'#7b93ad'}}>{etq}</div>
+                  <div style={{fontSize:20,fontWeight:800,color:'#0B2A5B',marginTop:3}}>
+                    {val != null && val !== '' ? `${val}${uni}` : '—'}
+                  </div>
+                </div>
+              );
+              return (
+                <>
+                  <div className="est-titulo" style={{marginBottom:12}}>
+                    <FaCloudRain /> {e.nombre}
+                    <span style={{marginLeft:8,fontSize:10,fontWeight:800,color:'#15803d',background:'#dcfce7',
+                                  border:'1px solid #bbf7d0',borderRadius:4,padding:'1px 6px'}}>INNOVA</span>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:12}}>
+                    {dato('Lluvia del día', e.totalRain?.toFixed(1), ' mm')}
+                    {dato('Temperatura', e.temp, ' °C')}
+                    {dato('Humedad', e.hum, ' %')}
+                    {dato('Viento', e.viento, ` Km/h${e.vientoDir ? ' · ' + e.vientoDir : ''}`)}
+                    {dato('Presión', e.presion, ' mb')}
+                    {dato('Radiación', e.radiacion, ' W/m²')}
+                    {dato('Índice UV', e.uv)}
+                    {dato('Última lectura', e.actualizado)}
+                  </div>
+                  <div style={{marginTop:16,background:'#fffbeb',border:'1px solid #fde68a',borderRadius:10,
+                               padding:'11px 14px',fontSize:12.5,color:'#92400e',lineHeight:1.5}}>
+                    Esta estación no tiene historial disponible: su servidor solo entrega la lectura del
+                    momento. Para ver la lluvia por horas o por días haría falta que Innova-T habilite su
+                    API sobre esta estación, o guardar aquí cada lectura.
+                  </div>
+                </>
+              );
+            })() : estacionSeleccionada ? (<>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap',flexShrink:0}}>
                 <div className="est-titulo" style={{marginBottom:0}}><FaCloudRain/> Historial — {estaciones.find(e=>e.id===estacionSeleccionada)?.nombre || 'Estación'}</div>
                 <div style={{display:'flex',gap:'6px'}}>
