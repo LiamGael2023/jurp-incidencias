@@ -20,6 +20,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 // ── Herramientas del visor ───────────────────────────────────────────────────
 import { BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
 import './MapaHerramientas.css';
+import { useInventario, CapasInventario, PanelInventario, FaClipboardCheck } from './InventarioGIS';
 import { useRuta, CapaRuta, fmtDistancia, fmtTiempo } from './RutaGIS';
 import Mapa3D from './Mapa3D';
 import { leerTodas as leerInnova, horaDeLectura } from './InnovaWeather';
@@ -73,7 +74,6 @@ import geoCaminosServ from './data/garitas/CAMINOS_DE_SERVICIO.json';
 import geoViasAcceso from './data/garitas/VIAS_DE_ACCESO.json';
 import geoViaAuxiliar from './data/garitas/VIA_AUXILIAR.json';
 import geoRedNacional from './data/garitas/RED_NACIONAL.json';
-import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion, FaClipboardCheck } from './InventarioGIS';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const crearIconoSimbologia = (url, sz = 28) => L.icon({ iconUrl: url, iconSize: [sz, sz], iconAnchor: [sz/2, sz/2], popupAnchor: [0, -(sz/2)] });
@@ -649,6 +649,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       tramo: a.canal || '',
       coords: [a.lng, a.lat],
       origen: 'inventario',
+      ambito: a.ambito,
       item: a,
     }));
 
@@ -1378,7 +1379,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                       <b>
                         {r.name}
                         {r.origen === 'inventario' && (
-                          <span className="gis-res-inv">inventario</span>
+                          <span className={`gis-res-inv amb-${r.ambito || 'SIN_DATO'}`}>
+                            {r.ambito === 'JURP' ? 'JURP'
+                              : r.ambito === 'PECH' ? 'Chavimochic'
+                              : 'inventario'}
+                          </span>
                         )}
                       </b>
                       <span>
@@ -1662,9 +1667,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       {/* ══════════════ PANEL DEL INVENTARIO JURP ══════════════ */}
       <PanelInventario inv={inv}
         onVolar={(b) => mapRef.current?.fitBounds(b, { padding: [50, 50], maxZoom: 16 })} />
-      {/* Formulario de evaluación. Se monta aquí y no dentro del popup
-          porque los popups de Leaflet no admiten un modal a pantalla completa. */}
-      <ModalEvaluacion inv={inv} />
+
       {/* ══════════════ PANEL DERECHO ══════════════ */}
       {!inv.abierto && (
       <aside className="gis-panel">

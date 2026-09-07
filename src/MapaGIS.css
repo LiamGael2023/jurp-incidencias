@@ -493,7 +493,7 @@
   .gis-leyenda { bottom: 78px; }
 }
 /* Distintivo del resultado que viene del inventario JURP: a diferencia de
-   los del KMZ, este abre su ficha con el estado de la campana. */
+   los del KMZ, éste abre su ficha con el estado de la campaña. */
 .gis-res-inv {
   margin-left: 7px;
   padding: 1px 5px;
@@ -506,4 +506,18 @@
   background: rgba(245, 159, 0, .18);
   border: 1px solid rgba(245, 159, 0, .4);
   vertical-align: 1px;
+}
+
+/* El chip del buscador toma el color del ámbito: verde lo que administra
+   la Junta, gris lo que pertenece al PECH. Son los mismos colores que usa
+   el popup del inventario, para que la lectura sea la misma en todo el visor. */
+.gis-res-inv.amb-JURP {
+  color: #8ce99a;
+  background: rgba(47, 158, 68, .18);
+  border-color: rgba(47, 158, 68, .45);
+}
+.gis-res-inv.amb-PECH {
+  color: #ced4da;
+  background: rgba(134, 142, 150, .18);
+  border-color: rgba(134, 142, 150, .4);
 }
