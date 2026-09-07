@@ -182,6 +182,10 @@ export function useInventario() {
   const [evaluaciones, setEvaluaciones] = useState({}); // "tipo:fid" → evaluación
   const [error, setError] = useState(null);
   const [iniciando, setIniciando] = useState(false);
+  // activo que se está evaluando: {tipo, fid, props}
+  const [evaluando, setEvaluando] = useState(null);
+  // definición de campos por tipo, cacheada tras el primer pedido
+  const [formularios, setFormularios] = useState({});
   // 'todo' | 'JURP' | 'PECH' — filtro general, el que aplica por defecto
   const [ambito, setAmbito] = useState('todo');
   // Filtro propio de cada capa; pisa al general mientras esté puesto.
@@ -328,6 +332,64 @@ export function useInventario() {
     [evaluaciones]
   );
 
+  // Los campos de cada tipo se piden una vez y quedan en memoria: son la
+  // definición del formulario y no cambian durante la sesión.
+  const cargarFormulario = useCallback(async (tipo) => {
+    if (formularios[tipo]) return formularios[tipo];
+    try {
+      const r = await fetch(`${API}/campos-evaluables/?tipo_activo=${tipo}`,
+                            { headers: cabeceras() });
+      if (!r.ok) return null;
+      const d = await r.json();
+      const campos = (d.results || d).sort((a, b) => a.orden - b.orden);
+      setFormularios(f => ({ ...f, [tipo]: campos }));
+      return campos;
+    } catch (e) {
+      return null;
+    }
+  }, [formularios]);
+
+  const abrirEvaluacion = useCallback((tipo, fid, props) => {
+    cargarFormulario(tipo);
+    setEvaluando({ tipo, fid, props });
+  }, [cargarFormulario]);
+
+  const cerrarEvaluacion = useCallback(() => setEvaluando(null), []);
+
+  // Guarda y refresca en memoria, para no volver a pedir toda la campaña.
+  const guardarEvaluacion = useCallback(async (tipo, fid, cuerpo) => {
+    if (!campania) return { ok: false, error: 'No hay campaña activa' };
+    const previa = evaluaciones[`${tipo}:${fid}`];
+    const url = previa ? `${API}/evaluaciones/${previa.id}/` : `${API}/evaluaciones/`;
+    try {
+      const r = await fetch(url, {
+        method: previa ? 'PATCH' : 'POST',
+        headers: { ...cabeceras(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...cuerpo, campania: campania.id,
+                               tipo_activo: tipo, activo_fid: fid }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const detalle = Object.entries(d)
+          .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`)
+          .join(' · ');
+        return { ok: false, error: detalle || `Error ${r.status}` };
+      }
+      setEvaluaciones(e => ({ ...e, [`${tipo}:${fid}`]: d }));
+
+      // el avance cambia con cada evaluación
+      try {
+        const ra = await fetch(`${API}/campanias/${campania.id}/avance/`,
+                               { headers: cabeceras() });
+        if (ra.ok) setAvance((await ra.json()).detalle || []);
+      } catch (e) { /* el avance se refresca al reabrir el panel */ }
+
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: 'No se pudo guardar' };
+    }
+  }, [campania, evaluaciones]);
+
   // Cambiar de campaña: recarga el avance y las evaluaciones de ese año.
   // Las geometrías no se vuelven a pedir: los activos son los mismos, lo
   // que cambia es su estado.
@@ -368,6 +430,7 @@ export function useInventario() {
     campania, avance, totales, datos, visibles, cargando, error, iniciando,
     ambito, cambiarAmbito, ambitoDe, alternarAmbitoCapa, datosDe, clave,
     campanias, cambiarCampania, altas,
+    evaluando, abrirEvaluacion, cerrarEvaluacion, guardarEvaluacion, formularios,
     alternarCapa, apagarTodas, evaluacionDe, totalVisibles, recargar: iniciar,
   };
 }
