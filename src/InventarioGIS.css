@@ -381,16 +381,13 @@
 }
 .inv-badge-doble button:hover { filter: brightness(1.35); }
 
-/* la mitad activa cuando se filtró a ese ámbito */
-.inv-badge-doble button.solo {
-  box-shadow: inset 0 -2px 0 currentColor;
-}
-
-/* la otra mitad, cuando hay un filtro puesto */
+/* mitad desmarcada: ese ámbito no se está dibujando */
 .inv-badge-doble button.apagado {
-  opacity: .32;
-  filter: grayscale(.6);
+  opacity: .3;
+  filter: grayscale(.75);
+  text-decoration: line-through;
 }
+.inv-badge-doble button.apagado:hover { opacity: .55; }
 
 /* ── grupos de contexto en el panel ──────────────────────── */
 .inv-grupo-contexto .gis-capas-titulo { color: #8fa8bb; }

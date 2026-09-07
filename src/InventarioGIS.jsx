@@ -265,21 +265,31 @@ export function useInventario() {
     Object.entries(visibles).forEach(([cod, v]) => { if (v) cargarCapa(cod, nuevo); });
   }, [visibles, cargarCapa]);
 
-  // Los números del badge: alternan el ámbito de esa capa sola.
+  // Cada mitad del badge se comporta como una casilla: suma o quita ese
+  // ámbito, sin pisar al otro. Los dos marcados = 'todo'; ninguno = la capa
+  // se apaga, porque no habría nada que dibujar.
   const alternarAmbitoCapa = useCallback((codigo, amb) => {
+    const actual = filtroCapa[codigo] || ambito;
+    const activos = new Set(actual === 'todo' ? ['JURP', 'PECH'] : [actual]);
+
+    if (activos.has(amb)) activos.delete(amb);
+    else activos.add(amb);
+
+    if (activos.size === 0) {                    // se destildaron los dos
+      setVisibles(v => ({ ...v, [codigo]: false }));
+      return;
+    }
+
+    const nuevo = activos.size === 2 ? 'todo' : [...activos][0];
     setFiltroCapa(f => {
-      const actual = f[codigo] || ambito;
-      // volver a pulsar el mismo filtro lo quita y se ven los dos
-      const nuevo = actual === amb ? 'todo' : amb;
-      cargarCapa(codigo, nuevo);
       const copia = { ...f };
       if (nuevo === ambito) delete copia[codigo];
       else copia[codigo] = nuevo;
       return copia;
     });
-    // encender la capa si estaba apagada: filtrarla implica querer verla
+    cargarCapa(codigo, nuevo);
     setVisibles(v => (v[codigo] ? v : { ...v, [codigo]: true }));
-  }, [ambito, cargarCapa]);
+  }, [filtroCapa, ambito, cargarCapa]);
 
   const apagarTodas = useCallback(() => setVisibles({}), []);
 
@@ -461,21 +471,21 @@ function BadgeCapa({ info, ambito, onFiltrar }) {
 
   const stop = (e, amb) => { e.preventDefault(); e.stopPropagation(); onFiltrar(amb); };
 
+  // Qué ámbitos están marcados ahora mismo para esta capa.
+  const verJurp = ambito === 'todo' || ambito === 'JURP';
+  const verPech = ambito === 'todo' || ambito === 'PECH';
+
   return (
     <span className="inv-badge-doble">
       <button type="button"
-        className={`amb-JURP ${ambito === 'JURP' ? 'solo' : ''} ${ambito === 'PECH' ? 'apagado' : ''}`}
-        title={ambito === 'JURP'
-          ? `${jurp} de JURP — clic para ver también las del PECH`
-          : `${jurp} de JURP — clic para ver solo estas`}
+        className={`amb-JURP ${verJurp ? '' : 'apagado'}`}
+        title={`${jurp} de JURP — clic para ${verJurp ? 'ocultarlas' : 'mostrarlas'}`}
         onClick={(e) => stop(e, 'JURP')}>
         {jurp}
       </button>
       <button type="button"
-        className={`amb-PECH ${ambito === 'PECH' ? 'solo' : ''} ${ambito === 'JURP' ? 'apagado' : ''}`}
-        title={ambito === 'PECH'
-          ? `${pech} del PECH — clic para ver también las de JURP`
-          : `${pech} del PECH — clic para ver solo estas`}
+        className={`amb-PECH ${verPech ? '' : 'apagado'}`}
+        title={`${pech} del PECH — clic para ${verPech ? 'ocultarlas' : 'mostrarlas'}`}
         onClick={(e) => stop(e, 'PECH')}>
         {pech}
       </button>
@@ -584,7 +594,8 @@ export function PanelInventario({ inv, onVolar }) {
           </div>
         </div>
         <div className="inv-nota" style={{ margin: '4px 2px 0' }}>
-          También puedes pulsar los números de cada capa para filtrarla sola.
+          En cada capa, los dos números funcionan como casillas: pulsa uno
+          para mostrar u ocultar ese ámbito.
         </div>
 
         {/* ── capas ── */}
