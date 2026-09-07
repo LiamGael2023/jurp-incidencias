@@ -407,3 +407,91 @@
   border: 2px solid #4c6ef5;
   opacity: .8;
 }
+
+/* ══════════════════════════════════════════════════════════
+   Campañas y evaluaciones
+   ══════════════════════════════════════════════════════════ */
+
+/* selector de campaña: permite ver el estado registrado en otro año */
+.inv-campania-select {
+  background: rgba(245, 159, 0, .16);
+  border: 1px solid rgba(245, 159, 0, .4);
+  color: #ffd8a8;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 2px 5px;
+  cursor: pointer;
+}
+.inv-campania-select:hover { background: rgba(245, 159, 0, .26); }
+.inv-campania-select option { background: #14202b; color: #e9f2f9; }
+
+.inv-campania-plegar {
+  background: none;
+  border: none;
+  color: #8fb4cd;
+  cursor: pointer;
+  display: flex;
+  padding: 2px;
+}
+.inv-campania-plegar:hover { color: #cfe3f2; }
+
+/* condición operativa junto al estado */
+.inv-pop-cond {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--c);
+  border: 1px solid var(--c);
+  border-radius: 3px;
+  padding: 1px 5px;
+  opacity: .9;
+}
+
+/* valores levantados en campo; los que difieren del dato base se marcan */
+.inv-pop-valores {
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+.inv-pop-valores th {
+  text-align: left;
+  font-weight: 500;
+  color: #8fb4cd;
+  padding: 1px 8px 1px 0;
+  white-space: nowrap;
+}
+.inv-pop-valores td { color: #dbe9f4; padding: 1px 0; }
+.inv-pop-valores tr.cambio td { color: #ffd8a8; font-weight: 700; }
+.inv-pop-valores s {
+  color: #6f95b1;
+  font-weight: 400;
+  margin-right: 5px;
+  opacity: .8;
+}
+
+/* altas de campo pendientes de validación */
+.inv-altas {
+  margin-top: 8px;
+  padding: 6px 8px;
+  font-size: 10.5px;
+  color: #a5d8ff;
+  background: rgba(76, 110, 245, .12);
+  border: 1px solid rgba(76, 110, 245, .3);
+  border-radius: 5px;
+}
+.inv-altas ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  list-style: disc;
+}
+.inv-altas li {
+  font-size: 10px;
+  color: #c3d9e8;
+  margin-bottom: 1px;
+}
+.inv-altas b { color: #a5d8ff; font-weight: 700; }
+.inv-altas span { color: #7ba7c7; }

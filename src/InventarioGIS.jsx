@@ -3,7 +3,7 @@ import { GeoJSON, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import {
   FaClipboardCheck, FaTimes, FaSyncAlt, FaCrosshairs,
-  FaChevronDown, FaChevronRight, FaExclamationCircle,
+  FaChevronDown, FaChevronRight, FaExclamationCircle, FaPlusCircle,
 } from 'react-icons/fa';
 import './InventarioGIS.css';
 
@@ -122,15 +122,25 @@ const AMBITOS = [
 ];
 const META = Object.fromEntries(TODAS.map(c => [c.codigo, c]));
 
-// Colores por estado de conservación evaluado.
+// Estado de conservación, con los códigos del formato ANA.
 const COLOR_ESTADO = {
-  bueno: '#2f9e44', regular: '#f59f00', malo: '#e8590c',
-  colapsado: '#c92a2a', no_ubicado: '#868e96',
+  B: '#2f9e44',   // bueno
+  R: '#f59f00',   // regular
+  M: '#e8590c',   // malo
+  C: '#c92a2a',   // colapsado
+  '-': '#868e96', // no aplica
 };
 
 const ETIQUETA_ESTADO = {
-  bueno: 'Bueno', regular: 'Regular', malo: 'Malo',
-  colapsado: 'Colapsado', no_ubicado: 'No ubicado',
+  B: 'Bueno', R: 'Regular', M: 'Malo', C: 'Colapsado', '-': 'No aplica',
+};
+
+// Condición operativa: lo que va a la columna Observaciones del formato.
+const COLOR_CONDICION = {
+  'Operativo': '#2f9e44',
+  'Mantenimiento': '#f59f00',
+  'Inoperativo': '#c92a2a',
+  'No ubicado': '#868e96',
 };
 
 const token = () => localStorage.getItem('userToken');
@@ -162,7 +172,9 @@ const iconoActivo = (color, estado, ambito) => {
 export function useInventario() {
   const [abierto, setAbierto] = useState(false);
   const [campania, setCampania] = useState(null);
+  const [campanias, setCampanias] = useState([]);
   const [avance, setAvance] = useState([]);
+  const [altas, setAltas] = useState([]);
   const [totales, setTotales] = useState({});
   const [datos, setDatos] = useState({});        // codigo → FeatureCollection
   const [visibles, setVisibles] = useState({});  // codigo → bool
@@ -190,6 +202,7 @@ export function useInventario() {
 
       const camps = await rc.json();
       const lista = camps.results || camps;
+      setCampanias(lista);
       const activa = lista.find(c => c.estado === 'en_proceso') || lista[0];
       setCampania(activa || null);
 
@@ -212,6 +225,16 @@ export function useInventario() {
             (ev.results || ev).map(e => [`${e.tipo_activo}:${e.activo_fid}`, e])
           ));
         }
+
+        // altas de campo pendientes de validar
+        try {
+          const rn = await fetch(`${API}/activos-nuevos/?validacion=pendiente`,
+                                 { headers: cabeceras() });
+          if (rn.ok) {
+            const an = await rn.json();
+            setAltas(an.results || an);
+          }
+        } catch (e) { /* sin altas, el panel simplemente no las muestra */ }
       }
     } catch (e) {
       setError(e.message || 'Error al cargar el inventario');
@@ -305,6 +328,28 @@ export function useInventario() {
     [evaluaciones]
   );
 
+  // Cambiar de campaña: recarga el avance y las evaluaciones de ese año.
+  // Las geometrías no se vuelven a pedir: los activos son los mismos, lo
+  // que cambia es su estado.
+  const cambiarCampania = useCallback(async (id) => {
+    const elegida = campanias.find(c => String(c.id) === String(id));
+    if (!elegida) return;
+    setCampania(elegida);
+    try {
+      const [ra, re] = await Promise.all([
+        fetch(`${API}/campanias/${elegida.id}/avance/`, { headers: cabeceras() }),
+        fetch(`${API}/evaluaciones/?campania=${elegida.anio}`, { headers: cabeceras() }),
+      ]);
+      if (ra.ok) setAvance((await ra.json()).detalle || []);
+      if (re.ok) {
+        const ev = await re.json();
+        setEvaluaciones(Object.fromEntries(
+          (ev.results || ev).map(e => [`${e.tipo_activo}:${e.activo_fid}`, e])
+        ));
+      }
+    } catch (e) { setError('No se pudo cambiar de campaña'); }
+  }, [campanias]);
+
   const totalVisibles = useMemo(
     () => Object.entries(visibles).filter(([, v]) => v)
       .reduce((a, [k]) => a + (datos[`${k}::${filtroCapa[k] || ambito}`]?.features?.length || 0), 0),
@@ -322,6 +367,7 @@ export function useInventario() {
     abierto, alternar, cerrar: () => setAbierto(false),
     campania, avance, totales, datos, visibles, cargando, error, iniciando,
     ambito, cambiarAmbito, ambitoDe, alternarAmbitoCapa, datosDe, clave,
+    campanias, cambiarCampania, altas,
     alternarCapa, apagarTodas, evaluacionDe, totalVisibles, recargar: iniciar,
   };
 }
@@ -426,17 +472,51 @@ export function CapasInventario({ inv }) {
                   {ev ? (
                     <div className="inv-pop-eval" style={{ '--e': COLOR_ESTADO[ev.estado_cons] }}>
                       <div className="inv-pop-eval-tit">
-                        Evaluado el {ev.fecha}
+                        Campaña {ev.campania_anio || inv.campania?.anio} ·
+                        evaluado el {ev.fecha}
                         {ev.evaluador && ` · ${ev.evaluador}`}
                       </div>
                       <div className="inv-pop-eval-estado">
                         {ETIQUETA_ESTADO[ev.estado_cons] || ev.estado_cons}
+                        {ev.condicion && (
+                          <span className="inv-pop-cond"
+                            style={{ '--c': COLOR_CONDICION[ev.condicion] || '#868e96' }}>
+                            {ev.condicion}
+                          </span>
+                        )}
                         {ev.requiere_mant && <span className="inv-pop-mant">requiere mantenimiento</span>}
                       </div>
+
+                      {/* lo levantado en campo, comparado con el dato base */}
+                      {ev.valores && Object.keys(ev.valores).length > 0 && (
+                        <table className="inv-pop-valores">
+                          <tbody>
+                            {Object.entries(ev.valores).map(([k, v]) => {
+                              const base = p[k];
+                              const cambio = base !== undefined
+                                && String(base) !== String(v);
+                              return (
+                                <tr key={k} className={cambio ? 'cambio' : ''}>
+                                  <th>{k.replace(/_/g, ' ')}</th>
+                                  <td>
+                                    {cambio && <s>{String(base)}</s>}
+                                    {ETIQUETA_ESTADO[v] || String(v)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+
                       {ev.observaciones && <div className="inv-pop-eval-obs">{ev.observaciones}</div>}
                     </div>
                   ) : p.ambito === 'JURP' ? (
-                    <div className="inv-pop-pend">Sin evaluar en esta campaña</div>
+                    <div className="inv-pop-pend">
+                      Sin evaluar en la campaña {inv.campania?.anio || ''}
+                      {p.campania_alta > (inv.campania?.anio || 0) &&
+                        ' — alta posterior a esta campaña'}
+                    </div>
                   ) : (
                     <div className="inv-pop-pend">
                       Obra del PECH — fuera del alcance de la campaña
@@ -540,14 +620,30 @@ export function PanelInventario({ inv, onVolar }) {
         {/* ── campaña y avance ── */}
         {inv.campania && (
           <div className="inv-campania">
-            <div className="inv-campania-head" onClick={() => setVerAvance(v => !v)}>
-              <div>
-                <span className="inv-campania-anio">Campaña {inv.campania.anio}</span>
+            <div className="inv-campania-head">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {inv.campanias.length > 1 ? (
+                  <select className="inv-campania-select"
+                    value={inv.campania.id}
+                    onChange={e => inv.cambiarCampania(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    title="Ver el estado registrado en otra campaña">
+                    {inv.campanias.map(c => (
+                      <option key={c.id} value={c.id}>Campaña {c.anio}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="inv-campania-anio">Campaña {inv.campania.anio}</span>
+                )}
                 <span className={`inv-campania-estado est-${inv.campania.estado}`}>
                   {inv.campania.estado.replace('_', ' ')}
                 </span>
               </div>
-              {verAvance ? <FaChevronDown size={10} /> : <FaChevronRight size={10} />}
+              <button type="button" className="inv-campania-plegar"
+                onClick={() => setVerAvance(v => !v)}
+                title={verAvance ? 'Ocultar detalle' : 'Ver detalle por tipo'}>
+                {verAvance ? <FaChevronDown size={10} /> : <FaChevronRight size={10} />}
+              </button>
             </div>
 
             <div className="inv-barra">
@@ -563,6 +659,21 @@ export function PanelInventario({ inv, onVolar }) {
               </div>
             )}
 
+            {inv.altas.length > 0 && (
+              <div className="inv-altas">
+                <FaPlusCircle /> {inv.altas.length} alta(s) de campo por validar
+                <ul>
+                  {inv.altas.slice(0, 4).map(a => (
+                    <li key={a.id}>
+                      <b>{a.tipo_activo}</b> {a.nombre || a.descripcion || `#${a.id}`}
+                      {a.registrado_por && <span> · {a.registrado_por}</span>}
+                    </li>
+                  ))}
+                  {inv.altas.length > 4 && <li>y {inv.altas.length - 4} más…</li>}
+                </ul>
+              </div>
+            )}
+
             {verAvance && (
               <table className="inv-avance">
                 <tbody>
@@ -571,7 +682,10 @@ export function PanelInventario({ inv, onVolar }) {
                       <td>{a.nombre}</td>
                       <td className="inv-avance-num">{a.evaluados}/{a.total}</td>
                       <td className="inv-avance-pct">{a.porcentaje}%</td>
-                      <td className={a.criticos ? 'inv-avance-crit' : ''}>{a.criticos || ''}</td>
+                      <td className={a.criticos ? 'inv-avance-crit' : ''}
+                          title={a.criticos ? `${a.criticos} en estado malo o colapsado` : ''}>
+                        {a.criticos || ''}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -663,7 +777,9 @@ export function PanelInventario({ inv, onVolar }) {
           <div className="gis-capas-titulo">Estado de conservación</div>
           <div className="inv-leyenda">
             {Object.entries(ETIQUETA_ESTADO).map(([k, v]) => (
-              <span key={k}><i style={{ background: COLOR_ESTADO[k] }} />{v}</span>
+              <span key={k} title={`Código ANA: ${k}`}>
+                <i style={{ background: COLOR_ESTADO[k] }} />{v}
+              </span>
             ))}
           </div>
           <div className="inv-nota">
