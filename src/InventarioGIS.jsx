@@ -537,6 +537,7 @@ export function CapasInventario({ inv }) {
   // llegue desde el buscador.
   const marcadores = useRef({});
   const { destacado, limpiarDestacado } = inv;
+  const DEPURAR = false;   // ponlo en true para ver el rastro en consola
 
   useEffect(() => {
     if (!destacado) return;
@@ -551,6 +552,11 @@ export function CapasInventario({ inv }) {
     const abrir = () => {
       if (cancelado) return;
       const m = marcadores.current[clave];
+      if (DEPURAR) {
+        console.log('[inv] abrir', clave, 'intento', intentos,
+                    '| ref:', !!m, '| en mapa:', !!(m && m._map),
+                    '| refs:', Object.keys(marcadores.current).length);
+      }
       if (m && m._map) {          // _map: confirma que sigue en el mapa
         m.openPopup();
         limpiarDestacado();
@@ -558,7 +564,10 @@ export function CapasInventario({ inv }) {
       }
       // la capa puede estar descargándose todavía
       if (++intentos < 30) temporizador = setTimeout(abrir, 200);
-      else limpiarDestacado();    // sin marcador, queda el vuelo hecho
+      else {
+        if (DEPURAR) console.warn('[inv] no se encontró el marcador', clave);
+        limpiarDestacado();       // sin marcador, queda el vuelo hecho
+      }
     };
 
     mapa.flyTo([destacado.lat, destacado.lng], 17, { duration: 1.2 });
@@ -630,6 +639,9 @@ export function CapasInventario({ inv }) {
 
           const p = f.properties || {};
           const ev = inv.evaluacionDe(capa.codigo, p.fid);
+          const esDestacado = destacado
+            && destacado.tipo === capa.codigo
+            && String(destacado.fid) === String(p.fid);
 
           return (
             <Marker
@@ -643,6 +655,14 @@ export function CapasInventario({ inv }) {
                 const k = `${capa.codigo}:${p.fid}`;
                 if (m) marcadores.current[k] = m;
                 else delete marcadores.current[k];
+              }}
+              eventHandlers={{
+                // Si el marcador se agrega al mapa siendo el destacado —el
+                // caso de una capa que acaba de descargarse— se abre aquí,
+                // que es el único momento en que existe con certeza.
+                add: (e) => {
+                  if (esDestacado) setTimeout(() => e.target.openPopup(), 60);
+                },
               }}
             >
               <Popup>
