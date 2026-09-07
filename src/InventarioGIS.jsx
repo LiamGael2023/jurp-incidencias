@@ -514,14 +514,12 @@ export function CapasInventario({ inv }) {
                   ) : p.ambito === 'JURP' ? (
                     <div className="inv-pop-pend">
                       Sin evaluar en la campaña {inv.campania?.anio || ''}
-                      {p.campania_alta > (inv.campania?.anio || 0) &&
-                        ' — alta posterior a esta campaña'}
                     </div>
-                  ) : (
+                  ) : p.ambito === 'PECH' ? (
                     <div className="inv-pop-pend">
                       Obra del PECH — fuera del alcance de la campaña
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </Popup>
             </Marker>
