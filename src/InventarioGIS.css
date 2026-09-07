@@ -359,7 +359,7 @@
   color: #ffd8a8;
 }
 
-/* ── badge de conteo con desglose ────────────────────────── */
+/* ── badge de conteo: cada mitad filtra su ámbito ─────────── */
 .inv-badge-doble {
   display: inline-flex;
   border-radius: 4px;
@@ -368,12 +368,29 @@
   font-weight: 700;
   line-height: 1;
 }
-.inv-badge-doble i {
-  font-style: normal;
-  padding: 2px 5px;
+
+.inv-badge-doble button {
+  font-family: inherit;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: opacity .12s ease, filter .12s ease;
 }
-.inv-badge-doble i.amb-JURP { border: none; border-radius: 0; }
-.inv-badge-doble i.amb-PECH { border: none; border-radius: 0; }
+.inv-badge-doble button:hover { filter: brightness(1.35); }
+
+/* la mitad activa cuando se filtró a ese ámbito */
+.inv-badge-doble button.solo {
+  box-shadow: inset 0 -2px 0 currentColor;
+}
+
+/* la otra mitad, cuando hay un filtro puesto */
+.inv-badge-doble button.apagado {
+  opacity: .32;
+  filter: grayscale(.6);
+}
 
 /* ── grupos de contexto en el panel ──────────────────────── */
 .inv-grupo-contexto .gis-capas-titulo { color: #8fa8bb; }

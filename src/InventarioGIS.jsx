@@ -170,8 +170,12 @@ export function useInventario() {
   const [evaluaciones, setEvaluaciones] = useState({}); // "tipo:fid" → evaluación
   const [error, setError] = useState(null);
   const [iniciando, setIniciando] = useState(false);
-  // 'todo' | 'JURP' | 'PECH' — filtra qué se pide al backend
+  // 'todo' | 'JURP' | 'PECH' — filtro general, el que aplica por defecto
   const [ambito, setAmbito] = useState('todo');
+  // Filtro propio de cada capa; pisa al general mientras esté puesto.
+  // Se maneja desde los números del badge: clic en el verde deja solo JURP,
+  // clic en el gris solo Chavimochic, clic otra vez vuelve a ambos.
+  const [filtroCapa, setFiltroCapa] = useState({});
 
   // Carga inicial: campaña vigente, totales por capa y evaluaciones hechas.
   const iniciar = useCallback(async () => {
@@ -216,9 +220,16 @@ export function useInventario() {
     }
   }, []);
 
+  // Ámbito que rige para una capa: el suyo si lo tiene, si no el general.
+  const ambitoDe = useCallback(
+    (codigo) => filtroCapa[codigo] || ambito,
+    [filtroCapa, ambito]
+  );
+
   // La caché se indexa por capa + ámbito: cambiar el filtro no debe
   // devolver el GeoJSON que se bajó con el filtro anterior.
-  const clave = useCallback((codigo, amb = ambito) => `${codigo}::${amb}`, [ambito]);
+  const clave = useCallback((codigo, amb) => `${codigo}::${amb || ambitoDe(codigo)}`,
+                            [ambitoDe]);
 
   const cargarCapa = useCallback(async (codigo, amb) => {
     const k = `${codigo}::${amb}`;
@@ -241,16 +252,34 @@ export function useInventario() {
   const alternarCapa = useCallback((codigo) => {
     setVisibles(v => {
       const nuevo = !v[codigo];
-      if (nuevo) cargarCapa(codigo, ambito);
+      if (nuevo) cargarCapa(codigo, ambitoDe(codigo));
       return { ...v, [codigo]: nuevo };
     });
-  }, [cargarCapa, ambito]);
+  }, [cargarCapa, ambitoDe]);
 
-  // Al cambiar el filtro hay que rebajar lo que esté encendido.
+  // El filtro general reemplaza a los de cada capa: si el usuario elige
+  // "solo JURP" arriba, no tiene sentido que una capa siga en otro modo.
   const cambiarAmbito = useCallback((nuevo) => {
     setAmbito(nuevo);
+    setFiltroCapa({});
     Object.entries(visibles).forEach(([cod, v]) => { if (v) cargarCapa(cod, nuevo); });
   }, [visibles, cargarCapa]);
+
+  // Los números del badge: alternan el ámbito de esa capa sola.
+  const alternarAmbitoCapa = useCallback((codigo, amb) => {
+    setFiltroCapa(f => {
+      const actual = f[codigo] || ambito;
+      // volver a pulsar el mismo filtro lo quita y se ven los dos
+      const nuevo = actual === amb ? 'todo' : amb;
+      cargarCapa(codigo, nuevo);
+      const copia = { ...f };
+      if (nuevo === ambito) delete copia[codigo];
+      else copia[codigo] = nuevo;
+      return copia;
+    });
+    // encender la capa si estaba apagada: filtrarla implica querer verla
+    setVisibles(v => (v[codigo] ? v : { ...v, [codigo]: true }));
+  }, [ambito, cargarCapa]);
 
   const apagarTodas = useCallback(() => setVisibles({}), []);
 
@@ -268,20 +297,21 @@ export function useInventario() {
 
   const totalVisibles = useMemo(
     () => Object.entries(visibles).filter(([, v]) => v)
-      .reduce((a, [k]) => a + (datos[`${k}::${ambito}`]?.features?.length || 0), 0),
-    [visibles, datos, ambito]
+      .reduce((a, [k]) => a + (datos[`${k}::${filtroCapa[k] || ambito}`]?.features?.length || 0), 0),
+    [visibles, datos, ambito, filtroCapa]
   );
 
-  // Lo que consumen los componentes: siempre el GeoJSON del ámbito vigente.
+  // Lo que consumen los componentes: el GeoJSON del ámbito que rige
+  // para esa capa en concreto.
   const datosDe = useCallback(
-    (codigo) => datos[`${codigo}::${ambito}`],
-    [datos, ambito]
+    (codigo) => datos[`${codigo}::${filtroCapa[codigo] || ambito}`],
+    [datos, ambito, filtroCapa]
   );
 
   return {
     abierto, alternar, cerrar: () => setAbierto(false),
     campania, avance, totales, datos, visibles, cargando, error, iniciando,
-    ambito, cambiarAmbito, datosDe, clave,
+    ambito, cambiarAmbito, ambitoDe, alternarAmbitoCapa, datosDe, clave,
     alternarCapa, apagarTodas, evaluacionDe, totalVisibles, recargar: iniciar,
   };
 }
@@ -416,7 +446,7 @@ export function CapasInventario({ inv }) {
    Badge de conteo: muestra cuántos hay según el filtro vigente,
    y con "todo" desglosa JURP/Chavimochic.
    ══════════════════════════════════════════════════════════ */
-function BadgeCapa({ info, ambito }) {
+function BadgeCapa({ info, ambito, onFiltrar }) {
   if (info == null) return <span className="gis-capa-badge">—</span>;
 
   // el backend devuelve {total, jurp, pech} en las capas con ámbito
@@ -424,16 +454,31 @@ function BadgeCapa({ info, ambito }) {
   const jurp = typeof info === 'object' ? info.jurp : undefined;
   const pech = typeof info === 'object' ? info.pech : undefined;
 
-  if (ambito === 'JURP') return <span className="gis-capa-badge">{jurp ?? total}</span>;
-  if (ambito === 'PECH') return <span className="gis-capa-badge">{pech ?? 0}</span>;
-
-  if (jurp === undefined || pech === 0) {
+  // capa sin desglose (solo JURP, o base sin la columna): número simple
+  if (jurp === undefined || (pech === 0 && jurp === total)) {
     return <span className="gis-capa-badge">{total}</span>;
   }
+
+  const stop = (e, amb) => { e.preventDefault(); e.stopPropagation(); onFiltrar(amb); };
+
   return (
-    <span className="inv-badge-doble" title={`${jurp} de JURP · ${pech} del PECH`}>
-      <i className="amb-JURP">{jurp}</i>
-      <i className="amb-PECH">{pech}</i>
+    <span className="inv-badge-doble">
+      <button type="button"
+        className={`amb-JURP ${ambito === 'JURP' ? 'solo' : ''} ${ambito === 'PECH' ? 'apagado' : ''}`}
+        title={ambito === 'JURP'
+          ? `${jurp} de JURP — clic para ver también las del PECH`
+          : `${jurp} de JURP — clic para ver solo estas`}
+        onClick={(e) => stop(e, 'JURP')}>
+        {jurp}
+      </button>
+      <button type="button"
+        className={`amb-PECH ${ambito === 'PECH' ? 'solo' : ''} ${ambito === 'JURP' ? 'apagado' : ''}`}
+        title={ambito === 'PECH'
+          ? `${pech} del PECH — clic para ver también las de JURP`
+          : `${pech} del PECH — clic para ver solo estas`}
+        onClick={(e) => stop(e, 'PECH')}>
+        {pech}
+      </button>
     </span>
   );
 }
@@ -538,6 +583,9 @@ export function PanelInventario({ inv, onVolar }) {
             ))}
           </div>
         </div>
+        <div className="inv-nota" style={{ margin: '4px 2px 0' }}>
+          También puedes pulsar los números de cada capa para filtrarla sola.
+        </div>
 
         {/* ── capas ── */}
         <div className="gis-capas-acciones" style={{ marginTop: 8 }}>
@@ -580,7 +628,10 @@ export function PanelInventario({ inv, onVolar }) {
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   {inv.cargando[c.codigo]
                     ? <FaSyncAlt className="icon-spin" size={11} style={{ color: '#74c0fc' }} />
-                    : <BadgeCapa info={inv.totales[c.codigo]} ambito={inv.ambito} />}
+                    : <BadgeCapa
+                        info={inv.totales[c.codigo]}
+                        ambito={inv.ambitoDe(c.codigo)}
+                        onFiltrar={(amb) => inv.alternarAmbitoCapa(c.codigo, amb)} />}
                   {inv.datosDe(c.codigo) && (
                     <button
                       onClick={() => volarACapa(c.codigo)}
