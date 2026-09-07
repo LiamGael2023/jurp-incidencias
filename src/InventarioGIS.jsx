@@ -177,7 +177,19 @@ const cabeceras = () => ({});
 //   anillo  → estado de conservación evaluado (sin anillo = sin evaluar)
 //   forma   → ámbito: los de JURP van sólidos, los del PECH huecos y más
 //             chicos, porque son contexto y no deben competir por la vista.
+// Los divIcon se memorizan: sin esto React recrea el icono en cada render,
+// remonta el marcador y se pierde la referencia que usa el buscador.
+const cacheIconos = new Map();
+
 const iconoActivo = (color, estado, ambito, ico) => {
+  const llave = `${color}|${estado || ''}|${ambito || ''}|${ico || ''}`;
+  if (cacheIconos.has(llave)) return cacheIconos.get(llave);
+  const icono = construirIcono(color, estado, ambito, ico);
+  cacheIconos.set(llave, icono);
+  return icono;
+};
+
+const construirIcono = (color, estado, ambito, ico) => {
   const esPech = ambito === 'PECH';
   const cEstado = estado ? COLOR_ESTADO[estado] : null;
 
@@ -529,26 +541,36 @@ export function CapasInventario({ inv }) {
   useEffect(() => {
     if (!destacado) return;
     const clave = `${destacado.tipo}:${destacado.fid}`;
-
-    // La capa puede estar descargándose todavía: se reintenta un momento
-    // antes de rendirse, en vez de fallar en silencio.
+    let cancelado = false;
     let intentos = 0;
-    const buscar = () => {
+    let temporizador = null;
+
+    // El popup se abre DESPUÉS del vuelo: si se abre antes, el propio
+    // desplazamiento del mapa lo cierra. Y se vuelve a leer la referencia
+    // en ese momento, porque el marcador pudo remontarse mientras tanto.
+    const abrir = () => {
+      if (cancelado) return;
       const m = marcadores.current[clave];
-      if (m) {
-        mapa.flyTo([destacado.lat, destacado.lng], 17, { duration: 1.2 });
-        setTimeout(() => m.openPopup(), 1300);
+      if (m && m._map) {          // _map: confirma que sigue en el mapa
+        m.openPopup();
         limpiarDestacado();
         return;
       }
-      if (++intentos < 20) setTimeout(buscar, 250);
-      else {
-        // sin marcador (capa vacía o filtrada), al menos se vuela al punto
-        mapa.flyTo([destacado.lat, destacado.lng], 17, { duration: 1.2 });
-        limpiarDestacado();
-      }
+      // la capa puede estar descargándose todavía
+      if (++intentos < 30) temporizador = setTimeout(abrir, 200);
+      else limpiarDestacado();    // sin marcador, queda el vuelo hecho
     };
-    buscar();
+
+    mapa.flyTo([destacado.lat, destacado.lng], 17, { duration: 1.2 });
+    mapa.once('moveend', abrir);
+    // por si el mapa ya estaba en el punto y moveend no llega a dispararse
+    temporizador = setTimeout(abrir, 1600);
+
+    return () => {
+      cancelado = true;
+      clearTimeout(temporizador);
+      mapa.off('moveend', abrir);
+    };
   }, [destacado, mapa, limpiarDestacado]);
 
   return (
@@ -615,7 +637,12 @@ export function CapasInventario({ inv }) {
               position={[lat, lng]}
               icon={iconoActivo(capa.color, ev?.estado_cons, p.ambito, capa.ico)}
               ref={(m) => {
-                if (m) marcadores.current[`${capa.codigo}:${p.fid}`] = m;
+                // React llama con null al desmontar. Si no se borra, la
+                // referencia queda apuntando a un marcador que ya no está
+                // en el mapa y openPopup() no hace nada.
+                const k = `${capa.codigo}:${p.fid}`;
+                if (m) marcadores.current[k] = m;
+                else delete marcadores.current[k];
               }}
             >
               <Popup>
