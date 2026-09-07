@@ -537,7 +537,7 @@ export function CapasInventario({ inv }) {
   // llegue desde el buscador.
   const marcadores = useRef({});
   const { destacado, limpiarDestacado } = inv;
-  const DEPURAR = false;   // ponlo en true para ver el rastro en consola
+  const DEPURAR = true;   // ponlo en true para ver el rastro en consola
 
   useEffect(() => {
     if (!destacado) return;
