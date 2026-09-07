@@ -495,3 +495,192 @@
 }
 .inv-altas b { color: #a5d8ff; font-weight: 700; }
 .inv-altas span { color: #7ba7c7; }
+
+/* ══════════════════════════════════════════════════════════
+   Formulario de evaluación
+   ══════════════════════════════════════════════════════════ */
+
+/* botón dentro del popup */
+.inv-btn-evaluar {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffd8a8;
+  background: rgba(245, 159, 0, .18);
+  border: 1px solid rgba(245, 159, 0, .45);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background .12s ease;
+}
+.inv-btn-evaluar:hover { background: rgba(245, 159, 0, .3); }
+
+/* ── modal ── */
+.inv-modal-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(5, 12, 20, .55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.inv-modal {
+  width: 420px;
+  max-width: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  border-left: 2px solid #f59f00;
+  overflow: hidden;
+}
+
+.inv-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, .09);
+}
+
+.inv-modal-tit {
+  font-size: 15px;
+  font-weight: 700;
+  color: #e9f2f9;
+}
+
+.inv-modal-sub {
+  font-size: 10.5px;
+  color: #7ba7c7;
+  text-transform: capitalize;
+  margin-top: 2px;
+}
+
+.inv-modal-previa {
+  margin-left: 7px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: #8ce99a;
+  background: rgba(47, 158, 68, .18);
+  border: 1px solid rgba(47, 158, 68, .4);
+  border-radius: 3px;
+}
+
+.inv-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.inv-modal-sep {
+  margin: 14px 0 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, .09);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #7ba7c7;
+}
+
+/* ── campos ── */
+.inv-campo { margin-bottom: 10px; }
+
+.inv-campo label {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 11px;
+  color: #b8d0e0;
+}
+
+.inv-req { color: #ff8787; margin-left: 3px; }
+
+/* el valor que traía el inventario, para que el técnico vea qué cambia */
+.inv-campo-base {
+  float: right;
+  font-size: 9.5px;
+  font-style: italic;
+  color: #f59f00;
+}
+
+.inv-campo input[type="text"],
+.inv-campo input[type="number"],
+.inv-campo select,
+.inv-campo textarea {
+  width: 100%;
+  padding: 5px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  color: #e9f2f9;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 5px;
+  outline: none;
+  resize: vertical;
+}
+.inv-campo input:focus,
+.inv-campo select:focus,
+.inv-campo textarea:focus {
+  border-color: rgba(245, 159, 0, .55);
+  background: rgba(255, 255, 255, .09);
+}
+.inv-campo select option { background: #14202b; }
+
+.inv-campo-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.inv-campo-fila label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  cursor: pointer;
+}
+.inv-campo-fila select { width: auto; }
+
+/* ── pie ── */
+.inv-modal-pie {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(255, 255, 255, .09);
+}
+
+.inv-btn-sec,
+.inv-btn-pri {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background .12s ease;
+}
+
+.inv-btn-sec {
+  color: #a8c6da;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .14);
+}
+.inv-btn-sec:hover { background: rgba(255, 255, 255, .12); }
+
+.inv-btn-pri {
+  color: #14202b;
+  background: #ffc078;
+  border: 1px solid #ffa94d;
+}
+.inv-btn-pri:hover { background: #ffd8a8; }
+.inv-btn-pri:disabled { opacity: .45; cursor: not-allowed; }

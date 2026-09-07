@@ -514,12 +514,23 @@ export function CapasInventario({ inv }) {
                   ) : p.ambito === 'JURP' ? (
                     <div className="inv-pop-pend">
                       Sin evaluar en la campaña {inv.campania?.anio || ''}
+                      {p.campania_alta > (inv.campania?.anio || 0) &&
+                        ' — alta posterior a esta campaña'}
                     </div>
                   ) : p.ambito === 'PECH' ? (
                     <div className="inv-pop-pend">
                       Obra del PECH — fuera del alcance de la campaña
                     </div>
                   ) : null}
+
+                  {/* solo lo que administra la Junta entra en la campaña */}
+                  {p.ambito === 'JURP' && inv.campania
+                    && inv.campania.estado !== 'cerrada' && (
+                    <button type="button" className="inv-btn-evaluar"
+                      onClick={() => inv.abrirEvaluacion(capa.codigo, p.fid, p)}>
+                      {ev ? 'Editar evaluación' : 'Evaluar'}
+                    </button>
+                  )}
                 </div>
               </Popup>
             </Marker>
@@ -529,6 +540,209 @@ export function CapasInventario({ inv }) {
     </>
   );
 }
+
+/* ══════════════════════════════════════════════════════════
+   Formulario de evaluación
+
+   Los campos no están escritos aquí: se piden a la API, que los devuelve
+   con sus opciones ya resueltas. Agregar un campo evaluable en la base
+   lo hace aparecer en este formulario sin tocar el visor.
+   ══════════════════════════════════════════════════════════ */
+export function ModalEvaluacion({ inv }) {
+  const [valores, setValores] = useState({});
+  const [resumen, setResumen] = useState({});
+  const [guardando, setGuardando] = useState(false);
+  const [fallo, setFallo] = useState(null);
+
+  const ev = inv.evaluando;
+  const campos = ev ? (inv.formularios[ev.tipo] || null) : null;
+  const previa = ev ? inv.evaluacionDe(ev.tipo, ev.fid) : null;
+
+  // Al abrir: precarga con la evaluación previa si existe, y si no con el
+  // dato que ya tiene el inventario. El técnico confirma o corrige, en vez
+  // de escribir todo de cero.
+  useEffect(() => {
+    if (!ev || !campos) return;
+    const inicial = {};
+    campos.forEach(c => {
+      const dePrevia = previa?.valores?.[c.campo];
+      const deBase = ev.props?.[c.campo];
+      inicial[c.campo] = dePrevia !== undefined && dePrevia !== null
+        ? dePrevia
+        : (deBase !== undefined && deBase !== null ? deBase : '');
+    });
+    setValores(inicial);
+    setResumen({
+      evaluador: previa?.evaluador || localStorage.getItem('userName') || '',
+      observaciones: previa?.observaciones || '',
+      requiere_mant: previa?.requiere_mant || false,
+      prioridad: previa?.prioridad || '',
+    });
+    setFallo(null);
+  }, [ev?.tipo, ev?.fid, campos]);
+
+  if (!ev) return null;
+
+  const cambiar = (campo, v) => setValores(s => ({ ...s, [campo]: v }));
+
+  const guardar = async () => {
+    const faltan = (campos || [])
+      .filter(c => c.obligatorio && (valores[c.campo] === '' || valores[c.campo] == null))
+      .map(c => c.etiqueta);
+    if (faltan.length) {
+      setFallo(`Falta completar: ${faltan.join(', ')}`);
+      return;
+    }
+
+    setGuardando(true);
+    setFallo(null);
+
+    // los numéricos viajan como número, no como texto
+    const limpios = {};
+    (campos || []).forEach(c => {
+      const v = valores[c.campo];
+      if (v === '' || v == null) return;
+      limpios[c.campo] = (c.tipo_dato === 'numero' || c.tipo_dato === 'entero')
+        ? Number(v) : v;
+    });
+
+    const r = await inv.guardarEvaluacion(ev.tipo, ev.fid, {
+      valores: limpios,
+      // se replican fuera del JSON para poder filtrar sin abrirlo
+      estado_cons: limpios.estado ?? null,
+      condicion: limpios.observacio ?? null,
+      evaluador: resumen.evaluador || null,
+      observaciones: resumen.observaciones || null,
+      requiere_mant: !!resumen.requiere_mant,
+      prioridad: resumen.prioridad || null,
+    });
+
+    setGuardando(false);
+    if (r.ok) inv.cerrarEvaluacion();
+    else setFallo(r.error);
+  };
+
+  const nombre = ev.props?.nombre || ev.props?.codigo || `#${ev.fid}`;
+
+  return (
+    <div className="inv-modal-fondo" onClick={inv.cerrarEvaluacion}>
+      <div className="inv-modal gis-glass" onClick={e => e.stopPropagation()}>
+
+        <div className="inv-modal-head">
+          <div>
+            <div className="inv-modal-tit">{nombre}</div>
+            <div className="inv-modal-sub">
+              {ev.tipo.replace(/_/g, ' ')} · campaña {inv.campania?.anio}
+              {previa && <span className="inv-modal-previa">ya evaluado</span>}
+            </div>
+          </div>
+          <button className="gis-tool" style={{ width: 26, height: 26 }}
+            onClick={inv.cerrarEvaluacion}><FaTimes /></button>
+        </div>
+
+        <div className="inv-modal-body">
+          {!campos && (
+            <div className="inv-cargando">
+              <FaSyncAlt className="icon-spin" /> Cargando formulario…
+            </div>
+          )}
+
+          {campos && campos.length === 0 && (
+            <div className="inv-error">
+              <FaExclamationCircle /> Este tipo de activo no tiene campos
+              evaluables definidos.
+            </div>
+          )}
+
+          {campos && campos.map(c => {
+            const base = ev.props?.[c.campo];
+            const cambiado = base != null && String(base) !== String(valores[c.campo]);
+            return (
+              <div className="inv-campo" key={c.campo}>
+                <label>
+                  {c.etiqueta}
+                  {c.obligatorio && <b className="inv-req">*</b>}
+                  {cambiado && (
+                    <span className="inv-campo-base">antes: {String(base)}</span>
+                  )}
+                </label>
+
+                {c.tipo_dato === 'opcion' && c.opciones?.length ? (
+                  <select value={valores[c.campo] ?? ''}
+                          onChange={e => cambiar(c.campo, e.target.value)}>
+                    <option value="">— sin dato —</option>
+                    {c.opciones.map(o => (
+                      <option key={o.codigo} value={o.codigo}>{o.etiqueta}</option>
+                    ))}
+                  </select>
+                ) : c.tipo_dato === 'booleano' ? (
+                  <input type="checkbox" checked={!!valores[c.campo]}
+                         onChange={e => cambiar(c.campo, e.target.checked)} />
+                ) : (
+                  <input
+                    type={c.tipo_dato === 'numero' || c.tipo_dato === 'entero'
+                          ? 'number' : 'text'}
+                    step={c.tipo_dato === 'numero' ? '0.01' : '1'}
+                    value={valores[c.campo] ?? ''}
+                    onChange={e => cambiar(c.campo, e.target.value)} />
+                )}
+              </div>
+            );
+          })}
+
+          <div className="inv-modal-sep">Registro</div>
+
+          <div className="inv-campo">
+            <label>Evaluador</label>
+            <input type="text" value={resumen.evaluador}
+              placeholder="Nombre de quien evalúa"
+              onChange={e => setResumen(s => ({ ...s, evaluador: e.target.value }))} />
+          </div>
+
+          <div className="inv-campo">
+            <label>Observaciones</label>
+            <textarea rows={2} value={resumen.observaciones}
+              placeholder="Detalle de lo observado en campo"
+              onChange={e => setResumen(s => ({ ...s, observaciones: e.target.value }))} />
+          </div>
+
+          <div className="inv-campo inv-campo-fila">
+            <label>
+              <input type="checkbox" checked={resumen.requiere_mant}
+                onChange={e => setResumen(s => ({ ...s, requiere_mant: e.target.checked }))} />
+              Requiere mantenimiento
+            </label>
+            {resumen.requiere_mant && (
+              <select value={resumen.prioridad}
+                onChange={e => setResumen(s => ({ ...s, prioridad: e.target.value }))}>
+                <option value="">Prioridad…</option>
+                <option value="alta">Alta</option>
+                <option value="media">Media</option>
+                <option value="baja">Baja</option>
+              </select>
+            )}
+          </div>
+
+          {fallo && (
+            <div className="inv-error"><FaExclamationCircle /> {fallo}</div>
+          )}
+        </div>
+
+        <div className="inv-modal-pie">
+          <button className="inv-btn-sec" onClick={inv.cerrarEvaluacion}>
+            Cancelar
+          </button>
+          <button className="inv-btn-pri" onClick={guardar}
+                  disabled={guardando || !campos?.length}>
+            {guardando ? 'Guardando…' : (previa ? 'Actualizar' : 'Guardar evaluación')}
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 
 /* ══════════════════════════════════════════════════════════
    Badge de conteo: muestra cuántos hay según el filtro vigente,
