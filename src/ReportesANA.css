@@ -174,3 +174,31 @@
   font-style: italic;
   color: #6f95b1;
 }
+
+/* Los estilos globales del panel pisan el tamaño de fuente de los botones,
+   así que aquí se fijan con más especificidad. */
+.rep-panel .rep-formato {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+
+.rep-panel .rep-formato .rep-clave {
+  font-size: 9.5px;
+  line-height: 1.2;
+}
+
+.rep-panel .rep-formato .rep-titulo {
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.rep-panel .rep-btn-zip {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.rep-panel .rep-botones button {
+  font-size: 10.5px;
+  line-height: 1.2;
+}
