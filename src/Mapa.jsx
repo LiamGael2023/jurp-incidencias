@@ -627,8 +627,49 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const conLluvia = lluviasAPI.filter(l => l.totalRain > 0).length;
 
   // ── Search ────────────────────────────────────────────────────────────
-  const handleBusqueda = (val) => { setBusqueda(val); if (val.length < 2) { setResultadosBusqueda([]); setMostrarResultados(false); return; } const q = val.toLowerCase(); setResultadosBusqueda(SEARCH_INDEX.filter(it => it.name.toLowerCase().includes(q) || it.progresiva.toLowerCase().includes(q) || it.tipo.toLowerCase().includes(q)).slice(0, 6)); setMostrarResultados(true); };
-  const seleccionarResultado = (item) => { const [lng, lat] = item.coords; setFlyTarget([lat, lng]); setMostrarResultados(false); setBusqueda(item.name); setTimeout(() => setFlyTarget(null), 2000); };
+  // Busca en dos fuentes: la cartografía KMZ (contexto, sin ficha) y el
+  // inventario en PostGIS (con estado de campaña y ficha propia). Los del
+  // inventario van primero porque son los que la Junta administra.
+  const handleBusqueda = (val) => {
+    setBusqueda(val);
+    if (val.length < 2) { setResultadosBusqueda([]); setMostrarResultados(false); return; }
+    const q = val.toLowerCase();
+
+    const deKmz = SEARCH_INDEX
+      .filter(it => it.name.toLowerCase().includes(q)
+                 || it.progresiva.toLowerCase().includes(q)
+                 || it.tipo.toLowerCase().includes(q))
+      .slice(0, 6)
+      .map(it => ({ ...it, origen: 'kmz' }));
+
+    const delInv = inv.buscar(val).slice(0, 6).map(a => ({
+      name: a.nombre || `#${a.fid}`,
+      tipo: a.tipo.replace(/_/g, ' '),
+      progresiva: a.progresiva != null ? String(a.progresiva) : '',
+      tramo: a.canal || '',
+      coords: [a.lng, a.lat],
+      origen: 'inventario',
+      item: a,
+    }));
+
+    setResultadosBusqueda([...delInv, ...deKmz].slice(0, 10));
+    setMostrarResultados(true);
+  };
+
+  // Un resultado del inventario abre su ficha; uno del KMZ solo vuela,
+  // porque esas capas no tienen ficha que mostrar.
+  const seleccionarResultado = (item) => {
+    setMostrarResultados(false);
+    setBusqueda(item.name);
+    if (item.origen === 'inventario') {
+      if (!inv.abierto) inv.alternar();
+      inv.irA(item.item);
+      return;
+    }
+    const [lng, lat] = item.coords;
+    setFlyTarget([lat, lng]);
+    setTimeout(() => setFlyTarget(null), 2000);
+  };
 
   // ── APIs ───────────────────────────────────────────────────────────────
   const obtenerDatosDeApis = async () => {
@@ -1334,8 +1375,17 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                   <div key={i} className="gis-resultado" onClick={() => seleccionarResultado(r)}>
                     {r.icon && <img src={r.icon} alt="" />}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <b>{r.name}</b>
-                      <span>{r.tipo}{r.progresiva ? ` · ${r.progresiva}` : ''}</span>
+                      <b>
+                        {r.name}
+                        {r.origen === 'inventario' && (
+                          <span className="gis-res-inv">inventario</span>
+                        )}
+                      </b>
+                      <span>
+                        {r.tipo}
+                        {r.tramo ? ` · ${r.tramo}` : ''}
+                        {r.progresiva ? ` · ${r.progresiva}` : ''}
+                      </span>
                     </div>
                   </div>
                 ))}
