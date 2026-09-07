@@ -684,3 +684,61 @@
 }
 .inv-btn-pri:hover { background: #ffd8a8; }
 .inv-btn-pri:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ══════════════════════════════════════════════════════════
+   Simbología del inventario
+
+   Los símbolos son los mismos que usa el panel de capas KMZ, para que la
+   misma estructura se lea igual en los dos paneles.
+   ══════════════════════════════════════════════════════════ */
+
+.inv-simb {
+  position: relative;
+  display: block;
+  width: 26px;
+  height: 26px;
+  transition: transform .12s ease;
+}
+.inv-simb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .65));
+}
+.inv-marker-wrap:hover .inv-simb { transform: scale(1.25); }
+
+/* punto de estado en la esquina: no tapa el dibujo del símbolo */
+.inv-simb i {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--e);
+  border: 1.5px solid rgba(10, 20, 30, .85);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+
+/* las obras del PECH van atenuadas: son contexto */
+.inv-simb.inv-pech img {
+  opacity: .55;
+  filter: grayscale(.35) drop-shadow(0 1px 2px rgba(0, 0, 0, .5));
+}
+
+/* símbolo en la lista de capas */
+.inv-capa-ico {
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* símbolo en la cabecera del popup */
+.inv-pop-ico {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  vertical-align: -4px;
+  margin-right: 6px;
+}

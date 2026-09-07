@@ -7,6 +7,29 @@ import {
 } from 'react-icons/fa';
 import './InventarioGIS.css';
 
+// Simbología oficial del inventario. Son los mismos archivos que usa el
+// panel de capas KMZ, así que ambos paneles muestran el mismo símbolo para
+// la misma estructura.
+import icoToma from './assets/simbologia/toma.png';
+import icoEntrega from './assets/simbologia/entrega.png';
+import icoCanoa from './assets/simbologia/canoa.png';
+import icoSifon from './assets/simbologia/sifon.png';
+import icoAlcantarilla from './assets/simbologia/alcantarilla.png';
+import icoAliviadero from './assets/simbologia/aliviadero.png';
+import icoDesarenador from './assets/simbologia/desarenador.png';
+import icoCaida from './assets/simbologia/caida.png';
+import icoCanalRect from './assets/simbologia/canal_rectangular.png';
+import icoCanalTrap from './assets/simbologia/canal_trapezoidal.png';
+import icoConducCubierto from './assets/simbologia/conducto_cubierto.png';
+import icoPaseVehicular from './assets/simbologia/pase_vehicular.png';
+import icoPasePeatonal from './assets/simbologia/pase_peatonal.png';
+import icoBocatoma from './assets/simbologia/bocatoma.png';
+import icoRapida from './assets/simbologia/rapida.png';
+import icoTransicion from './assets/simbologia/transicion.png';
+import icoAcueducto from './assets/simbologia/acueducto.png';
+import icoGaritaJURP from './assets/simbologia/garita_jurp.png';
+import icoGaritaOtros from './assets/simbologia/garita_otros.png';
+
 /**
  * Módulo de inventario de infraestructura de riego (ámbito JURP).
  *
@@ -37,32 +60,32 @@ const GRUPOS = [
   {
     titulo: 'Obras de captación y entrega',
     capas: [
-      { codigo: 'tomas_l10',            label: 'Tomas Lateral 10',      color: '#f59f00' },
-      { codigo: 'tomas_otros_sectores', label: 'Tomas otros sectores',  color: '#f08c00' },
-      { codigo: 'entregas',             label: 'Entregas',              color: '#e8590c' },
-      { codigo: 'laterales',            label: 'Laterales',             color: '#d9480f' },
-      { codigo: 'partidor',             label: 'Partidores',            color: '#c92a2a' },
+      { codigo: 'tomas_l10',            label: 'Tomas Lateral 10',      color: '#f59f00', ico: icoToma },
+      { codigo: 'tomas_otros_sectores', label: 'Tomas otros sectores',  color: '#f08c00', ico: icoToma },
+      { codigo: 'entregas',             label: 'Entregas',              color: '#e8590c', ico: icoEntrega },
+      { codigo: 'laterales',            label: 'Laterales',             color: '#d9480f', ico: icoCanalTrap },
+      { codigo: 'partidor',             label: 'Partidores',            color: '#c92a2a', ico: icoTransicion },
     ],
   },
   {
     titulo: 'Obras de arte',
     capas: [
-      { codigo: 'canoas',              label: 'Canoas',               color: '#4c6ef5' },
-      { codigo: 'sifon',               label: 'Sifones',              color: '#3b5bdb' },
-      { codigo: 'alcantarilla',        label: 'Alcantarillas',        color: '#7048e8' },
-      { codigo: 'aliviadero',          label: 'Aliviaderos',          color: '#9c36b5' },
-      { codigo: 'desarenadores',       label: 'Desarenadores',        color: '#0c8599' },
-      { codigo: 'camara_rompepresion', label: 'Cámaras rompepresión', color: '#1098ad' },
-      { codigo: 'cajas_hidraulicas',   label: 'Cajas hidráulicas',    color: '#0ca678' },
-      { codigo: 'pases_de_tuberias',   label: 'Pases de tuberías',    color: '#2f9e44' },
-      { codigo: 'reservorios',         label: 'Reservorios',          color: '#1971c2' },
+      { codigo: 'canoas',              label: 'Canoas',               color: '#4c6ef5', ico: icoCanoa },
+      { codigo: 'sifon',               label: 'Sifones',              color: '#3b5bdb', ico: icoSifon },
+      { codigo: 'alcantarilla',        label: 'Alcantarillas',        color: '#7048e8', ico: icoAlcantarilla },
+      { codigo: 'aliviadero',          label: 'Aliviaderos',          color: '#9c36b5', ico: icoAliviadero },
+      { codigo: 'desarenadores',       label: 'Desarenadores',        color: '#0c8599', ico: icoDesarenador },
+      { codigo: 'camara_rompepresion', label: 'Cámaras rompepresión', color: '#1098ad', ico: icoCaida },
+      { codigo: 'cajas_hidraulicas',   label: 'Cajas hidráulicas',    color: '#0ca678', ico: icoCanalRect },
+      { codigo: 'pases_de_tuberias',   label: 'Pases de tuberías',    color: '#2f9e44', ico: icoConducCubierto },
+      { codigo: 'reservorios',         label: 'Reservorios',          color: '#1971c2', ico: icoAcueducto },
     ],
   },
   {
     titulo: 'Cruces',
     capas: [
-      { codigo: 'puente_vehicular', label: 'Puentes vehiculares', color: '#868e96' },
-      { codigo: 'puente_peatonal',  label: 'Puentes peatonales',  color: '#adb5bd' },
+      { codigo: 'puente_vehicular', label: 'Puentes vehiculares', color: '#868e96', ico: icoPaseVehicular },
+      { codigo: 'puente_peatonal',  label: 'Puentes peatonales',  color: '#adb5bd', ico: icoPasePeatonal },
     ],
   },
   {
@@ -86,12 +109,12 @@ const GRUPOS_CONTEXTO = [
     titulo: 'Chavimochic — obras del PECH',
     contexto: true,
     capas: [
-      { codigo: 'bocatomas',          label: 'Bocatomas',            color: '#495057' },
-      { codigo: 'estaciones_control', label: 'Estaciones de control', color: '#5c7cfa' },
-      { codigo: 'rapidas',            label: 'Rápidas',              color: '#f03e3e' },
-      { codigo: 'tomas_canal_madre',  label: 'Tomas Canal Madre',    color: '#e8590c' },
-      { codigo: 'garitas_jurp',       label: 'Garitas JURP',         color: '#1098ad' },
-      { codigo: 'garitas_otros',      label: 'Garitas de terceros',  color: '#9c36b5' },
+      { codigo: 'bocatomas',          label: 'Bocatomas',            color: '#495057', ico: icoBocatoma },
+      { codigo: 'estaciones_control', label: 'Estaciones de control', color: '#5c7cfa', ico: icoBocatoma },
+      { codigo: 'rapidas',            label: 'Rápidas',              color: '#f03e3e', ico: icoRapida },
+      { codigo: 'tomas_canal_madre',  label: 'Tomas Canal Madre',    color: '#e8590c', ico: icoToma },
+      { codigo: 'garitas_jurp',       label: 'Garitas JURP',         color: '#1098ad', ico: icoGaritaJURP },
+      { codigo: 'garitas_otros',      label: 'Garitas de terceros',  color: '#9c36b5', ico: icoGaritaOtros },
     ],
   },
   {
@@ -154,12 +177,30 @@ const cabeceras = () => ({});
 //   anillo  → estado de conservación evaluado (sin anillo = sin evaluar)
 //   forma   → ámbito: los de JURP van sólidos, los del PECH huecos y más
 //             chicos, porque son contexto y no deben competir por la vista.
-const iconoActivo = (color, estado, ambito) => {
+const iconoActivo = (color, estado, ambito, ico) => {
   const esPech = ambito === 'PECH';
+  const cEstado = estado ? COLOR_ESTADO[estado] : null;
+
+  // Con símbolo: se dibuja la simbología del inventario y el estado va en un
+  // punto en la esquina, para no tapar el dibujo.
+  if (ico) {
+    return L.divIcon({
+      className: 'inv-marker-wrap',
+      html: `<span class="inv-simb ${esPech ? 'inv-pech' : ''}">`
+          + `<img src="${ico}" alt="" />`
+          + (cEstado ? `<i style="--e:${cEstado}"></i>` : '')
+          + '</span>',
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+      popupAnchor: [0, -14],
+    });
+  }
+
+  // Sin símbolo propio: círculo del color de la capa, con anillo de estado.
   return L.divIcon({
     className: 'inv-marker-wrap',
     html: `<span class="inv-marker ${esPech ? 'inv-pech' : ''}" `
-        + `style="--c:${color};--e:${estado ? COLOR_ESTADO[estado] : 'transparent'}"></span>`,
+        + `style="--c:${color};--e:${cEstado || 'transparent'}"></span>`,
     iconSize: [16, 16],
     iconAnchor: [8, 8],
     popupAnchor: [0, -8],
@@ -501,11 +542,12 @@ export function CapasInventario({ inv }) {
             <Marker
               key={`inv-${capa.codigo}-${p.fid}`}
               position={[lat, lng]}
-              icon={iconoActivo(capa.color, ev?.estado_cons, p.ambito)}
+              icon={iconoActivo(capa.color, ev?.estado_cons, p.ambito, capa.ico)}
             >
               <Popup>
                 <div className="inv-pop">
                   <div className="inv-pop-tit" style={{ borderColor: capa.color }}>
+                    {capa.ico && <img src={capa.ico} alt="" className="inv-pop-ico" />}
                     {p.nombre || p.codigo || `${capa.label} #${p.fid}`}
                   </div>
                   <div className="inv-pop-sub">
@@ -1012,15 +1054,19 @@ export function PanelInventario({ inv, onVolar }) {
                     checked={!!inv.visibles[c.codigo]}
                     onChange={() => inv.alternarCapa(c.codigo)}
                   />
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      width: 14,
-                      height: c.tipo === 'line' ? 3 : 14,
-                      background: c.color,
-                      borderRadius: c.tipo === 'line' ? 2 : (c.tipo === 'poly' ? 3 : '50%'),
-                    }}
-                  />
+                  {c.ico ? (
+                    <img src={c.ico} alt="" className="inv-capa-ico" />
+                  ) : (
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        width: 14,
+                        height: c.tipo === 'line' ? 3 : 14,
+                        background: c.color,
+                        borderRadius: c.tipo === 'line' ? 2 : (c.tipo === 'poly' ? 3 : '50%'),
+                      }}
+                    />
+                  )}
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {c.label}
                   </span>
