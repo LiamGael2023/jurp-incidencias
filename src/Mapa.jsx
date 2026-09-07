@@ -20,7 +20,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 // ── Herramientas del visor ───────────────────────────────────────────────────
 import { BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
 import './MapaHerramientas.css';
-import { useInventario, CapasInventario, PanelInventario, FaClipboardCheck } from './InventarioGIS';
+import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion, FaClipboardCheck } from './InventarioGIS';
 import { useRuta, CapaRuta, fmtDistancia, fmtTiempo } from './RutaGIS';
 import Mapa3D from './Mapa3D';
 import { leerTodas as leerInnova, horaDeLectura } from './InnovaWeather';
@@ -74,6 +74,7 @@ import geoCaminosServ from './data/garitas/CAMINOS_DE_SERVICIO.json';
 import geoViasAcceso from './data/garitas/VIAS_DE_ACCESO.json';
 import geoViaAuxiliar from './data/garitas/VIA_AUXILIAR.json';
 import geoRedNacional from './data/garitas/RED_NACIONAL.json';
+import PanelReportes from './ReportesANA';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const crearIconoSimbologia = (url, sz = 28) => L.icon({ iconUrl: url, iconSize: [sz, sz], iconAnchor: [sz/2, sz/2], popupAnchor: [0, -(sz/2)] });
@@ -248,6 +249,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [mostrarResultados, setMostrarResultados] = useState(false);
   const [flyTarget, setFlyTarget] = useState(null);
   const [showLayers, setShowLayers] = useState(false);
+  const [verReportes, setVerReportes] = useState(false);
   const inv = useInventario();
   // Ruteo sobre la red de caminos propia (no usa Google ni OSM).
   // El trazado de canales entra al ruteo porque el camino de servicio corre
@@ -1489,6 +1491,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         <button className={`gis-tool ${inv.abierto ? 'activo' : ''}`}
           title="Inventario JURP · capas de PostGIS con su estado de evaluación"
           onClick={inv.alternar}><FaClipboardCheck /></button>
+        <button className={`gis-tool ${verReportes ? 'activo' : ''}`}
+          title="Formatos ANA · descargar los reportes oficiales"
+          onClick={() => setVerReportes(v => !v)}><FaFileExcel /></button>
         <button className={`gis-tool ${showLayers ? 'activo' : ''}`} title="Capas" onClick={() => setShowLayers(v => !v)}><FaLayerGroup /></button>
         <button className={`gis-tool ${capasUsuario.length || capasGuardadas.some(c => c.visible) ? 'activo' : ''}`}
           title="Cargar un KMZ o KML desde tu equipo"
@@ -1667,6 +1672,16 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       {/* ══════════════ PANEL DEL INVENTARIO JURP ══════════════ */}
       <PanelInventario inv={inv}
         onVolar={(b) => mapRef.current?.fitBounds(b, { padding: [50, 50], maxZoom: 16 })} />
+
+      {/* Formulario de evaluación. Se monta aquí y no dentro del popup
+          porque los popups de Leaflet no admiten un modal a pantalla completa. */}
+      <ModalEvaluacion inv={inv} />
+
+      {/* ══════════════ FORMATOS ANA ══════════════ */}
+      {verReportes && (
+        <PanelReportes campanias={inv.campanias}
+          onCerrar={() => setVerReportes(false)} />
+      )}
 
       {/* ══════════════ PANEL DERECHO ══════════════ */}
       {!inv.abierto && (
