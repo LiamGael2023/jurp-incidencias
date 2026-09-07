@@ -742,3 +742,113 @@
   vertical-align: -4px;
   margin-right: 6px;
 }
+
+/* ══════════════════════════════════════════════════════════
+   Buscador del inventario
+   ══════════════════════════════════════════════════════════ */
+
+.inv-buscador {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.inv-buscador-ico {
+  position: absolute;
+  left: 9px;
+  font-size: 11px;
+  color: #7ba7c7;
+  pointer-events: none;
+}
+
+.inv-buscador input {
+  width: 100%;
+  padding: 6px 26px 6px 26px;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: #e9f2f9;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 6px;
+  outline: none;
+}
+.inv-buscador input:focus {
+  border-color: rgba(245, 159, 0, .5);
+  background: rgba(255, 255, 255, .09);
+}
+.inv-buscador input::placeholder { color: #6f95b1; }
+.inv-buscador input:disabled { opacity: .5; }
+
+.inv-buscador-x {
+  position: absolute;
+  right: 7px;
+  background: none;
+  border: none;
+  color: #7ba7c7;
+  cursor: pointer;
+  display: flex;
+  padding: 2px;
+}
+.inv-buscador-x:hover { color: #cfe3f2; }
+
+/* ── resultados ── */
+.inv-buscador-lista {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 260px;
+  overflow-y: auto;
+  background: rgba(14, 26, 38, .97);
+  border: 1px solid rgba(255, 255, 255, .13);
+  border-radius: 7px;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .5);
+}
+
+.inv-buscador-lista button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  cursor: pointer;
+  font-family: inherit;
+}
+.inv-buscador-lista button:last-child { border-bottom: none; }
+.inv-buscador-lista button:hover { background: rgba(245, 159, 0, .12); }
+
+.inv-res-nom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #e9f2f9;
+}
+
+.inv-res-amb {
+  font-style: normal;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.inv-res-meta {
+  display: block;
+  font-size: 10px;
+  color: #7ba7c7;
+  margin-top: 1px;
+}
+
+.inv-res-vacio {
+  padding: 9px 10px;
+  font-size: 11px;
+  font-style: italic;
+  color: #6f95b1;
+}

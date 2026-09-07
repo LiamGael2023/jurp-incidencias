@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { GeoJSON, Marker, Popup } from 'react-leaflet';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { GeoJSON, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
   FaClipboardCheck, FaTimes, FaSyncAlt, FaCrosshairs,
-  FaChevronDown, FaChevronRight, FaExclamationCircle, FaPlusCircle,
+  FaChevronDown, FaChevronRight, FaExclamationCircle, FaPlusCircle, FaSearch,
 } from 'react-icons/fa';
 import './InventarioGIS.css';
 
@@ -223,6 +223,11 @@ export function useInventario() {
   const [evaluaciones, setEvaluaciones] = useState({}); // "tipo:fid" → evaluación
   const [error, setError] = useState(null);
   const [iniciando, setIniciando] = useState(false);
+  // índice de búsqueda: un registro por activo, con lo justo para
+  // encontrarlo y volar hasta él
+  const [indice, setIndice] = useState([]);
+  // activo al que hay que volar y abrirle el popup: {tipo, fid}
+  const [destacado, setDestacado] = useState(null);
   // activo que se está evaluando: {tipo, fid, props}
   const [evaluando, setEvaluando] = useState(null);
   // definición de campos por tipo, cacheada tras el primer pedido
@@ -270,6 +275,13 @@ export function useInventario() {
             (ev.results || ev).map(e => [`${e.tipo_activo}:${e.activo_fid}`, e])
           ));
         }
+
+        // índice para el buscador. Se pide una vez: son ~2.000 registros
+        // ligeros y evita tener que cargar todas las capas para buscar.
+        try {
+          const ri = await fetch(`${API}/capas/indice/`, { headers: cabeceras() });
+          if (ri.ok) setIndice(await ri.json());
+        } catch (e) { /* sin índice, el buscador queda vacío */ }
 
         // altas de campo pendientes de validar
         try {
@@ -390,6 +402,33 @@ export function useInventario() {
     }
   }, [formularios]);
 
+  // Búsqueda por nombre, canal o progresiva. Sin acentos ni mayúsculas,
+  // para que "cámara" encuentre "camara".
+  const buscar = useCallback((texto) => {
+    const q = (texto || '').trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (q.length < 2) return [];
+    const norm = (v) => String(v || '').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return indice
+      .filter(a => norm(a.nombre).includes(q) || norm(a.canal).includes(q)
+                || norm(a.progresiva).includes(q) || norm(a.tipo).includes(q))
+      .slice(0, 12);
+  }, [indice]);
+
+  // Lleva al activo: enciende su capa si estaba apagada, vuela y le abre
+  // el popup. La capa tarda en llegar la primera vez, así que el marcador
+  // se destaca cuando termine de dibujarse.
+  const irA = useCallback((item) => {
+    if (!visibles[item.tipo]) {
+      setVisibles(v => ({ ...v, [item.tipo]: true }));
+      cargarCapa(item.tipo, ambitoDe(item.tipo));
+    }
+    setDestacado({ tipo: item.tipo, fid: item.fid, lat: item.lat, lng: item.lng });
+  }, [visibles, cargarCapa, ambitoDe]);
+
+  const limpiarDestacado = useCallback(() => setDestacado(null), []);
+
   const abrirEvaluacion = useCallback((tipo, fid, props) => {
     cargarFormulario(tipo);
     setEvaluando({ tipo, fid, props });
@@ -471,6 +510,7 @@ export function useInventario() {
     campania, avance, totales, datos, visibles, cargando, error, iniciando,
     ambito, cambiarAmbito, ambitoDe, alternarAmbitoCapa, datosDe, clave,
     campanias, cambiarCampania, altas,
+    indice, buscar, irA, destacado, limpiarDestacado,
     evaluando, abrirEvaluacion, cerrarEvaluacion, guardarEvaluacion, formularios,
     alternarCapa, apagarTodas, evaluacionDe, totalVisibles, recargar: iniciar,
   };
@@ -480,6 +520,37 @@ export function useInventario() {
    Capas sobre el mapa — va DENTRO del <MapContainer>
    ══════════════════════════════════════════════════════════ */
 export function CapasInventario({ inv }) {
+  const mapa = useMap();
+  // Guarda el marcador de cada activo para poder abrirle el popup cuando
+  // llegue desde el buscador.
+  const marcadores = useRef({});
+  const { destacado, limpiarDestacado } = inv;
+
+  useEffect(() => {
+    if (!destacado) return;
+    const clave = `${destacado.tipo}:${destacado.fid}`;
+
+    // La capa puede estar descargándose todavía: se reintenta un momento
+    // antes de rendirse, en vez de fallar en silencio.
+    let intentos = 0;
+    const buscar = () => {
+      const m = marcadores.current[clave];
+      if (m) {
+        mapa.flyTo([destacado.lat, destacado.lng], 17, { duration: 1.2 });
+        setTimeout(() => m.openPopup(), 1300);
+        limpiarDestacado();
+        return;
+      }
+      if (++intentos < 20) setTimeout(buscar, 250);
+      else {
+        // sin marcador (capa vacía o filtrada), al menos se vuela al punto
+        mapa.flyTo([destacado.lat, destacado.lng], 17, { duration: 1.2 });
+        limpiarDestacado();
+      }
+    };
+    buscar();
+  }, [destacado, mapa, limpiarDestacado]);
+
   return (
     <>
       {TODAS.map(capa => {
@@ -543,6 +614,9 @@ export function CapasInventario({ inv }) {
               key={`inv-${capa.codigo}-${p.fid}`}
               position={[lat, lng]}
               icon={iconoActivo(capa.color, ev?.estado_cons, p.ambito, capa.ico)}
+              ref={(m) => {
+                if (m) marcadores.current[`${capa.codigo}:${p.fid}`] = m;
+              }}
             >
               <Popup>
                 <div className="inv-pop">
@@ -850,6 +924,75 @@ export function ModalEvaluacion({ inv }) {
 
 
 /* ══════════════════════════════════════════════════════════
+   Buscador del inventario
+
+   Busca sobre el índice que se descarga al abrir el panel, así que
+   encuentra cualquier activo aunque su capa esté apagada. Al elegir uno,
+   enciende la capa, vuela y le abre la ficha.
+   ══════════════════════════════════════════════════════════ */
+function BuscadorInventario({ inv }) {
+  const [texto, setTexto] = useState('');
+  const [abierto, setAbierto] = useState(false);
+
+  const resultados = useMemo(() => inv.buscar(texto), [texto, inv.buscar]);
+
+  const elegir = (item) => {
+    inv.irA(item);
+    setTexto(item.nombre || `${item.tipo} #${item.fid}`);
+    setAbierto(false);
+  };
+
+  return (
+    <div className="inv-buscador">
+      <FaSearch className="inv-buscador-ico" />
+      <input
+        value={texto}
+        placeholder={inv.indice.length
+          ? `Buscar entre ${inv.indice.length.toLocaleString('es-PE')} activos…`
+          : 'Cargando índice…'}
+        onChange={(e) => { setTexto(e.target.value); setAbierto(true); }}
+        onFocus={() => resultados.length && setAbierto(true)}
+        disabled={!inv.indice.length}
+      />
+      {texto && (
+        <button className="inv-buscador-x"
+          onClick={() => { setTexto(''); setAbierto(false); }}>
+          <FaTimes size={10} />
+        </button>
+      )}
+
+      {abierto && resultados.length > 0 && (
+        <div className="inv-buscador-lista">
+          {resultados.map(r => (
+            <button key={`${r.tipo}:${r.fid}`} onClick={() => elegir(r)}>
+              <span className="inv-res-nom">
+                {r.nombre || `#${r.fid}`}
+                {r.ambito && (
+                  <i className={`inv-res-amb amb-${r.ambito}`}>
+                    {r.ambito === 'JURP' ? 'JURP' : 'PECH'}
+                  </i>
+                )}
+              </span>
+              <span className="inv-res-meta">
+                {META[r.tipo]?.label || r.tipo}
+                {r.canal && ` · ${r.canal}`}
+                {r.progresiva != null && r.progresiva !== '' && ` · ${r.progresiva}`}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {abierto && texto.length >= 2 && resultados.length === 0 && (
+        <div className="inv-buscador-lista">
+          <div className="inv-res-vacio">Sin coincidencias</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
    Badge de conteo: muestra cuántos hay según el filtro vigente,
    y con "todo" desglosa JURP/Chavimochic.
    ══════════════════════════════════════════════════════════ */
@@ -1010,6 +1153,9 @@ export function PanelInventario({ inv, onVolar }) {
             )}
           </div>
         )}
+
+        {/* ── buscador ── */}
+        <BuscadorInventario inv={inv} />
 
         {/* ── filtro de ámbito ── */}
         <div className="inv-ambito">
