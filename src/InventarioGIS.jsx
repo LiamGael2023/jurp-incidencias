@@ -79,7 +79,47 @@ const GRUPOS = [
   },
 ];
 
-const TODAS = GRUPOS.flatMap(g => g.capas);
+// Capas que vienen del KMZ: cubren todo Chavimochic y son de referencia.
+// El grupo va aparte para que nadie las confunda con lo que la Junta evalúa.
+const GRUPOS_CONTEXTO = [
+  {
+    titulo: 'Chavimochic — obras del PECH',
+    contexto: true,
+    capas: [
+      { codigo: 'bocatomas',          label: 'Bocatomas',            color: '#495057' },
+      { codigo: 'estaciones_control', label: 'Estaciones de control', color: '#5c7cfa' },
+      { codigo: 'rapidas',            label: 'Rápidas',              color: '#f03e3e' },
+      { codigo: 'tomas_canal_madre',  label: 'Tomas Canal Madre',    color: '#e8590c' },
+      { codigo: 'garitas_jurp',       label: 'Garitas JURP',         color: '#1098ad' },
+      { codigo: 'garitas_otros',      label: 'Garitas de terceros',  color: '#9c36b5' },
+    ],
+  },
+  {
+    titulo: 'Chavimochic — trazados y vías',
+    contexto: true,
+    capas: [
+      { codigo: 'canal_madre_kmz',       label: 'Canal Madre',       color: '#1971c2', tipo: 'poly' },
+      { codigo: 'canal_lateral_10_kmz',  label: 'Lateral 10',        color: '#4dabf7', tipo: 'poly' },
+      { codigo: 'redes_presurizado_kmz', label: 'Redes presurizado', color: '#74c0fc', tipo: 'poly' },
+      { codigo: 'evacuador_kmz',         label: 'Evacuadores',       color: '#a5d8ff', tipo: 'poly' },
+      { codigo: 'caminos_servicio_kmz',  label: 'Caminos de servicio', color: '#e67700', tipo: 'poly' },
+      { codigo: 'vias_acceso_kmz',       label: 'Vías de acceso',    color: '#d6336c', tipo: 'poly' },
+      { codigo: 'via_auxiliar_kmz',      label: 'Vía auxiliar',      color: '#ae3ec9', tipo: 'poly' },
+      { codigo: 'red_nacional_kmz',      label: 'Red vial nacional', color: '#d63939', tipo: 'poly' },
+    ],
+  },
+];
+
+const TODOS_GRUPOS = [...GRUPOS, ...GRUPOS_CONTEXTO];
+const TODAS = TODOS_GRUPOS.flatMap(g => g.capas);
+
+// Filtro de ámbito. 'todo' no manda el parámetro y el backend devuelve
+// Chavimochic completo.
+const AMBITOS = [
+  { valor: 'todo', etiqueta: 'Todo',        titulo: 'JURP y Chavimochic' },
+  { valor: 'JURP', etiqueta: 'JURP',        titulo: 'Solo lo que administra la Junta' },
+  { valor: 'PECH', etiqueta: 'Chavimochic', titulo: 'Solo obras del PECH' },
+];
 const META = Object.fromEntries(TODAS.map(c => [c.codigo, c]));
 
 // Colores por estado de conservación evaluado.
@@ -99,14 +139,22 @@ const token = () => localStorage.getItem('userToken');
 // DRF intente autenticarlo, falle y devuelva 401 pese al permiso AllowAny.
 const cabeceras = () => ({});
 
-// Punto con anillo de color: relleno = capa, borde = estado evaluado.
-const iconoActivo = (color, estado) => L.divIcon({
-  className: 'inv-marker-wrap',
-  html: `<span class="inv-marker" style="--c:${color};--e:${estado ? COLOR_ESTADO[estado] : 'transparent'}"></span>`,
-  iconSize: [16, 16],
-  iconAnchor: [8, 8],
-  popupAnchor: [0, -8],
-});
+// El marcador carga tres datos a la vez:
+//   relleno → capa a la que pertenece
+//   anillo  → estado de conservación evaluado (sin anillo = sin evaluar)
+//   forma   → ámbito: los de JURP van sólidos, los del PECH huecos y más
+//             chicos, porque son contexto y no deben competir por la vista.
+const iconoActivo = (color, estado, ambito) => {
+  const esPech = ambito === 'PECH';
+  return L.divIcon({
+    className: 'inv-marker-wrap',
+    html: `<span class="inv-marker ${esPech ? 'inv-pech' : ''}" `
+        + `style="--c:${color};--e:${estado ? COLOR_ESTADO[estado] : 'transparent'}"></span>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+    popupAnchor: [0, -8],
+  });
+};
 
 /* ══════════════════════════════════════════════════════════
    Hook: estado del módulo
@@ -122,6 +170,8 @@ export function useInventario() {
   const [evaluaciones, setEvaluaciones] = useState({}); // "tipo:fid" → evaluación
   const [error, setError] = useState(null);
   const [iniciando, setIniciando] = useState(false);
+  // 'todo' | 'JURP' | 'PECH' — filtra qué se pide al backend
+  const [ambito, setAmbito] = useState('todo');
 
   // Carga inicial: campaña vigente, totales por capa y evaluaciones hechas.
   const iniciar = useCallback(async () => {
@@ -139,8 +189,12 @@ export function useInventario() {
       const activa = lista.find(c => c.estado === 'en_proceso') || lista[0];
       setCampania(activa || null);
 
+      // el backend devuelve total y, cuando la capa tiene ámbito, el
+      // desglose jurp/pech para el badge del panel
       const caps = await rt.json();
-      setTotales(Object.fromEntries((caps.results || caps).map(c => [c.codigo, c.total])));
+      setTotales(Object.fromEntries(
+        (caps.results || caps).map(c => [c.codigo, c])
+      ));
 
       if (activa) {
         const [ra, re] = await Promise.all([
@@ -162,17 +216,23 @@ export function useInventario() {
     }
   }, []);
 
-  // Trae el GeoJSON de una capa la primera vez que se enciende.
-  const cargarCapa = useCallback(async (codigo) => {
-    if (datos[codigo]) return;
+  // La caché se indexa por capa + ámbito: cambiar el filtro no debe
+  // devolver el GeoJSON que se bajó con el filtro anterior.
+  const clave = useCallback((codigo, amb = ambito) => `${codigo}::${amb}`, [ambito]);
+
+  const cargarCapa = useCallback(async (codigo, amb) => {
+    const k = `${codigo}::${amb}`;
+    if (datos[k]) return;
     setCargando(c => ({ ...c, [codigo]: true }));
     try {
-      const r = await fetch(`${API}/capas/${codigo}/?srid=4326`, { headers: cabeceras() });
+      const filtro = amb === 'todo' ? '' : `&ambito=${amb}`;
+      const r = await fetch(`${API}/capas/${codigo}/?srid=4326${filtro}`,
+                            { headers: cabeceras() });
       if (r.ok) {
         // El JSON se resuelve ANTES de tocar el estado: el actualizador de
         // useState es síncrono y no admite await dentro.
         const geo = await r.json();
-        setDatos(d => ({ ...d, [codigo]: geo }));
+        setDatos(d => ({ ...d, [k]: geo }));
       }
     } catch (e) { /* la capa queda vacía; el badge lo refleja */ }
     finally { setCargando(c => ({ ...c, [codigo]: false })); }
@@ -181,10 +241,16 @@ export function useInventario() {
   const alternarCapa = useCallback((codigo) => {
     setVisibles(v => {
       const nuevo = !v[codigo];
-      if (nuevo) cargarCapa(codigo);
+      if (nuevo) cargarCapa(codigo, ambito);
       return { ...v, [codigo]: nuevo };
     });
-  }, [cargarCapa]);
+  }, [cargarCapa, ambito]);
+
+  // Al cambiar el filtro hay que rebajar lo que esté encendido.
+  const cambiarAmbito = useCallback((nuevo) => {
+    setAmbito(nuevo);
+    Object.entries(visibles).forEach(([cod, v]) => { if (v) cargarCapa(cod, nuevo); });
+  }, [visibles, cargarCapa]);
 
   const apagarTodas = useCallback(() => setVisibles({}), []);
 
@@ -202,13 +268,20 @@ export function useInventario() {
 
   const totalVisibles = useMemo(
     () => Object.entries(visibles).filter(([, v]) => v)
-      .reduce((a, [k]) => a + (datos[k]?.features?.length || 0), 0),
-    [visibles, datos]
+      .reduce((a, [k]) => a + (datos[`${k}::${ambito}`]?.features?.length || 0), 0),
+    [visibles, datos, ambito]
+  );
+
+  // Lo que consumen los componentes: siempre el GeoJSON del ámbito vigente.
+  const datosDe = useCallback(
+    (codigo) => datos[`${codigo}::${ambito}`],
+    [datos, ambito]
   );
 
   return {
     abierto, alternar, cerrar: () => setAbierto(false),
     campania, avance, totales, datos, visibles, cargando, error, iniciando,
+    ambito, cambiarAmbito, datosDe, clave,
     alternarCapa, apagarTodas, evaluacionDe, totalVisibles, recargar: iniciar,
   };
 }
@@ -221,7 +294,7 @@ export function CapasInventario({ inv }) {
     <>
       {TODAS.map(capa => {
         if (!inv.visibles[capa.codigo]) return null;
-        const fc = inv.datos[capa.codigo];
+        const fc = inv.datosDe(capa.codigo);
         if (!fc?.features?.length) return null;
 
         // Líneas y polígonos: un solo GeoJSON por capa.
@@ -230,12 +303,17 @@ export function CapasInventario({ inv }) {
             <GeoJSON
               key={`inv-${capa.codigo}`}
               data={fc}
-              style={{
-                color: capa.color,
-                weight: capa.tipo === 'line' ? 3 : 1.5,
-                opacity: 0.9,
-                fillColor: capa.color,
-                fillOpacity: capa.tipo === 'poly' ? 0.12 : 0,
+              style={(f) => {
+                // Las obras del PECH van más tenues: son contexto.
+                const esPech = (f?.properties?.ambito) === 'PECH';
+                return {
+                  color: capa.color,
+                  weight: capa.tipo === 'line' ? 3 : 1.5,
+                  opacity: esPech ? 0.5 : 0.9,
+                  dashArray: esPech ? '6 4' : null,
+                  fillColor: capa.color,
+                  fillOpacity: capa.tipo === 'poly' ? (esPech ? 0.06 : 0.12) : 0,
+                };
               }}
               onEachFeature={(f, layer) => {
                 const p = f.properties || {};
@@ -244,8 +322,15 @@ export function CapasInventario({ inv }) {
                   .slice(0, 10)
                   .map(([k, v]) => `<tr><th>${k.replace(/_/g, ' ')}</th><td>${v}</td></tr>`)
                   .join('');
+                const amb = p.ambito || '';
+                const chip = amb
+                  ? `<span class="inv-badge-ambito amb-${amb}">`
+                    + `${amb === 'JURP' ? 'JURP' : amb === 'PECH' ? 'Chavimochic' : 'sin ámbito'}`
+                    + '</span>'
+                  : '';
                 layer.bindPopup(
                   `<div class="inv-pop"><div class="inv-pop-tit">${capa.label}</div>
+                   <div class="inv-pop-sub">${chip}</div>
                    <table class="inv-pop-tabla"><tbody>${filas}</tbody></table></div>`
                 );
               }}
@@ -267,14 +352,22 @@ export function CapasInventario({ inv }) {
             <Marker
               key={`inv-${capa.codigo}-${p.fid}`}
               position={[lat, lng]}
-              icon={iconoActivo(capa.color, ev?.estado_cons)}
+              icon={iconoActivo(capa.color, ev?.estado_cons, p.ambito)}
             >
               <Popup>
                 <div className="inv-pop">
                   <div className="inv-pop-tit" style={{ borderColor: capa.color }}>
                     {p.nombre || p.codigo || `${capa.label} #${p.fid}`}
                   </div>
-                  <div className="inv-pop-sub">{capa.label}</div>
+                  <div className="inv-pop-sub">
+                    {capa.label}
+                    {p.ambito && (
+                      <span className={`inv-badge-ambito amb-${p.ambito}`}>
+                        {p.ambito === 'JURP' ? 'JURP' :
+                         p.ambito === 'PECH' ? 'Chavimochic' : 'sin ámbito'}
+                      </span>
+                    )}
+                  </div>
 
                   {/* tbody explícito: sin él React avisa de anidamiento inválido */}
                   <table className="inv-pop-tabla">
@@ -302,8 +395,12 @@ export function CapasInventario({ inv }) {
                       </div>
                       {ev.observaciones && <div className="inv-pop-eval-obs">{ev.observaciones}</div>}
                     </div>
-                  ) : (
+                  ) : p.ambito === 'JURP' ? (
                     <div className="inv-pop-pend">Sin evaluar en esta campaña</div>
+                  ) : (
+                    <div className="inv-pop-pend">
+                      Obra del PECH — fuera del alcance de la campaña
+                    </div>
                   )}
                 </div>
               </Popup>
@@ -312,6 +409,32 @@ export function CapasInventario({ inv }) {
         });
       })}
     </>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   Badge de conteo: muestra cuántos hay según el filtro vigente,
+   y con "todo" desglosa JURP/Chavimochic.
+   ══════════════════════════════════════════════════════════ */
+function BadgeCapa({ info, ambito }) {
+  if (info == null) return <span className="gis-capa-badge">—</span>;
+
+  // el backend devuelve {total, jurp, pech} en las capas con ámbito
+  const total = typeof info === 'number' ? info : info.total;
+  const jurp = typeof info === 'object' ? info.jurp : undefined;
+  const pech = typeof info === 'object' ? info.pech : undefined;
+
+  if (ambito === 'JURP') return <span className="gis-capa-badge">{jurp ?? total}</span>;
+  if (ambito === 'PECH') return <span className="gis-capa-badge">{pech ?? 0}</span>;
+
+  if (jurp === undefined || pech === 0) {
+    return <span className="gis-capa-badge">{total}</span>;
+  }
+  return (
+    <span className="inv-badge-doble" title={`${jurp} de JURP · ${pech} del PECH`}>
+      <i className="amb-JURP">{jurp}</i>
+      <i className="amb-PECH">{pech}</i>
+    </span>
   );
 }
 
@@ -331,7 +454,7 @@ export function PanelInventario({ inv, onVolar }) {
   const pct = avanceTotal.total ? (avanceTotal.evaluados / avanceTotal.total * 100) : 0;
 
   const volarACapa = (codigo) => {
-    const fc = inv.datos[codigo];
+    const fc = inv.datosDe(codigo);
     if (!fc?.features?.length || !onVolar) return;
     const capa = L.geoJSON(fc);
     onVolar(capa.getBounds());
@@ -402,14 +525,29 @@ export function PanelInventario({ inv, onVolar }) {
           </div>
         )}
 
+        {/* ── filtro de ámbito ── */}
+        <div className="inv-ambito">
+          <div className="inv-ambito-tit">Mostrar</div>
+          <div className="inv-ambito-btns">
+            {AMBITOS.map(a => (
+              <button key={a.valor} title={a.titulo}
+                className={inv.ambito === a.valor ? 'activo' : ''}
+                onClick={() => inv.cambiarAmbito(a.valor)}>
+                {a.etiqueta}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* ── capas ── */}
         <div className="gis-capas-acciones" style={{ marginTop: 8 }}>
           <button onClick={inv.apagarTodas}>Apagar todas</button>
           <span className="inv-visibles">{inv.totalVisibles.toLocaleString('es-PE')} en pantalla</span>
         </div>
 
-        {GRUPOS.map((g, i) => (
-          <div className="gis-capas-grupo" key={g.titulo}>
+        {TODOS_GRUPOS.map((g, i) => (
+          <div className={`gis-capas-grupo ${g.contexto ? 'inv-grupo-contexto' : ''}`}
+               key={g.titulo}>
             <div
               className="gis-capas-titulo inv-grupo-tit"
               onClick={() => setGrupoAbierto(s => ({ ...s, [i]: !s[i] }))}
@@ -442,8 +580,8 @@ export function PanelInventario({ inv, onVolar }) {
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   {inv.cargando[c.codigo]
                     ? <FaSyncAlt className="icon-spin" size={11} style={{ color: '#74c0fc' }} />
-                    : <span className="gis-capa-badge">{inv.totales[c.codigo] ?? '—'}</span>}
-                  {inv.datos[c.codigo] && (
+                    : <BadgeCapa info={inv.totales[c.codigo]} ambito={inv.ambito} />}
+                  {inv.datosDe(c.codigo) && (
                     <button
                       onClick={() => volarACapa(c.codigo)}
                       title="Centrar en esta capa"
@@ -469,6 +607,18 @@ export function PanelInventario({ inv, onVolar }) {
           <div className="inv-nota">
             El anillo del marcador indica el estado evaluado en la campaña vigente.
             Sin anillo = pendiente de evaluar.
+          </div>
+        </div>
+
+        <div className="gis-capas-grupo">
+          <div className="gis-capas-titulo">Ámbito</div>
+          <div className="inv-leyenda">
+            <span><i className="inv-mini-jurp" />JURP · se evalúa</span>
+            <span><i className="inv-mini-pech" />Chavimochic · contexto</span>
+          </div>
+          <div className="inv-nota">
+            Los puntos huecos y las líneas punteadas son obras del PECH:
+            se muestran como referencia y quedan fuera de la campaña.
           </div>
         </div>
 

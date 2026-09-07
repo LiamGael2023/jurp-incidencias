@@ -270,3 +270,126 @@
   cursor: pointer;
 }
 .inv-error button:hover { background: rgba(255, 255, 255, .18); }
+
+/* ══════════════════════════════════════════════════════════
+   Ámbito: distinguir lo de JURP de lo del PECH
+   ══════════════════════════════════════════════════════════ */
+
+/* Marcador de una obra del PECH: hueco y algo menor. Es contexto,
+   no debe competir por la atención con lo que la Junta evalúa. */
+.inv-marker.inv-pech {
+  width: 9px;
+  height: 9px;
+  margin: 3.5px;
+  background: transparent;
+  border: 2px solid var(--c);
+  opacity: .8;
+  box-shadow: 0 0 0 2px var(--e), 0 1px 3px rgba(0, 0, 0, .5);
+}
+
+/* ── conmutador Todo / JURP / Chavimochic ────────────────── */
+.inv-ambito {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  margin-top: 8px;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 6px;
+}
+
+.inv-ambito-tit {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #7ba7c7;
+  white-space: nowrap;
+}
+
+.inv-ambito-btns {
+  display: flex;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.inv-ambito-btns button {
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .12);
+  color: #a8c6da;
+  border-radius: 5px;
+  padding: 3px 9px;
+  font-size: 10.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.inv-ambito-btns button:hover { background: rgba(255, 255, 255, .13); }
+.inv-ambito-btns button.activo {
+  background: rgba(245, 159, 0, .22);
+  border-color: rgba(245, 159, 0, .5);
+  color: #ffd8a8;
+  font-weight: 700;
+}
+
+/* ── etiqueta de ámbito en el popup ──────────────────────── */
+.inv-badge-ambito {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: none;
+}
+.amb-JURP {
+  background: rgba(47, 158, 68, .2);
+  border: 1px solid rgba(47, 158, 68, .45);
+  color: #8ce99a;
+}
+.amb-PECH {
+  background: rgba(134, 142, 150, .18);
+  border: 1px solid rgba(134, 142, 150, .4);
+  color: #ced4da;
+}
+.amb-SIN_DATO {
+  background: rgba(245, 159, 0, .16);
+  border: 1px solid rgba(245, 159, 0, .38);
+  color: #ffd8a8;
+}
+
+/* ── badge de conteo con desglose ────────────────────────── */
+.inv-badge-doble {
+  display: inline-flex;
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+.inv-badge-doble i {
+  font-style: normal;
+  padding: 2px 5px;
+}
+.inv-badge-doble i.amb-JURP { border: none; border-radius: 0; }
+.inv-badge-doble i.amb-PECH { border: none; border-radius: 0; }
+
+/* ── grupos de contexto en el panel ──────────────────────── */
+.inv-grupo-contexto .gis-capas-titulo { color: #8fa8bb; }
+.inv-grupo-contexto .gis-capa label { opacity: .88; }
+
+/* ── leyenda de ámbito ───────────────────────────────────── */
+.inv-mini-jurp,
+.inv-mini-pech {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.inv-mini-jurp { background: #4c6ef5; }
+.inv-mini-pech {
+  background: transparent;
+  border: 2px solid #4c6ef5;
+  opacity: .8;
+}
