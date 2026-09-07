@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { GeoJSON, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
@@ -533,31 +533,41 @@ export function useInventario() {
    ══════════════════════════════════════════════════════════ */
 export function CapasInventario({ inv }) {
   const mapa = useMap();
-  // Guarda el marcador de cada activo para poder abrirle el popup cuando
-  // llegue desde el buscador.
-  const marcadores = useRef({});
   const { destacado, limpiarDestacado } = inv;
-  const DEPURAR = true;   // ponlo en true para ver el rastro en consola
+  const DEPURAR = false;   // ponlo en true para ver el rastro en consola
 
   useEffect(() => {
     if (!destacado) return;
-    const clave = `${destacado.tipo}:${destacado.fid}`;
     let cancelado = false;
     let intentos = 0;
     let temporizador = null;
 
+    // El marcador se busca en el propio mapa por sus coordenadas, no por
+    // referencias de React: los refs en callbacks inline se pierden entre
+    // renders y quedaba solo uno registrado de los cuarenta y nueve.
+    // La tolerancia es ~1 m, suficiente para no confundir dos estructuras.
+    const TOL = 1e-5;
+    const hallar = () => {
+      let encontrado = null;
+      mapa.eachLayer((capa) => {
+        if (encontrado || !capa.getLatLng || !capa.getPopup) return;
+        const ll = capa.getLatLng();
+        if (Math.abs(ll.lat - destacado.lat) < TOL
+            && Math.abs(ll.lng - destacado.lng) < TOL
+            && capa.getPopup()) {
+          encontrado = capa;
+        }
+      });
+      return encontrado;
+    };
+
     // El popup se abre DESPUÉS del vuelo: si se abre antes, el propio
-    // desplazamiento del mapa lo cierra. Y se vuelve a leer la referencia
-    // en ese momento, porque el marcador pudo remontarse mientras tanto.
+    // desplazamiento del mapa lo cierra.
     const abrir = () => {
       if (cancelado) return;
-      const m = marcadores.current[clave];
-      if (DEPURAR) {
-        console.log('[inv] abrir', clave, 'intento', intentos,
-                    '| ref:', !!m, '| en mapa:', !!(m && m._map),
-                    '| refs:', Object.keys(marcadores.current).length);
-      }
-      if (m && m._map) {          // _map: confirma que sigue en el mapa
+      const m = hallar();
+      if (DEPURAR) console.log('[inv] intento', intentos, '| marcador:', !!m);
+      if (m) {
         m.openPopup();
         limpiarDestacado();
         return;
@@ -565,7 +575,7 @@ export function CapasInventario({ inv }) {
       // la capa puede estar descargándose todavía
       if (++intentos < 30) temporizador = setTimeout(abrir, 200);
       else {
-        if (DEPURAR) console.warn('[inv] no se encontró el marcador', clave);
+        if (DEPURAR) console.warn('[inv] sin marcador en', destacado);
         limpiarDestacado();       // sin marcador, queda el vuelo hecho
       }
     };
@@ -648,20 +658,12 @@ export function CapasInventario({ inv }) {
               key={`inv-${capa.codigo}-${p.fid}`}
               position={[lat, lng]}
               icon={iconoActivo(capa.color, ev?.estado_cons, p.ambito, capa.ico)}
-              ref={(m) => {
-                // React llama con null al desmontar. Si no se borra, la
-                // referencia queda apuntando a un marcador que ya no está
-                // en el mapa y openPopup() no hace nada.
-                const k = `${capa.codigo}:${p.fid}`;
-                if (m) marcadores.current[k] = m;
-                else delete marcadores.current[k];
-              }}
               eventHandlers={{
                 // Si el marcador se agrega al mapa siendo el destacado —el
                 // caso de una capa que acaba de descargarse— se abre aquí,
                 // que es el único momento en que existe con certeza.
                 add: (e) => {
-                  if (esDestacado) setTimeout(() => e.target.openPopup(), 60);
+                  if (esDestacado) setTimeout(() => e.target.openPopup(), 80);
                 },
               }}
             >
