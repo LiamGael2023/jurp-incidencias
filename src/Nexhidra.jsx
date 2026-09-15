@@ -15,7 +15,6 @@ import logoSentria from './assets/nexhidra/logo-sentria.png';
 const AZUL = '#1268C3';
 const NARANJA = '#EE7B12';
 const VERDE = '#2E9E4F';
-const TEAL = '#0CA678';     // módulo Inventario
 const NAVY = '#0B2A5B';
 
 /* Ancho fijo del lienzo. Todo se escala para caber en la pantalla. */
@@ -46,13 +45,10 @@ const P = {
   reporte: ['M8 4h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z', 'M9 9h6', 'M9 13h6', 'M9 17h4'],
   camara: ['M4 8a2 2 0 0 1 2-2h1l1.5-2h7L17 6h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z', 'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z'],
   flecha: ['M5 12h13', 'M13 6l6 6-6 6'],
-  portapapeles: ['M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z', 'M8 6H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2', 'M9 13l2 2 4-4'],
-  capas: ['M12 3l9 5-9 5-9-5z', 'M3 13l9 5 9-5', 'M3 17l9 5 9-5'],
-  regla: ['M3 16l13-13 5 5-13 13z', 'M8 8l2 2', 'M11 5l2 2', 'M5 11l2 2'],
 };
 
-export default function Nexhidra({ onEntrar, onCaudixa, onSentria, onInventario,
-  hrefPluvira, hrefCaudixa, hrefSentria, hrefInventario }) {
+export default function Nexhidra({ onEntrar, onCaudixa, onSentria,
+  hrefPluvira, hrefCaudixa, hrefSentria }) {
   const stageRef = useRef(null);
   const [movil, setMovil] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= CORTE_MOVIL
@@ -159,20 +155,6 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria, onInventario,
       ],
       onClick: onSentria, href: hrefSentria,
     },
-    {
-      // Sin logo propio todavía: la tarjeta se rotula con el nombre en texto
-      // y, en lugar del móvil, muestra el icono del módulo. Cuando llegue el
-      // logo basta con rellenar `logo` y `src` como en las demás.
-      key: 'inventario', src: null, logo: null, color: TEAL, tint: '#d7f5ec',
-      nombre: 'INVENTARIO', tagline: 'INFRAESTRUCTURA BAJO CONTROL',
-      desc: 'Catastro georreferenciado de la infraestructura de riego, con su estado de conservación evaluado campaña tras campaña.',
-      features: [
-        { d: P.capas, label: 'CATASTRO GEORREFERENCIADO' },
-        { d: P.portapapeles, label: 'EVALUACIÓN POR CAMPAÑA' },
-        { d: P.regla, label: 'REPORTES Y EXPORTACIÓN' },
-      ],
-      onClick: onInventario, href: hrefInventario,
-    },
   ];
 
   return (
@@ -234,20 +216,12 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria, onInventario,
                   {...propsTarjeta}
                 >
                   <div className="nx-card-top">
-                    {s.src ? (
-                      <div className="nx-phone">
-                        <span className="nx-notch" />
-                        <img src={s.src} alt={`App ${s.nombre}`} />
-                      </div>
-                    ) : (
-                      <div className="nx-phone nx-phone-vacio">
-                        <Ico d={P.capas} color="#fff" size={54} sw={1.6} />
-                      </div>
-                    )}
+                    <div className="nx-phone">
+                      <span className="nx-notch" />
+                      <img src={s.src} alt={`App ${s.nombre}`} />
+                    </div>
                     <div className="nx-card-id">
-                      {s.logo
-                        ? <img className="nx-card-logo" src={s.logo} alt={s.nombre} />
-                        : <p className="nx-card-nombre">{s.nombre}</p>}
+                      <img className="nx-card-logo" src={s.logo} alt={s.nombre} />
                       <p className="nx-tag">{s.tagline}</p>
                     </div>
                   </div>
@@ -257,7 +231,7 @@ export default function Nexhidra({ onEntrar, onCaudixa, onSentria, onInventario,
                   <ul className="nx-feats">
                     {s.features.map((f) => (
                       <li key={f.label}>
-                        <span className="nx-fcircle"><Ico d={f.d} color={s.color} size={26} /></span>
+                        <span className="nx-fcircle"><Ico d={f.d} color={s.color} size={28} /></span>
                         <span className="nx-flabel">{f.label}</span>
                       </li>
                     ))}
@@ -327,44 +301,37 @@ const CSS = `
 
 /* ---------- panel soluciones ---------- */
 .nx-panel{position:relative;margin:0 40px;background:#fff;border-radius:28px;
-  box-shadow:0 24px 60px rgba(11,42,91,.12);padding:34px 40px;}
-/* Cuatro módulos: la rejilla pasa de 3 a 4 columnas y el contenido encoge
-   un poco para que ninguna tarjeta quede apretada. */
-.nx-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:26px;}
+  box-shadow:0 24px 60px rgba(11,42,91,.12);padding:34px 44px;}
+.nx-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:44px;}
 
-.nx-card{display:flex;flex-direction:column;gap:16px;padding:16px 12px 18px;border-radius:20px;
+.nx-card{display:flex;flex-direction:column;gap:18px;padding:16px 14px 18px;border-radius:20px;
   text-decoration:none;color:inherit;
   border:2px solid transparent;transition:background .25s,transform .25s,box-shadow .25s,border-color .25s;}
 .nx-card-on{cursor:pointer;}
 .nx-card-on:hover{background:var(--tint);border-color:var(--c);transform:translateY(-6px);
   box-shadow:0 16px 36px rgba(11,42,91,.16);}
 
-.nx-card-top{display:flex;gap:16px;align-items:flex-start;}
+.nx-card-top{display:flex;gap:20px;align-items:flex-start;}
 .nx-phone{position:relative;flex-shrink:0;background:#10203c;border-radius:30px;padding:8px;
-  box-shadow:0 14px 30px rgba(11,42,91,.28);width:120px;}
-.nx-notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:50px;height:15px;
+  box-shadow:0 14px 30px rgba(11,42,91,.28);width:138px;}
+.nx-notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:56px;height:16px;
   background:#10203c;border-radius:0 0 12px 12px;z-index:2;}
-.nx-phone img{width:100%;height:250px;object-fit:cover;border-radius:22px;display:block;}
-/* Tarjeta sin captura de app: el marco se rellena con el icono del módulo */
-.nx-phone-vacio{display:flex;align-items:center;justify-content:center;height:266px;
-  background:linear-gradient(160deg,#0f6b52 0%,#0CA678 60%,#2fc99b 100%);}
+.nx-phone img{width:100%;height:264px;object-fit:cover;border-radius:22px;display:block;}
 
-.nx-card-id{padding-top:8px;min-width:0;flex:1;}
-.nx-card-logo{width:100%;max-width:280px;height:auto;object-fit:contain;display:block;}
-.nx-card-nombre{font-family:'Sora',sans-serif;font-weight:800;font-size:34px;letter-spacing:.01em;
-  color:var(--c);margin:0;line-height:1.05;}
-.nx-tag{font-family:'Sora',sans-serif;font-weight:700;font-size:15px;letter-spacing:1.1px;
-  color:var(--c);margin:12px 0 0;line-height:1.4;}
-.nx-desc{font-size:17px;line-height:1.5;color:var(--texto);margin:0;text-wrap:pretty;}
+.nx-card-id{padding-top:10px;min-width:0;flex:1;}
+.nx-card-logo{width:100%;max-width:330px;height:auto;object-fit:contain;display:block;}
+.nx-tag{font-family:'Sora',sans-serif;font-weight:700;font-size:17px;letter-spacing:1.5px;
+  color:var(--c);margin:14px 0 0;line-height:1.4;}
+.nx-desc{font-size:19px;line-height:1.55;color:var(--texto);margin:0;text-wrap:pretty;}
 
-.nx-feats{display:flex;gap:8px;list-style:none;padding:0;margin:0 0 auto;}
-.nx-feats li{flex:1;display:flex;flex-direction:column;align-items:center;gap:9px;text-align:center;}
-.nx-fcircle{width:54px;height:54px;border-radius:50%;border:2.5px solid var(--c);background:#fff;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.nx-flabel{font-weight:800;font-size:12.5px;letter-spacing:.5px;color:var(--navy);line-height:1.3;}
+.nx-feats{display:flex;gap:12px;list-style:none;padding:0;margin:0 0 auto;}
+.nx-feats li{flex:1;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;}
+.nx-fcircle{width:62px;height:62px;border-radius:50%;border:2.5px solid var(--c);background:#fff;
+  display:flex;align-items:center;justify-content:center;}
+.nx-flabel{font-weight:800;font-size:14.5px;letter-spacing:.8px;color:var(--navy);line-height:1.35;}
 
-.nx-btn{width:100%;border:none;border-radius:12px;padding:13px 16px;text-decoration:none;
-  font-family:'Sora',sans-serif;font-weight:700;font-size:16px;letter-spacing:1.4px;
+.nx-btn{width:100%;border:none;border-radius:12px;padding:13px 18px;text-decoration:none;
+  font-family:'Sora',sans-serif;font-weight:700;font-size:17.5px;letter-spacing:1.8px;
   display:flex;align-items:center;justify-content:center;gap:10px;
   background:var(--c);color:#fff;cursor:pointer;transition:filter .2s,transform .2s;}
 .nx-btn:hover:not(.nx-btn-off){filter:brightness(1.08);transform:translateY(-2px);}
@@ -391,8 +358,6 @@ const CSS = `
 .nx-movil .nx-cards{grid-template-columns:1fr;gap:26px;}
 .nx-movil .nx-card-top{flex-direction:column;align-items:center;text-align:center;gap:14px;}
 .nx-movil .nx-card-logo{max-width:270px;margin:0 auto;}
-.nx-movil .nx-card-nombre{text-align:center;font-size:32px;}
-.nx-movil .nx-phone-vacio{width:150px;height:186px;margin:0 auto;}
 .nx-movil .nx-tag{font-size:14px;}
 .nx-movil .nx-desc{font-size:16.5px;}
 .nx-movil .nx-flabel{font-size:12px;}

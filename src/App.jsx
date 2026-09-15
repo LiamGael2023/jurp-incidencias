@@ -30,19 +30,18 @@ const MENU = [
   { clave: 'reportes',     titulo: 'Reportes',      icono: <FaFilePdf />,       apps: ['pluvira'] },
   { clave: 'maquinaria',   titulo: 'Maquinaria',    icono: <FaTruck />,         apps: ['pluvira'] },
   { clave: 'partes',       titulo: 'Partes Diarios', icono: <FaClipboardList />, apps: ['pluvira'] },
-  // Módulo Inventario: visor propio, sin nada de incidencias.
-  { clave: 'inv-mapa',     titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,    apps: ['inventario'] },
-  { clave: 'inv-reportes', titulo: 'Reportes',      icono: <FaClipboardCheck />,  apps: ['inventario'] },
+  // Inventario: visor propio y sus reportes, al final del menú.
+  { clave: 'inv-mapa',     titulo: 'Inventario GIS',       icono: <FaMapMarkedAlt />,   apps: ['pluvira'] },
+  { clave: 'inv-reportes', titulo: 'Inventario Reportes',  icono: <FaClipboardCheck />, apps: ['pluvira'] },
 ];
 
-const vistaInicial = (app) =>
-  app === 'sentria' ? 'vigilancia' : app === 'inventario' ? 'inv-mapa' : 'mapa';
+const vistaInicial = (app) => (app === 'sentria' ? 'vigilancia' : 'mapa');
 
 /* Lee ?app=pluvira | ?app=sentria de la URL. Sirve para abrir cada login
    directo en una pestaña nueva, saltando la intro. */
 const appDeURL = () => {
   const a = new URLSearchParams(window.location.search).get('app');
-  return ['pluvira', 'sentria', 'inventario'].includes(a) ? a : null;
+  return a === 'pluvira' || a === 'sentria' ? a : null;
 };
 
 function App() {
@@ -126,11 +125,9 @@ function App() {
       <Nexhidra
         onEntrar={() => salirDeIntro('pluvira')}
         onSentria={() => salirDeIntro('sentria')}
-        onInventario={() => salirDeIntro('inventario')}
         onCaudixa={() => { window.location.href = URL_HYDROMETRIX; }}
         hrefPluvira="?app=pluvira"
         hrefSentria="?app=sentria"
-        hrefInventario="?app=inventario"
         hrefCaudixa={URL_HYDROMETRIX}
       />
     );
