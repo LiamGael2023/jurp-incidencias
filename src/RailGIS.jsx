@@ -28,10 +28,12 @@ const ANCHO_ABIERTO = '286px';    // 264 (rail) + 22 (aire)
 const ANCHO_CERRADO = '88px';     // 66 + 22
 
 // La app por la que se entró: tiñe el rail y se muestra bajo el logo NEXHYDRO.
+// Las que aún no tienen logo se rotulan con texto (ver railx-app-texto).
 const APPS = {
   pluvira:     { logo: logoPluvira,     min: minPluvira,     color: '#EE7B12', nombre: 'PLUVIRA' },
   sentria:     { logo: logoSentria,     min: minSentria,     color: '#2E9E4F', nombre: 'SENTRIA' },
   hydrometrix: { logo: logoHydrometrix, min: minHydrometrix, color: '#1268C3', nombre: 'HYDROMETRIX' },
+  inventario:  { logo: null,            min: null,           color: '#0CA678', nombre: 'INVENTARIO' },
 };
 
 export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogout, app }) {
@@ -78,11 +80,30 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
 
         <hr className="railx-divisor" />
 
-        {/* ── módulo activo dentro del ecosistema ── */}
+        {/* ── módulo activo dentro del ecosistema ──
+            Si el módulo todavía no tiene logo, se rotula con su nombre en
+            texto para que el rail no quede mudo. */}
         <div className="railx-app">
           <span className="railx-app-etq">Módulo</span>
-          <img className="railx-app-logo" src={info.logo} alt={info.nombre} />
-          <img className="railx-app-min" src={info.min} alt={info.nombre} title={info.nombre} />
+          {info.logo ? (
+            <>
+              <img className="railx-app-logo" src={info.logo} alt={info.nombre} />
+              <img className="railx-app-min" src={info.min} alt={info.nombre} title={info.nombre} />
+            </>
+          ) : (
+            <>
+              <span className="railx-app-logo" style={{
+                display: 'block', fontFamily: "'Sora', system-ui, sans-serif",
+                fontWeight: 800, fontSize: 21, letterSpacing: '.06em',
+                color: info.color, lineHeight: 1.15,
+              }}>{info.nombre}</span>
+              <span className="railx-app-min" title={info.nombre} style={{
+                display: 'block', fontFamily: "'Sora', system-ui, sans-serif",
+                fontWeight: 800, fontSize: 13, letterSpacing: '.04em',
+                color: info.color, textAlign: 'center',
+              }}>INV</span>
+            </>
+          )}
         </div>
 
         {/* ── navegación ── */}

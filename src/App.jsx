@@ -14,7 +14,9 @@ import Vigilancia from './Vigilancia';
 import Reportes from './Reportes';
 import Maquinaria from './Maquinaria';
 import Partes from './Partes';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList } from 'react-icons/fa';
+import MapaInventario from './MapaInventario';
+import ReportesInventario from './ReportesInventario';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
 const URL_HYDROMETRIX = 'http://sistema.jriegopresurizado.org.pe/';
@@ -28,15 +30,19 @@ const MENU = [
   { clave: 'reportes',     titulo: 'Reportes',      icono: <FaFilePdf />,       apps: ['pluvira'] },
   { clave: 'maquinaria',   titulo: 'Maquinaria',    icono: <FaTruck />,         apps: ['pluvira'] },
   { clave: 'partes',       titulo: 'Partes Diarios', icono: <FaClipboardList />, apps: ['pluvira'] },
+  // Módulo Inventario: visor propio, sin nada de incidencias.
+  { clave: 'inv-mapa',     titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,    apps: ['inventario'] },
+  { clave: 'inv-reportes', titulo: 'Reportes',      icono: <FaClipboardCheck />,  apps: ['inventario'] },
 ];
 
-const vistaInicial = (app) => (app === 'sentria' ? 'vigilancia' : 'mapa');
+const vistaInicial = (app) =>
+  app === 'sentria' ? 'vigilancia' : app === 'inventario' ? 'inv-mapa' : 'mapa';
 
 /* Lee ?app=pluvira | ?app=sentria de la URL. Sirve para abrir cada login
    directo en una pestaña nueva, saltando la intro. */
 const appDeURL = () => {
   const a = new URLSearchParams(window.location.search).get('app');
-  return a === 'pluvira' || a === 'sentria' ? a : null;
+  return ['pluvira', 'sentria', 'inventario'].includes(a) ? a : null;
 };
 
 function App() {
@@ -146,6 +152,21 @@ function App() {
 
   if (vistaActual === 'mapa') {
     return <MapaChavimochic {...propsRail} onVerIncidente={irAIncidente} />;
+  }
+
+  // ── Módulo Inventario ───────────────────────────────────────────────
+  // El visor trae su propio RailGIS: se monta a pantalla completa.
+  if (vistaActual === 'inv-mapa') {
+    return <MapaInventario {...propsRail} />;
+  }
+
+  if (vistaActual === 'inv-reportes') {
+    return (
+      <div className="maq">
+        <RailGIS {...propsRail} />
+        <div className="maq-main"><ReportesInventario /></div>
+      </div>
+    );
   }
 
   if (vistaActual === 'maquinaria') {
@@ -269,6 +290,7 @@ function App() {
           {vistaActual === 'reportes' && <Reportes />}
           {vistaActual === 'maquinaria' && <Maquinaria irAIncidente={irAIncidente} />}
           {vistaActual === 'partes' && <Partes irAIncidente={irAIncidente} />}
+          {vistaActual === 'inv-reportes' && <ReportesInventario />}
         </div>
       </div>
     </div>
