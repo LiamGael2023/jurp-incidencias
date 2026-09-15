@@ -31,7 +31,8 @@ const MENU = [
   { clave: 'maquinaria',   titulo: 'Maquinaria',    icono: <FaTruck />,         apps: ['pluvira'] },
   { clave: 'partes',       titulo: 'Partes Diarios', icono: <FaClipboardList />, apps: ['pluvira'] },
   // Inventario: rótulo de sección y sus dos vistas, al final del menú.
-  { clave: 'sec-inventario', titulo: 'Módulo Inventario', seccion: true, apps: ['pluvira'] },
+  { clave: 'sec-inventario', titulo: 'INVENTARIO', seccion: true,
+    icono: <FaClipboardCheck />, apps: ['pluvira'] },
   { clave: 'inv-mapa',     titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,   apps: ['pluvira'] },
   { clave: 'inv-reportes', titulo: 'Reportes',      icono: <FaClipboardCheck />, apps: ['pluvira'] },
 ];

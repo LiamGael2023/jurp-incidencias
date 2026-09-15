@@ -113,9 +113,16 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
         <ul className="railx-nav">
           {(menu || []).map(m => (
             m.seccion ? (
+              // Cabecera de módulo dentro del menú: mismo trato visual que el
+              // bloque "MÓDULO / PLUVIRA" de arriba, para que se lea como otro
+              // módulo y no como un grupo más de opciones.
               <li key={m.clave} className="railx-seccion" aria-hidden="true">
-                <span className="railx-seccion-linea" />
-                <span className="railx-seccion-txt">{m.titulo}</span>
+                <hr className="railx-divisor railx-seccion-hr" />
+                <span className="railx-seccion-etq">Módulo</span>
+                <span className="railx-seccion-mod">
+                  <span className="railx-seccion-ico">{m.icono}</span>
+                  <span className="railx-seccion-txt">{m.titulo}</span>
+                </span>
               </li>
             ) : (
               <li key={m.clave}>
@@ -134,21 +141,31 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
 
         {/* Estilos del rótulo de sección: van aquí para no tocar RailGIS.css */}
         <style>{`
-          .railx-seccion{
-            display:flex; align-items:center; gap:9px;
-            padding:16px 18px 6px; pointer-events:none;
+          .railx-seccion{ display:block; pointer-events:none; list-style:none; }
+          .railx-seccion-hr{ margin:14px 0 0; }
+          .railx-seccion-etq{
+            display:block; padding:14px 18px 0;
+            font-size:10.5px; font-weight:800; letter-spacing:.14em;
+            text-transform:uppercase; color:#8aa4bd;
+          }
+          .railx-seccion-mod{
+            display:flex; align-items:center; gap:10px;
+            padding:8px 18px 4px;
+          }
+          .railx-seccion-ico{
+            display:flex; align-items:center; justify-content:center;
+            width:34px; height:34px; flex:0 0 34px; border-radius:10px;
+            background:var(--sec, #0CA678); color:#fff; font-size:17px;
           }
           .railx-seccion-txt{
-            font-size:10.5px; font-weight:800; letter-spacing:.12em;
-            text-transform:uppercase; color:#8aa4bd; white-space:nowrap;
+            font-family:'Sora', system-ui, sans-serif;
+            font-size:21px; font-weight:800; letter-spacing:.01em;
+            color:var(--sec, #0CA678); white-space:nowrap; line-height:1.1;
           }
-          .railx-seccion-linea{
-            flex:0 0 14px; height:2px; border-radius:2px; background:var(--app);
-            opacity:.55;
-          }
-          .railx.colapsado .railx-seccion{ padding:12px 14px 6px; }
+          /* Colapsado: solo cabe el icono, centrado bajo la línea. */
+          .railx.colapsado .railx-seccion-etq,
           .railx.colapsado .railx-seccion-txt{ display:none; }
-          .railx.colapsado .railx-seccion-linea{ flex:1; }
+          .railx.colapsado .railx-seccion-mod{ padding:10px 0 4px; justify-content:center; }
         `}</style>
 
         {/* ── perfil, al pie ── */}
