@@ -126,9 +126,11 @@ function App() {
       <Nexhidra
         onEntrar={() => salirDeIntro('pluvira')}
         onSentria={() => salirDeIntro('sentria')}
+        onInventario={() => salirDeIntro('inventario')}
         onCaudixa={() => { window.location.href = URL_HYDROMETRIX; }}
         hrefPluvira="?app=pluvira"
         hrefSentria="?app=sentria"
+        hrefInventario="?app=inventario"
         hrefCaudixa={URL_HYDROMETRIX}
       />
     );
