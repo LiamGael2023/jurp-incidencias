@@ -106,21 +106,50 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
           )}
         </div>
 
-        {/* ── navegación ── */}
+        {/* ── navegación ──
+            Una entrada con `seccion: true` no navega: es un rótulo que separa
+            bloques del menú. Al colapsar el rail se queda solo la línea, que
+            es lo único que cabe. */}
         <ul className="railx-nav">
           {(menu || []).map(m => (
-            <li key={m.clave}>
-              <button type="button"
-                className={vistaActual === m.clave ? 'activo' : ''}
-                onClick={() => onNavegar && onNavegar(m.clave)}
-                title={m.titulo}>
-                <span className="railx-ico">{m.icono}</span>
-                <span className="railx-label">{m.titulo}</span>
-                <span className="railx-tip">{m.titulo}</span>
-              </button>
-            </li>
+            m.seccion ? (
+              <li key={m.clave} className="railx-seccion" aria-hidden="true">
+                <span className="railx-seccion-linea" />
+                <span className="railx-seccion-txt">{m.titulo}</span>
+              </li>
+            ) : (
+              <li key={m.clave}>
+                <button type="button"
+                  className={vistaActual === m.clave ? 'activo' : ''}
+                  onClick={() => onNavegar && onNavegar(m.clave)}
+                  title={m.titulo}>
+                  <span className="railx-ico">{m.icono}</span>
+                  <span className="railx-label">{m.titulo}</span>
+                  <span className="railx-tip">{m.titulo}</span>
+                </button>
+              </li>
+            )
           ))}
         </ul>
+
+        {/* Estilos del rótulo de sección: van aquí para no tocar RailGIS.css */}
+        <style>{`
+          .railx-seccion{
+            display:flex; align-items:center; gap:9px;
+            padding:16px 18px 6px; pointer-events:none;
+          }
+          .railx-seccion-txt{
+            font-size:10.5px; font-weight:800; letter-spacing:.12em;
+            text-transform:uppercase; color:#8aa4bd; white-space:nowrap;
+          }
+          .railx-seccion-linea{
+            flex:0 0 14px; height:2px; border-radius:2px; background:var(--app);
+            opacity:.55;
+          }
+          .railx.colapsado .railx-seccion{ padding:12px 14px 6px; }
+          .railx.colapsado .railx-seccion-txt{ display:none; }
+          .railx.colapsado .railx-seccion-linea{ flex:1; }
+        `}</style>
 
         {/* ── perfil, al pie ── */}
         <hr className="railx-divisor railx-divisor-pie" />

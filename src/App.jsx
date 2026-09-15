@@ -30,9 +30,10 @@ const MENU = [
   { clave: 'reportes',     titulo: 'Reportes',      icono: <FaFilePdf />,       apps: ['pluvira'] },
   { clave: 'maquinaria',   titulo: 'Maquinaria',    icono: <FaTruck />,         apps: ['pluvira'] },
   { clave: 'partes',       titulo: 'Partes Diarios', icono: <FaClipboardList />, apps: ['pluvira'] },
-  // Inventario: visor propio y sus reportes, al final del menú.
-  { clave: 'inv-mapa',     titulo: 'Inventario GIS',       icono: <FaMapMarkedAlt />,   apps: ['pluvira'] },
-  { clave: 'inv-reportes', titulo: 'Inventario Reportes',  icono: <FaClipboardCheck />, apps: ['pluvira'] },
+  // Inventario: rótulo de sección y sus dos vistas, al final del menú.
+  { clave: 'sec-inventario', titulo: 'Módulo Inventario', seccion: true, apps: ['pluvira'] },
+  { clave: 'inv-mapa',     titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,   apps: ['pluvira'] },
+  { clave: 'inv-reportes', titulo: 'Reportes',      icono: <FaClipboardCheck />, apps: ['pluvira'] },
 ];
 
 const vistaInicial = (app) => (app === 'sentria' ? 'vigilancia' : 'mapa');
