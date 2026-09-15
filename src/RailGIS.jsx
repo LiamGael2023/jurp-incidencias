@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FaSignOutAlt, FaBars } from 'react-icons/fa';
+import { FaSignOutAlt, FaBars, FaChevronDown } from 'react-icons/fa';
 import logoNexhydro from './assets/nexhidra/logo-nexhydro.png';
 import logoNexhydroMin from './assets/nexhidra/logo-nexhydro-min.png';
 import logoHydrometrix from './assets/nexhidra/logo-hydrometrix.png';
@@ -40,6 +40,21 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
   const [colapsado, setColapsado] = useState(
     () => localStorage.getItem('railColapsado') === '1'
   );
+
+  // Secciones plegadas, por clave. Se guarda para que el menú no se vuelva a
+  // desplegar entero en cada navegación (cada vista monta su propio rail).
+  const [seccionesCerradas, setSeccionesCerradas] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('railSecciones') || '{}'); }
+    catch (e) { return {}; }
+  });
+
+  const alternarSeccion = (clave) => {
+    setSeccionesCerradas(prev => {
+      const sig = { ...prev, [clave]: !prev[clave] };
+      localStorage.setItem('railSecciones', JSON.stringify(sig));
+      return sig;
+    });
+  };
 
   // Publica el ancho para que .inc-main / .est-main / .rep-main lo usen.
   useEffect(() => {
@@ -111,38 +126,62 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
             bloques del menú. Al colapsar el rail se queda solo la línea, que
             es lo único que cabe. */}
         <ul className="railx-nav">
-          {(menu || []).map(m => (
-            m.seccion ? (
-              // Cabecera de módulo dentro del menú: mismo trato visual que el
-              // bloque "MÓDULO / PLUVIRA" de arriba, para que se lea como otro
-              // módulo y no como un grupo más de opciones.
-              <li key={m.clave} className="railx-seccion" aria-hidden="true">
-                <hr className="railx-divisor railx-seccion-hr" />
-                <span className="railx-seccion-etq">Módulo</span>
-                <span className="railx-seccion-mod">
-                  <span className="railx-seccion-ico">{m.icono}</span>
-                  <span className="railx-seccion-txt">{m.titulo}</span>
-                </span>
-              </li>
-            ) : (
-              <li key={m.clave}>
-                <button type="button"
-                  className={vistaActual === m.clave ? 'activo' : ''}
-                  onClick={() => onNavegar && onNavegar(m.clave)}
-                  title={m.titulo}>
-                  <span className="railx-ico">{m.icono}</span>
-                  <span className="railx-label">{m.titulo}</span>
-                  <span className="railx-tip">{m.titulo}</span>
-                </button>
-              </li>
-            )
-          ))}
+          {(() => {
+            // Las opciones pertenecen a la última sección declarada. Las que
+            // van antes de la primera no tienen sección y siempre se ven.
+            let seccionActual = null;
+            return (menu || []).map(m => {
+              if (m.seccion) {
+                seccionActual = m.clave;
+                const cerrada = !!seccionesCerradas[m.clave];
+                return (
+                  // Cabecera de módulo: mismo trato visual que el bloque
+                  // "MÓDULO / PLUVIRA" de arriba, y pulsable para plegarlo.
+                  <li key={m.clave} className="railx-seccion">
+                    <hr className="railx-divisor railx-seccion-hr" />
+                    <button type="button" className="railx-seccion-btn"
+                      onClick={() => alternarSeccion(m.clave)}
+                      title={cerrada ? `Mostrar ${m.titulo}` : `Ocultar ${m.titulo}`}
+                      aria-expanded={!cerrada}>
+                      <span className="railx-seccion-etq">Módulo</span>
+                      <span className="railx-seccion-mod">
+                        <span className="railx-seccion-ico">{m.icono}</span>
+                        <span className="railx-seccion-txt">{m.titulo}</span>
+                        <span className={`railx-seccion-chev ${cerrada ? 'cerrada' : ''}`}>
+                          <FaChevronDown />
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              }
+              if (seccionActual && seccionesCerradas[seccionActual]) return null;
+              return (
+                <li key={m.clave}>
+                  <button type="button"
+                    className={vistaActual === m.clave ? 'activo' : ''}
+                    onClick={() => onNavegar && onNavegar(m.clave)}
+                    title={m.titulo}>
+                    <span className="railx-ico">{m.icono}</span>
+                    <span className="railx-label">{m.titulo}</span>
+                    <span className="railx-tip">{m.titulo}</span>
+                  </button>
+                </li>
+              );
+            });
+          })()}
         </ul>
 
         {/* Estilos del rótulo de sección: van aquí para no tocar RailGIS.css */}
         <style>{`
-          .railx-seccion{ display:block; pointer-events:none; list-style:none; }
+          .railx-seccion{ display:block; list-style:none; }
           .railx-seccion-hr{ margin:14px 0 0; }
+          .railx-seccion-btn{
+            width:100%; background:none; border:none; padding:0; margin:0;
+            text-align:left; cursor:pointer; font:inherit; color:inherit;
+            border-radius:12px; transition:background .18s;
+          }
+          .railx-seccion-btn:hover{ background:rgba(12,166,120,.08); }
           .railx-seccion-etq{
             display:block; padding:14px 18px 0;
             font-size:10.5px; font-weight:800; letter-spacing:.14em;
@@ -150,8 +189,13 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
           }
           .railx-seccion-mod{
             display:flex; align-items:center; gap:10px;
-            padding:8px 18px 4px;
+            padding:8px 18px 8px;
           }
+          .railx-seccion-chev{
+            margin-left:auto; display:flex; font-size:12px; color:#8aa4bd;
+            transition:transform .22s;
+          }
+          .railx-seccion-chev.cerrada{ transform:rotate(-90deg); }
           .railx-seccion-ico{
             display:flex; align-items:center; justify-content:center;
             width:34px; height:34px; flex:0 0 34px; border-radius:10px;
@@ -164,8 +208,9 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
           }
           /* Colapsado: solo cabe el icono, centrado bajo la línea. */
           .railx.colapsado .railx-seccion-etq,
-          .railx.colapsado .railx-seccion-txt{ display:none; }
-          .railx.colapsado .railx-seccion-mod{ padding:10px 0 4px; justify-content:center; }
+          .railx.colapsado .railx-seccion-txt,
+          .railx.colapsado .railx-seccion-chev{ display:none; }
+          .railx.colapsado .railx-seccion-mod{ padding:10px 0 8px; justify-content:center; }
         `}</style>
 
         {/* ── perfil, al pie ── */}
