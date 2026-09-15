@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FaSignOutAlt, FaBars, FaChevronDown } from 'react-icons/fa';
+import { FaSignOutAlt, FaBars, FaChevronDown, FaClipboardCheck } from 'react-icons/fa';
 import logoNexhydro from './assets/nexhidra/logo-nexhydro.png';
 import logoNexhydroMin from './assets/nexhidra/logo-nexhydro-min.png';
 import logoHydrometrix from './assets/nexhidra/logo-hydrometrix.png';
@@ -33,7 +33,8 @@ const APPS = {
   pluvira:     { logo: logoPluvira,     min: minPluvira,     color: '#EE7B12', nombre: 'PLUVIRA' },
   sentria:     { logo: logoSentria,     min: minSentria,     color: '#2E9E4F', nombre: 'SENTRIA' },
   hydrometrix: { logo: logoHydrometrix, min: minHydrometrix, color: '#1268C3', nombre: 'HYDROMETRIX' },
-  inventario:  { logo: null,            min: null,           color: '#0CA678', nombre: 'INVENTARIO' },
+  inventario:  { logo: null,            min: null,           color: '#0CA678', nombre: 'INVENTARIO',
+                 icono: <FaClipboardCheck /> },
 };
 
 export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogout, app }) {
@@ -96,8 +97,12 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
         <hr className="railx-divisor" />
 
         {/* ── módulo activo dentro del ecosistema ──
+            Solo cuando el menú no declara secciones propias: si las declara,
+            cada módulo lleva su cabecera dentro del menú y este bloque
+            duplicaría la información.
             Si el módulo todavía no tiene logo, se rotula con su nombre en
             texto para que el rail no quede mudo. */}
+        {!(menu || []).some(m => m.seccion) && (
         <div className="railx-app">
           <span className="railx-app-etq">Módulo</span>
           {info.logo ? (
@@ -120,6 +125,7 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
             </>
           )}
         </div>
+        )}
 
         {/* ── navegación ──
             Una entrada con `seccion: true` no navega: es un rótulo que separa
@@ -134,24 +140,35 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
               if (m.seccion) {
                 seccionActual = m.clave;
                 const cerrada = !!seccionesCerradas[m.clave];
+                // Los datos visuales salen de APPS: así el logo y el color de
+                // cada módulo se definen en un solo sitio.
+                const mod = APPS[m.modulo] || {};
+                const rotulo = m.titulo || mod.nombre || '';
                 return (
-                  // Cabecera de módulo: mismo trato visual que el bloque
-                  // "MÓDULO / PLUVIRA" de arriba, y pulsable para plegarlo.
-                  <li key={m.clave} className="railx-seccion">
+                  <li key={m.clave} className="railx-seccion"
+                      style={{ '--sec': mod.color || '#0CA678' }}>
                     <hr className="railx-divisor railx-seccion-hr" />
                     <button type="button" className="railx-seccion-btn"
                       onClick={() => alternarSeccion(m.clave)}
-                      title={cerrada ? `Mostrar ${m.titulo}` : `Ocultar ${m.titulo}`}
+                      title={cerrada ? `Mostrar ${rotulo}` : `Ocultar ${rotulo}`}
                       aria-expanded={!cerrada}>
                       <span className="railx-seccion-etq">Módulo</span>
                       <span className="railx-seccion-mod">
-                        <span className="railx-seccion-ico">{m.icono}</span>
-                        <span className="railx-seccion-txt">{m.titulo}</span>
+                        {mod.logo ? (
+                          <img className="railx-seccion-logo" src={mod.logo} alt={rotulo} />
+                        ) : (
+                          <>
+                            <span className="railx-seccion-ico">{m.icono || mod.icono}</span>
+                            <span className="railx-seccion-txt">{rotulo}</span>
+                          </>
+                        )}
                         <span className={`railx-seccion-chev ${cerrada ? 'cerrada' : ''}`}>
                           <FaChevronDown />
                         </span>
                       </span>
                     </button>
+                    {/* Colapsado: el logo no cabe, se usa la versión mínima */}
+                    {mod.min && <img className="railx-seccion-min" src={mod.min} alt={rotulo} />}
                   </li>
                 );
               }
@@ -175,13 +192,17 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
         {/* Estilos del rótulo de sección: van aquí para no tocar RailGIS.css */}
         <style>{`
           .railx-seccion{ display:block; list-style:none; }
-          .railx-seccion-hr{ margin:14px 0 0; }
+          .railx-seccion-hr{ margin:12px 0 0; }
+          /* !important: .railx-nav button ya trae display:flex y padding
+             propios, y sin esto el rótulo y el logo salen en la misma fila. */
           .railx-seccion-btn{
-            width:100%; background:none; border:none; padding:0; margin:0;
-            text-align:left; cursor:pointer; font:inherit; color:inherit;
-            border-radius:12px; transition:background .18s;
+            display:block !important; width:100%;
+            background:none !important; border:none; padding:0 !important;
+            margin:0; text-align:left; cursor:pointer; font:inherit;
+            color:inherit; border-radius:12px; transition:background .18s;
+            height:auto !important;
           }
-          .railx-seccion-btn:hover{ background:rgba(12,166,120,.08); }
+          .railx-seccion-btn:hover{ background:rgba(0,0,0,.035) !important; }
           .railx-seccion-etq{
             display:block; padding:14px 18px 0;
             font-size:10.5px; font-weight:800; letter-spacing:.14em;
@@ -189,8 +210,10 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
           }
           .railx-seccion-mod{
             display:flex; align-items:center; gap:10px;
-            padding:8px 18px 8px;
+            padding:6px 18px 10px;
           }
+          .railx-seccion-logo{ height:30px; width:auto; object-fit:contain; display:block; }
+          .railx-seccion-min{ display:none; }
           .railx-seccion-chev{
             margin-left:auto; display:flex; font-size:12px; color:#8aa4bd;
             transition:transform .22s;
@@ -207,10 +230,15 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
             color:var(--sec, #0CA678); white-space:nowrap; line-height:1.1;
           }
           /* Colapsado: solo cabe el icono, centrado bajo la línea. */
+          /* Colapsado: solo el icono o el logotipo mínimo, centrados. */
           .railx.colapsado .railx-seccion-etq,
           .railx.colapsado .railx-seccion-txt,
-          .railx.colapsado .railx-seccion-chev{ display:none; }
+          .railx.colapsado .railx-seccion-chev,
+          .railx.colapsado .railx-seccion-logo{ display:none; }
           .railx.colapsado .railx-seccion-mod{ padding:10px 0 8px; justify-content:center; }
+          .railx.colapsado .railx-seccion-min{
+            display:block; width:30px; height:auto; margin:0 auto 8px;
+          }
         `}</style>
 
         {/* ── perfil, al pie ── */}

@@ -22,7 +22,11 @@ import logo from './assets/logo1.png';
 const URL_HYDROMETRIX = 'http://sistema.jriegopresurizado.org.pe/';
 
 /* Menu completo. "apps" indica desde que tarjeta de NEXHIDRO se ve cada opcion. */
+// El menú se agrupa por MÓDULO. Cada entrada con `seccion: true` es una
+// cabecera plegable; las opciones que vienen debajo le pertenecen hasta la
+// siguiente cabecera. `modulo` es la clave del logo y el color en RailGIS.
 const MENU = [
+  { clave: 'sec-pluvira', seccion: true, modulo: 'pluvira', apps: ['pluvira'] },
   { clave: 'mapa',         titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,  apps: ['pluvira'] },
   { clave: 'lista',        titulo: 'Incidentes',    icono: <FaListUl />,        apps: ['pluvira'] },
   { clave: 'vigilancia',   titulo: 'Vigilancia',    icono: <FaShieldAlt />,     apps: ['sentria'] },
@@ -31,8 +35,7 @@ const MENU = [
   { clave: 'maquinaria',   titulo: 'Maquinaria',    icono: <FaTruck />,         apps: ['pluvira'] },
   { clave: 'partes',       titulo: 'Partes Diarios', icono: <FaClipboardList />, apps: ['pluvira'] },
   // Inventario: rótulo de sección y sus dos vistas, al final del menú.
-  { clave: 'sec-inventario', titulo: 'INVENTARIO', seccion: true,
-    icono: <FaClipboardCheck />, apps: ['pluvira'] },
+  { clave: 'sec-inventario', seccion: true, modulo: 'inventario', apps: ['pluvira'] },
   { clave: 'inv-mapa',     titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,   apps: ['pluvira'] },
   { clave: 'inv-reportes', titulo: 'Reportes',      icono: <FaClipboardCheck />, apps: ['pluvira'] },
 ];
