@@ -214,8 +214,11 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
             display:flex; align-items:center; gap:10px;
             padding:6px 18px 10px;
           }
+          /* Por ALTURA, no por ancho: los lockups tienen proporciones
+             distintas (PLUVIRA es más compacto, INVENTARIO más alargado) y
+             fijando el ancho uno acababa más alto que el otro. */
           .railx-seccion-logo{
-            height:auto; width:100%; max-width:170px; object-fit:contain; display:block;
+            height:30px; width:auto; max-width:100%; object-fit:contain; display:block;
           }
           .railx-seccion-min{ display:none; }
           .railx-seccion-chev{
