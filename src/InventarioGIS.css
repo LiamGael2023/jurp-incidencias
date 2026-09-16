@@ -1035,3 +1035,29 @@
 .inv-modal-body::-webkit-scrollbar { width: 8px; }
 .inv-modal-body::-webkit-scrollbar-thumb { background: #cbd9e8; border-radius: 4px; }
 .inv-modal-body::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Desplegables nativos ───────────────────────────────────────────────
+   La lista de opciones de un <select> la dibuja el sistema operativo, no
+   el CSS de la página: hereda el color-scheme del documento, y como el
+   visor va en oscuro, las opciones salían negras sobre negro. Declarar
+   el esquema claro en el modal obliga al navegador a pintar la lista en
+   claro; las reglas de <option> son el respaldo para Firefox y Linux,
+   donde sí se pueden estilar. */
+.inv-modal,
+.inv-campo select,
+.inv-campo input,
+.inv-campo textarea {
+  color-scheme: light;
+}
+
+.inv-campo select option {
+  background: #fff;
+  color: #1d273b;
+  padding: 6px 10px;
+}
+
+.inv-campo select option:checked,
+.inv-campo select option:hover {
+  background: #e0f2fe;
+  color: #0B2A5B;
+}
