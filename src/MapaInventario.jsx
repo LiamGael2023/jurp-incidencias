@@ -11,7 +11,7 @@ import {
 } from 'react-icons/fa';
 import { MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
 import './MapaHerramientas.css';
-import { useInventario, CapasInventario, PanelInventario } from './InventarioGIS';
+import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion } from './InventarioGIS';
 
 /**
  * Visor del módulo INVENTARIO.
@@ -223,6 +223,10 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
       {/* ══════════════ PANEL DEL INVENTARIO ══════════════ */}
       <PanelInventario inv={inv}
         onVolar={(b) => mapRef.current?.fitBounds(b, { padding: [50, 50], maxZoom: 16 })} />
+
+      {/* Formulario de evaluación. Sin esto, el botón "Evaluar" del popup
+          cambia el estado pero no se abre nada en pantalla. */}
+      <ModalEvaluacion inv={inv} />
 
       {/* ══════════════ LEYENDA ══════════════ */}
       <div className="gis-leyenda gis-glass">
