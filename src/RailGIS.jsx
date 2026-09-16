@@ -8,6 +8,8 @@ import logoSentria from './assets/nexhidra/logo-sentria.png';
 import minHydrometrix from './assets/nexhidra/logo-hydrometrix-min.png';
 import minPluvira from './assets/nexhidra/logo-pluvira-min.png';
 import minSentria from './assets/nexhidra/logo-sentria-min.png';
+import logoInventario from './assets/nexhidra/logo-inventario.png';
+import minInventario from './assets/nexhidra/logo-inventario-min.png';
 import './RailGIS.css';
 
 /**
@@ -33,7 +35,7 @@ const APPS = {
   pluvira:     { logo: logoPluvira,     min: minPluvira,     color: '#EE7B12', nombre: 'PLUVIRA' },
   sentria:     { logo: logoSentria,     min: minSentria,     color: '#2E9E4F', nombre: 'SENTRIA' },
   hydrometrix: { logo: logoHydrometrix, min: minHydrometrix, color: '#1268C3', nombre: 'HYDROMETRIX' },
-  inventario:  { logo: null,            min: null,           color: '#0CA678', nombre: 'INVENTARIO',
+  inventario:  { logo: logoInventario,  min: minInventario,  color: '#0CA678', nombre: 'INVENTARIO',
                  icono: <FaClipboardCheck /> },
 };
 
@@ -212,7 +214,9 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
             display:flex; align-items:center; gap:10px;
             padding:6px 18px 10px;
           }
-          .railx-seccion-logo{ height:30px; width:auto; object-fit:contain; display:block; }
+          .railx-seccion-logo{
+            height:auto; width:100%; max-width:170px; object-fit:contain; display:block;
+          }
           .railx-seccion-min{ display:none; }
           .railx-seccion-chev{
             margin-left:auto; display:flex; font-size:12px; color:#8aa4bd;
