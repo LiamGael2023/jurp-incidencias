@@ -852,3 +852,186 @@
   font-style: italic;
   color: #6f95b1;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MODAL DE EVALUACIÓN — tema claro
+   ═══════════════════════════════════════════════════════════════════════
+   Pega este bloque AL FINAL de src/InventarioGIS.css.
+
+   Por qué claro y no oscuro: el formulario se abre sobre el mapa satelital,
+   y un panel oscuro translúcido sobre imágenes de terreno deja los rótulos
+   y los selects casi ilegibles. El resto de formularios del sistema
+   (gestión de incidencias, partes diarios) ya son claros, así que además
+   gana coherencia. El panel de capas se queda oscuro: ese sí funciona,
+   porque es una lista corta sobre el borde de la pantalla.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Fondo: más oscuro y con desenfoque, para que el formulario despegue */
+.inv-modal-fondo {
+  background: rgba(4, 12, 24, .62) !important;
+  backdrop-filter: blur(3px);
+}
+
+.inv-modal {
+  background: #fff !important;
+  border: 1px solid #d3e4f4 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 24px 60px rgba(11, 42, 91, .28) !important;
+  backdrop-filter: none !important;
+  color: #1d273b !important;
+  max-width: 480px;
+  width: 100%;
+}
+
+/* ── cabecera ── */
+.inv-modal-head {
+  background: linear-gradient(120deg, #0B2A5B 0%, #12508f 60%, #1268C3 100%);
+  border-bottom: none !important;
+  border-radius: 14px 14px 0 0;
+  padding: 14px 18px !important;
+}
+.inv-modal-tit {
+  color: #fff !important;
+  font-size: 17px !important;
+  font-weight: 800 !important;
+}
+.inv-modal-sub {
+  color: #9fccf0 !important;
+  font-size: 11.5px !important;
+}
+.inv-modal-previa {
+  margin-left: 7px; padding: 1px 7px; border-radius: 4px;
+  background: rgba(255, 255, 255, .18); color: #fff;
+  font-size: 10px; font-weight: 700; letter-spacing: .03em;
+}
+.inv-modal-head .gis-tool {
+  background: rgba(255, 255, 255, .16) !important;
+  border-color: rgba(255, 255, 255, .3) !important;
+  color: #fff !important;
+}
+
+/* ── cuerpo ── */
+.inv-modal-body {
+  background: #fff !important;
+  padding: 16px 18px !important;
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
+.inv-campo { margin-bottom: 13px; }
+
+.inv-campo label {
+  display: block;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: #48617c !important;
+  margin-bottom: 5px;
+}
+
+.inv-req { color: #d63939 !important; margin-left: 3px; }
+
+/* El dato que ya tenía el inventario, para saber qué se está cambiando */
+.inv-campo-base {
+  margin-left: 8px; font-size: 10.5px; font-weight: 600;
+  color: #b45309; background: #fff7ed; border: 1px solid #fed7aa;
+  border-radius: 4px; padding: 1px 6px;
+}
+
+.inv-campo input[type="text"],
+.inv-campo input[type="number"],
+.inv-campo select,
+.inv-campo textarea {
+  width: 100%;
+  background: #f7fafd !important;
+  border: 1px solid #cbd9e8 !important;
+  border-radius: 8px !important;
+  color: #1d273b !important;
+  font-size: 13.5px !important;
+  font-family: inherit;
+  padding: 9px 11px !important;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.inv-campo select { cursor: pointer; }
+
+.inv-campo input::placeholder,
+.inv-campo textarea::placeholder { color: #9db2c7 !important; }
+
+.inv-campo input:focus,
+.inv-campo select:focus,
+.inv-campo textarea:focus {
+  background: #fff !important;
+  border-color: #35B6E9 !important;
+  box-shadow: 0 0 0 3px rgba(53, 182, 233, .16);
+}
+
+/* Fila con la casilla de mantenimiento y su prioridad */
+.inv-campo-fila {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-top: 4px;
+}
+.inv-campo-fila label {
+  display: flex; align-items: center; gap: 7px;
+  margin-bottom: 0; cursor: pointer;
+}
+.inv-campo-fila input[type="checkbox"] {
+  width: 16px; height: 16px; accent-color: #0CA678; cursor: pointer;
+}
+.inv-campo-fila select { width: auto; min-width: 140px; }
+
+/* Separador de bloque ("Registro") */
+.inv-modal-sep {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; color: #7b93ad !important;
+  margin: 18px 0 11px; padding-top: 13px;
+  border-top: 1px solid #e6eef7;
+}
+
+/* ── avisos ── */
+.inv-modal .inv-error {
+  display: flex; align-items: center; gap: 8px;
+  background: #fef2f2 !important; border: 1px solid #fecaca !important;
+  color: #b91c1c !important; border-radius: 8px;
+  padding: 9px 12px; font-size: 12.5px; margin-top: 4px;
+}
+.inv-modal .inv-cargando {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  color: #5b7590 !important; font-size: 13px; padding: 26px 0;
+}
+
+/* ── pie ── */
+.inv-modal-pie {
+  background: #f8fafc !important;
+  border-top: 1px solid #e6eef7 !important;
+  border-radius: 0 0 14px 14px;
+  padding: 13px 18px !important;
+  display: flex; justify-content: flex-end; gap: 9px;
+}
+
+.inv-btn-sec {
+  background: #fff !important;
+  border: 1px solid #cbd9e8 !important;
+  color: #5b7590 !important;
+  border-radius: 9px; padding: 9px 18px;
+  font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.inv-btn-sec:hover { background: #eef4fa !important; border-color: #9fc9ec !important; }
+
+/* Verde: el color del módulo Inventario, no el ámbar de antes */
+.inv-btn-pri {
+  background: #0CA678 !important;
+  border: none !important;
+  color: #fff !important;
+  border-radius: 9px; padding: 9px 20px;
+  font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
+  box-shadow: 0 3px 10px rgba(12, 166, 120, .32);
+  transition: background .15s, transform .15s;
+}
+.inv-btn-pri:hover:not(:disabled) { background: #0b9268 !important; transform: translateY(-1px); }
+.inv-btn-pri:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
+
+/* Scrollbar del cuerpo, acorde al tema claro */
+.inv-modal-body::-webkit-scrollbar { width: 8px; }
+.inv-modal-body::-webkit-scrollbar-thumb { background: #cbd9e8; border-radius: 4px; }
+.inv-modal-body::-webkit-scrollbar-track { background: transparent; }
