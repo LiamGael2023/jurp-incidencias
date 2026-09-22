@@ -1,38 +1,31 @@
 /**
  * Lluvia de una estación, leída del endpoint filtered-data de JURP.
  *
- * Pluviómetros y estaciones Davis no guardan la lluvia igual:
+ * Todas las estaciones se consultan igual: metric 'rainfall_mm', y el total
+ * del día sale de 'total_precipitation', que calcula el servidor.
  *
- *   pluviómetro   → metric 'rainfall_mm': cada lectura es lo que cayó en ese
- *                   intervalo. El total del día es la suma.
- *   estación Davis → metric 'rainfall_mm_per_day': WeatherLink v1 solo entrega
- *                   el ACUMULADO DEL DÍA en cada snapshot ('rainfall_mm' viene
- *                   vacío). El total del día es el último valor, y lo que cayó
- *                   en una hora es la diferencia entre acumulados.
+ * Antes había que distinguir el tipo de equipo, porque las Davis de la
+ * generación v1 tienen 'rainfall_mm' vacío y solo guardan el acumulado del
+ * día. Eso ahora lo resuelve el backend (ver _derivar_intervalos en
+ * src/apps/davis/views.py): cuando una estación no tiene el campo, deriva la
+ * serie restando acumulados consecutivos. La regla vive en un solo lugar, y
+ * una estación nueva funciona sin tocar el cliente.
  *
- * Con Davis no se usa 'total_precipitation': el servidor suma todos los
- * acumulados y el resultado sale multiplicado por el número de lecturas.
- *
- * Si la estación no tiene ninguna lectura en el día se marca 'sinDatos':
- * "0 mm" y "no hay dato" no son lo mismo y el mapa no debe confundirlos.
+ * Las funciones siguen aceptando el parámetro 'tipo' para no obligar a
+ * cambiar a quien las llama; ya no se usa.
  */
 
 export const fmtFecha = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-// Acepta el tipo del mapa ('davis') y el del backend ('estacion_davis').
-export const esDavis = (tipo) => tipo === 'davis' || tipo === 'estacion_davis';
-
-export const metricaLluvia = (tipo) => (esDavis(tipo) ? 'rainfall_mm_per_day' : 'rainfall_mm');
-
 // Coordenadas 0,0 = estación sin ubicar en el backend (caería frente a África).
 export const sinUbicacion = (lat, lng) =>
   !Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0);
 
-async function pedirDia(stationId, tipo, fecha, token) {
+async function pedirDia(stationId, fecha, token) {
   const f = fmtFecha(fecha);
   const url = `/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${f}&end_date=${f}`
-    + `&station_id=${stationId}&metric=${metricaLluvia(tipo)}&max_points=9000`;
+    + `&station_id=${stationId}&metric=rainfall_mm&max_points=9000`;
   const r = await fetch(url, { headers: { Authorization: `Token ${token}` } });
   if (!r.ok) return null;
   const j = await r.json();
@@ -47,24 +40,23 @@ async function pedirDia(stationId, tipo, fecha, token) {
 /**
  * Total de un día.
  * → { mm, lecturas, sinDatos }
+ *
+ * 'sinDatos' distingue "la estación no reportó" de "reportó y no llovió":
+ * mostrar 0 mm en el primer caso afirmaría algo que no se sabe.
  */
 export async function lluviaDelDia(stationId, tipo, fecha, token) {
   try {
-    const res = await pedirDia(stationId, tipo, fecha, token);
+    const res = await pedirDia(stationId, fecha, token);
     if (!res) return { mm: 0, lecturas: 0, sinDatos: true };
+
     const { json, lecturas } = res;
     const n = typeof json.stats?.count === 'number' ? json.stats.count : lecturas.length;
     if (!n) return { mm: 0, lecturas: 0, sinDatos: true };
 
-    let mm;
-    if (esDavis(tipo)) {
-      // El acumulado solo sube durante el día: el máximo es el total.
-      mm = lecturas.reduce((m, x) => Math.max(m, x.v), 0);
-    } else if (typeof json.total_precipitation === 'number') {
-      mm = json.total_precipitation;
-    } else {
-      mm = lecturas.reduce((a, x) => a + x.v, 0);
-    }
+    const mm = typeof json.total_precipitation === 'number'
+      ? json.total_precipitation
+      : lecturas.reduce((a, x) => a + x.v, 0);
+
     return { mm, lecturas: n, sinDatos: false };
   } catch (e) {
     return { mm: 0, lecturas: 0, sinDatos: true };
@@ -74,31 +66,21 @@ export async function lluviaDelDia(stationId, tipo, fecha, token) {
 /**
  * Lluvia del día hora por hora.
  * → { horas: [24 números] | [], ultimo: {fecha, valor, hora} | null, lecturas }
- *   'horas' vacío cuando no hay lecturas, para que el gráfico diga "sin datos"
- *   en vez de dibujar 24 ceros.
+ *   'horas' vacío cuando no hay lecturas, para que el gráfico diga "sin
+ *   datos" en vez de dibujar 24 ceros.
  */
 export async function lluviaPorHora(stationId, tipo, fecha, token) {
   try {
-    const res = await pedirDia(stationId, tipo, fecha, token);
+    const res = await pedirDia(stationId, fecha, token);
     if (!res || !res.lecturas.length) return { horas: [], ultimo: null, lecturas: 0 };
 
     const horas = new Array(24).fill(0);
     let ultimo = null;
-    let previo = 0;   // acumulado anterior (solo Davis)
 
     for (const x of res.lecturas) {
-      let cayo;
-      if (esDavis(tipo)) {
-        // Diferencia con el acumulado anterior. Si baja, la consola reinició
-        // el contador: lo leído es lo caído desde el reinicio.
-        cayo = x.v >= previo ? x.v - previo : x.v;
-        previo = x.v;
-      } else {
-        cayo = x.v;
-      }
-      if (cayo <= 0) continue;
-      horas[x.t.getHours()] += cayo;
-      ultimo = { fecha: x.t, valor: cayo, hora: x.t.getHours() };
+      if (x.v <= 0) continue;
+      horas[x.t.getHours()] += x.v;
+      ultimo = { fecha: x.t, valor: x.v, hora: x.t.getHours() };
     }
     return { horas, ultimo, lecturas: res.lecturas.length };
   } catch (e) {
