@@ -2,11 +2,19 @@ import { useState, useEffect } from 'react';
 import { FaSyncAlt, FaShieldAlt, FaClock, FaCar, FaExclamationTriangle, FaChevronLeft, FaChevronRight, FaTimes, FaImage, FaMapMarkerAlt, FaUser, FaCalendarAlt, FaCheckCircle, FaSignInAlt, FaSignOutAlt } from 'react-icons/fa';
 import './Incidentes.css';
 
+// Todo pasa por el rewrite de vercel.json: /vigapi/* → gideonstudio /api/v1/*
+// Llamar al dominio absoluto lo bloquea CORS, porque el navegador no permite
+// que la web de Vercel consulte otro dominio sin su autorización expresa.
 const BASE = '/vigapi';
+
+// El servidor de vigilancia devuelve las imágenes con URL absoluta propia,
+// que no pasa por el rewrite. Se sirven directo desde ahí.
+const MEDIA = 'https://gideonstudio.duckdns.org';
 
 function Vigilancia() {
   const [tab, setTab] = useState('incidentes');
   const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState(null);
 
   // Data
   const [incidentes, setIncidentes] = useState([]);
@@ -26,32 +34,49 @@ function Vigilancia() {
   // ── Cargar datos ──────────────────────────────────────────────────────
   const cargarTodo = async () => {
     setCargando(true);
-    
-    // 🟢 TOKEN FIJO DE PRUEBAS (Reemplazar luego por localStorage)
-    const tokenPrueba = 'ae6a7e5db83827115227cd8597f157a5d69dd21b';
-    
-    // 🟢 Configuramos las cabeceras con el Token
+    setError(null);
+
+    // El token es el de la sesión de PLUVIRA, el mismo con el que se entró
+    // a la web. El backend de vigilancia lo valida contra PLUVIRA y lo
+    // acepta solo para consultar (ver auth_pluvira.py en el servidor).
+    const token = localStorage.getItem('userToken');
+    if (!token) {
+      setError('Sesión no iniciada. Vuelve a entrar al sistema.');
+      setCargando(false);
+      return;
+    }
+
     const opciones = {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Token ${tokenPrueba}`
-      }
+        'Authorization': `Token ${token}`,
+      },
     };
 
     try {
       const [rInc, rTur, rTra, rAle] = await Promise.all([
-        fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/lista/`, opciones),
-        fetch(`https://gideonstudio.duckdns.org/api/v1/incidentes/gestion/`, opciones),
+        fetch(`${BASE}/incidentes/lista/`, opciones),
+        fetch(`${BASE}/incidentes/gestion/`, opciones),
         fetch(`${BASE}/transito/`, opciones),
         fetch(`${BASE}/alertas/`, opciones),
       ]);
+
+      // Un 401 en todas significa que el backend todavía no reconoce el
+      // token de PLUVIRA. Se avisa en vez de mostrar tablas vacías, que
+      // se leerían como "no hay registros".
+      if ([rInc, rTur, rTra, rAle].every(r => r.status === 401)) {
+        setError('El servidor de vigilancia no aceptó la sesión. Revisa la integración con PLUVIRA.');
+      }
 
       if (rInc.ok) { const d = await rInc.json(); setIncidentes(Array.isArray(d) ? d : d.results || []); }
       if (rTur.ok) { const d = await rTur.json(); setTurnos(Array.isArray(d) ? d : d.results || []); }
       if (rTra.ok) { const d = await rTra.json(); setTransitos(Array.isArray(d) ? d : d.results || []); }
       if (rAle.ok) { const d = await rAle.json(); setAlertas(Array.isArray(d) ? d : d.results || []); }
-    } catch(e) { console.error('Error cargando vigilancia:', e); }
+    } catch (e) {
+      console.error('Error cargando vigilancia:', e);
+      setError('No se pudo conectar con el servidor de vigilancia.');
+    }
     finally { setCargando(false); }
   };
 
@@ -63,21 +88,19 @@ function Vigilancia() {
   const paginar = (data, pag) => data.slice((pag-1)*itemsPP, pag*itemsPP);
   const totalPags = (data) => Math.max(1, Math.ceil(data.length / itemsPP));
 
-  // 🟢 Helper MEGA ROBUSTO para forzar la URL absoluta a Gideon
+  // Las rutas de las fotos llegan a veces absolutas y a veces relativas, y
+  // cuando son absolutas pueden traer el dominio equivocado. Se rearman
+  // siempre contra el servidor de vigilancia.
   const getUrlImagen = (ruta) => {
     if (!ruta) return null;
     try {
-      // Si Django manda el link completo pero con el dominio de Vercel (o cualquier otro)
       if (ruta.startsWith('http')) {
-        const urlObj = new URL(ruta);
-        // Retornamos el dominio correcto + la ruta de la carpeta media
-        return `https://gideonstudio.duckdns.org${urlObj.pathname}${urlObj.search}`;
+        const u = new URL(ruta);
+        return `${MEDIA}${u.pathname}${u.search}`;
       }
-      // Si Django manda solo la ruta relativa (/media/...)
-      const slashRuta = ruta.startsWith('/') ? ruta : `/${ruta}`;
-      return `https://gideonstudio.duckdns.org${slashRuta}`;
+      return `${MEDIA}${ruta.startsWith('/') ? ruta : `/${ruta}`}`;
     } catch (e) {
-      return ruta; // Si algo falla, devuelve la ruta original
+      return ruta;
     }
   };
 
@@ -132,6 +155,17 @@ function Vigilancia() {
       </div>
 
       <div className="tbl-page-body" style={{padding:0,overflowY:'auto',maxHeight:'calc(100vh - 140px)'}}>
+
+        {/* Aviso de error: sin esto, un fallo de permisos se vería igual
+            que "no hay registros", que es una afirmación distinta. */}
+        {error && (
+          <div style={{margin:'16px 20px 0',padding:'11px 16px',background:'#fee2e2',
+                       border:'1px solid #fecaca',color:'#b91c1c',borderRadius:'6px',fontSize:'13px',
+                       display:'flex',alignItems:'center',gap:'8px'}}>
+            <FaExclamationTriangle /> {error}
+          </div>
+        )}
+
         {/* ── Tabs ──────────────────────────────────────────────────────── */}
         <div style={{display:'flex',borderBottom:'2px solid #e2e8f0',background:'#fff',padding:'0 20px',position:'sticky',top:0,zIndex:10}}>
           {tabBtn('incidentes', <FaExclamationTriangle/>, `Incidentes (${incidentes.length})`)}
@@ -174,7 +208,6 @@ function Vigilancia() {
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
                         {(inc.evidencias || []).length > 0 ? (
                           <div style={{display:'flex',gap:'4px',justifyContent:'center'}}>
-                            {/* 🟢 Aplicamos getUrlImagen a las evidencias de los incidentes */}
                             {inc.evidencias.slice(0,3).map((ev, j) => (
                               <img key={j} src={getUrlImagen(ev.archivo)} alt="" onClick={()=>setModalImg(getUrlImagen(ev.archivo))} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} />
                             ))}
@@ -206,6 +239,8 @@ function Vigilancia() {
                 <thead>
                   <tr style={{background:'#f8fafc',borderBottom:'1px solid #e2e8f0'}}>
                     <th style={{padding:'10px 14px',textAlign:'left',fontWeight:'600',color:'#475569'}}>ID</th>
+                    <th style={{padding:'10px 14px',textAlign:'left',fontWeight:'600',color:'#475569'}}>Vigilante</th>
+                    <th style={{padding:'10px 14px',textAlign:'left',fontWeight:'600',color:'#475569'}}>Garita</th>
                     <th style={{padding:'10px 14px',textAlign:'left',fontWeight:'600',color:'#475569'}}>Inicio</th>
                     <th style={{padding:'10px 14px',textAlign:'left',fontWeight:'600',color:'#475569'}}>Fin</th>
                     <th style={{padding:'10px 14px',textAlign:'left',fontWeight:'600',color:'#475569'}}>Duración</th>
@@ -218,6 +253,8 @@ function Vigilancia() {
                   {paginar(turnos, pagTur).map((t, i) => (
                     <tr key={t.id || i} style={{borderBottom:'1px solid #f1f5f9'}}>
                       <td style={{padding:'10px 14px',fontWeight:'600',color:'#1d273b'}}>#{t.id}</td>
+                      <td style={{padding:'10px 14px',color:'#1d273b',fontWeight:'500'}}>{t.usuario_nombre || '—'}</td>
+                      <td style={{padding:'10px 14px',color:'#475569'}}>{t.garita || '—'}</td>
                       <td style={{padding:'10px 14px',color:'#475569',whiteSpace:'nowrap'}}>{fmtFecha(t.inicio)}</td>
                       <td style={{padding:'10px 14px',color:'#475569',whiteSpace:'nowrap'}}>{t.fin ? fmtFecha(t.fin) : '—'}</td>
                       <td style={{padding:'10px 14px',fontWeight:'600',color:'#206bc4'}}>{fmtDuracion(t.inicio, t.fin)}</td>
@@ -226,16 +263,14 @@ function Vigilancia() {
                                   : <span style={{background:'#f1f3f5',color:'#626976',padding:'3px 10px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>Cerrado</span>}
                       </td>
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
-                        {/* 🟢 Aplicamos getUrlImagen */}
                         {t.foto_inicio ? <img src={getUrlImagen(t.foto_inicio)} alt="" onClick={()=>setModalImg(getUrlImagen(t.foto_inicio))} style={{width:'40px',height:'40px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}}/> : <span style={{color:'#cbd5e1'}}>—</span>}
                       </td>
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
-                        {/* 🟢 Aplicamos getUrlImagen */}
                         {t.foto_fin ? <img src={getUrlImagen(t.foto_fin)} alt="" onClick={()=>setModalImg(getUrlImagen(t.foto_fin))} style={{width:'40px',height:'40px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}}/> : <span style={{color:'#cbd5e1'}}>—</span>}
                       </td>
                     </tr>
                   ))}
-                  {turnos.length === 0 && <tr><td colSpan="7" style={{padding:'30px',textAlign:'center',color:'#626976'}}>No hay turnos registrados</td></tr>}
+                  {turnos.length === 0 && <tr><td colSpan="9" style={{padding:'30px',textAlign:'center',color:'#626976'}}>No hay turnos registrados</td></tr>}
                 </tbody>
               </table>
               {paginador(pagTur, setPagTur, totalPags(turnos))}
@@ -271,7 +306,7 @@ function Vigilancia() {
                   {paginar(transitos, pagTra).map((t, i) => (
                     <tr key={t.id || i} style={{borderBottom:'1px solid #f1f5f9'}}>
                       <td style={{padding:'10px 14px'}}>
-                        {t.tipo === 'INGRESO' 
+                        {t.tipo === 'INGRESO'
                           ? <span style={{background:'#d3f9d8',color:'#2b8a3e',padding:'3px 10px',borderRadius:'4px',fontSize:'11px',fontWeight:'700',display:'inline-flex',alignItems:'center',gap:'4px'}}><FaSignInAlt size={10}/> Ingreso</span>
                           : <span style={{background:'#fee2e2',color:'#dc2626',padding:'3px 10px',borderRadius:'4px',fontSize:'11px',fontWeight:'700',display:'inline-flex',alignItems:'center',gap:'4px'}}><FaSignOutAlt size={10}/> Salida</span>}
                       </td>
@@ -283,7 +318,6 @@ function Vigilancia() {
                       <td style={{padding:'10px 14px',color:'#475569',maxWidth:'180px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.observacion || '—'}</td>
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
                         <div style={{display:'flex',gap:'4px',justifyContent:'center'}}>
-                          {/* 🟢 Aplicamos getUrlImagen en todas las condiciones */}
                           {(t.foto_documento || t.foto_documento_url) && <img src={getUrlImagen(t.foto_documento || t.foto_documento_url)} alt="Doc" onClick={()=>setModalImg(getUrlImagen(t.foto_documento || t.foto_documento_url))} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} title="Documento"/>}
                           {(t.foto_movilidad || t.foto_movilidad_url) && <img src={getUrlImagen(t.foto_movilidad || t.foto_movilidad_url)} alt="Mov" onClick={()=>setModalImg(getUrlImagen(t.foto_movilidad || t.foto_movilidad_url))} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} title="Movilidad"/>}
                           {!(t.foto_documento || t.foto_documento_url) && !(t.foto_movilidad || t.foto_movilidad_url) && <span style={{color:'#cbd5e1',fontSize:'11px'}}>—</span>}
