@@ -6,6 +6,7 @@ import './EstadisticasGIS.css';
 // Estaciones InnovaWeather (Innova-T): viven en otro servidor y se consultan
 // aparte, pero se muestran en la misma lista que las Davis y los pluviómetros.
 import { leerTodas as leerInnova, horaDeLectura } from './InnovaWeather';
+import { lluviaDelDia, lluviaPorHora } from './lluviaEstacion';
 
 const COLORS_TIPO = ['#1268C3','#f76707','#d63939','#2fb344','#ae3ec9','#f59f00'];
 const COLORS_GRAVEDAD = {'lev':'#2fb344','mod':'#f76707','gra':'#d63939'};
@@ -148,26 +149,17 @@ function Estadisticas() {
       const past24h = new Date(now.getTime() - 24*60*60*1000);
       const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       const enriched = await Promise.all(all.map(async (eq) => {
-        let totalRain = 0, temp = '--', hum = '--';
+        let totalRain = 0, temp = '--', hum = '--', sinDatos = true;
         try {
-          const [rR, rT, rH] = await Promise.all([
-            fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(now)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=rainfall_mm&max_points=9000`, { headers:{'Authorization':`Token ${token()}`} }),
+          // La lluvia la resuelve lluviaEstacion.js: Davis y pluviómetros
+          // guardan distinto (acumulado diario vs. lectura por intervalo).
+          const [lluvia, rT, rH] = await Promise.all([
+            lluviaDelDia(eq.id, eq.tipo_equipo, now, token()),
             fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(past24h)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=temp_out`, { headers:{'Authorization':`Token ${token()}`} }),
             fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(past24h)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=hum_out`, { headers:{'Authorization':`Token ${token()}`} }),
           ]);
-          // Acumulado del DÍA ACTUAL. Se prefiere 'total_precipitation', que
-          // lo calcula el servidor; si no viene, se suma la serie del día.
-          if (rR.ok) {
-            const d = await rR.json();
-            if (typeof d.total_precipitation === 'number') {
-              totalRain = d.total_precipitation;
-            } else {
-              for (const r of (d.data||[])) {
-                if (new Date(r.timestamp).toDateString() !== now.toDateString()) continue;
-                totalRain += parseFloat(r.value)||0;
-              }
-            }
-          }
+          totalRain = lluvia.mm;
+          sinDatos = lluvia.sinDatos;
           if (rT.ok) { const d = await rT.json(); const recs = d.data||[]; if(recs.length) temp = parseFloat(recs[recs.length-1].value).toFixed(1); }
           if (rH.ok) { const d = await rH.json(); const recs = d.data||[]; if(recs.length) hum = parseFloat(recs[recs.length-1].value).toFixed(1); }
           // Plan B: metrics endpoint
@@ -184,7 +176,7 @@ function Estadisticas() {
             }
           }
         } catch(e) { /* silencioso */ }
-        return { ...eq, totalRain, temp, hum, isCritical: totalRain > 20 };
+        return { ...eq, totalRain, temp, hum, sinDatos, isCritical: totalRain > 20 };
       }));
 
       // ── InnovaWeather ──────────────────────────────────────────────────
@@ -220,6 +212,7 @@ function Estadisticas() {
   // ── Cargar datos de lluvia para gráfico ───────────────────────────────
   const cargarLluviaChart = async (stationId, rango) => {
     if (!stationId) return;
+    const tipo = estaciones.find(x => x.id === stationId)?.tipo_equipo;
     setCargandoLluvia(true);
 
     // ── Estaciones InnovaWeather ────────────────────────────────────────
@@ -246,16 +239,9 @@ function Estadisticas() {
       if (!esHoy) {
         const dds = [];
         for (let i = dias - 1; i >= 0; i--) dds.push(new Date(now.getTime() - i * 864e5));
-        const totales = await Promise.all(dds.map(async d => {
-          try {
-            const r = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(d)}&end_date=${fmt(d)}&station_id=${stationId}&metric=rainfall_mm&max_points=9000`, { headers:{'Authorization':`Token ${token()}`} });
-            if (!r.ok) return 0;
-            const j = await r.json();
-            if (typeof j.total_precipitation === 'number') return j.total_precipitation;
-            // Plan B: sumar la serie del día (sin reducir, es un solo día).
-            return (j.data || []).reduce((a, x) => a + (parseFloat(x.value) || 0), 0);
-          } catch (e) { return 0; }
-        }));
+        const totales = (await Promise.all(
+          dds.map(d => lluviaDelDia(stationId, tipo, d, token()))
+        )).map(x => x.mm);
         setLluviaChart(dds.map((d, i) => ({
           dia: i === dds.length - 1 ? 'Hoy'
             : `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`,
@@ -264,42 +250,28 @@ function Estadisticas() {
         setDetalleHoy(null);
         return;
       }
-      const res = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(past)}&end_date=${fmt(now)}&station_id=${stationId}&metric=rainfall_mm&max_points=9000`, { headers:{'Authorization':`Token ${token()}`} });
-      if (!res.ok) { setLluviaChart([]); setDetalleHoy(null); return; }
-      const data = await res.json();
-      const records = data.data || [];
-      if (esHoy) {
-        // ── Acumulado por hora del día en curso ──────────────────────────
-        // Arreglo indexado 0..23: el orden queda fijo, sin depender de cómo
-        // JavaScript recorra las claves de un objeto.
-        const porHora = new Array(24).fill(0);
-        let ultimo = null;   // último registro con lluvia > 0
-        for (const r of records) {
-          const dt = new Date(r.timestamp);
-          if (dt.toDateString() !== now.toDateString()) continue;
-          const h = dt.getHours();
-          const v = parseFloat(r.value) || 0;
-          porHora[h] += v;
-          if (v > 0) ultimo = { fecha: dt, valor: v, hora: h };
-        }
-        const horaActual = now.getHours();
-        setLluviaChart(porHora.map((mm, h) => ({
-          dia: String(h).padStart(2, '0'),
-          mm: parseFloat(mm.toFixed(1)),
-          enCurso: h === horaActual,
-        })));
-        const acumDia = porHora.reduce((a, b) => a + b, 0);
-        setDetalleHoy(ultimo ? {
-          hora: `${String(ultimo.hora).padStart(2, '0')}:${String(ultimo.fecha.getMinutes()).padStart(2, '0')}`,
-          hace: Math.max(0, Math.round((now - ultimo.fecha) / 60000)),
-          valor: ultimo.valor,
-          acumHora: porHora[ultimo.hora],
-          horaLabel: `${String(ultimo.hora).padStart(2, '0')}:00`,
-          acumDia,
-        } : { sinLluvia: true, acumDia });
-      } else {
-        setDetalleHoy(null);
+      // ── Hoy, hora por hora ─────────────────────────────────────────
+      const { horas, ultimo, lecturas } = await lluviaPorHora(stationId, tipo, now, token());
+      if (!lecturas) {
+        setLluviaChart([]);
+        setDetalleHoy({ sinDatos: true, acumDia: 0 });
+        return;
       }
+      const horaActual = now.getHours();
+      setLluviaChart(horas.map((mm, h) => ({
+        dia: String(h).padStart(2, '0'),
+        mm: parseFloat(mm.toFixed(1)),
+        enCurso: h === horaActual,
+      })));
+      const acumDia = horas.reduce((a, b) => a + b, 0);
+      setDetalleHoy(ultimo ? {
+        hora: `${String(ultimo.hora).padStart(2, '0')}:${String(ultimo.fecha.getMinutes()).padStart(2, '0')}`,
+        hace: Math.max(0, Math.round((now - ultimo.fecha) / 60000)),
+        valor: ultimo.valor,
+        acumHora: horas[ultimo.hora],
+        horaLabel: `${String(ultimo.hora).padStart(2, '0')}:00`,
+        acumDia,
+      } : { sinLluvia: true, acumDia });
     } catch(e) { console.error(e); } finally { setCargandoLluvia(false); }
   };
 
@@ -494,7 +466,7 @@ function Estadisticas() {
                       )}
                     </div>
                     <div className="est-estacion-datos">
-                      <span style={{color: eq.isCritical ? '#d63939' : '#1268C3', fontWeight:'700'}}><FaCloudRain style={{marginRight:'3px'}}/>{eq.totalRain.toFixed(1)} mm</span>
+                      <span style={{color: eq.isCritical ? '#d63939' : '#1268C3', fontWeight:'700'}}><FaCloudRain style={{marginRight:'3px'}}/>{eq.sinDatos ? 'sin datos' : `${eq.totalRain.toFixed(1)} mm`}</span>
                       <span><FaThermometerHalf style={{marginRight:'3px',color:'#f76707'}}/>{eq.temp}°C</span>
                       <span><FaTint style={{marginRight:'3px',color:'#35B6E9'}}/>{eq.hum}%</span>
                     </div>
@@ -554,7 +526,11 @@ function Estadisticas() {
               {/* Resumen de la última lluvia (solo en modo 'hoy') */}
               {esModoHoy && detalleHoy && !cargandoLluvia && (
                 <div className="est-ultima">
-                  {detalleHoy.sinLluvia ? (
+                  {detalleHoy.sinDatos ? (
+                    <div className="est-ultima-vacio">
+                      <FaExclamationTriangle /> Sin lecturas hoy: la estación no está reportando
+                    </div>
+                  ) : detalleHoy.sinLluvia ? (
                     <div className="est-ultima-vacio">
                       <FaCloudRain /> Sin lluvia registrada hoy
                     </div>

@@ -24,6 +24,7 @@ import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion, FaCli
 import { useRuta, CapaRuta, fmtDistancia, fmtTiempo } from './RutaGIS';
 import Mapa3D from './Mapa3D';
 import { leerTodas as leerInnova, horaDeLectura } from './InnovaWeather';
+import { lluviaDelDia, lluviaPorHora, sinUbicacion } from './lluviaEstacion';
 
 import geoCanalMadre from './data/Canal_Madre.json';
 import geoLateral10 from './data/Lateral_10.json';
@@ -621,11 +622,14 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const incPend = incidentesAPI.filter(i => i.estado === 'pat').length;
   const incEnAte = incidentesAPI.filter(i => i.estado === 'eat').length;
   const incAte = incidentesAPI.filter(i => i.estado === 'ate').length;
-  const lluviaMax = lluviasAPI.length ? Math.max(...lluviasAPI.map(l => l.totalRain)) : 0;
+  // Solo cuentan las que tienen lecturas hoy: una sin datos no es un 0 mm.
+  const conDatos = lluviasAPI.filter(l => !l.sinDatos);
+  const sinDatosN = lluviasAPI.length - conDatos.length;
+  const lluviaMax = conDatos.length ? Math.max(...conDatos.map(l => l.totalRain)) : 0;
   // El KPI muestra el máximo, no un total: sumar acumulados de estaciones
   // distintas no significa nada. Se indica de cuál es y cuántas registran lluvia.
   const nivelAlerta = NIVELES_ALERTA[alerta?.level] || NIVELES_ALERTA.nor;
-  const estacionMax = lluviasAPI.find(l => l.totalRain === lluviaMax);
+  const estacionMax = conDatos.find(l => l.totalRain === lluviaMax);
   const conLluvia = lluviasAPI.filter(l => l.totalRain > 0).length;
 
   // ── Search ────────────────────────────────────────────────────────────
@@ -691,9 +695,19 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       if (resDav.ok) { const d = await resDav.json(); equipos.push(...(d.results || []).map(e => ({ ...e, tipo: 'davis' }))); }
       const resD = { ok: equipos.length > 0 };
       if (resD.ok) { const dd = { results: equipos }; const now = new Date(), fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; const nd = [];
-        // Acumulado del DÍA ACTUAL, igual que la app móvil. max_points alto:
-        // sin él la API entrega la serie reducida y el total sale corto.
-        for (const eq of (dd.results || [])) { const la = parseFloat(eq.latitude), lo = parseFloat(eq.longitude); if (isNaN(la) || isNaN(lo)) continue; let rain = 0; try { const rr = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(now)}&end_date=${fmt(now)}&station_id=${eq.id}&metric=rainfall_mm&max_points=9000`, { headers: { 'Authorization': `Token ${token}` } }); if (rr.ok) { const rd = await rr.json(); for (const rec of (rd.data || [])) { const dt = new Date(rec.timestamp); if (dt.toDateString() !== now.toDateString()) continue; rain += parseFloat(rec.value) || 0; } } } catch(e) {} nd.push({ id: eq.id, name: eq.nombre || (eq.tipo === 'davis' ? 'Estación Davis' : 'Pluviómetro'), tipo: eq.tipo, lat: la, lng: lo, totalRain: rain, isCritical: rain > 20 }); }
+        // Lluvia del DÍA ACTUAL. Pluviómetros y Davis se leen distinto
+        // (ver lluviaEstacion.js). Las que tienen coordenadas 0,0 no se dibujan.
+        const validos = (dd.results || []).filter(eq =>
+          !sinUbicacion(parseFloat(eq.latitude), parseFloat(eq.longitude)));
+        const lluvias = await Promise.all(validos.map(eq => lluviaDelDia(eq.id, eq.tipo, now, token)));
+        validos.forEach((eq, i) => {
+          const { mm, lecturas, sinDatos } = lluvias[i];
+          nd.push({
+            id: eq.id, name: eq.nombre || (eq.tipo === 'davis' ? 'Estación Davis' : 'Pluviómetro'),
+            tipo: eq.tipo, lat: parseFloat(eq.latitude), lng: parseFloat(eq.longitude),
+            totalRain: mm, lecturas, sinDatos, isCritical: mm > 20,
+          });
+        });
         // Estaciones InnovaWeather (Innova-T): no son Davis ni están en el
         // backend de JURP, se consultan aparte y se suman a la misma lista
         // para que el mapa las trate igual que a un pluviómetro.
@@ -1114,7 +1128,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     });
 
   // ── Lluvia del día por horas (para el detalle del KPI) ────────────────
-  const cargarHorasLluvia = useCallback(async (stationId) => {
+  const cargarHorasLluvia = useCallback(async (stationId, tipo) => {
     if (!stationId) return;
     setCargandoHoras(true);
 
@@ -1129,20 +1143,12 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     try {
       const tk = localStorage.getItem('userToken');
       const now = new Date();
-      const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      const r = await fetch(`/api/v1/mobile/davis/rain-gauges/filtered-data/?start_date=${fmt(now)}&end_date=${fmt(now)}&station_id=${stationId}&metric=rainfall_mm&max_points=9000`,
-        { headers: { 'Authorization': `Token ${tk}` } });
-      if (!r.ok) { setHorasLluvia([]); return; }
-      const d = await r.json();
-      // Arreglo indexado 0..23: el orden no depende del recorrido de claves.
-      const porHora = new Array(24).fill(0);
-      for (const rec of (d.data || [])) {
-        const dt = new Date(rec.timestamp);
-        if (dt.toDateString() !== now.toDateString()) continue;
-        porHora[dt.getHours()] += parseFloat(rec.value) || 0;
-      }
+      // En Davis la lluvia de cada hora sale de la diferencia entre
+      // acumulados diarios; en pluviómetros, de sumar las lecturas.
+      const { horas } = await lluviaPorHora(stationId, tipo, now, tk);
       const hAhora = now.getHours();
-      setHorasLluvia(porHora.map((mm, h) => ({
+      // Sin lecturas → arreglo vacío: el gráfico dice "Sin registros hoy".
+      setHorasLluvia(horas.map((mm, h) => ({
         hora: String(h).padStart(2, '0'),
         mm: parseFloat(mm.toFixed(1)),
         enCurso: h === hAhora,
@@ -1154,10 +1160,10 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   // Abre el detalle de una estación (o de la que más acumuló hoy).
   const abrirDetalleLluvia = (id = null) => {
     if (!lluviasAPI.length) return;
-    const destino = id ?? [...lluviasAPI].sort((a, b) => b.totalRain - a.totalRain)[0].id;
+    const destino = id ?? [...lluviasAPI].sort((a, b) => (a.sinDatos - b.sinDatos) || (b.totalRain - a.totalRain))[0].id;
     setEstLluvia(destino);
     setModalLluvia(true);
-    cargarHorasLluvia(destino);
+    cargarHorasLluvia(destino, lluviasAPI.find(e => e.id === destino)?.tipo);
   };
 
   // ── Handlers ──────────────────────────────────────────────────────────
@@ -1181,17 +1187,17 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     // Los pluviómetros y las estaciones Davis se distinguen por el ícono y el
   // color del borde: 🌧️ celeste para pluviómetro, 🌡️ violeta para Davis.
   // Las que registran lluvia hoy laten, para que salten a la vista.
-  const crearIconoLluvia = (r, cr, tipo = 'pluviometro') => {
+  const crearIconoLluvia = (r, cr, tipo = 'pluviometro', sinDatos = false) => {
     const esDavis = tipo === 'davis';
     const esInnova = tipo === 'innova';
     const llueve = r > 0;
-    const borde = cr ? '#ef4444'
+    const borde = sinDatos ? '#64748b' : cr ? '#ef4444'
       : (llueve ? '#35B6E9' : (esInnova ? '#4ade80' : (esDavis ? '#a78bfa' : '#5b7590')));
     const clase = llueve ? (cr ? 'gis-lluvia-alerta' : 'gis-lluvia-activa') : '';
     return divIcon({
       className: 'icono-vacio',
-      html: `<div class="${clase}" style="display:flex;flex-direction:column;align-items:center;margin-top:-30px">
-               <div style="background:${cr ? '#1e293b' : '#111827'};border:1px solid ${borde};color:${borde};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${r.toFixed(1)} mm</div>
+      html: `<div class="${clase}" style="display:flex;flex-direction:column;align-items:center;margin-top:-30px;opacity:${sinDatos ? 0.6 : 1}">
+               <div style="background:${cr ? '#1e293b' : '#111827'};border:1px solid ${borde};color:${borde};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${sinDatos ? 'sin datos' : r.toFixed(1) + ' mm'}</div>
                <div style="font-size:22px;line-height:1;margin-top:2px">${esInnova ? '📡' : (esDavis ? '🌡️' : '🌧️')}</div>
              </div>`,
       iconSize: [60, 60], iconAnchor: [30, 45],
@@ -1316,7 +1322,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             .filter(p => p.tipo === 'davis' ? capas.Davis : capas.Lluvias)   // innova va con los pluviómetros
             .filter(p => !soloConLluvia || p.totalRain > 0)
             .map(p => (
-            <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical, p.tipo)}
+            <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical, p.tipo, p.sinDatos)}
               eventHandlers={{ click: () => abrirDetalleLluvia(p.id) }} />
           ))}
         </MapContainer>
@@ -1462,6 +1468,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               {lluviasAPI.filter(l => l.tipo !== 'davis' && l.tipo !== 'innova').length} pluv
               · {lluviasAPI.filter(l => l.tipo === 'davis').length} Davis
               {lluviasAPI.some(l => l.tipo === 'innova') && ` · ${lluviasAPI.filter(l => l.tipo === 'innova').length} Innova`}
+              {sinDatosN > 0 && ` · ${sinDatosN} sin datos`}
             </span>
           </span>
         </div>
@@ -1473,7 +1480,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             <span className="gis-kpi-valor">{lluviaMax.toFixed(1)}<small>mm</small></span>
             <span className="gis-kpi-nota">
               {estacionMax?.name || '—'}
-              {conLluvia > 0 && ` · ${conLluvia} de ${lluviasAPI.length} con lluvia`}
+              {conLluvia > 0 && ` · ${conLluvia} de ${conDatos.length} con lluvia`}
             </span>
           </span>
           <FaChartBar className="gis-kpi-lupa" />
@@ -1548,7 +1555,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                   <input type="checkbox" checked={soloConLluvia} onChange={() => setSoloConLluvia(v => !v)} />
                   <span style={{ fontSize: '11px', color: '#a3c6e2' }}>Solo las que registran lluvia</span>
                 </label>
-                <span className="gis-capa-badge">{lluviasAPI.filter(l => l.totalRain > 0).length}/{lluviasAPI.length}</span>
+                <span className="gis-capa-badge" title="Con lluvia / con lecturas hoy">{conLluvia}/{conDatos.length}</span>
               </div>
               {(capas.Incidentes_Nuevos || capas.Incidentes_Atencion) && (
                 <select className="gis-mini-select" value={filtroTiempo} onChange={e => setFiltroTiempo(Number(e.target.value))}>
@@ -1927,17 +1934,17 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
               {/* selector de estación */}
               <div className="gis-modal-estaciones">
-                {[...lluviasAPI].sort((a, b) => b.totalRain - a.totalRain).map(e => (
+                {[...lluviasAPI].sort((a, b) => (a.sinDatos - b.sinDatos) || (b.totalRain - a.totalRain)).map(e => (
                   <button key={e.id}
                     className={`gis-chip ${estLluvia === e.id ? 'activo' : ''}`}
-                    onClick={() => { setEstLluvia(e.id); cargarHorasLluvia(e.id); }}>
-                    {e.tipo === 'innova' ? '📡' : (e.tipo === 'davis' ? '🌡️' : '🌧️')} {e.name} · {e.totalRain.toFixed(1)} mm
+                    onClick={() => { setEstLluvia(e.id); cargarHorasLluvia(e.id, e.tipo); }}>
+                    {e.tipo === 'innova' ? '📡' : (e.tipo === 'davis' ? '🌡️' : '🌧️')} {e.name} · {e.sinDatos ? 'sin datos' : `${e.totalRain.toFixed(1)} mm`}
                   </button>
                 ))}
               </div>
 
               <div className="gis-modal-resumen">
-                <div><span>Acumulado hoy</span><b>{acum.toFixed(1)} mm</b></div>
+                <div><span>Acumulado hoy</span><b>{est?.sinDatos ? 'sin datos' : `${acum.toFixed(1)} mm`}</b></div>
                 <div><span>Hora más intensa</span><b>{pico.mm > 0 ? `${pico.hora}:00 · ${pico.mm.toFixed(1)} mm` : '—'}</b></div>
               </div>
 
