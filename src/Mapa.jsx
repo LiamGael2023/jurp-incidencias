@@ -1200,11 +1200,10 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     return divIcon({
       className: 'icono-vacio',
       html: `<div class="${clase}" style="display:flex;flex-direction:column;align-items:center;margin-top:-30px;opacity:${sinDatos ? 0.6 : 1}">
-               <div style="background:${cr ? '#1e293b' : '#111827'};border:1px solid ${borde};color:${borde};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${sinDatos ? 'sin datos' : r.toFixed(1) + ' mm'}</div>
+               <div style="background:${cr ? '#1e293b' : '#111827'};border:1px solid ${borde};color:${borde};font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap">${nombre ? `<span style="color:#e8f1fa">${nombre}</span><span style="opacity:.45"> · </span>` : ''}${sinDatos ? 'sin datos' : r.toFixed(1) + ' mm'}</div>
                <div style="font-size:22px;line-height:1;margin-top:2px">${esInnova ? '📡' : (esDavis ? '🌡️' : '🌧️')}</div>
-               ${nombre ? `<div style="margin-top:1px;font-size:9px;font-weight:700;color:#fff;letter-spacing:.02em;white-space:nowrap;text-shadow:0 0 3px #000,0 0 6px #000">${nombre}</div>` : ''}
              </div>`,
-      iconSize: [120, 74], iconAnchor: [60, 45],
+      iconSize: [160, 62], iconAnchor: [80, 45],
     });
   };
 
