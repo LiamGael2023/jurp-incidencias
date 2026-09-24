@@ -287,6 +287,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [ver3D, setVer3D] = useState(false);
   // Al iniciar se muestran todas; se puede filtrar a las que registran lluvia.
   const [soloConLluvia, setSoloConLluvia] = useState(false);
+  // Nombre de la estación bajo el ícono. Se puede apagar: con 27 estaciones
+  // en el valle, las etiquetas se pisan unas a otras.
+  const [verNombres, setVerNombres] = useState(true);
   // Capas KMZ/KML que el usuario sube desde su equipo (no se guardan en el
   // servidor: viven mientras dure la sesión de la pestaña).
   const [capasUsuario, setCapasUsuario] = useState([]);
@@ -1187,7 +1190,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     // Los pluviómetros y las estaciones Davis se distinguen por el ícono y el
   // color del borde: 🌧️ celeste para pluviómetro, 🌡️ violeta para Davis.
   // Las que registran lluvia hoy laten, para que salten a la vista.
-  const crearIconoLluvia = (r, cr, tipo = 'pluviometro', sinDatos = false) => {
+  const crearIconoLluvia = (r, cr, tipo = 'pluviometro', sinDatos = false, nombre = '') => {
     const esDavis = tipo === 'davis';
     const esInnova = tipo === 'innova';
     const llueve = r > 0;
@@ -1199,8 +1202,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       html: `<div class="${clase}" style="display:flex;flex-direction:column;align-items:center;margin-top:-30px;opacity:${sinDatos ? 0.6 : 1}">
                <div style="background:${cr ? '#1e293b' : '#111827'};border:1px solid ${borde};color:${borde};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${sinDatos ? 'sin datos' : r.toFixed(1) + ' mm'}</div>
                <div style="font-size:22px;line-height:1;margin-top:2px">${esInnova ? '📡' : (esDavis ? '🌡️' : '🌧️')}</div>
+               ${nombre ? `<div style="margin-top:1px;font-size:9px;font-weight:700;color:#fff;letter-spacing:.02em;white-space:nowrap;text-shadow:0 0 3px #000,0 0 6px #000">${nombre}</div>` : ''}
              </div>`,
-      iconSize: [60, 60], iconAnchor: [30, 45],
+      iconSize: [120, 74], iconAnchor: [60, 45],
     });
   };
 
@@ -1322,7 +1326,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             .filter(p => p.tipo === 'davis' ? capas.Davis : capas.Lluvias)   // innova va con los pluviómetros
             .filter(p => !soloConLluvia || p.totalRain > 0)
             .map(p => (
-            <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical, p.tipo, p.sinDatos)}
+            <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical, p.tipo, p.sinDatos, verNombres ? p.name : '')}
               eventHandlers={{ click: () => abrirDetalleLluvia(p.id) }} />
           ))}
         </MapContainer>
@@ -1550,6 +1554,12 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={() => { toggleCapa('Incidentes_Atencion'); toggleCapa('Incidentes_Nuevos'); }} /> Incidentes</label></div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Lluvias} onChange={() => toggleCapa('Lluvias')} /> Pluviómetros</label></div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Davis} onChange={() => toggleCapa('Davis')} /> Estaciones Davis</label></div>
+              <div className="gis-capa" style={{ paddingLeft: 21 }}>
+                <label>
+                  <input type="checkbox" checked={verNombres} onChange={() => setVerNombres(v => !v)} />
+                  <span style={{ fontSize: '11px', color: '#a3c6e2' }}>Mostrar nombres</span>
+                </label>
+              </div>
               <div className="gis-capa" style={{ paddingLeft: 21 }}>
                 <label>
                   <input type="checkbox" checked={soloConLluvia} onChange={() => setSoloConLluvia(v => !v)} />
