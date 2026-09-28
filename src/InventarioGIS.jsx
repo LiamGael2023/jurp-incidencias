@@ -72,17 +72,21 @@ const API = '/vigapi/inventario';
  * se sostienen más de tres identidades de color distinguibles. Por eso hay
  * solo dos familias cromáticas y un neutro:
  *
- *   azul   → agua: canales, tomas, entregas, obras de arte
- *   magenta→ territorio: sectores, licencias, lotes (solo contorno)
- *   gris   → vías, caminos y todo lo que es de terceros
+ *   azul  → agua: canales, tomas, entregas, obras de arte
+ *   verde → territorio: sectores, licencias, lotes (solo contorno)
+ *   gris  → vías, caminos y todo lo que es de terceros
  *
  * Dentro del agua la distinción no la hace el tono sino la jerarquía: el
  * canal madre va oscuro y grueso, y las ramas se aclaran y adelgazan. Las
  * tuberías a presión van punteadas. Los puntos, además, llevan su propio
  * icono de simbología, así que el color ahí es lo de menos.
  *
- * El par azul/magenta se verificó para daltonismo sobre fondo oscuro
- * (ΔE 15.9 CVD, 25.8 visión normal; el mínimo exigible es 8 y 15).
+ * El verde del territorio es claro y apagado a propósito: un verde más
+ * saturado se confundiría con el verde "bueno" del estado. Verificado para
+ * daltonismo sobre fondo oscuro — contra el azul del agua ΔE 22.5 CVD y
+ * 23.2 en visión normal, y contra el verde del estado 14.7 y 16.8, sobre
+ * mínimos de 8 y 15. Un paso más oscuro (#82b95f) caía a 11.7 contra el
+ * estado y por eso se descartó.
  */
 const GRUPOS = [
   {
@@ -123,9 +127,9 @@ const GRUPOS = [
       { codigo: 'canal_lateral_10',  label: 'Canal Lateral 10',  color: '#4dabf7', tipo: 'line', weight: 3 },
       { codigo: 'subalterales',      label: 'Subalterales',      color: '#a5d8ff', tipo: 'line', weight: 2 },
       { codigo: 'redes_presurizado', label: 'Redes presurizado', color: '#74c0fc', tipo: 'line', dash: '3 5', weight: 2 },
-      { codigo: 'sectores_pech',     label: 'Sectores PECH',     color: '#d55181', tipo: 'poly' },
-      { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#e87ba4', tipo: 'poly' },
-      { codigo: 'lotes',             label: 'Lotes',             color: '#f2a7c3', tipo: 'poly' },
+      { codigo: 'sectores_pech',     label: 'Sectores PECH',     color: '#94c973', tipo: 'poly' },
+      { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#aed88f', tipo: 'poly' },
+      { codigo: 'lotes',             label: 'Lotes',             color: '#c8e6b4', tipo: 'poly' },
     ],
   },
 ];
