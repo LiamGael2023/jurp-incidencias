@@ -10,7 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Swal from 'sweetalert2';
-import { FaFilePdf, FaUpload, FaEye, FaSyncAlt, FaFolderOpen, FaSpinner, FaTimes, FaDownload } from 'react-icons/fa';
+import { FaFilePdf, FaUpload, FaEye, FaSyncAlt, FaFolderOpen, FaSpinner, FaTimes, FaDownload, FaTrash } from 'react-icons/fa';
 
 // Ruta relativa: el proxy /api la redirige al backend de incidentes.
 const BASE_URL = '/api/v1/mobile/hi-report-files';
@@ -22,6 +22,7 @@ export default function Reportes() {
   const [subiendo, setSubiendo] = useState(false);
   const [puedeSubir, setPuedeSubir] = useState(false);
   const [pdfModal, setPdfModal] = useState(null);   // { url, nombre } o null
+  const [borrando, setBorrando] = useState(null);   // id del reporte que se esta eliminando
   const fileInputRef = useRef(null);
 
   const authHeaders = () => {
@@ -141,6 +142,44 @@ export default function Reportes() {
     setPdfModal(null);
   };
 
+  // Elimina un reporte del servidor. Solo lo ve quien puede subir: quien
+  // carga los documentos es quien corrige los que subio mal.
+  const eliminarReporte = async (rep) => {
+    const nombre = rep.name || `Reporte #${rep.id}`;
+    const conf = await Swal.fire({
+      title: '¿Eliminar este reporte?',
+      html: `Se eliminará <b>${nombre}</b> de forma permanente.<br>`
+            + `<small style="color:#64748b">Esta acción no se puede deshacer.</small>`,
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
+      confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar',
+    });
+    if (!conf.isConfirmed) return;
+
+    setBorrando(rep.id);
+    try {
+      const r = await fetch(`${BASE_URL}/${rep.id}/`, { method: 'DELETE', headers: authHeaders() });
+      if (r.ok || r.status === 204) {
+        // Se quita de la lista sin recargar: la respuesta ya confirmó el borrado.
+        setReportes(prev => prev.filter(x => x.id !== rep.id));
+        Swal.fire({ icon: 'success', title: 'Eliminado', timer: 1200, showConfirmButton: false });
+      } else if (r.status === 403 || r.status === 401) {
+        Swal.fire('Sin permiso', 'Tu usuario no tiene permiso para eliminar reportes.', 'warning');
+      } else if (r.status === 405) {
+        Swal.fire('No disponible', 'El servidor no permite eliminar reportes desde aquí todavía.', 'warning');
+      } else if (r.status === 404) {
+        // Ya no existe: la lista estaba desactualizada.
+        setReportes(prev => prev.filter(x => x.id !== rep.id));
+        Swal.fire({ icon: 'info', title: 'Ya no existía', timer: 1400, showConfirmButton: false });
+      } else {
+        Swal.fire('Error', `No se pudo eliminar (código: ${r.status}).`, 'error');
+      }
+    } catch (e) {
+      Swal.fire('Error', 'Error de conexión al eliminar.', 'error');
+    } finally {
+      setBorrando(null);
+    }
+  };
+
   const formatoFecha = (iso) => {
     if (!iso) return 'Fecha desconocida';
     try {
@@ -198,9 +237,18 @@ export default function Reportes() {
                   </div>
                 </div>
               </div>
-              <button onClick={() => abrirPdf(rep.id, rep.name)} style={btnVer} title="Ver / descargar PDF">
-                <FaEye size={16} />
-              </button>
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                <button onClick={() => abrirPdf(rep.id, rep.name)} style={btnVer} title="Ver / descargar PDF">
+                  <FaEye size={16} />
+                </button>
+                {puedeSubir && (
+                  <button onClick={() => eliminarReporte(rep)} disabled={borrando === rep.id}
+                    style={{ ...btnBorrar, opacity: borrando === rep.id ? 0.5 : 1, cursor: borrando === rep.id ? 'default' : 'pointer' }}
+                    title="Eliminar reporte">
+                    {borrando === rep.id ? <FaSpinner className="icon-spin" size={15} /> : <FaTrash size={15} />}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -236,3 +284,4 @@ const btnPrimario = { display: 'flex', alignItems: 'center', gap: '6px', backgro
 const btnSecundario = { display: 'flex', alignItems: 'center', gap: '6px', background: '#fff', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '8px 14px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' };
 const tarjeta = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px', gap: '12px' };
 const btnVer = { background: 'rgba(32,107,196,0.1)', border: 'none', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#206bc4', cursor: 'pointer', flexShrink: 0 };
+const btnBorrar = { background: 'rgba(220,38,38,0.1)', border: 'none', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', flexShrink: 0 };
