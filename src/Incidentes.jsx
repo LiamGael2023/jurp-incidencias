@@ -899,6 +899,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     ? horasDeActividad(a)
     : round4(parseFloat(a.horasEfectivas) || 0);
   const hayReduccionEn = (a) => heDeActividad(a) < horasDeActividad(a);
+  // Horas muertas: lo trabajado que no se cobra (avería, espera, traslado).
+  const muertasDeActividad = (a) => round4(Math.max(0, horasDeActividad(a) - heDeActividad(a)));
+  const muertasDeLista = (lista) => round4((lista || []).reduce((t, a) => t + muertasDeActividad(a), 0));
   // Los motivos de las líneas reducidas, juntos, para el campo de cabecera
   // que ya existía (lo usan los reportes y los partes antiguos).
   const resumenReduccion = (lista) => (lista || [])
@@ -3047,13 +3050,14 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                             <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', whiteSpace:'nowrap' }}>METRADO</th>
                             <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', whiteSpace:'nowrap' }}>HM INI · FIN</th>
                             <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', whiteSpace:'nowrap' }}>TRAMO</th>
+                            <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#b45309', whiteSpace:'nowrap' }}>H. MUERTAS</th>
                             <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', whiteSpace:'nowrap' }}>HE</th>
                             <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', width:'96px' }}></th>
                           </tr>
                         </thead>
                         <tbody>
                           {actividades.length === 0 ? (
-                            <tr><td colSpan="8" style={{ padding:'16px 10px', textAlign:'center', color:'#94a3b8', fontStyle:'italic' }}>
+                            <tr><td colSpan="9" style={{ padding:'16px 10px', textAlign:'center', color:'#94a3b8', fontStyle:'italic' }}>
                               Todavía no hay actividades. Usa "Agregar actividad".
                             </td></tr>
                           ) : actividades.map((a, i) => {
@@ -3075,9 +3079,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                 <td style={{ padding:'8px 10px', textAlign:'right', color:'#64748b', whiteSpace:'nowrap' }}>
                                   {fmtCant(horasDeActividad(a))} h
                                 </td>
-                                <td style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, whiteSpace:'nowrap', color: hayReduccionEn(a) ? '#b45309' : '#334155' }}>
+                                <td style={{ padding:'8px 10px', textAlign:'right', whiteSpace:'nowrap', fontWeight: muertasDeActividad(a) > 0 ? 700 : 400, color: muertasDeActividad(a) > 0 ? '#b45309' : '#cbd5e1' }}>
+                                  {muertasDeActividad(a) > 0 ? `${fmtCant(muertasDeActividad(a))} h` : '—'}
+                                  {muertasDeActividad(a) > 0 && <div style={{ fontSize:'10.5px', fontWeight:400, color:'#b45309' }}>{a.obsReduccion}</div>}
+                                </td>
+                                <td style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, whiteSpace:'nowrap', color:'#1463A5' }}>
                                   {fmtCant(heDeActividad(a))} h
-                                  {hayReduccionEn(a) && <div style={{ fontSize:'10.5px', fontWeight:400, color:'#b45309' }}>{a.obsReduccion}</div>}
                                 </td>
                                 <td style={{ padding:'8px 10px' }}>
                                   <div style={{ display:'flex', gap:'5px', justifyContent:'flex-end' }}>
@@ -3108,6 +3115,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                 <td></td>
                                 <td style={{ padding:'9px 10px', textAlign:'right', fontWeight:700, color:'#64748b', whiteSpace:'nowrap' }}>
                                   {fmtCant(tramoDeLista(actividades))} h
+                                </td>
+                                <td style={{ padding:'9px 10px', textAlign:'right', fontWeight:800, whiteSpace:'nowrap', color: muertasDeLista(actividades) > 0 ? '#b45309' : '#cbd5e1' }}>
+                                  {muertasDeLista(actividades) > 0 ? `${fmtCant(muertasDeLista(actividades))} h` : '—'}
                                 </td>
                                 <td style={{ padding:'9px 10px', textAlign:'right', fontWeight:800, color:'#1463A5', whiteSpace:'nowrap' }}>
                                   {fmtCant(horasMaquina)} h
@@ -3156,7 +3166,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                           <span style={{ fontSize:'16px', fontWeight:800, color:'#1463A5' }}>{fmtCant(he)} h</span>
                           {reduce && (
                             <span style={{ fontSize:'12px', color:'#b45309' }}>
-                              de {fmtCant(tramo)} h trabajadas · se descuentan {fmtCant(tramo - he)} HE
+                              de {fmtCant(tramo)} h de horómetro · {fmtCant(tramo - he)} h muertas
                             </span>
                           )}
                           {conMotivo.length > 0 && (
@@ -3570,8 +3580,13 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                       onChange={e => setActForm({ ...actForm, hmFin: e.target.value })} />
                   </div>
                   <div className="tbl-col-auto" style={{ display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
-                    <div style={{ background:'#e0f2fe', color:'#0284c7', padding:'8px 12px', borderRadius:'4px', fontWeight:'bold', fontSize:'13px', border:'1px solid #bae6fd', whiteSpace:'nowrap' }}>
-                      Horas: {fmtCant(horasDeActividad(actForm))} h
+                    <div style={{ background:'#e0f2fe', color:'#0284c7', padding:'8px 12px', borderRadius:'4px', fontWeight:'bold', fontSize:'13px', border:'1px solid #bae6fd', whiteSpace:'nowrap', textAlign:'center' }}>
+                      Tramo: {fmtCant(horasDeActividad(actForm))} h
+                      {muertasDeActividad(actForm) > 0 && (
+                        <div style={{ fontSize:'11px', fontWeight:600, color:'#b45309' }}>
+                          {fmtCant(muertasDeActividad(actForm))} h muertas
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3594,9 +3609,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                       </div>
                       <div className="tbl-col">
                         <label className="tbl-form-label">
-                          Motivo de la reducción {reduce
-                            ? <span style={{color:'#d97706',fontSize:'11px',fontWeight:600}}>· requerido (se descuentan {fmtCant(tramo - he)} HE)</span>
-                            : <span style={{color:'#94a3b8',fontSize:'11px'}}>· opcional</span>}
+                          Motivo de las horas muertas {reduce
+                            ? <span style={{color:'#d97706',fontSize:'11px',fontWeight:600}}>· requerido ({fmtCant(tramo - he)} h muertas)</span>
+                            : <span style={{color:'#94a3b8',fontSize:'11px'}}>· sin horas muertas</span>}
                         </label>
                         <input type="text" className="tbl-form-control"
                           placeholder={reduce ? 'Avería, espera de volquetes, traslado...' : 'Sin reducción de horas'}
