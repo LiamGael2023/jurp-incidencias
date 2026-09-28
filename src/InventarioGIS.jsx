@@ -73,7 +73,7 @@ const API = '/vigapi/inventario';
  * solo dos familias cromáticas y un neutro:
  *
  *   azul  → agua: canales, tomas, entregas, obras de arte
- *   púrpura→ territorio: sectores, licencias, lotes (solo contorno)
+ *   lima  → territorio: sectores, licencias, lotes (solo contorno)
  *   gris  → vías, caminos y todo lo que es de terceros
  *
  * Dentro del agua la distinción no la hace el tono sino la jerarquía: el
@@ -81,11 +81,16 @@ const API = '/vigapi/inventario';
  * tuberías a presión van punteadas. Los puntos, además, llevan su propio
  * icono de simbología, así que el color ahí es lo de menos.
  *
- * El territorio va en púrpura por el fondo: el satélite de esta zona es
- * oliva donde hay cultivo (#70765c) y arena donde no (#ada686). Un verde
- * ahí se pierde entre los campos, y el púrpura es justo lo contrario del
- * oliva. Contra el azul del agua da ΔE 17.9 para daltonismo y 28.0 en
- * visión normal, sobre mínimos de 8 y 15.
+ * El territorio va en lima, no en verde: el satélite de esta zona es oliva
+ * donde hay cultivo (#70765c) y arena donde no (#ada686), y un verde de
+ * hoja se pierde entre los campos. El lima se levanta del terreno y, sobre
+ * todo, se separa del verde "bueno" del estado — que es el riesgo real de
+ * usar esta familia. Contra ese verde da ΔE 17.4 en visión normal y contra
+ * el azul del agua 26.4, sobre un mínimo de 15.
+ *
+ * Los tonos más oscuros de la misma familia se descartaron por eso mismo:
+ * #8fb840 queda en 12.5 contra el estado y #2d913e en 3.8, o sea
+ * indistinguible de un activo en buen estado.
  *
  * Aun así, sobre una ortofoto ningún color puro llega al contraste
  * mínimo: el fondo es de luminancia media y compite con todo. Eso no se
@@ -132,9 +137,9 @@ const GRUPOS = [
       { codigo: 'canal_lateral_10',  label: 'Canal Lateral 10',  color: '#4dabf7', tipo: 'line', weight: 3 },
       { codigo: 'subalterales',      label: 'Subalterales',      color: '#a5d8ff', tipo: 'line', weight: 2 },
       { codigo: 'redes_presurizado', label: 'Redes presurizado', color: '#74c0fc', tipo: 'line', dash: '3 5', weight: 2 },
-      { codigo: 'sectores_pech',     label: 'Sectores PECH',     color: '#9c36b5', tipo: 'poly' },
-      { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#b44fc9', tipo: 'poly' },
-      { codigo: 'lotes',             label: 'Lotes',             color: '#cb87da', tipo: 'poly' },
+      { codigo: 'sectores_pech',     label: 'Sectores PECH',     color: '#aec14a', tipo: 'poly' },
+      { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#c0d259', tipo: 'poly' },
+      { codigo: 'lotes',             label: 'Lotes',             color: '#d2e070', tipo: 'poly' },
     ],
   },
 ];
