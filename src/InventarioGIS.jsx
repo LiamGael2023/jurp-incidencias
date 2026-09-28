@@ -154,7 +154,10 @@ const GRUPOS_CONTEXTO = [
       { codigo: 'bocatomas',          label: 'Bocatomas',            color: '#7a93ab', ico: icoBocatoma },
       { codigo: 'estaciones_control', label: 'Estaciones de control', color: '#8ea9c2', ico: icoBocatoma },
       { codigo: 'rapidas',            label: 'Rápidas',              color: '#6b8ca8', ico: icoRapida },
-      { codigo: 'tomas_canal_madre',  label: 'Tomas Canal Madre',    color: '#a1bcd1', ico: icoToma },
+      // Formato B-1.C del ANA: la obra es del PECH pero el inventario lo
+      // levanta y lo firma la Junta como operador, asi que estas tomas si
+      // entran en campana. Por eso 'evaluable' va aparte del ambito.
+      { codigo: 'tomas_canal_madre',  label: 'Tomas Canal Madre',    color: '#a1bcd1', ico: icoToma, evaluable: true },
       { codigo: 'garitas_jurp',       label: 'Garitas JURP',         color: '#15aabf', ico: icoGaritaJURP },
       { codigo: 'garitas_otros',      label: 'Garitas de terceros',  color: '#94a3b8', ico: icoGaritaOtros },
     ],
@@ -797,6 +800,7 @@ export function CapasInventario({ inv }) {
 
           const p = f.properties || {};
           const ev = inv.evaluacionDe(capa.codigo, p.fid);
+          const entraEnCampania = p.ambito === 'JURP' || !!capa.evaluable;
           const esDestacado = destacado
             && destacado.tipo === capa.codigo
             && String(destacado.fid) === String(p.fid);
@@ -893,9 +897,10 @@ export function CapasInventario({ inv }) {
 
                       {ev.observaciones && <div className="inv-pop-eval-obs">{ev.observaciones}</div>}
                     </div>
-                  ) : p.ambito === 'JURP' ? (
+                  ) : entraEnCampania ? (
                     <div className="inv-pop-pend">
                       Sin evaluar en la campaña {inv.campania?.anio || ''}
+                      {p.ambito === 'PECH' && ' — obra del PECH que opera la Junta'}
                       {p.campania_alta > (inv.campania?.anio || 0) &&
                         ' — alta posterior a esta campaña'}
                     </div>
@@ -905,8 +910,10 @@ export function CapasInventario({ inv }) {
                     </div>
                   ) : null}
 
-                  {/* solo lo que administra la Junta entra en la campaña */}
-                  {p.ambito === 'JURP' && inv.campania
+                  {/* Entra en campaña lo que administra la Junta, más las
+                      capas marcadas como evaluables aunque la obra sea de
+                      terceros: la Junta las opera y las inventaría. */}
+                  {entraEnCampania && inv.campania
                     && inv.campania.estado !== 'cerrada' && (
                     <button type="button" className="inv-btn-evaluar"
                       onClick={() => inv.abrirEvaluacion(capa.codigo, p.fid, p)}>
