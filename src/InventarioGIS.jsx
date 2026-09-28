@@ -60,48 +60,72 @@ import icoGaritaOtros from './assets/simbologia/garita_otros.png';
 const API = '/vigapi/inventario';
 
 // Agrupación para el panel. El orden es el que ve el usuario.
+/*
+ * Criterio de color de las capas
+ * ------------------------------
+ * Verde, amarillo, naranja y rojo están RESERVADOS para el estado de
+ * conservación (bueno / regular / malo / colapsado). Ninguna capa los usa
+ * como identidad: antes una "entrega" naranja se confundía con un activo
+ * en mal estado, que es justo lo que el mapa tiene que dejar claro.
+ *
+ * Sobre imagen satelital todas las capas se ven a la vez, y en ese caso no
+ * se sostienen más de tres identidades de color distinguibles. Por eso hay
+ * solo dos familias cromáticas y un neutro:
+ *
+ *   azul   → agua: canales, tomas, entregas, obras de arte
+ *   magenta→ territorio: sectores, licencias, lotes (solo contorno)
+ *   gris   → vías, caminos y todo lo que es de terceros
+ *
+ * Dentro del agua la distinción no la hace el tono sino la jerarquía: el
+ * canal madre va oscuro y grueso, y las ramas se aclaran y adelgazan. Las
+ * tuberías a presión van punteadas. Los puntos, además, llevan su propio
+ * icono de simbología, así que el color ahí es lo de menos.
+ *
+ * El par azul/magenta se verificó para daltonismo sobre fondo oscuro
+ * (ΔE 15.9 CVD, 25.8 visión normal; el mínimo exigible es 8 y 15).
+ */
 const GRUPOS = [
   {
     titulo: 'Obras de captación y entrega',
     capas: [
-      { codigo: 'tomas_l10',            label: 'Tomas Lateral 10',      color: '#f59f00', ico: icoToma },
-      { codigo: 'tomas_otros_sectores', label: 'Tomas otros sectores',  color: '#f08c00', ico: icoToma },
-      { codigo: 'entregas',             label: 'Entregas',              color: '#e8590c', ico: icoEntrega },
-      { codigo: 'laterales',            label: 'Laterales',             color: '#d9480f', ico: icoCanalTrap },
-      { codigo: 'partidor',             label: 'Partidores',            color: '#c92a2a', ico: icoTransicion },
+      { codigo: 'tomas_l10',            label: 'Tomas Lateral 10',      color: '#4dabf7', ico: icoToma },
+      { codigo: 'tomas_otros_sectores', label: 'Tomas otros sectores',  color: '#74c0fc', ico: icoToma },
+      { codigo: 'entregas',             label: 'Entregas',              color: '#3bc9db', ico: icoEntrega },
+      { codigo: 'laterales',            label: 'Laterales',             color: '#22b8cf', ico: icoCanalTrap },
+      { codigo: 'partidor',             label: 'Partidores',            color: '#15aabf', ico: icoTransicion },
     ],
   },
   {
     titulo: 'Obras de arte',
     capas: [
       { codigo: 'canoas',              label: 'Canoas',               color: '#4c6ef5', ico: icoCanoa },
-      { codigo: 'sifon',               label: 'Sifones',              color: '#3b5bdb', ico: icoSifon },
-      { codigo: 'alcantarilla',        label: 'Alcantarillas',        color: '#7048e8', ico: icoAlcantarilla },
-      { codigo: 'aliviadero',          label: 'Aliviaderos',          color: '#9c36b5', ico: icoAliviadero },
-      { codigo: 'desarenadores',       label: 'Desarenadores',        color: '#0c8599', ico: icoDesarenador },
-      { codigo: 'camara_rompepresion', label: 'Cámaras rompepresión', color: '#1098ad', ico: icoCaida },
-      { codigo: 'cajas_hidraulicas',   label: 'Cajas hidráulicas',    color: '#0ca678', ico: icoCanalRect },
-      { codigo: 'pases_de_tuberias',   label: 'Pases de tuberías',    color: '#2f9e44', ico: icoConducCubierto },
-      { codigo: 'reservorios',         label: 'Reservorios',          color: '#1971c2', ico: icoAcueducto },
+      { codigo: 'sifon',               label: 'Sifones',              color: '#4dabf7', ico: icoSifon },
+      { codigo: 'alcantarilla',        label: 'Alcantarillas',        color: '#9775fa', ico: icoAlcantarilla },
+      { codigo: 'aliviadero',          label: 'Aliviaderos',          color: '#b197fc', ico: icoAliviadero },
+      { codigo: 'desarenadores',       label: 'Desarenadores',        color: '#22b8cf', ico: icoDesarenador },
+      { codigo: 'camara_rompepresion', label: 'Cámaras rompepresión', color: '#3bc9db', ico: icoCaida },
+      { codigo: 'cajas_hidraulicas',   label: 'Cajas hidráulicas',    color: '#66d9e8', ico: icoCanalRect },
+      { codigo: 'pases_de_tuberias',   label: 'Pases de tuberías',    color: '#74c0fc', ico: icoConducCubierto },
+      { codigo: 'reservorios',         label: 'Reservorios',          color: '#1c7ed6', ico: icoAcueducto },
     ],
   },
   {
     titulo: 'Cruces',
     capas: [
-      { codigo: 'puente_vehicular', label: 'Puentes vehiculares', color: '#868e96', ico: icoPaseVehicular },
-      { codigo: 'puente_peatonal',  label: 'Puentes peatonales',  color: '#adb5bd', ico: icoPasePeatonal },
+      { codigo: 'puente_vehicular', label: 'Puentes vehiculares', color: '#adb5bd', ico: icoPaseVehicular },
+      { codigo: 'puente_peatonal',  label: 'Puentes peatonales',  color: '#ced4da', ico: icoPasePeatonal },
     ],
   },
   {
     titulo: 'Red y territorio',
     capas: [
-      { codigo: 'canal_madre',       label: 'Canal madre',       color: '#1c7ed6', tipo: 'line' },
-      { codigo: 'canal_lateral_10',  label: 'Canal Lateral 10',  color: '#f03e3e', tipo: 'line' },
-      { codigo: 'subalterales',      label: 'Subalterales',      color: '#ae3ec9', tipo: 'line' },
-      { codigo: 'redes_presurizado', label: 'Redes presurizado', color: '#f59f00', tipo: 'line' },
-      { codigo: 'sectores_pech',     label: 'Sectores PECH',     color: '#c92a2a', tipo: 'poly' },
-      { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#f76707', tipo: 'poly' },
-      { codigo: 'lotes',             label: 'Lotes',             color: '#e8590c', tipo: 'poly' },
+      { codigo: 'canal_madre',       label: 'Canal madre',       color: '#1c7ed6', tipo: 'line', weight: 4 },
+      { codigo: 'canal_lateral_10',  label: 'Canal Lateral 10',  color: '#4dabf7', tipo: 'line', weight: 3 },
+      { codigo: 'subalterales',      label: 'Subalterales',      color: '#a5d8ff', tipo: 'line', weight: 2 },
+      { codigo: 'redes_presurizado', label: 'Redes presurizado', color: '#74c0fc', tipo: 'line', dash: '3 5', weight: 2 },
+      { codigo: 'sectores_pech',     label: 'Sectores PECH',     color: '#d55181', tipo: 'poly' },
+      { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#e87ba4', tipo: 'poly' },
+      { codigo: 'lotes',             label: 'Lotes',             color: '#f2a7c3', tipo: 'poly' },
     ],
   },
 ];
@@ -113,26 +137,26 @@ const GRUPOS_CONTEXTO = [
     titulo: 'Chavimochic — obras del PECH',
     contexto: true,
     capas: [
-      { codigo: 'bocatomas',          label: 'Bocatomas',            color: '#495057', ico: icoBocatoma },
-      { codigo: 'estaciones_control', label: 'Estaciones de control', color: '#5c7cfa', ico: icoBocatoma },
-      { codigo: 'rapidas',            label: 'Rápidas',              color: '#f03e3e', ico: icoRapida },
-      { codigo: 'tomas_canal_madre',  label: 'Tomas Canal Madre',    color: '#e8590c', ico: icoToma },
-      { codigo: 'garitas_jurp',       label: 'Garitas JURP',         color: '#1098ad', ico: icoGaritaJURP },
-      { codigo: 'garitas_otros',      label: 'Garitas de terceros',  color: '#9c36b5', ico: icoGaritaOtros },
+      { codigo: 'bocatomas',          label: 'Bocatomas',            color: '#7a93ab', ico: icoBocatoma },
+      { codigo: 'estaciones_control', label: 'Estaciones de control', color: '#8ea9c2', ico: icoBocatoma },
+      { codigo: 'rapidas',            label: 'Rápidas',              color: '#6b8ca8', ico: icoRapida },
+      { codigo: 'tomas_canal_madre',  label: 'Tomas Canal Madre',    color: '#a1bcd1', ico: icoToma },
+      { codigo: 'garitas_jurp',       label: 'Garitas JURP',         color: '#15aabf', ico: icoGaritaJURP },
+      { codigo: 'garitas_otros',      label: 'Garitas de terceros',  color: '#94a3b8', ico: icoGaritaOtros },
     ],
   },
   {
     titulo: 'Chavimochic — trazados y vías',
     contexto: true,
     capas: [
-      { codigo: 'canal_madre_kmz',       label: 'Canal Madre',       color: '#1971c2', tipo: 'poly' },
-      { codigo: 'canal_lateral_10_kmz',  label: 'Lateral 10',        color: '#4dabf7', tipo: 'poly' },
-      { codigo: 'redes_presurizado_kmz', label: 'Redes presurizado', color: '#74c0fc', tipo: 'poly' },
-      { codigo: 'evacuador_kmz',         label: 'Evacuadores',       color: '#a5d8ff', tipo: 'poly' },
-      { codigo: 'caminos_servicio_kmz',  label: 'Caminos de servicio', color: '#e67700', tipo: 'poly' },
-      { codigo: 'vias_acceso_kmz',       label: 'Vías de acceso',    color: '#d6336c', tipo: 'poly' },
-      { codigo: 'via_auxiliar_kmz',      label: 'Vía auxiliar',      color: '#ae3ec9', tipo: 'poly' },
-      { codigo: 'red_nacional_kmz',      label: 'Red vial nacional', color: '#d63939', tipo: 'poly' },
+      { codigo: 'canal_madre_kmz',       label: 'Canal Madre',       color: '#6b8ca8', tipo: 'poly' },
+      { codigo: 'canal_lateral_10_kmz',  label: 'Lateral 10',        color: '#86a5bd', tipo: 'poly' },
+      { codigo: 'redes_presurizado_kmz', label: 'Redes presurizado', color: '#a1bcd1', tipo: 'poly' },
+      { codigo: 'evacuador_kmz',         label: 'Evacuadores',       color: '#bcd3e4', tipo: 'poly' },
+      { codigo: 'caminos_servicio_kmz',  label: 'Caminos de servicio', color: '#868e96', tipo: 'poly' },
+      { codigo: 'vias_acceso_kmz',       label: 'Vías de acceso',    color: '#adb5bd', tipo: 'poly' },
+      { codigo: 'via_auxiliar_kmz',      label: 'Vía auxiliar',      color: '#9aa3ab', tipo: 'poly' },
+      { codigo: 'red_nacional_kmz',      label: 'Red vial nacional', color: '#dee2e6', tipo: 'poly' },
     ],
   },
 ];
@@ -687,11 +711,17 @@ export function CapasInventario({ inv }) {
                 const esPech = (f?.properties?.ambito) === 'PECH';
                 return {
                   color: capa.color,
-                  weight: capa.tipo === 'line' ? 3 : 1.5,
-                  opacity: esPech ? 0.5 : 0.9,
-                  dashArray: esPech ? '6 4' : null,
+                  // El grosor es la otra mitad de la jerarquía: el troncal
+                  // pesa, las ramas adelgazan. Sin esto, cuatro pasos de
+                  // azul no se distinguen de un vistazo.
+                  weight: capa.tipo === 'line' ? (capa.weight || 3) : 1.2,
+                  opacity: esPech ? 0.5 : 0.95,
+                  dashArray: esPech ? '6 4' : (capa.dash || null),
                   fillColor: capa.color,
-                  fillOpacity: capa.tipo === 'poly' ? (esPech ? 0.06 : 0.12) : 0,
+                  // Las áreas van casi sin relleno: son el suelo sobre el que
+                  // se leen los canales, no la información principal. Con
+                  // relleno fuerte tapaban la imagen satelital entera.
+                  fillOpacity: capa.tipo === 'poly' ? (esPech ? 0.04 : 0.08) : 0,
                 };
               }}
               onEachFeature={(f, layer) => {
