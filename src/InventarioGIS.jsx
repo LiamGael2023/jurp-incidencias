@@ -194,6 +194,8 @@ const ZOOM_ETIQUETAS = 16;
  * con eso los <Marker> hijos se añaden al racimo en vez de al mapa, y sus
  * popups siguen siendo JSX normal. No hay que reescribirlos a mano.
  */
+// eslint-disable-next-line no-unused-vars -- children se descarta a propósito:
+// los hijos los coloca react-leaflet dentro del grupo, no este factory.
 const GrupoCluster = createPathComponent(({ children: _hijos, ...opciones }, ctx) => {
   const grupo = L.markerClusterGroup({
     chunkedLoading: true,        // añade por tandas, sin congelar la pestaña
@@ -1131,8 +1133,13 @@ export function ModalEvaluacion({ inv }) {
    Busca sobre el índice que se descarga al abrir el panel, así que
    encuentra cualquier activo aunque su capa esté apagada. Al elegir uno,
    enciende la capa, vuela y le abre la ficha.
+
+   Se exporta porque la barra superior del visor usa este mismo componente:
+   tenía un buscador propio que solo miraba las capas ya descargadas y
+   comparaba el texto tal cual, así que encontraba menos cosas y de otra
+   manera. Dos buscadores parecidos pero distintos confunden más que uno.
    ══════════════════════════════════════════════════════════ */
-function BuscadorInventario({ inv }) {
+export function BuscadorInventario({ inv, clase = '' }) {
   const [texto, setTexto] = useState('');
   const [abierto, setAbierto] = useState(false);
 
@@ -1145,7 +1152,7 @@ function BuscadorInventario({ inv }) {
   };
 
   return (
-    <div className="inv-buscador">
+    <div className={`inv-buscador ${clase}`.trim()}>
       <FaSearch className="inv-buscador-ico" />
       <input
         value={texto}

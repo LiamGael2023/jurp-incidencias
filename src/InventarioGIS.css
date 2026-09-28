@@ -1094,3 +1094,22 @@
   pointer-events: none;   /* no debe robarle el clic al marcador */
 }
 .leaflet-tooltip.inv-eti::before { display: none; }   /* quita la flecha */
+
+/* ── El buscador del inventario en la barra superior ──────────────────────
+   Es el mismo componente del panel; aquí solo se adapta al ancho de la
+   barra y se le pone el fondo de cristal del resto de los controles. */
+.inv-buscador.inv-buscador-top {
+  width: 100%;
+  max-width: 520px;
+}
+.inv-buscador.inv-buscador-top input {
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(10px);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #e2e8f0;
+  height: 38px;
+}
+.inv-buscador.inv-buscador-top .inv-buscador-lista {
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(12px);
+}

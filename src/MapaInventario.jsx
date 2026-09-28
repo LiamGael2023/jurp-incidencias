@@ -6,12 +6,13 @@ import './MapaDashboard.css';
 import './MapaGIS.css';
 import RailGIS from './RailGIS';
 import {
-  FaGlobe, FaSyncAlt, FaSearch, FaTimes, FaCamera, FaShareAlt,
+  FaGlobe, FaSyncAlt, FaCamera, FaShareAlt,
   FaPlus, FaMinus, FaRulerCombined, FaDrawPolygon, FaEraser, FaLocationArrow,
 } from 'react-icons/fa';
 import { MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
 import './MapaHerramientas.css';
-import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion } from './InventarioGIS';
+import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion,
+         BuscadorInventario } from './InventarioGIS';
 
 /**
  * Visor del módulo INVENTARIO.
@@ -69,9 +70,6 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
   const [base, setBase] = useState('satelite');
   const [herramienta, setHerramienta] = useState(null);
   const [destino, setDestino] = useState(null);
-  const [busqueda, setBusqueda] = useState('');
-  const [resultados, setResultados] = useState([]);
-  const [buscando, setBuscando] = useState(false);
 
   const mapRef = useRef(null);
   const contenedorRef = useRef(null);
@@ -81,38 +79,6 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
 
   // El panel del inventario es la razón de esta vista: se abre al entrar.
   useEffect(() => { if (!inv.abierto) inv.alternar(); }, []);   // solo al montar
-
-  // ── Búsqueda dentro de las capas ya descargadas ──────────────────────
-  // Solo mira lo que está cargado en memoria: buscar en el servidor exigiría
-  // un endpoint de búsqueda que el inventario todavía no tiene.
-  const buscar = (txt) => {
-    setBusqueda(txt);
-    if (txt.trim().length < 2) { setResultados([]); return; }
-    const q = txt.toLowerCase();
-    const out = [];
-    for (const [codigo, fc] of Object.entries(inv.datos || {})) {
-      for (const f of (fc?.features || [])) {
-        const p = f.properties || {};
-        const nombre = String(p.nombre || p.codigo || '');
-        if (!nombre.toLowerCase().includes(q)) continue;
-        const c = f.geometry?.coordinates;
-        if (!c) continue;
-        const [lng, lat] = Array.isArray(c[0]) ? c[0] : c;
-        if (typeof lat !== 'number' || typeof lng !== 'number') continue;
-        out.push({ nombre, capa: codigo, lat, lng });
-        if (out.length >= 8) break;
-      }
-      if (out.length >= 8) break;
-    }
-    setResultados(out);
-  };
-
-  const irAResultado = (r) => {
-    setDestino([r.lat, r.lng]);
-    setResultados([]);
-    setBusqueda(r.nombre);
-    setTimeout(() => setDestino(null), 1800);
-  };
 
   return (
     <div className="gis" ref={contenedorRef}>
@@ -147,30 +113,9 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
           </div>
         </div>
 
+        {/* El mismo buscador del panel, no uno parecido. */}
         <div className="gis-buscador">
-          <div className="gis-buscador-caja">
-            <FaSearch className="gis-buscador-ico" />
-            <input value={busqueda} onChange={e => buscar(e.target.value)}
-              placeholder="Buscar en las capas encendidas…" />
-            {busqueda && (
-              <button className="gis-buscador-x"
-                onClick={() => { setBusqueda(''); setResultados([]); }}>
-                <FaTimes />
-              </button>
-            )}
-            {resultados.length > 0 && (
-              <div className="gis-resultados gis-glass">
-                {resultados.map((r, i) => (
-                  <div key={i} className="gis-resultado" onClick={() => irAResultado(r)}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <b>{r.nombre}</b>
-                      <span>{r.capa}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <BuscadorInventario inv={inv} clase="inv-buscador-top" />
         </div>
 
         <div className="gis-acciones gis-glass">
