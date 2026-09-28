@@ -159,7 +159,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   // calcMetradoDe() sirva igual a una actividad que al parte completo.
   const estadoInicialActividad = {
     zonaTrabajo: '', actividad: '', actividadOtros: '', observacion: '',
-    hmInicio: '', hmFin: '',
+    hmInicio: '', hmFin: '', horasEfectivas: '', obsReduccion: '',
     calcularMetrado: false, metradoManual: '', unidadMetrado: 'm3',
     longitud: '', altura: '', anchoSup: '', anchoInf: '',
     anchoBase: '', corona: '', talud: '', hPromedio: '',
@@ -699,6 +699,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                 actividadOtros: IMG_METRADO[i.activities] ? '' : i.activities,
                 hmInicio: i.start_horometer != null ? String(i.start_horometer) : '',
                 hmFin: i.end_horometer != null ? String(i.end_horometer) : '',
+                horasEfectivas: i.horas_efectivas != null ? String(i.horas_efectivas) : '',
+                obsReduccion: i.obs_reduccion || '',
                 metradoManual: i.metrado != null ? String(i.metrado) : '',
                 unidadMetrado: i.metrado_unidad || 'm3',
                 anchoSup: i.width_top ?? '', anchoInf: i.width_bottom ?? '',
@@ -877,8 +879,10 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const horasCobradas = (i) => {
     if (i.horas_efectivas != null && i.horas_efectivas !== '') return round4(i.horas_efectivas);
     if (i.actividades && i.actividades.length) {
-      return round4(i.actividades.reduce((t, a) => t + Math.max(0,
-        (parseFloat(a.end_horometer) || 0) - (parseFloat(a.start_horometer) || 0)), 0));
+      return round4(i.actividades.reduce((t, a) => {
+        if (a.horas_efectivas != null && a.horas_efectivas !== '') return t + (parseFloat(a.horas_efectivas) || 0);
+        return t + Math.max(0, (parseFloat(a.end_horometer) || 0) - (parseFloat(a.start_horometer) || 0));
+      }, 0));
     }
     return round4(Math.max(0, (parseFloat(i.end_horometer) || 0) - (parseFloat(i.start_horometer) || 0)));
   };
@@ -889,9 +893,22 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     if (!Number.isFinite(i) || !Number.isFinite(f)) return 0;
     return round4(Math.max(0, f - i));
   };
-  // Horas del parte: la SUMA de los tramos, no el rango de la cabecera. Si la
-  // maquina estuvo parada entre dos tareas, esas horas no se cobran.
-  const horasDeLista = (lista) => round4((lista || []).reduce((t, a) => t + horasDeActividad(a), 0));
+  // Horas efectivas de una actividad: lo que de verdad se cobra. Vacío = todo
+  // el tramo; menos que el tramo exige un motivo.
+  const heDeActividad = (a) => (a?.horasEfectivas === '' || a?.horasEfectivas == null)
+    ? horasDeActividad(a)
+    : round4(parseFloat(a.horasEfectivas) || 0);
+  const hayReduccionEn = (a) => heDeActividad(a) < horasDeActividad(a);
+  // Los motivos de las líneas reducidas, juntos, para el campo de cabecera
+  // que ya existía (lo usan los reportes y los partes antiguos).
+  const resumenReduccion = (lista) => (lista || [])
+    .filter(a => hayReduccionEn(a))
+    .map(a => `${textoActividad(a)}: ${(a.obsReduccion || '').trim()}`)
+    .join(' · ');
+  // Horas del parte: la SUMA de las efectivas de sus actividades, no el rango
+  // de la cabecera. Lo que la máquina estuvo parada no se cobra.
+  const horasDeLista = (lista) => round4((lista || []).reduce((t, a) => t + heDeActividad(a), 0));
+  const tramoDeLista = (lista) => round4((lista || []).reduce((t, a) => t + horasDeActividad(a), 0));
   const horasMaquina = String(horasDeLista(actividades));
   // Rango del dia, para la cabecera del parte y para sembrar el HM del siguiente.
   const rangoHorometro = (lista) => {
@@ -975,6 +992,18 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       icon: 'warning', title: 'Horómetro superpuesto',
       text: 'Ese tramo se cruza con el de otra actividad del parte. Revisa los horómetros.',
     });
+    // Las horas efectivas no pueden pasar del tramo, y si son menos hay que
+    // decir por qué: eso es lo que justifica cobrar menos de lo trabajado.
+    const tramo = horasDeActividad(a);
+    const he = heDeActividad(a);
+    if (he < 0 || he > tramo) return Swal.fire({
+      icon: 'warning', title: 'Atención',
+      text: `Las horas efectivas deben estar entre 0 y ${tramo}.`,
+    });
+    if (he < tramo && !(a.obsReduccion || '').trim()) return Swal.fire({
+      icon: 'warning', title: 'Observación requerida',
+      text: 'Detalla el motivo de la reducción de horas de esta actividad.',
+    });
     const lista = [...actividades];
     if (actEditando === null) lista.push(a); else lista[actEditando] = a;
     setActividades(lista);
@@ -1021,6 +1050,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       work_zone_text: a.zonaTrabajo || '',
       actividad: textoActividad(a),
       start_horometer: num(a.hmInicio), end_horometer: num(a.hmFin),
+      horas_efectivas: a.horasEfectivas === '' || a.horasEfectivas == null
+        ? null : round4(parseFloat(a.horasEfectivas) || 0),
+      obs_reduccion: a.obsReduccion || '',
       width_top: num(a.anchoSup), width_bottom: num(a.anchoInf),
       height: num(a.altura), length: num(a.longitud),
       metrado: mv.val.toFixed(4),
@@ -1048,6 +1080,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       zonaTrabajo: a.work_zone_text || '',
       hmInicio: a.start_horometer != null ? String(a.start_horometer) : '',
       hmFin: a.end_horometer != null ? String(a.end_horometer) : '',
+      horasEfectivas: a.horas_efectivas != null ? String(a.horas_efectivas) : '',
+      obsReduccion: a.obs_reduccion || '',
       // Sin 'medidas' (partes de antes de este cambio) se conserva al menos el
       // metrado guardado, en vez de recalcularlo a cero con campos vacíos.
       actividad: crudo.actividad || (IMG_METRADO[a.actividad] ? a.actividad : 'OTROS'),
@@ -1275,14 +1309,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         icon: 'warning', title: 'N° de Parte repetido',
         text: `Ya hay un parte ${nuevoRecurso.numeroParte} en esta incidencia. Cámbialo antes de agregarlo.`,
       });
-      const efectivas = (nuevoRecurso.horasEfectivas === '' || nuevoRecurso.horasEfectivas === null)
-        ? totalHM
-        : parseFloat(nuevoRecurso.horasEfectivas) || 0;
-      if (efectivas < 0 || efectivas > totalHM) return Swal.fire({ icon: 'warning', title: 'Atención', text: `Las Horas Efectivas deben estar entre 0 y ${totalHM}` });
-      if (efectivas < totalHM && !nuevoRecurso.obsReduccion.trim()) {
-        return Swal.fire({ icon: 'warning', title: 'Observación requerida', text: 'Detalla el motivo de la reducción de horas efectivas.' });
-      }
-      cantFinal = round4(efectivas);
+      // Lo que se cobra: la suma de las horas efectivas de cada actividad.
+      // Cada línea ya validó su reducción y su motivo al agregarse a la hoja.
+      cantFinal = round4(totalHM);
       const equipoFinal = nuevoRecurso.equipo;
       const marcaFinal = nuevoRecurso.marca;
       // Detalle corto: solo código · equipo marca modelo. El resto va en el PDF del parte.
@@ -1311,6 +1340,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         actividadesLista: [...actividades],
         hmInicio: rangoHorometro(actividades).inicio,
         hmFin: rangoHorometro(actividades).fin,
+        horasEfectivas: String(horasDeLista(actividades)),
+        obsReduccion: resumenReduccion(actividades),
         actividad: res.texto, actividadOtros: '',
         metradoManual: String(res.metrado), unidadMetrado: res.unidad, calcularMetrado: false,
       } : {}) };
@@ -1432,12 +1463,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           return { ...x, ...r, cantidad: cant, descripcionResumen: r.descripcion,
             total: round2(cant * (parseFloat(r.precioUnitario) || 0)) };
         }
-        const totalHM = parseFloat(horasMaquina) || 0;
-        const efec = r.horasEfectivas === '' ? totalHM : round4(parseFloat(r.horasEfectivas) || 0);
+        const efec = round4(parseFloat(horasMaquina) || 0);
         const res = resumenActividades(actividades);
         const rg = rangoHorometro(actividades);
         return { ...x, ...r, cantidad: efec, total: round2(efec * (parseFloat(r.precioUnitario) || 0)),
           actividadesLista: [...actividades], hmInicio: rg.inicio, hmFin: rg.fin,
+          horasEfectivas: String(efec), obsReduccion: resumenReduccion(actividades),
           actividad: res.texto, actividadOtros: '',
           metradoManual: String(res.metrado), unidadMetrado: res.unidad, calcularMetrado: false };
       }));
@@ -1479,6 +1510,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         const rgHM = rangoHorometro(actividades);
         fd.append('start_horometer', rgHM.inicio === '' ? 0 : rgHM.inicio);
         fd.append('end_horometer', rgHM.fin === '' ? 0 : rgHM.fin);
+        fd.append('horas_efectivas', horasDeLista(actividades));
+        fd.append('obs_reduccion', resumenReduccion(actividades));
         fd.append('fuel_gallons', parseFloat(r.combustible) || 0);
         fd.append('fuel_voucher', r.vale || '');
         const res = resumenActividades(actividades);
@@ -2382,6 +2415,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           const rgHM = rangoHorometro(r.actividadesLista || []);
           formData.append('start_horometer', rgHM.inicio === '' ? 0 : rgHM.inicio);
           formData.append('end_horometer', rgHM.fin === '' ? 0 : rgHM.fin);
+          formData.append('horas_efectivas', horasDeLista(r.actividadesLista || []));
+          formData.append('obs_reduccion', resumenReduccion(r.actividadesLista || []));
           formData.append('fuel_gallons', parseFloat(r.combustible) || 0);
           formData.append('fuel_voucher', r.vale);
           // Cabecera: el texto de todas las actividades y el metrado resumido.
@@ -2993,7 +3028,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                             Actividades realizadas <span style={{color:'red'}}>*</span>
                           </div>
                           <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>
-                            Agrega una línea por cada tarea, con su tramo de horómetro y su metrado. Las horas del parte son la suma de los tramos.
+                            Agrega una línea por cada tarea, con su tramo de horómetro, sus horas efectivas y su metrado. El parte cobra la suma de las HE.
                           </div>
                         </div>
                         <button type="button" onClick={abrirNuevaActividad}
@@ -3011,13 +3046,14 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                             <th style={{ textAlign:'left', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1' }}>ACTIVIDAD</th>
                             <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', whiteSpace:'nowrap' }}>METRADO</th>
                             <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', whiteSpace:'nowrap' }}>HM INI · FIN</th>
-                            <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', whiteSpace:'nowrap' }}>HORAS</th>
+                            <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', whiteSpace:'nowrap' }}>TRAMO</th>
+                            <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', whiteSpace:'nowrap' }}>HE</th>
                             <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', width:'96px' }}></th>
                           </tr>
                         </thead>
                         <tbody>
                           {actividades.length === 0 ? (
-                            <tr><td colSpan="7" style={{ padding:'16px 10px', textAlign:'center', color:'#94a3b8', fontStyle:'italic' }}>
+                            <tr><td colSpan="8" style={{ padding:'16px 10px', textAlign:'center', color:'#94a3b8', fontStyle:'italic' }}>
                               Todavía no hay actividades. Usa "Agregar actividad".
                             </td></tr>
                           ) : actividades.map((a, i) => {
@@ -3036,8 +3072,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                 <td style={{ padding:'8px 10px', textAlign:'right', color:'#475569', whiteSpace:'nowrap' }}>
                                   {a.hmInicio === '' || a.hmFin === '' ? '—' : `${fmtCant(a.hmInicio)} · ${fmtCant(a.hmFin)}`}
                                 </td>
-                                <td style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'#334155', whiteSpace:'nowrap' }}>
+                                <td style={{ padding:'8px 10px', textAlign:'right', color:'#64748b', whiteSpace:'nowrap' }}>
                                   {fmtCant(horasDeActividad(a))} h
+                                </td>
+                                <td style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, whiteSpace:'nowrap', color: hayReduccionEn(a) ? '#b45309' : '#334155' }}>
+                                  {fmtCant(heDeActividad(a))} h
+                                  {hayReduccionEn(a) && <div style={{ fontSize:'10.5px', fontWeight:400, color:'#b45309' }}>{a.obsReduccion}</div>}
                                 </td>
                                 <td style={{ padding:'8px 10px' }}>
                                   <div style={{ display:'flex', gap:'5px', justifyContent:'flex-end' }}>
@@ -3066,8 +3106,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                   {unidades.length === 1 ? `${fmtCant(suma)} ${unidades[0]}` : 'unidades mixtas'}
                                 </td>
                                 <td></td>
+                                <td style={{ padding:'9px 10px', textAlign:'right', fontWeight:700, color:'#64748b', whiteSpace:'nowrap' }}>
+                                  {fmtCant(tramoDeLista(actividades))} h
+                                </td>
                                 <td style={{ padding:'9px 10px', textAlign:'right', fontWeight:800, color:'#1463A5', whiteSpace:'nowrap' }}>
-                                  {horasMaquina} h
+                                  {fmtCant(horasMaquina)} h
                                 </td>
                                 <td></td>
                               </tr>
@@ -3094,38 +3137,33 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                           <>
                             {caja('HM Inicio del día', rg.inicio)}
                             {caja('HM Fin del día', rg.fin)}
-                            <div className="tbl-col-auto" style={{display: 'flex', flexDirection: 'column', justifyContent: 'flex-end'}}><div style={{background: '#e0f2fe', color: '#0284c7', padding: '8px 12px', borderRadius: '4px', fontWeight: 'bold', fontSize: '13px', border: '1px solid #bae6fd'}} title="Suma de los tramos de cada actividad">Horas: {horasMaquina} h</div></div>
+                            <div className="tbl-col-auto" style={{display: 'flex', flexDirection: 'column', justifyContent: 'flex-end'}}><div style={{background: '#e0f2fe', color: '#0284c7', padding: '8px 12px', borderRadius: '4px', fontWeight: 'bold', fontSize: '13px', border: '1px solid #bae6fd'}} title="Suma de las horas efectivas de cada actividad">HE: {fmtCant(horasMaquina)} h</div></div>
                           </>
                         );
                       })()}
                       <div className="tbl-col"><label className="tbl-form-label">Combustible (Gls)</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.combustible} onChange={e => setNuevoRecurso({...nuevoRecurso, combustible: e.target.value})} /></div>
                       <div className="tbl-col"><label className="tbl-form-label">Vale N°</label><input type="text" className="tbl-form-control" value={nuevoRecurso.vale} onChange={e => setNuevoRecurso({...nuevoRecurso, vale: e.target.value})} /></div>
                     </div>
+                    {/* Las horas efectivas se anotan en cada actividad. Aquí solo el total. */}
                     {(() => {
-                      const totalHM = parseFloat(horasMaquina) || 0;
-                      const efectivas = nuevoRecurso.horasEfectivas === '' ? totalHM : parseFloat(nuevoRecurso.horasEfectivas)||0;
-                      const hayReduccion = efectivas < totalHM;
+                      const tramo = tramoDeLista(actividades);
+                      const he = parseFloat(horasMaquina) || 0;
+                      const reduce = he < tramo;
+                      const conMotivo = actividades.filter(a => hayReduccionEn(a));
                       return (
-                        <div className="tbl-row tbl-mb-3">
-                          <div className="tbl-col-3">
-                            <label className="tbl-form-label">Horas Efectivas (HE)</label>
-                            <input type="number" min="0" max={totalHM} step={STEP4} className="tbl-form-control"
-                              placeholder={String(totalHM)}
-                              value={nuevoRecurso.horasEfectivas}
-                              onChange={e => setNuevoRecurso({...nuevoRecurso, horasEfectivas: e.target.value})}
-                              style={hayReduccion ? {borderColor:'#f59e0b', backgroundColor:'#fffbeb', fontWeight:'bold'} : {fontWeight:'bold'}}
-                              title="Por defecto = horas del horómetro. Edítalo si fueron menos." />
-                          </div>
-                          <div className="tbl-col">
-                            <label className="tbl-form-label">
-                              Observación {hayReduccion ? <span style={{color:'#d97706',fontSize:'11px',fontWeight:600}}>· requerida (reducción de {fmtCant(totalHM - efectivas)} HE)</span> : <span style={{color:'#94a3b8',fontSize:'11px'}}>· opcional</span>}
-                            </label>
-                            <input type="text" className="tbl-form-control"
-                              placeholder={hayReduccion ? 'Detalla el motivo de la reducción de horas...' : 'Sin observaciones de reducción'}
-                              value={nuevoRecurso.obsReduccion}
-                              onChange={e => setNuevoRecurso({...nuevoRecurso, obsReduccion: e.target.value})}
-                              style={hayReduccion && !nuevoRecurso.obsReduccion.trim() ? {borderColor:'#f59e0b', backgroundColor:'#fffbeb'} : {}} />
-                          </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap', padding:'10px 12px', marginBottom:'15px', borderRadius:'6px', background: reduce ? '#fffbeb' : '#f8fafc', border: `1px solid ${reduce ? '#fde68a' : '#e2e8f0'}` }}>
+                          <span style={{ fontSize:'12px', fontWeight:700, color:'#334155' }}>Horas Efectivas (HE) del parte:</span>
+                          <span style={{ fontSize:'16px', fontWeight:800, color:'#1463A5' }}>{fmtCant(he)} h</span>
+                          {reduce && (
+                            <span style={{ fontSize:'12px', color:'#b45309' }}>
+                              de {fmtCant(tramo)} h trabajadas · se descuentan {fmtCant(tramo - he)} HE
+                            </span>
+                          )}
+                          {conMotivo.length > 0 && (
+                            <span style={{ fontSize:'11.5px', color:'#92400e', flexBasis:'100%' }}>
+                              {conMotivo.map(a => `${textoActividad(a)}: ${a.obsReduccion}`).join(' · ')}
+                            </span>
+                          )}
                         </div>
                       );
                     })()}
@@ -3537,6 +3575,38 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                     </div>
                   </div>
                 </div>
+
+                {/* Horas efectivas de ESTA actividad: lo que entra al costo. */}
+                {(() => {
+                  const tramo = horasDeActividad(actForm);
+                  const he = heDeActividad(actForm);
+                  const reduce = he < tramo;
+                  return (
+                    <div className="tbl-row tbl-mb-3">
+                      <div className="tbl-col-3">
+                        <label className="tbl-form-label">Horas Efectivas (HE)</label>
+                        <input type="number" min="0" max={tramo} step={STEP4} className="tbl-form-control"
+                          placeholder={String(tramo)}
+                          value={actForm.horasEfectivas}
+                          onChange={e => setActForm({ ...actForm, horasEfectivas: e.target.value })}
+                          style={reduce ? {borderColor:'#f59e0b', backgroundColor:'#fffbeb', fontWeight:'bold'} : {fontWeight:'bold'}}
+                          title="Por defecto = las horas del tramo. Edítalo si se cobran menos." />
+                      </div>
+                      <div className="tbl-col">
+                        <label className="tbl-form-label">
+                          Motivo de la reducción {reduce
+                            ? <span style={{color:'#d97706',fontSize:'11px',fontWeight:600}}>· requerido (se descuentan {fmtCant(tramo - he)} HE)</span>
+                            : <span style={{color:'#94a3b8',fontSize:'11px'}}>· opcional</span>}
+                        </label>
+                        <input type="text" className="tbl-form-control"
+                          placeholder={reduce ? 'Avería, espera de volquetes, traslado...' : 'Sin reducción de horas'}
+                          value={actForm.obsReduccion}
+                          onChange={e => setActForm({ ...actForm, obsReduccion: e.target.value })}
+                          style={reduce && !(actForm.obsReduccion || '').trim() ? {borderColor:'#f59e0b', backgroundColor:'#fffbeb'} : {}} />
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="tbl-row tbl-mb-3">
                   <div className="tbl-col">
