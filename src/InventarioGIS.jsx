@@ -1,6 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { GeoJSON, Marker, Popup, useMap } from 'react-leaflet';
+import { createPathComponent } from '@react-leaflet/core';
 import L from 'leaflet';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import {
   FaClipboardCheck, FaTimes, FaSyncAlt, FaCrosshairs,
   FaChevronDown, FaChevronRight, FaExclamationCircle, FaPlusCircle, FaSearch,
@@ -136,6 +140,29 @@ const GRUPOS_CONTEXTO = [
 const TODOS_GRUPOS = [...GRUPOS, ...GRUPOS_CONTEXTO];
 const TODAS = TODOS_GRUPOS.flatMap(g => g.capas);
 
+/**
+ * Racimo de marcadores.
+ *
+ * Con las capas encendidas hay más de dos mil puntos, y pintarlos uno a uno
+ * deja el mapa inservible. Leaflet.markercluster los agrupa por cercanía y
+ * solo dibuja lo que cabe en pantalla.
+ *
+ * El truco está en devolver el grupo como 'layerContainer' del contexto:
+ * con eso los <Marker> hijos se añaden al racimo en vez de al mapa, y sus
+ * popups siguen siendo JSX normal. No hay que reescribirlos a mano.
+ */
+const GrupoCluster = createPathComponent(({ children: _hijos, ...opciones }, ctx) => {
+  const grupo = L.markerClusterGroup({
+    chunkedLoading: true,        // añade por tandas, sin congelar la pestaña
+    showCoverageOnHover: false,  // el polígono al pasar el ratón estorba
+    maxClusterRadius: 55,
+    disableClusteringAtZoom: 18, // de cerca, cada estructura por separado
+    spiderfyOnMaxZoom: true,     // las que comparten punto se abren en abanico
+    ...opciones,
+  });
+  return { instance: grupo, context: { ...ctx, layerContainer: grupo } };
+});
+
 // Filtro de ámbito. 'todo' no manda el parámetro y el backend devuelve
 // Chavimochic completo.
 const AMBITOS = [
@@ -251,6 +278,36 @@ export function useInventario() {
   // clic en el gris solo Chavimochic, clic otra vez vuelve a ambos.
   const [filtroCapa, setFiltroCapa] = useState({});
 
+  // Trae todas las capas de a pocas. De golpe serían treinta y siete
+  // peticiones a la vez: el navegador las encola igual y el backend las
+  // sufre, así que se piden en tandas y el mapa se va llenando solo.
+  const cargarTodas = useCallback(async (amb, codigos) => {
+    const ambito_ = amb || 'todo';
+    const filtro = ambito_ === 'todo' ? '' : `&ambito=${ambito_}`;
+
+    // El fetch va aquí y no reusa cargarCapa a propósito: aquella se
+    // recrea en cada render y la versión que quedaría capturada vería
+    // una caché vieja. Aquí sabemos que no hay nada cargado todavía.
+    const traer = async (codigo) => {
+      setCargando(c => ({ ...c, [codigo]: true }));
+      try {
+        const r = await fetch(`${API}/capas/${codigo}/?srid=4326${filtro}`,
+                              { headers: cabeceras() });
+        if (r.ok) {
+          const geo = await r.json();
+          setDatos(d => ({ ...d, [`${codigo}::${ambito_}`]: geo }));
+        }
+      } catch (e) { /* esa capa queda vacía; el badge lo refleja */ }
+      finally { setCargando(c => ({ ...c, [codigo]: false })); }
+    };
+
+    const TANDA = 4;
+    const pendientes = codigos ? [...codigos] : TODAS.map(c => c.codigo);
+    while (pendientes.length) {
+      await Promise.all(pendientes.splice(0, TANDA).map(traer));
+    }
+  }, []);
+
   // Carga inicial: campaña vigente, totales por capa y evaluaciones hechas.
   const iniciar = useCallback(async () => {
     if (!token()) { setError('Sesión no iniciada'); return; }
@@ -305,12 +362,16 @@ export function useInventario() {
           }
         } catch (e) { /* sin altas, el panel simplemente no las muestra */ }
       }
+      // Se abre con todo encendido: el mapa sirve para ver qué hay, y
+      // llegar a eso marcando treinta y siete casillas no es verlo.
+      setVisibles(Object.fromEntries(TODAS.map(c => [c.codigo, true])));
+      cargarTodas();
     } catch (e) {
       setError(e.message || 'Error al cargar el inventario');
     } finally {
       setIniciando(false);
     }
-  }, []);
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ámbito que rige para una capa: el suyo si lo tiene, si no el general.
   const ambitoDe = useCallback(
@@ -354,8 +415,9 @@ export function useInventario() {
   const cambiarAmbito = useCallback((nuevo) => {
     setAmbito(nuevo);
     setFiltroCapa({});
-    Object.entries(visibles).forEach(([cod, v]) => { if (v) cargarCapa(cod, nuevo); });
-  }, [visibles, cargarCapa]);
+    const encendidas = Object.entries(visibles).filter(([, v]) => v).map(([cod]) => cod);
+    cargarTodas(nuevo, encendidas);
+  }, [visibles, cargarTodas]);
 
   // Cada mitad del badge se comporta como una casilla: suma o quita ese
   // ámbito, sin pisar al otro. Los dos marcados = 'todo'; ninguno = la capa
@@ -533,6 +595,7 @@ export function useInventario() {
    ══════════════════════════════════════════════════════════ */
 export function CapasInventario({ inv }) {
   const mapa = useMap();
+  const refCluster = useRef(null);
   const { destacado, limpiarDestacado } = inv;
   const DEPURAR = false;   // ponlo en true para ver el rastro en consola
 
@@ -547,16 +610,24 @@ export function CapasInventario({ inv }) {
     // renders y quedaba solo uno registrado de los cuarenta y nueve.
     // La tolerancia es ~1 m, suficiente para no confundir dos estructuras.
     const TOL = 1e-5;
+    const coincide = (capa) => {
+      if (!capa || !capa.getLatLng || !capa.getPopup || !capa.getPopup()) return false;
+      const ll = capa.getLatLng();
+      return Math.abs(ll.lat - destacado.lat) < TOL
+          && Math.abs(ll.lng - destacado.lng) < TOL;
+    };
     const hallar = () => {
+      // Dentro del racimo el marcador puede no estar en el mapa todavía:
+      // markercluster solo añade los que toca dibujar. Por eso se busca en
+      // la lista del grupo, no recorriendo las capas del mapa.
+      const grupo = refCluster.current;
+      if (grupo && grupo.getLayers) {
+        const m = grupo.getLayers().find(coincide);
+        if (m) return m;
+      }
       let encontrado = null;
       mapa.eachLayer((capa) => {
-        if (encontrado || !capa.getLatLng || !capa.getPopup) return;
-        const ll = capa.getLatLng();
-        if (Math.abs(ll.lat - destacado.lat) < TOL
-            && Math.abs(ll.lng - destacado.lng) < TOL
-            && capa.getPopup()) {
-          encontrado = capa;
-        }
+        if (!encontrado && coincide(capa)) encontrado = capa;
       });
       return encontrado;
     };
@@ -568,7 +639,13 @@ export function CapasInventario({ inv }) {
       const m = hallar();
       if (DEPURAR) console.log('[inv] intento', intentos, '| marcador:', !!m);
       if (m) {
-        m.openPopup();
+        const grupo = refCluster.current;
+        // Si está agrupado, el popup no se puede abrir sin desplegarlo antes.
+        if (grupo && grupo.hasLayer && grupo.hasLayer(m) && grupo.zoomToShowLayer) {
+          grupo.zoomToShowLayer(m, () => m.openPopup());
+        } else {
+          m.openPopup();
+        }
         limpiarDestacado();
         return;
       }
@@ -639,6 +716,18 @@ export function CapasInventario({ inv }) {
             />
           );
         }
+        return null;
+      })}
+
+      {/* Los puntos de TODAS las capas van al mismo racimo. Uno por capa
+          dejaría veintidós racimos pisándose en el mismo sitio; con uno
+          solo, lo que se ve es cuántas estructuras hay en cada zona. */}
+      <GrupoCluster ref={refCluster}>
+      {TODAS.map(capa => {
+        if (!inv.visibles[capa.codigo]) return null;
+        if (capa.tipo === 'line' || capa.tipo === 'poly') return null;
+        const fc = inv.datosDe(capa.codigo);
+        if (!fc?.features?.length) return null;
 
         // Puntos: marcador propio para poder pintar el estado evaluado.
         return fc.features.map(f => {
@@ -765,6 +854,7 @@ export function CapasInventario({ inv }) {
           );
         });
       })}
+      </GrupoCluster>
     </>
   );
 }
