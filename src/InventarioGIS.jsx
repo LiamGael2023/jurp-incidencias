@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { GeoJSON, Marker, Popup, useMap } from 'react-leaflet';
+import { GeoJSON, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
 import { createPathComponent } from '@react-leaflet/core';
 import L from 'leaflet';
 import 'leaflet.markercluster';
@@ -177,6 +177,11 @@ const GRUPOS_CONTEXTO = [
 
 const TODOS_GRUPOS = [...GRUPOS, ...GRUPOS_CONTEXTO];
 const TODAS = TODOS_GRUPOS.flatMap(g => g.capas);
+
+// Desde este zoom cada activo lleva su nombre al lado. Mas lejos no se
+// rotula: con dos mil seiscientos puntos el mapa se vuelve una mancha de
+// texto, y ademas la mayoria sigue metida en un racimo.
+const ZOOM_ETIQUETAS = 16;
 
 /**
  * Racimo de marcadores.
@@ -634,6 +639,14 @@ export function useInventario() {
 export function CapasInventario({ inv }) {
   const mapa = useMap();
   const refCluster = useRef(null);
+  const [zoom, setZoom] = useState(() => mapa.getZoom());
+  const rotular = zoom >= ZOOM_ETIQUETAS;
+
+  useEffect(() => {
+    const alZoom = () => setZoom(mapa.getZoom());
+    mapa.on('zoomend', alZoom);
+    return () => mapa.off('zoomend', alZoom);
+  }, [mapa]);
   const { destacado, limpiarDestacado } = inv;
   const DEPURAR = false;   // ponlo en true para ver el rastro en consola
 
@@ -800,6 +813,12 @@ export function CapasInventario({ inv }) {
                 },
               }}
             >
+              {rotular && (
+                <Tooltip permanent direction="right" offset={[12, 0]}
+                  className="inv-eti" opacity={1}>
+                  {p.nombre || p.codigo || `${capa.label} #${p.fid}`}
+                </Tooltip>
+              )}
               <Popup>
                 <div className="inv-pop">
                   <div className="inv-pop-tit" style={{ borderColor: capa.color }}>
