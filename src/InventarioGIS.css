@@ -1061,3 +1061,15 @@
   background: #e0f2fe;
   color: #0B2A5B;
 }
+/* ── Halo de las capas vectoriales ────────────────────────────────────────
+   Sobre imagen satelital el fondo es de luminancia media —oliva donde hay
+   cultivo, arena donde no— y ahí ningún color puro alcanza el contraste
+   mínimo por sí solo: las líneas finas se diluyen en el terreno.
+
+   El halo oscuro bajo cada trazo es la solución cartográfica de siempre.
+   Da el contraste que el color no puede dar, y funciona igual sobre el
+   verde de los campos, sobre el desierto y sobre el mar, sin tener que
+   elegir el tono en función del fondo. */
+.leaflet-overlay-pane svg path {
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.85));
+}
