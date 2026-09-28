@@ -149,6 +149,27 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
 
   const [nuevoRecurso, setNuevoRecurso] = useState(estadoInicialRecurso);
 
+  // ── Actividades del parte diario ────────────────────────────────────────
+  // Una máquina suele hacer varias tareas en la misma jornada (excavar,
+  // cargar, eliminar) y el formato oficial impreso admite varias líneas.
+  // El horómetro sigue siendo UNO por parte: de ahí sale el costo. Cada
+  // actividad aporta el QUÉ se hizo y CUÁNTO se midió.
+  //
+  // Los nombres de campo son los mismos que usaba el formulario, para que
+  // calcMetradoDe() sirva igual a una actividad que al parte completo.
+  const estadoInicialActividad = {
+    zonaTrabajo: '', actividad: '', actividadOtros: '', observacion: '',
+    hmInicio: '', hmFin: '',
+    calcularMetrado: false, metradoManual: '', unidadMetrado: 'm3',
+    longitud: '', altura: '', anchoSup: '', anchoInf: '',
+    anchoBase: '', corona: '', talud: '', hPromedio: '',
+    nViajes: '', volTolva: '', fe: '1.25',
+  };
+  const [actividades, setActividades] = useState([]);       // las del parte abierto
+  const [actForm, setActForm] = useState(estadoInicialActividad);
+  const [actEditando, setActEditando] = useState(null);     // índice, o null = nueva
+  const [modalActividad, setModalActividad] = useState(false);
+
   // ── Carga de catálogos (equipos/marcas/modelos) ──────────────────────────
   const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
@@ -666,9 +687,26 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           calcularMetrado: !!i.metrado_calculado,
           anchoSup: i.width_top ?? '', anchoInf: i.width_bottom ?? '',
           altura: i.height ?? '', longitud: i.length ?? '',
-          cantidad: round4(Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer))),
+          // Las actividades vienen anidadas. Un parte anterior a este cambio no
+          // las trae: se le arma una sola línea con lo que hay en la cabecera,
+          // así al editarlo no se queda sin actividades.
+          actividadesLista: (i.actividades && i.actividades.length)
+            ? actividadesDesdeBackend(i.actividades)
+            : (i.activities ? [{
+                ...estadoInicialActividad,
+                zonaTrabajo: i.work_zone_text || '',
+                actividad: IMG_METRADO[i.activities] ? i.activities : 'OTROS',
+                actividadOtros: IMG_METRADO[i.activities] ? '' : i.activities,
+                hmInicio: i.start_horometer != null ? String(i.start_horometer) : '',
+                hmFin: i.end_horometer != null ? String(i.end_horometer) : '',
+                metradoManual: i.metrado != null ? String(i.metrado) : '',
+                unidadMetrado: i.metrado_unidad || 'm3',
+                anchoSup: i.width_top ?? '', anchoInf: i.width_bottom ?? '',
+                altura: i.height ?? '', longitud: i.length ?? '',
+              }] : []),
+          cantidad: horasCobradas(i),
           precioUnitario: parseFloat(i.unit_price),
-          total: round2(round4(Math.max(0, parseFloat(i.end_horometer) - parseFloat(i.start_horometer))) * parseFloat(i.unit_price)),
+          total: round2(horasCobradas(i) * (parseFloat(i.unit_price) || 0)),
           guardadoEnDB: true,
         };
       });
@@ -833,7 +871,34 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   // Paso de los inputs numéricos en toda la gestión del incidente.
   const STEP4 = '0.0001';
 
-  const horasMaquina = (nuevoRecurso.hmFin && nuevoRecurso.hmInicio) ? String(round4(Math.max(0, parseFloat(nuevoRecurso.hmFin) - parseFloat(nuevoRecurso.hmInicio)))) : 0;
+  // Horas que se cobran de un parte ya guardado: manda horas_efectivas (es lo
+  // que se costeó); si no está, la suma de los tramos de sus actividades; y
+  // como último recurso el rango de la cabecera, para los partes antiguos.
+  const horasCobradas = (i) => {
+    if (i.horas_efectivas != null && i.horas_efectivas !== '') return round4(i.horas_efectivas);
+    if (i.actividades && i.actividades.length) {
+      return round4(i.actividades.reduce((t, a) => t + Math.max(0,
+        (parseFloat(a.end_horometer) || 0) - (parseFloat(a.start_horometer) || 0)), 0));
+    }
+    return round4(Math.max(0, (parseFloat(i.end_horometer) || 0) - (parseFloat(i.start_horometer) || 0)));
+  };
+
+  // Horas de una actividad: su propio tramo de horometro.
+  const horasDeActividad = (a) => {
+    const i = parseFloat(a?.hmInicio), f = parseFloat(a?.hmFin);
+    if (!Number.isFinite(i) || !Number.isFinite(f)) return 0;
+    return round4(Math.max(0, f - i));
+  };
+  // Horas del parte: la SUMA de los tramos, no el rango de la cabecera. Si la
+  // maquina estuvo parada entre dos tareas, esas horas no se cobran.
+  const horasDeLista = (lista) => round4((lista || []).reduce((t, a) => t + horasDeActividad(a), 0));
+  const horasMaquina = String(horasDeLista(actividades));
+  // Rango del dia, para la cabecera del parte y para sembrar el HM del siguiente.
+  const rangoHorometro = (lista) => {
+    const ini = (lista || []).map(a => parseFloat(a.hmInicio)).filter(Number.isFinite);
+    const fin = (lista || []).map(a => parseFloat(a.hmFin)).filter(Number.isFinite);
+    return { inicio: ini.length ? Math.min(...ini) : '', fin: fin.length ? Math.max(...fin) : '' };
+  };
 
   // ── Cálculo de metrado según actividad ──────────────────────────────────
   // Calcula el metrado de CUALQUIER recurso (no solo el del formulario abierto).
@@ -860,16 +925,143 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       default: return {val:((Ws+Wi)/2)*h*L, unit:'m³'};
     }
   };
-  const calcVolumen = () => calcMetradoDe(nuevoRecurso);
-  const volCalc = calcVolumen();
+  // El bloque de metrado vive ahora en la ventana de actividad, así que estos
+  // derivados miran a la actividad que se está editando, no al parte.
+  const volCalc = calcMetradoDe(actForm);
   const volumenMetrado = round4(volCalc.val);
   // Formatea números con separador de miles (1000000.00 → 1,000,000.00)
   const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // OTROS = actividad libre: sin fórmula ni medidas, solo metrado manual.
-  const esActividadOtros = nuevoRecurso.actividad === 'OTROS';
-  const tieneMetradoActividad = IMG_METRADO[nuevoRecurso.actividad] !== undefined || esActividadOtros;
+  const esActividadOtros = actForm.actividad === 'OTROS';
+  const tieneMetradoActividad = IMG_METRADO[actForm.actividad] !== undefined || esActividadOtros;
   // Texto de actividad que se muestra/guarda (en OTROS, la descripción escrita).
   const textoActividad = (r) => (r.actividad === 'OTROS' ? (r.actividadOtros || '').trim() : (r.actividad || ''));
+
+  // ── Manejo de la lista de actividades ───────────────────────────────────
+  const abrirNuevaActividad = () => {
+    // El horómetro encadena: la tarea siguiente arranca donde terminó la
+    // anterior. La primera parte del HM Fin del último parte de la máquina.
+    const previo = actividades.length
+      ? actividades[actividades.length - 1].hmFin
+      : (nuevoRecurso.hmInicio !== '' && nuevoRecurso.hmInicio != null ? String(nuevoRecurso.hmInicio) : '');
+    // Hereda la zona del parte para no volver a escribirla en cada línea.
+    setActForm({ ...estadoInicialActividad, zonaTrabajo: nuevoRecurso.zonaTrabajo || '', hmInicio: previo });
+    setActEditando(null);
+    setModalActividad(true);
+  };
+  const abrirEditarActividad = (i) => {
+    setActForm({ ...estadoInicialActividad, ...actividades[i] });
+    setActEditando(i);
+    setModalActividad(true);
+  };
+  const quitarActividad = (i) => setActividades(actividades.filter((_, j) => j !== i));
+
+  const guardarActividad = () => {
+    const a = actForm;
+    if (!a.actividad) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona la actividad realizada' });
+    if (a.actividad === 'OTROS' && !(a.actividadOtros || '').trim())
+      return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Escribe la descripción de la actividad realizada.' });
+    if (a.actividad === 'OTROS' && !(parseFloat(a.metradoManual) > 0))
+      return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa el metrado manual de la actividad.' });
+    // El tramo de horómetro es lo que se cobra: sin él la actividad no suma horas.
+    if (a.hmInicio === '' || a.hmFin === '')
+      return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Completa el horómetro de inicio y fin de esta actividad.' });
+    if (horasDeActividad(a) <= 0)
+      return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El horómetro final debe ser mayor al inicial.' });
+    // Dos actividades no pueden ocupar el mismo tramo: serían horas cobradas dos veces.
+    const choca = actividades.some((o, j) => j !== actEditando &&
+      parseFloat(a.hmInicio) < parseFloat(o.hmFin) && parseFloat(a.hmFin) > parseFloat(o.hmInicio));
+    if (choca) return Swal.fire({
+      icon: 'warning', title: 'Horómetro superpuesto',
+      text: 'Ese tramo se cruza con el de otra actividad del parte. Revisa los horómetros.',
+    });
+    const lista = [...actividades];
+    if (actEditando === null) lista.push(a); else lista[actEditando] = a;
+    setActividades(lista);
+    setModalActividad(false);
+    setActEditando(null);
+  };
+
+  // Resumen de la lista para los campos de cabecera del parte, que siguen
+  // existiendo (el costeo, los reportes y los partes antiguos los usan).
+  // Si todas las líneas comparten unidad, el metrado de cabecera es la suma.
+  // Si se mezclan (m³ con m², por ejemplo), sumar sería inventar un número:
+  // se toma el total de la unidad que más pesa y el detalle queda por línea.
+  const resumenActividades = (lista) => {
+    if (!lista || !lista.length) return { texto: '', metrado: 0, unidad: 'm3', calculado: false };
+    // Se agrupa por la unidad EFECTIVA: una línea calculada por fórmula la
+    // impone la propia fórmula (PERFILADO da m², no m³), no el desplegable.
+    const codigoUnidad = { 'm': 'm', 'm²': 'm2', 'm³': 'm3', 'glb': 'glb' };
+    const porUnidad = {};
+    lista.forEach(a => {
+      const mv = calcMetradoDe(a);
+      const u = codigoUnidad[mv.unit] || a.unidadMetrado || 'm3';
+      porUnidad[u] = round4((porUnidad[u] || 0) + (mv.val || 0));
+    });
+    const unidades = Object.keys(porUnidad);
+    const dominante = unidades.reduce((mejor, u) => (porUnidad[u] > porUnidad[mejor] ? u : mejor), unidades[0]);
+    return {
+      texto: lista.map(a => textoActividad(a)).filter(Boolean).join(' / '),
+      metrado: porUnidad[dominante],
+      unidad: dominante,
+      calculado: lista.every(a => a.actividad !== 'OTROS' && !!a.calcularMetrado),
+    };
+  };
+
+  // Lista lista para el backend (campos de DailyPartActivity). 'medidas'
+  // guarda los valores crudos del formulario para poder reabrir la actividad
+  // tal como se capturó, incluso las que no tienen columna propia.
+  const actividadesParaBackend = (lista) => (lista || []).map((a, i) => {
+    const mv = calcMetradoDe(a);
+    const calculado = a.actividad !== 'OTROS' && !!a.calcularMetrado;
+    const num = (v) => (v === '' || v == null ? null : v);
+
+    return {
+      orden: i + 1,
+      work_zone_text: a.zonaTrabajo || '',
+      actividad: textoActividad(a),
+      start_horometer: num(a.hmInicio), end_horometer: num(a.hmFin),
+      width_top: num(a.anchoSup), width_bottom: num(a.anchoInf),
+      height: num(a.altura), length: num(a.longitud),
+      metrado: mv.val.toFixed(4),
+      metrado_unidad: calculado ? mv.unit : (a.unidadMetrado || 'm3'),
+      metrado_calculado: calculado,
+      observacion: a.observacion || '',
+      medidas: JSON.stringify({
+        actividad: a.actividad, actividadOtros: a.actividadOtros || '',
+        calcularMetrado: !!a.calcularMetrado, metradoManual: a.metradoManual,
+        unidadMetrado: a.unidadMetrado, longitud: a.longitud, altura: a.altura,
+        anchoSup: a.anchoSup, anchoInf: a.anchoInf, anchoBase: a.anchoBase,
+        corona: a.corona, talud: a.talud, hPromedio: a.hPromedio,
+        nViajes: a.nViajes, volTolva: a.volTolva, fe: a.fe,
+      }),
+    };
+  });
+
+  // Y el camino de vuelta, al reabrir un parte guardado.
+  const actividadesDesdeBackend = (arr) => (arr || []).map(a => {
+    let crudo = {};
+    try { crudo = a.medidas ? JSON.parse(a.medidas) : {}; } catch (e) { crudo = {}; }
+    return {
+      ...estadoInicialActividad,
+      ...crudo,
+      zonaTrabajo: a.work_zone_text || '',
+      hmInicio: a.start_horometer != null ? String(a.start_horometer) : '',
+      hmFin: a.end_horometer != null ? String(a.end_horometer) : '',
+      // Sin 'medidas' (partes de antes de este cambio) se conserva al menos el
+      // metrado guardado, en vez de recalcularlo a cero con campos vacíos.
+      actividad: crudo.actividad || (IMG_METRADO[a.actividad] ? a.actividad : 'OTROS'),
+      actividadOtros: crudo.actividadOtros || (IMG_METRADO[a.actividad] ? '' : (a.actividad || '')),
+      calcularMetrado: crudo.calcularMetrado ?? false,
+      metradoManual: crudo.metradoManual ?? (a.metrado != null ? String(a.metrado) : ''),
+      unidadMetrado: crudo.unidadMetrado || a.metrado_unidad || 'm3',
+      anchoSup: crudo.anchoSup ?? (a.width_top ?? ''),
+      anchoInf: crudo.anchoInf ?? (a.width_bottom ?? ''),
+      altura: crudo.altura ?? (a.height ?? ''),
+      longitud: crudo.longitud ?? (a.length ?? ''),
+      observacion: a.observacion || '',
+    };
+  });
 
   // Abre el modal de "Añadir". Para maquinaria abre primero el SELECTOR de
   // máquina (paso 1). Personal/Insumo abren su formulario directo.
@@ -920,7 +1112,6 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       zonaTrabajo: ultimo.zonaTrabajo || '',
       turno: ultimo.turno || 'Día',
       precioUnitario: ultimo.precioUnitario || 0,
-      actividad: ultimo.actividad || '',
     };
   };
 
@@ -1018,6 +1209,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       // Hereda proveedor, operador, tarifa… del parte anterior de esta máquina.
       ...datosDelUltimoParte(maq.codigo),
     });
+    setActividades([]);
     obtenerCorrelativoParte(partesPendientes());
     setFormTipo('Maquinaria');
   };
@@ -1037,6 +1229,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       hmInicio: hmInicioPrev,
       ...datosDelUltimoParte(grupo.codigoMaquina || (grupo.descripcionResumen || '').split('·')[0]),
     });
+    setActividades([]);
     obtenerCorrelativoParte(partesPendientes());
     setFormTipo('Maquinaria');
   };
@@ -1067,8 +1260,10 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     let descFinal = nuevoRecurso.descripcion;
     let cantFinal = round4(parseFloat(nuevoRecurso.cantidad) || 0);
     if (nuevoRecurso.tipo === 'Maquinaria') {
+      // Las horas salen de las actividades: sin ellas no hay nada que costear.
+      if (actividades.length === 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Agrega al menos una actividad al parte.' });
       const totalHM = parseFloat(horasMaquina) || 0;
-      if (totalHM <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Horómetro Final debe ser mayor al Inicial' });
+      if (totalHM <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Las actividades del parte no suman horas. Revisa sus horómetros.' });
       if (!nuevoRecurso.numeroParte) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Número de Parte es obligatorio' });
       if (!nuevoRecurso.proveedor || !nuevoRecurso.proveedor.trim()) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Proveedor es obligatorio' });
       if (!nuevoRecurso.equipo) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un equipo' });
@@ -1080,12 +1275,6 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         icon: 'warning', title: 'N° de Parte repetido',
         text: `Ya hay un parte ${nuevoRecurso.numeroParte} en esta incidencia. Cámbialo antes de agregarlo.`,
       });
-      if (!nuevoRecurso.actividad) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona la actividad realizada' });
-      // OTROS: exige descripción escrita y metrado manual (no hay fórmula).
-      if (nuevoRecurso.actividad === 'OTROS' && !nuevoRecurso.actividadOtros.trim())
-        return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Escribe la descripción de la actividad realizada.' });
-      if (nuevoRecurso.actividad === 'OTROS' && !(parseFloat(nuevoRecurso.metradoManual) > 0))
-        return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa el metrado manual de la actividad.' });
       const efectivas = (nuevoRecurso.horasEfectivas === '' || nuevoRecurso.horasEfectivas === null)
         ? totalHM
         : parseFloat(nuevoRecurso.horasEfectivas) || 0;
@@ -1112,9 +1301,22 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       if (!nuevoRecurso.fechaRecurso) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Indica la fecha de uso del insumo' });
       if (!descFinal) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa una descripción' });
     }
-    const recursoCalculado = { ...nuevoRecurso, idLocal: Date.now(), descripcionResumen: descFinal, cantidad: cantFinal, precioUnitario: parseFloat(nuevoRecurso.precioUnitario) || 0, total: round2(cantFinal * (parseFloat(nuevoRecurso.precioUnitario) || 0)), guardadoEnDB: false };
+    // El parte viaja con sus actividades: de ahí salen la lista, el resumen de
+    // cabecera y el JSON que se manda al backend al guardar.
+    const res = nuevoRecurso.tipo === 'Maquinaria'
+      ? resumenActividades(actividades)
+      : { texto: '', metrado: 0, unidad: 'm3', calculado: false };
+    const recursoCalculado = { ...nuevoRecurso, idLocal: Date.now(), descripcionResumen: descFinal, cantidad: cantFinal, precioUnitario: parseFloat(nuevoRecurso.precioUnitario) || 0, total: round2(cantFinal * (parseFloat(nuevoRecurso.precioUnitario) || 0)), guardadoEnDB: false,
+      ...(nuevoRecurso.tipo === 'Maquinaria' ? {
+        actividadesLista: [...actividades],
+        hmInicio: rangoHorometro(actividades).inicio,
+        hmFin: rangoHorometro(actividades).fin,
+        actividad: res.texto, actividadOtros: '',
+        metradoManual: String(res.metrado), unidadMetrado: res.unidad, calcularMetrado: false,
+      } : {}) };
     setRecursos([...recursos, recursoCalculado]);
     setNuevoRecurso({...estadoInicialRecurso, numeroParte: generarCorrelativo()});
+    setActividades([]);
     // +1: el que se acaba de agregar todavía no está en `recursos` aquí.
     obtenerCorrelativoParte(partesPendientes() + 1);
     cerrarFormulario();   // cierra el modal y limpia el modo edición
@@ -1174,6 +1376,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       horasEfectivas: reg.cantidad != null && reg.cantidad !== totalHM ? String(reg.cantidad) : '',
       obsReduccion: reg.obsReduccion || '',
     });
+    // La hoja de actividades se llena con las del parte que se está editando.
+    setActividades(reg.actividadesLista ? [...reg.actividadesLista] : []);
     setEditando({
       dbId: reg.dbId, endpoint: reg.endpoint,
       idLocal: reg.idLocal, guardadoEnDB: reg.guardadoEnDB, tipo: 'Maquinaria',
@@ -1183,7 +1387,10 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   };
 
   // Cierra el formulario dejando siempre limpio el modo edición.
-  const cerrarFormulario = () => { setFormTipo(null); setEditando(null); };
+  const cerrarFormulario = () => {
+    setFormTipo(null); setEditando(null);
+    setModalActividad(false); setActEditando(null); setActividades([]);
+  };
 
   // Guarda la edición. Si el registro ya está en la BD va por PATCH; si aún
   // no se guardó, se actualiza en la lista local y viajará con "Guardar Costeos".
@@ -1201,12 +1408,10 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       if (!r.fechaRecurso) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Indica la fecha de uso' });
       if (!r.descripcion) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa una descripción' });
     } else {
+      if (actividades.length === 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El parte debe tener al menos una actividad.' });
       const totalHM = parseFloat(horasMaquina) || 0;
-      if (totalHM <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Horómetro Final debe ser mayor al Inicial' });
+      if (totalHM <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Las actividades del parte no suman horas. Revisa sus horómetros.' });
       if (!r.proveedor?.trim()) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Proveedor es obligatorio' });
-      if (!r.actividad) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona la actividad realizada' });
-      if (r.actividad === 'OTROS' && !r.actividadOtros.trim())
-        return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Escribe la descripción de la actividad.' });
     }
 
     // ── registro aún no guardado: se corrige en memoria ──
@@ -1229,7 +1434,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         }
         const totalHM = parseFloat(horasMaquina) || 0;
         const efec = r.horasEfectivas === '' ? totalHM : round4(parseFloat(r.horasEfectivas) || 0);
-        return { ...x, ...r, cantidad: efec, total: round2(efec * (parseFloat(r.precioUnitario) || 0)) };
+        const res = resumenActividades(actividades);
+        const rg = rangoHorometro(actividades);
+        return { ...x, ...r, cantidad: efec, total: round2(efec * (parseFloat(r.precioUnitario) || 0)),
+          actividadesLista: [...actividades], hmInicio: rg.inicio, hmFin: rg.fin,
+          actividad: res.texto, actividadOtros: '',
+          metradoManual: String(res.metrado), unidadMetrado: res.unidad, calcularMetrado: false };
       }));
       cerrarFormulario();
       Swal.fire({ icon: 'success', title: 'Actualizado', timer: 1100, showConfirmButton: false });
@@ -1266,18 +1476,28 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
         fd.append('operator', r.operador || '');
         fd.append('licencia', r.licencia || '');
         fd.append('categoria', r.categoria || '');
-        fd.append('start_horometer', parseFloat(r.hmInicio) || 0);
-        fd.append('end_horometer', parseFloat(r.hmFin) || 0);
+        const rgHM = rangoHorometro(actividades);
+        fd.append('start_horometer', rgHM.inicio === '' ? 0 : rgHM.inicio);
+        fd.append('end_horometer', rgHM.fin === '' ? 0 : rgHM.fin);
         fd.append('fuel_gallons', parseFloat(r.combustible) || 0);
         fd.append('fuel_voucher', r.vale || '');
-        fd.append('activities', textoActividad(r));
+        const res = resumenActividades(actividades);
+        fd.append('activities', res.texto || textoActividad(r));
         fd.append('observations', r.observaciones || '');
         fd.append('unit_price', parseFloat(r.precioUnitario) || 0);
-        const mv = calcMetradoDe(r);
-        const calculado = r.actividad !== 'OTROS' && !!r.calcularMetrado;
-        fd.append('metrado', mv.val.toFixed(4));
-        fd.append('metrado_unidad', calculado ? mv.unit : (r.unidadMetrado || 'm3'));
-        fd.append('metrado_calculado', calculado ? 'true' : 'false');
+        fd.append('actividades_json', JSON.stringify(actividadesParaBackend(actividades)));
+        if (actividades.length) {
+          // Medidas de cabecera: las de la primera línea. Un campo vacío no se
+          // manda: el backend espera un número y "" le da error de validación.
+          const p = actividades[0];
+          if (p.anchoSup !== '' && p.anchoSup != null) fd.append('width_top', p.anchoSup);
+          if (p.anchoInf !== '' && p.anchoInf != null) fd.append('width_bottom', p.anchoInf);
+          if (p.altura !== '' && p.altura != null) fd.append('height', p.altura);
+          if (p.longitud !== '' && p.longitud != null) fd.append('length', p.longitud);
+          fd.append('metrado', Number(res.metrado).toFixed(4));
+          fd.append('metrado_unidad', res.unidad);
+          fd.append('metrado_calculado', res.calculado ? 'true' : 'false');
+        }
       }
 
       const res = await fetch(`${API_OPS}/${editando.endpoint}/${editando.dbId}/`, { method: 'PATCH', body: fd });
@@ -1733,9 +1953,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     lMaq.forEach(i => {
       if (i.incident_report == null) return;
       const g = asegurar(i.incident_report);
-      const hIni = parseFloat(i.start_horometer) || 0;
-      const hFin = parseFloat(i.end_horometer) || 0;
-      const horas = Math.max(0, hFin - hIni);
+      const horas = horasCobradas(i);
       const pu = parseFloat(i.unit_price) || 0;
       const tot = horas * pu;
       g.maquinaria.push({
@@ -2158,28 +2376,36 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           if (r.modeloId) formData.append('maquina', r.modeloId);
           formData.append('equipment_name', r.equipo);
           formData.append('brand_name', r.marca);
-          formData.append('model_plate', r.placa ? `${r.modeloMaquina || ''} / ${r.placa}`.trim() : (r.modeloMaquina || '')); formData.append('start_horometer', parseFloat(r.hmInicio) || 0);
-          formData.append('end_horometer', parseFloat(r.hmFin) || 0); formData.append('fuel_gallons', parseFloat(r.combustible) || 0);
+          formData.append('model_plate', r.placa ? `${r.modeloMaquina || ''} / ${r.placa}`.trim() : (r.modeloMaquina || ''));
+          // La cabecera guarda el rango del día (primer inicio, último fin).
+          // Las horas que se cobran son la suma de los tramos, no este rango.
+          const rgHM = rangoHorometro(r.actividadesLista || []);
+          formData.append('start_horometer', rgHM.inicio === '' ? 0 : rgHM.inicio);
+          formData.append('end_horometer', rgHM.fin === '' ? 0 : rgHM.fin);
+          formData.append('fuel_gallons', parseFloat(r.combustible) || 0);
           formData.append('fuel_voucher', r.vale);
-          // En OTROS se guarda la descripción escrita, no la palabra "OTROS".
-          formData.append('activities', textoActividad(r));
+          // Cabecera: el texto de todas las actividades y el metrado resumido.
+          // El detalle real viaja en actividades_json.
+          const lineas = r.actividadesLista || [];
+          const res = resumenActividades(lineas);
+          formData.append('activities', res.texto || textoActividad(r));
           formData.append('observations', r.observaciones); formData.append('unit_price', r.precioUnitario);
           if (r.fotoParte) formData.append('part_photo', r.fotoParte);
           if (r.fotoVale) formData.append('voucher_photo', r.fotoVale);
-          if (r.incluirMetrado || IMG_METRADO[r.actividad] || r.actividad === 'OTROS') {
-            // OTROS no lleva medidas de campo: solo el metrado manual.
-            if (r.actividad !== 'OTROS') {
-              if (r.anchoSup !== '' && r.anchoSup != null) formData.append('width_top', r.anchoSup);
-              if (r.anchoInf !== '' && r.anchoInf != null) formData.append('width_bottom', r.anchoInf);
-              if (r.altura !== '' && r.altura != null) formData.append('height', r.altura);
-              if (r.longitud !== '' && r.longitud != null) formData.append('length', r.longitud);
-            }
-            // Metrado final: calculado por fórmula o ingresado a mano.
-            const mv = calcMetradoDe(r);
-            const calculado = r.actividad !== 'OTROS' && !!r.calcularMetrado;
-            formData.append('metrado', mv.val.toFixed(4));
-            formData.append('metrado_unidad', calculado ? mv.unit : (r.unidadMetrado || 'm3'));
-            formData.append('metrado_calculado', calculado ? 'true' : 'false');
+          // El parte va como multipart (lleva fotos), así que la lista viaja
+          // como texto JSON en un solo campo.
+          formData.append('actividades_json', JSON.stringify(actividadesParaBackend(lineas)));
+          if (lineas.length) {
+            // Medidas de cabecera: las de la primera línea, para que los partes
+            // de una sola actividad sigan viéndose igual que siempre.
+            const p = lineas[0];
+            if (p.anchoSup !== '' && p.anchoSup != null) formData.append('width_top', p.anchoSup);
+            if (p.anchoInf !== '' && p.anchoInf != null) formData.append('width_bottom', p.anchoInf);
+            if (p.altura !== '' && p.altura != null) formData.append('height', p.altura);
+            if (p.longitud !== '' && p.longitud != null) formData.append('length', p.longitud);
+            formData.append('metrado', Number(res.metrado).toFixed(4));
+            formData.append('metrado_unidad', res.unidad);
+            formData.append('metrado_calculado', res.calculado ? 'true' : 'false');
           }
         }
         const res = await fetch(endpoint, { method: 'POST', body: formData });
@@ -2257,12 +2483,13 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   };
 
   // Renderiza los campos de metrado según la actividad seleccionada.
+  // Trabaja sobre la actividad que se está editando en su propia ventana.
   const renderCamposMetrado = () => {
-    const act = nuevoRecurso.actividad;
-    const set = (campo, val) => setNuevoRecurso({...nuevoRecurso, [campo]: val});
-    const activo = !!nuevoRecurso.calcularMetrado;
+    const act = actForm.actividad;
+    const set = (campo, val) => setActForm({...actForm, [campo]: val});
+    const activo = !!actForm.calcularMetrado;
     const inp = (campo, label, step=STEP4) => (
-      <div className="tbl-col"><label className="tbl-form-label" style={{ color: activo ? undefined : '#94a3b8' }}>{label}</label><input type="number" step={step} className="tbl-form-control" placeholder="0.00" value={nuevoRecurso[campo]} disabled={!activo} onChange={e => set(campo, e.target.value)} style={{ background: activo ? undefined : '#f1f5f9', cursor: activo ? undefined : 'not-allowed' }} /></div>
+      <div className="tbl-col"><label className="tbl-form-label" style={{ color: activo ? undefined : '#94a3b8' }}>{label}</label><input type="number" step={step} className="tbl-form-control" placeholder="0.00" value={actForm[campo]} disabled={!activo} onChange={e => set(campo, e.target.value)} style={{ background: activo ? undefined : '#f1f5f9', cursor: activo ? undefined : 'not-allowed' }} /></div>
     );
     if (act === 'EXCAVACION DE MATERIAL' || act === 'ENROCADO')
       return <>{inp('anchoBase','Base B (m)')}{inp('corona','Corona b (m)')}{inp('altura','Altura h (m)')}{inp('longitud','Longitud L (m)')}</>;
@@ -2755,10 +2982,122 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                     <div className="tbl-row tbl-mb-3">
                       <div className="tbl-col-3"><label className="tbl-form-label">Precio Unit. (S/ HE)</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>
                     </div>
+                    {/* ── ACTIVIDADES DEL PARTE ──────────────────────────────
+                         Una máquina hace varias tareas en la misma jornada y el
+                         formato impreso admite varias líneas. El horómetro (y con
+                         él el costo) sigue siendo uno solo para todo el parte. */}
+                    <div style={{ background:'#f0f6ff', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'14px', marginBottom:'15px' }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', marginBottom:'10px', flexWrap:'wrap' }}>
+                        <div>
+                          <div style={{ fontSize:'13px', fontWeight:700, color:'#1463A5' }}>
+                            Actividades realizadas <span style={{color:'red'}}>*</span>
+                          </div>
+                          <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>
+                            Agrega una línea por cada tarea, con su tramo de horómetro y su metrado. Las horas del parte son la suma de los tramos.
+                          </div>
+                        </div>
+                        <button type="button" onClick={abrirNuevaActividad}
+                          style={{ display:'inline-flex', alignItems:'center', gap:'6px', background:'#1463A5', color:'#fff', border:'none', borderRadius:'6px', padding:'8px 14px', fontSize:'13px', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+                          <FaPlus size={11} /> Agregar actividad
+                        </button>
+                      </div>
+
+                      {/* Hoja resumen */}
+                      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12.5px', background:'#fff', borderRadius:'5px', overflow:'hidden' }}>
+                        <thead>
+                          <tr style={{ background:'#e0f2fe' }}>
+                            <th style={{ textAlign:'left', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', width:'34px' }}>#</th>
+                            <th style={{ textAlign:'left', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1' }}>ZONA</th>
+                            <th style={{ textAlign:'left', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1' }}>ACTIVIDAD</th>
+                            <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', whiteSpace:'nowrap' }}>METRADO</th>
+                            <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', whiteSpace:'nowrap' }}>HM INI · FIN</th>
+                            <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', whiteSpace:'nowrap' }}>HORAS</th>
+                            <th style={{ textAlign:'right', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', width:'96px' }}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {actividades.length === 0 ? (
+                            <tr><td colSpan="7" style={{ padding:'16px 10px', textAlign:'center', color:'#94a3b8', fontStyle:'italic' }}>
+                              Todavía no hay actividades. Usa "Agregar actividad".
+                            </td></tr>
+                          ) : actividades.map((a, i) => {
+                            const mv = calcMetradoDe(a);
+                            return (
+                              <tr key={i} style={{ borderTop:'1px solid #f1f5f9' }}>
+                                <td style={{ padding:'8px 10px', color:'#94a3b8', fontWeight:700 }}>{i + 1}</td>
+                                <td style={{ padding:'8px 10px', color:'#475569' }}>{a.zonaTrabajo || '—'}</td>
+                                <td style={{ padding:'8px 10px', color:'#1e293b', fontWeight:600 }}>
+                                  {textoActividad(a) || '—'}
+                                  {a.observacion ? <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:400 }}>{a.observacion}</div> : null}
+                                </td>
+                                <td style={{ padding:'8px 10px', textAlign:'right', color:'#1463A5', fontWeight:700, whiteSpace:'nowrap' }}>
+                                  {fmtCant(mv.val)} {mv.unit}
+                                </td>
+                                <td style={{ padding:'8px 10px', textAlign:'right', color:'#475569', whiteSpace:'nowrap' }}>
+                                  {a.hmInicio === '' || a.hmFin === '' ? '—' : `${fmtCant(a.hmInicio)} · ${fmtCant(a.hmFin)}`}
+                                </td>
+                                <td style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'#334155', whiteSpace:'nowrap' }}>
+                                  {fmtCant(horasDeActividad(a))} h
+                                </td>
+                                <td style={{ padding:'8px 10px' }}>
+                                  <div style={{ display:'flex', gap:'5px', justifyContent:'flex-end' }}>
+                                    <button type="button" onClick={() => abrirEditarActividad(i)} title="Editar actividad"
+                                      style={{ padding:'4px 8px', background:'#e0f2fe', color:'#0284c7', border:'none', borderRadius:'4px', cursor:'pointer', display:'inline-flex' }}><FaPen size={11} /></button>
+                                    <button type="button" onClick={() => quitarActividad(i)} title="Quitar actividad"
+                                      style={{ padding:'4px 8px', background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:'4px', cursor:'pointer', display:'inline-flex' }}><FaTrash size={11} /></button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        {actividades.length > 1 && (() => {
+                          // Solo se totaliza si todas las líneas comparten unidad:
+                          // sumar m³ con m² daría un número que no significa nada.
+                          const unidades = [...new Set(actividades.map(a => calcMetradoDe(a).unit))];
+                          const suma = actividades.reduce((s, a) => s + (calcMetradoDe(a).val || 0), 0);
+                          return (
+                            <tfoot>
+                              <tr style={{ background:'#f8fafc', borderTop:'2px solid #e2e8f0' }}>
+                                <td colSpan="3" style={{ padding:'9px 10px', textAlign:'right', fontWeight:700, color:'#334155' }}>
+                                  {actividades.length} actividades
+                                </td>
+                                <td style={{ padding:'9px 10px', textAlign:'right', fontWeight:800, color:'#1463A5', whiteSpace:'nowrap' }}>
+                                  {unidades.length === 1 ? `${fmtCant(suma)} ${unidades[0]}` : 'unidades mixtas'}
+                                </td>
+                                <td></td>
+                                <td style={{ padding:'9px 10px', textAlign:'right', fontWeight:800, color:'#1463A5', whiteSpace:'nowrap' }}>
+                                  {horasMaquina} h
+                                </td>
+                                <td></td>
+                              </tr>
+                            </tfoot>
+                          );
+                        })()}
+                      </table>
+                    </div>
+
                     <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col"><label className="tbl-form-label">HM Inicio <span style={{color:'red'}}>*</span> {parseFloat(nuevoRecurso.hmInicio) > 0 && <span style={{color:'#0284c7', fontSize:'10px', fontWeight:600}}>· viene del parte anterior</span>}</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.hmInicio} onChange={e => setNuevoRecurso({...nuevoRecurso, hmInicio: e.target.value})} /></div>
-                      <div className="tbl-col"><label className="tbl-form-label">HM Fin <span style={{color:'red'}}>*</span></label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.hmFin} onChange={e => setNuevoRecurso({...nuevoRecurso, hmFin: e.target.value})} /></div>
-                      <div className="tbl-col-auto" style={{display: 'flex', flexDirection: 'column', justifyContent: 'flex-end'}}><div style={{background: '#e0f2fe', color: '#0284c7', padding: '8px 12px', borderRadius: '4px', fontWeight: 'bold', fontSize: '13px', border: '1px solid #bae6fd'}}>Horas: {horasMaquina} h</div></div>
+                      {/* El horometro se captura en cada actividad. Aqui solo se
+                          muestra el resultado: el rango del dia y la suma de tramos. */}
+                      {(() => {
+                        const rg = rangoHorometro(actividades);
+                        const caja = (etq, val) => (
+                          <div className="tbl-col">
+                            <label className="tbl-form-label">{etq}</label>
+                            <div style={{ padding:'8px 10px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:'4px', fontWeight:700, color: val === '' ? '#94a3b8' : '#334155' }}>
+                              {val === '' ? '—' : fmtCant(val)}
+                            </div>
+                          </div>
+                        );
+                        return (
+                          <>
+                            {caja('HM Inicio del día', rg.inicio)}
+                            {caja('HM Fin del día', rg.fin)}
+                            <div className="tbl-col-auto" style={{display: 'flex', flexDirection: 'column', justifyContent: 'flex-end'}}><div style={{background: '#e0f2fe', color: '#0284c7', padding: '8px 12px', borderRadius: '4px', fontWeight: 'bold', fontSize: '13px', border: '1px solid #bae6fd'}} title="Suma de los tramos de cada actividad">Horas: {horasMaquina} h</div></div>
+                          </>
+                        );
+                      })()}
                       <div className="tbl-col"><label className="tbl-form-label">Combustible (Gls)</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.combustible} onChange={e => setNuevoRecurso({...nuevoRecurso, combustible: e.target.value})} /></div>
                       <div className="tbl-col"><label className="tbl-form-label">Vale N°</label><input type="text" className="tbl-form-control" value={nuevoRecurso.vale} onChange={e => setNuevoRecurso({...nuevoRecurso, vale: e.target.value})} /></div>
                     </div>
@@ -2791,98 +3130,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                       );
                     })()}
                     <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col"><label className="tbl-form-label">Actividades Realizadas <span style={{color:'red'}}>*</span></label>
-                        <select className="tbl-form-select" value={nuevoRecurso.actividad} onChange={e => {
-                            const v = e.target.value;
-                            if (v === 'OTROS') {
-                              // OTROS: sin fórmula ni medidas de campo, solo metrado manual.
-                              setNuevoRecurso({ ...nuevoRecurso, actividad: v, calcularMetrado: false,
-                                longitud: '', altura: '', anchoSup: '', anchoInf: '', anchoBase: '', corona: '',
-                                talud: '', hPromedio: '', nViajes: '', volTolva: '', fe: '1.25' });
-                            } else {
-                              setNuevoRecurso({ ...nuevoRecurso, actividad: v, actividadOtros: '' });
-                            }
-                          }}>
-                          <option value="">— Seleccionar actividad —</option>
-                          <option value="EXCAVACION DE MATERIAL">EXCAVACIÓN DE MATERIAL</option>
-                          <option value="CARGUIO DE MATERIAL">CARGUÍO DE MATERIAL</option>
-                          <option value="DESCOLMATACION DE CAUCE">DESCOLMATACIÓN DE CAUCE</option>
-                          <option value="ELIMINACION">ELIMINACIÓN DE MATERIAL</option>
-                          <option value="CONFORMACION DE DIQUE">CONFORMACIÓN DE DIQUE</option>
-                          <option value="ENROCADO">ENROCADO</option>
-                          <option value="PERFILADO DE TALUD">PERFILADO DE TALUD</option>
-                          <option value="HABILITACION DE ACCESO">HABILITACIÓN DE ACCESO</option>
-                          <option value="OTROS">OTROS (metrado manual)</option>
-                        </select>
-                      </div>
-                      <div className="tbl-col"><label className="tbl-form-label">Observaciones</label><input type="text" className="tbl-form-control" placeholder="Condiciones del terreno, clima..." value={nuevoRecurso.observaciones} onChange={e => setNuevoRecurso({...nuevoRecurso, observaciones: e.target.value})} /></div>
+                      <div className="tbl-col"><label className="tbl-form-label">Observaciones del parte</label><input type="text" className="tbl-form-control" placeholder="Condiciones del terreno, clima..." value={nuevoRecurso.observaciones} onChange={e => setNuevoRecurso({...nuevoRecurso, observaciones: e.target.value})} /></div>
                     </div>
-                    {/* Descripción libre de la actividad — solo cuando es OTROS */}
-                    {esActividadOtros && (
-                      <div className="tbl-row tbl-mb-3">
-                        <div className="tbl-col">
-                          <label className="tbl-form-label">Descripción de la actividad <span style={{color:'red'}}>*</span></label>
-                          <input type="text" className="tbl-form-control" placeholder="Ej. RIEGO DE PLATAFORMA CON CISTERNA"
-                            value={nuevoRecurso.actividadOtros}
-                            onChange={e => setNuevoRecurso({ ...nuevoRecurso, actividadOtros: e.target.value.toUpperCase() })} />
-                          <small style={{ fontSize:'11px', color:'#64748b' }}>Se guarda como la actividad del parte y aparece en el PDF y en los reportes.</small>
-                        </div>
-                      </div>
-                    )}
-                    {/* ── Metrado por actividad (con imagen de referencia) ────── */}
-                    {tieneMetradoActividad && (
-                      <div style={{ background:'#f0f6ff', padding:'14px', borderRadius:'4px', border:'1px solid #bfdbfe', marginTop:'4px' }}>
-                        {esActividadOtros ? (
-                          <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5' }}>
-                            OTROS · metrado de ingreso manual
-                          </div>
-                        ) : (
-                        <div style={{ display:'flex', gap:'14px', alignItems:'flex-start' }}>
-                          <div style={{ flexShrink:0, width:'160px' }}>
-                            <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5', marginBottom:'6px' }}>📐 Referencia</div>
-                            <img src={IMG_METRADO[nuevoRecurso.actividad]} alt={nuevoRecurso.actividad} onClick={() => setImgRefModal({src: IMG_METRADO[nuevoRecurso.actividad], titulo: nuevoRecurso.actividad})} style={{ width:'100%', borderRadius:'4px', border:'1px solid #bfdbfe', cursor:'pointer' }} title="Clic para ampliar" />
-                          </div>
-                          <div style={{ flex:1 }}>
-                            <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5', marginBottom:'10px' }}>{nuevoRecurso.actividad}</div>
-                            <div className="tbl-row tbl-mb-2" style={{ gap:'8px' }}>{renderCamposMetrado()}</div>
-                          </div>
-                        </div>
-                        )}
-                        <div style={{ marginTop:'8px', padding:'8px 12px', background:'#fff', borderRadius:'4px', border:'1px solid #bfdbfe', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'10px' }}>
-                          {(!esActividadOtros && nuevoRecurso.calcularMetrado) ? (
-                            <>
-                              <span style={{ fontSize:'11px', color:'#626976' }}>{formulaMetrado[nuevoRecurso.actividad]}</span>
-                              <span style={{ fontSize:'16px', fontWeight:'700', color: volCalc.val > 0 ? '#1463A5' : '#94a3b8' }}>{fmtCant(volumenMetrado)} {volCalc.unit}</span>
-                            </>
-                          ) : (
-                            <>
-                              <span style={{ fontSize:'11px', color:'#626976', whiteSpace:'nowrap' }}>Metrado (ingreso manual){esActividadOtros && <span style={{color:'red'}}> *</span>}</span>
-                              <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                                <input type="number" step={STEP4} className="tbl-form-control" placeholder="0.0000"
-                                  value={nuevoRecurso.metradoManual}
-                                  onChange={e => setNuevoRecurso({ ...nuevoRecurso, metradoManual: e.target.value })}
-                                  style={{ width:'130px', textAlign:'right', fontWeight:700, color:'#1463A5' }} />
-                                <select className="tbl-form-select" value={nuevoRecurso.unidadMetrado}
-                                  onChange={e => setNuevoRecurso({ ...nuevoRecurso, unidadMetrado: e.target.value })}
-                                  style={{ width:'80px' }}>
-                                  {UNIDADES_METRADO.map(u => <option key={u} value={u}>{UNIDADES_METRADO_TXT[u]}</option>)}
-                                </select>
-                              </div>
-                            </>
-                          )}
-                        </div>
-
-                        {/* Check para activar el cálculo por fórmula (no aplica en OTROS) */}
-                        {!esActividadOtros && (
-                          <label style={{ marginTop:'8px', display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:'#1463A5', fontWeight:600, cursor:'pointer', userSelect:'none' }}>
-                            <input type="checkbox" checked={!!nuevoRecurso.calcularMetrado}
-                              onChange={e => setNuevoRecurso({ ...nuevoRecurso, calcularMetrado: e.target.checked })}
-                              style={{ width:'15px', height:'15px', cursor:'pointer' }} />
-                            Calcular metrado con las medidas de campo
-                          </label>
-                        )}
-                      </div>
-                    )}
                   </div>
                 ) : nuevoRecurso.tipo === 'Personal' ? (
                   <>
@@ -3153,9 +3402,164 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           </div>
         </div>
       )}
+      {/* ── Modal: UNA actividad del parte (zona, tarea y metrado) ─────── */}
+      {modalActividad && (
+        <div className="tbl-modal-backdrop" style={{ zIndex: 10002 }}>
+          <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '820px' }}>
+            <div className="tbl-modal-content">
+              <div className="tbl-modal-header">
+                <h5 className="tbl-modal-title">
+                  {actEditando === null ? '➕ Agregar actividad' : `✏️ Editar actividad ${actEditando + 1}`}
+                </h5>
+                <button className="tbl-btn-close" onClick={() => { setModalActividad(false); setActEditando(null); }}><FaTimes/></button>
+              </div>
+              <div className="tbl-modal-body">
+                <div className="tbl-row tbl-mb-3">
+                  <div className="tbl-col">
+                    <label className="tbl-form-label">Zona de trabajo</label>
+                    <input type="text" className="tbl-form-control" placeholder="Ej. Tramo 15, Canal Moche km 3+200"
+                      value={actForm.zonaTrabajo}
+                      onChange={e => setActForm({ ...actForm, zonaTrabajo: e.target.value })} />
+                  </div>
+                  <div className="tbl-col">
+                    <label className="tbl-form-label">Actividad realizada <span style={{color:'red'}}>*</span></label>
+                    <select className="tbl-form-select" value={actForm.actividad} onChange={e => {
+                        const v = e.target.value;
+                        if (v === 'OTROS') {
+                          // OTROS: sin fórmula ni medidas de campo, solo metrado manual.
+                          setActForm({ ...actForm, actividad: v, calcularMetrado: false,
+                            longitud: '', altura: '', anchoSup: '', anchoInf: '', anchoBase: '', corona: '',
+                            talud: '', hPromedio: '', nViajes: '', volTolva: '', fe: '1.25' });
+                        } else {
+                          setActForm({ ...actForm, actividad: v, actividadOtros: '' });
+                        }
+                      }}>
+                      <option value="">— Seleccionar actividad —</option>
+                      <option value="EXCAVACION DE MATERIAL">EXCAVACIÓN DE MATERIAL</option>
+                      <option value="CARGUIO DE MATERIAL">CARGUÍO DE MATERIAL</option>
+                      <option value="DESCOLMATACION DE CAUCE">DESCOLMATACIÓN DE CAUCE</option>
+                      <option value="ELIMINACION">ELIMINACIÓN DE MATERIAL</option>
+                      <option value="CONFORMACION DE DIQUE">CONFORMACIÓN DE DIQUE</option>
+                      <option value="ENROCADO">ENROCADO</option>
+                      <option value="PERFILADO DE TALUD">PERFILADO DE TALUD</option>
+                      <option value="HABILITACION DE ACCESO">HABILITACIÓN DE ACCESO</option>
+                      <option value="OTROS">OTROS (metrado manual)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Descripción libre — solo cuando es OTROS */}
+                {esActividadOtros && (
+                  <div className="tbl-row tbl-mb-3">
+                    <div className="tbl-col">
+                      <label className="tbl-form-label">Descripción de la actividad <span style={{color:'red'}}>*</span></label>
+                      <input type="text" className="tbl-form-control" placeholder="Ej. RIEGO DE PLATAFORMA CON CISTERNA"
+                        value={actForm.actividadOtros}
+                        onChange={e => setActForm({ ...actForm, actividadOtros: e.target.value.toUpperCase() })} />
+                      <small style={{ fontSize:'11px', color:'#64748b' }}>Se guarda como el nombre de esta línea y aparece en el PDF y en los reportes.</small>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Metrado de esta actividad (con imagen de referencia) ── */}
+                {tieneMetradoActividad && (
+                  <div style={{ background:'#f0f6ff', padding:'14px', borderRadius:'4px', border:'1px solid #bfdbfe', marginTop:'4px' }}>
+                    {esActividadOtros ? (
+                      <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5' }}>
+                        OTROS · metrado de ingreso manual
+                      </div>
+                    ) : (
+                    <div style={{ display:'flex', gap:'14px', alignItems:'flex-start' }}>
+                      <div style={{ flexShrink:0, width:'160px' }}>
+                        <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5', marginBottom:'6px' }}>📐 Referencia</div>
+                        <img src={IMG_METRADO[actForm.actividad]} alt={actForm.actividad} onClick={() => setImgRefModal({src: IMG_METRADO[actForm.actividad], titulo: actForm.actividad})} style={{ width:'100%', borderRadius:'4px', border:'1px solid #bfdbfe', cursor:'pointer' }} title="Clic para ampliar" />
+                      </div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:'12px', fontWeight:'700', color:'#1463A5', marginBottom:'10px' }}>{actForm.actividad}</div>
+                        <div className="tbl-row tbl-mb-2" style={{ gap:'8px' }}>{renderCamposMetrado()}</div>
+                      </div>
+                    </div>
+                    )}
+                    <div style={{ marginTop:'8px', padding:'8px 12px', background:'#fff', borderRadius:'4px', border:'1px solid #bfdbfe', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'10px' }}>
+                      {(!esActividadOtros && actForm.calcularMetrado) ? (
+                        <>
+                          <span style={{ fontSize:'11px', color:'#626976' }}>{formulaMetrado[actForm.actividad]}</span>
+                          <span style={{ fontSize:'16px', fontWeight:'700', color: volCalc.val > 0 ? '#1463A5' : '#94a3b8' }}>{fmtCant(volumenMetrado)} {volCalc.unit}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ fontSize:'11px', color:'#626976', whiteSpace:'nowrap' }}>Metrado (ingreso manual){esActividadOtros && <span style={{color:'red'}}> *</span>}</span>
+                          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                            <input type="number" step={STEP4} className="tbl-form-control" placeholder="0.0000"
+                              value={actForm.metradoManual}
+                              onChange={e => setActForm({ ...actForm, metradoManual: e.target.value })}
+                              style={{ width:'130px', textAlign:'right', fontWeight:700, color:'#1463A5' }} />
+                            <select className="tbl-form-select" value={actForm.unidadMetrado}
+                              onChange={e => setActForm({ ...actForm, unidadMetrado: e.target.value })}
+                              style={{ width:'80px' }}>
+                              {UNIDADES_METRADO.map(u => <option key={u} value={u}>{UNIDADES_METRADO_TXT[u]}</option>)}
+                            </select>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Check para activar el cálculo por fórmula (no aplica en OTROS) */}
+                    {!esActividadOtros && (
+                      <label style={{ marginTop:'8px', display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:'#1463A5', fontWeight:600, cursor:'pointer', userSelect:'none' }}>
+                        <input type="checkbox" checked={!!actForm.calcularMetrado}
+                          onChange={e => setActForm({ ...actForm, calcularMetrado: e.target.checked })}
+                          style={{ width:'15px', height:'15px', cursor:'pointer' }} />
+                        Calcular metrado con las medidas de campo
+                      </label>
+                    )}
+                  </div>
+                )}
+
+                {/* Horómetro de esta actividad: de aquí salen sus horas y su costo. */}
+                <div className="tbl-row tbl-mb-3" style={{ marginTop:'12px' }}>
+                  <div className="tbl-col">
+                    <label className="tbl-form-label">
+                      HM Inicio <span style={{color:'red'}}>*</span>
+                      {actForm.hmInicio !== '' && actEditando === null && <span style={{color:'#0284c7', fontSize:'10px', fontWeight:600}}> · encadenado</span>}
+                    </label>
+                    <input type="number" step={STEP4} className="tbl-form-control" value={actForm.hmInicio}
+                      onChange={e => setActForm({ ...actForm, hmInicio: e.target.value })} />
+                  </div>
+                  <div className="tbl-col">
+                    <label className="tbl-form-label">HM Fin <span style={{color:'red'}}>*</span></label>
+                    <input type="number" step={STEP4} className="tbl-form-control" value={actForm.hmFin}
+                      onChange={e => setActForm({ ...actForm, hmFin: e.target.value })} />
+                  </div>
+                  <div className="tbl-col-auto" style={{ display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
+                    <div style={{ background:'#e0f2fe', color:'#0284c7', padding:'8px 12px', borderRadius:'4px', fontWeight:'bold', fontSize:'13px', border:'1px solid #bae6fd', whiteSpace:'nowrap' }}>
+                      Horas: {fmtCant(horasDeActividad(actForm))} h
+                    </div>
+                  </div>
+                </div>
+
+                <div className="tbl-row tbl-mb-3">
+                  <div className="tbl-col">
+                    <label className="tbl-form-label">Observación de esta actividad <span style={{color:'#94a3b8', fontSize:'11px'}}>· opcional</span></label>
+                    <input type="text" className="tbl-form-control" placeholder="Detalle propio de esta línea"
+                      value={actForm.observacion}
+                      onChange={e => setActForm({ ...actForm, observacion: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+              <div className="tbl-modal-footer" style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+                <button className="tbl-btn tbl-btn-link" onClick={() => { setModalActividad(false); setActEditando(null); }}>Cancelar</button>
+                <button className="tbl-btn tbl-btn-success" onClick={guardarActividad}>
+                  <FaSave style={{marginRight:'5px'}}/> {actEditando === null ? 'Agregar a la hoja' : 'Guardar cambios'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ── Modal de imagen de referencia (metrado) ────────────────────── */}
       {imgRefModal && (
-        <div onClick={() => setImgRefModal(null)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
+        <div onClick={() => setImgRefModal(null)} style={{ position:'fixed', inset:0, zIndex:10003, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
           <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:'10px', overflow:'hidden', maxWidth:'1000px', width:'100%', maxHeight:'90vh', display:'flex', flexDirection:'column' }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
               <h5 style={{ margin:0, fontSize:'15px', color:'#1e293b' }}>{imgRefModal.titulo}</h5>
