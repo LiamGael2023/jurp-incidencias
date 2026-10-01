@@ -69,7 +69,7 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
 
   const mapRef = useRef(null);
   const contenedorRef = useRef(null);
-  const { ocupado: capturando, descargar, compartir } = useCapturaMapa(contenedorRef);
+  const { ocupado: capturando, descargar, compartir } = useCapturaMapa(contenedorRef, { base: base, cambiarBase: setBase });
 
   const inv = useInventario();
 
@@ -87,7 +87,7 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
           ref={mapRef} zoomControl={false}>
           <TileLayer {...propsTeselas(base)} />
           <UTMDisplay />
-          <MiniMapa tileUrl={propsTeselas(base).url} />
+          <MiniMapa base={base} />
           <IrA pos={destino} />
           <HerramientaMedicion
             modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null}

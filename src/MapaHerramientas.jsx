@@ -14,6 +14,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MapContainer, TileLayer, Rectangle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
+import { capaBase, esExportable, alternativaExportable, propsTeselas } from './capasBase';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot
 } from 'recharts';
@@ -90,7 +91,7 @@ function MiniMapaSync({ setBounds, setCenter }) {
   return null;
 }
 
-export function MiniMapa({ tileUrl }) {
+export function MiniMapa({ base }) {
   const [center, setCenter] = useState(null);
   const [bounds, setBounds] = useState(null);
   const miniRef = useRef(null);
@@ -121,9 +122,11 @@ export function MiniMapa({ tileUrl }) {
             style={{ height: '100%', width: '100%' }}
             ref={miniRef}
           >
-            {/* crossOrigin aunque el minimapa quede fuera de la captura: si
-                algún día se decide incluirlo, que no contamine el lienzo. */}
-            <TileLayer url={tileUrl} crossOrigin="anonymous" />
+            {/* Las mismas props que el mapa grande, incluido crossOrigin solo
+                donde corresponde: pedirlo a un servidor que no envía la
+                cabecera hace que el navegador descarte la tesela y el
+                minimapa se quede en blanco. */}
+            <TileLayer {...propsTeselas(base)} />
             {bounds && <Rectangle bounds={bounds} pathOptions={{ color: '#E72276', weight: 2, fillOpacity: 0.1 }} />}
           </MapContainer>
         )}
@@ -455,8 +458,12 @@ function explicarFalloCaptura(e) {
   return `No se pudo capturar el mapa: ${e?.message || e}`;
 }
 
-export function useCapturaMapa(contenedorRef) {
+export function useCapturaMapa(contenedorRef, opciones = {}) {
   const [ocupado, setOcupado] = useState(false);
+  // Con `base` y `cambiarBase`, la captura sabe ofrecer el cambio de capa
+  // cuando la actual no se puede exportar. Sin ellos funciona igual, solo que
+  // el usuario tiene que cambiarla a mano.
+  const { base, cambiarBase } = opciones;
 
   const generar = useCallback(async () => {
     const { default: html2canvas } = await import('html2canvas');
@@ -481,7 +488,31 @@ export function useCapturaMapa(contenedorRef) {
     return canvas;
   }, [contenedorRef]);
 
+  /**
+   * Si la capa actual no se puede exportar, se ofrece cambiarla.
+   *
+   * Las teselas de Google no autorizan su lectura, así que con ellas la foto
+   * sale sin mapa de fondo. Antes de gastar el tiempo de la captura conviene
+   * decirlo y resolverlo, en vez de entregar una imagen vacía.
+   *
+   * Devuelve false si el usuario prefiere no capturar.
+   */
+  const prepararBase = useCallback(async () => {
+    if (!base || !cambiarBase || esExportable(base)) return true;
+    const alt = alternativaExportable(base);
+    const ok = window.confirm(
+      `La capa «${capaBase(base).etiqueta}» no permite exportarse, así que la foto `
+      + `saldría sin el mapa de fondo.\n\n`
+      + `¿Cambiar a «${capaBase(alt).etiqueta}» para esta captura?`);
+    if (!ok) return false;
+    cambiarBase(alt);
+    // Las teselas nuevas tardan en llegar; capturar antes daría un mapa a medias.
+    await new Promise(r => setTimeout(r, 1800));
+    return true;
+  }, [base, cambiarBase]);
+
   const descargar = useCallback(async () => {
+    if (!(await prepararBase())) return;
     setOcupado(true);
     try {
       const canvas = await generar();
@@ -491,9 +522,10 @@ export function useCapturaMapa(contenedorRef) {
       a.click();
     } catch (e) { console.error(e); alert(explicarFalloCaptura(e)); }
     finally { setOcupado(false); }
-  }, [generar]);
+  }, [generar, prepararBase]);
 
   const compartir = useCallback(async () => {
+    if (!(await prepararBase())) return;
     setOcupado(true);
     try {
       const canvas = await generar();

@@ -335,7 +335,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
   const mapRef = useRef(null);
   const contenedorRef = useRef(null);
-  const { ocupado: capturando, descargar, compartir } = useCapturaMapa(contenedorRef);
+  const { ocupado: capturando, descargar, compartir } = useCapturaMapa(contenedorRef, { base: mapaBase, cambiarBase: setMapaBase });
 
   // ── Stats ─────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -1291,7 +1291,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           <TileLayer {...propsTeselas(mapaBase)} />
           <FlyToComp pos={miUbicacion || flyTarget} />
           <UTMDisplay />
-          <MiniMapa tileUrl={obtenerUrlMapa()} />
+          <MiniMapa base={mapaBase} />
           <HerramientaMedicion modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null} onFinish={() => {}} />
 
           <SelectorOrigen activo={modoOrigen} onElegir={(p) => { setOrigenManual(p); setModoOrigen(false); }} />
