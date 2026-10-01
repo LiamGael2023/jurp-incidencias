@@ -19,6 +19,7 @@ import Swal from 'sweetalert2';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 // ── Herramientas del visor ───────────────────────────────────────────────────
 import { BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
+import { propsTeselas, OPCIONES_BASE } from './capasBase';
 import './MapaHerramientas.css';
 import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion, FaClipboardCheck } from './InventarioGIS';
 import { useRuta, CapaRuta, fmtDistancia, fmtTiempo } from './RutaGIS';
@@ -1173,7 +1174,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const toggleCapa = (n) => setCapas(p => ({ ...p, [n]: !p[n] }));
   const toggleCapaKMZ = (key) => { const v = !capasKMZ[key]; setCapasKMZ(p => ({ ...p, [key]: v })); if (v) { const cfg = KMZ_CONFIG.find(c => c.key === key); if (cfg?.data?.features?.length && mapRef.current) { const b = L.geoJSON(cfg.data).getBounds(); if (b.isValid()) mapRef.current.flyToBounds(b, { padding: [40, 40], maxZoom: 15, duration: 1 }); } } };
 
-  const obtenerUrlMapa = () => ({ satelite: "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", calles: "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", topografico: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", oscuro: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" })[mapaBase] || "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}";
+  const obtenerUrlMapa = () => propsTeselas(mapaBase).url;
 
   // ── Iconos ────────────────────────────────────────────────────────────
   const iconoGPS = divIcon({ className: 'icono-vacio', html: '<div style="background:#0ea5e9;border:3px solid #fff;width:16px;height:16px;border-radius:50%;box-shadow:0 0 12px #0ea5e988"></div>', iconSize: [22, 22], iconAnchor: [11, 11] });
@@ -1287,7 +1288,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           cabecera, panel, herramientas ni leyenda, que son hermanos de este div. */}
       <div className="gis-mapa" ref={contenedorRef}>
         <MapContainer center={centroMapa} zoom={10} style={{ height: '100%', width: '100%' }} ref={mapRef} zoomControl={false}>
-          <TileLayer url={obtenerUrlMapa()} maxZoom={20} />
+          <TileLayer {...propsTeselas(mapaBase)} />
           <FlyToComp pos={miUbicacion || flyTarget} />
           <UTMDisplay />
           <MiniMapa tileUrl={obtenerUrlMapa()} />
@@ -1466,10 +1467,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         <div className="gis-acciones gis-glass">
           <span className="gis-chip-activo"><span className="gis-punto" />ACTIVO</span>
           <select className="gis-select" value={mapaBase} onChange={e => setMapaBase(e.target.value)}>
-            <option value="satelite">Satélite</option>
-            <option value="calles">Calles</option>
-            <option value="topografico">Topográfico</option>
-            <option value="oscuro">Oscuro</option>
+            {OPCIONES_BASE.map(o => (
+              <option key={o.clave} value={o.clave}>{o.etiqueta}</option>
+            ))}
           </select>
           <button className="gis-btn-primario" onClick={obtenerDatosDeApis}>
             <FaSyncAlt className={cargandoAPIs ? 'icon-spin' : ''} />{cargandoAPIs ? '…' : 'Actualizar'}

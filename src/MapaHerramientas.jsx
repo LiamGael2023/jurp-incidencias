@@ -121,7 +121,9 @@ export function MiniMapa({ tileUrl }) {
             style={{ height: '100%', width: '100%' }}
             ref={miniRef}
           >
-            <TileLayer url={tileUrl} />
+            {/* crossOrigin aunque el minimapa quede fuera de la captura: si
+                algún día se decide incluirlo, que no contamine el lienzo. */}
+            <TileLayer url={tileUrl} crossOrigin="anonymous" />
             {bounds && <Rectangle bounds={bounds} pathOptions={{ color: '#E72276', weight: 2, fillOpacity: 0.1 }} />}
           </MapContainer>
         )}

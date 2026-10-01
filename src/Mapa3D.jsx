@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import {
   FaTimes, FaGlobeAmericas, FaPlay, FaSyncAlt,
 } from 'react-icons/fa';
+import { capaBase } from './capasBase';
 
 /**
  * Vista 3D en globo.
@@ -20,7 +21,9 @@ import {
  */
 
 // Mismas teselas que el visor 2D, para que la imagen no cambie entre vistas.
-const TILES_SATELITE = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
+// Salen de capasBase.js: tres copias de la misma URL era tres sitios donde
+// corregirla, y en WebGL una textura servida sin cabeceras CORS contamina el
+// contexto igual que contamina el lienzo en 2D.
 // Relieve abierto de AWS (Terrarium). No necesita clave.
 const TILES_DEM = 'https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png';
 
@@ -100,10 +103,10 @@ function Mapa3D({ incidentes = [], capasLinea = [], onCerrar, onSeleccionar }) {
         sources: {
           satelite: {
             type: 'raster',
-            tiles: [TILES_SATELITE],
+            tiles: [capaBase('satelite').url],
             tileSize: 256,
-            maxzoom: 20,
-            attribution: 'Imagery © Google',
+            maxzoom: capaBase('satelite').maxZoom,
+            attribution: capaBase('satelite').credito,
           },
         },
         layers: [

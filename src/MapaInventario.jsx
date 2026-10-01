@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import './MapaDashboard.css';
 import './MapaGIS.css';
 import RailGIS from './RailGIS';
+import { propsTeselas, OPCIONES_BASE, CAPA_POR_DEFECTO } from './capasBase';
 import {
   FaGlobe, FaSyncAlt, FaCamera, FaShareAlt,
   FaPlus, FaMinus, FaRulerCombined, FaDrawPolygon, FaEraser, FaLocationArrow,
@@ -29,30 +30,6 @@ import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion,
 
 const CENTRO = [-8.4186, -78.7533];
 
-// El satélite y las calles salían de mt1.google.com, que NO envía cabeceras
-// CORS. Eso hacía imposible capturar el mapa: html2canvas dibujaba las teselas
-// pero el canvas quedaba contaminado, y toDataURL lanzaba SecurityError — que
-// el botón convertía en un "No se pudo capturar el mapa" sin decir por qué.
-//
-// ESRI World Imagery responde con Access-Control-Allow-Origin, así que las
-// teselas entran en la captura. Es además el endpoint publicado para este uso,
-// mientras que mt1.google.com es interno de Google Maps y usarlo directamente
-// queda fuera de sus condiciones.
-const BASES = {
-  satelite:    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  calles:      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-  topografico: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-  oscuro:      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-};
-
-// Atribución exigida por cada proveedor. No es decorativa: es la condición de
-// uso de las teselas, y por eso viaja también dentro de la captura.
-const CREDITOS = {
-  satelite:    'Esri, Maxar, Earthstar Geographics',
-  calles:      '&copy; OpenStreetMap, &copy; CARTO',
-  topografico: '&copy; OpenStreetMap, SRTM · OpenTopoMap (CC-BY-SA)',
-  oscuro:      '&copy; OpenStreetMap, &copy; CARTO',
-};
 
 // Coordenadas UTM en la esquina, igual que en el visor de incidencias.
 function latLngToUTM(lat, lng) {
@@ -86,7 +63,7 @@ function IrA({ pos }) {
 }
 
 function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }) {
-  const [base, setBase] = useState('satelite');
+  const [base, setBase] = useState(CAPA_POR_DEFECTO);
   const [herramienta, setHerramienta] = useState(null);
   const [destino, setDestino] = useState(null);
 
@@ -108,13 +85,9 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
       <div className="gis-mapa" ref={contenedorRef}>
         <MapContainer center={CENTRO} zoom={10} style={{ height: '100%', width: '100%' }}
           ref={mapRef} zoomControl={false}>
-          {/* crossOrigin pide las teselas con CORS desde el primer momento. Sin
-              esto el navegador las guarda sin permiso de lectura y el canvas de
-              la captura queda contaminado aunque el servidor sí lo permita. */}
-          <TileLayer url={BASES[base] || BASES.satelite} maxZoom={20}
-            crossOrigin="anonymous" attribution={CREDITOS[base] || CREDITOS.satelite} />
+          <TileLayer {...propsTeselas(base)} />
           <UTMDisplay />
-          <MiniMapa tileUrl={BASES[base] || BASES.satelite} />
+          <MiniMapa tileUrl={propsTeselas(base).url} />
           <IrA pos={destino} />
           <HerramientaMedicion
             modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null}
@@ -146,10 +119,9 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
         <div className="gis-acciones gis-glass">
           <span className="gis-chip-activo"><span className="gis-punto" />ACTIVO</span>
           <select className="gis-select" value={base} onChange={e => setBase(e.target.value)}>
-            <option value="satelite">Satélite</option>
-            <option value="calles">Calles</option>
-            <option value="topografico">Topográfico</option>
-            <option value="oscuro">Oscuro</option>
+            {OPCIONES_BASE.map(o => (
+              <option key={o.clave} value={o.clave}>{o.etiqueta}</option>
+            ))}
           </select>
           <button className="gis-btn-primario" onClick={inv.recargar} disabled={inv.iniciando}>
             <FaSyncAlt className={inv.iniciando ? 'icon-spin' : ''} />
