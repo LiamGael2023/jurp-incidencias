@@ -187,6 +187,21 @@ const TODAS = TODOS_GRUPOS.flatMap(g => g.capas);
 const ZOOM_ETIQUETAS = 16;
 
 /**
+ * Cuelga los marcadores del racimo, o directamente del mapa si está apagado.
+ *
+ * Va como envoltura y no duplicando el bloque de marcadores a propósito: si
+ * hubiera dos copias, el día que se toque el dibujo de un marcador habría que
+ * acordarse de las dos, y la que no se use ese día es la que se queda atrás.
+ *
+ * Al cambiar `activo` cambia el tipo del componente, así que React desmonta y
+ * vuelve a montar los hijos. Es justo lo que hace falta: los marcadores tienen
+ * que soltarse del grupo y colgarse del mapa, o al revés.
+ */
+const Racimo = ({ activo, innerRef, children }) => (
+  activo ? <GrupoCluster ref={innerRef}>{children}</GrupoCluster> : <>{children}</>
+);
+
+/**
  * Racimo de marcadores.
  *
  * Con las capas encendidas hay más de dos mil puntos, y pintarlos uno a uno
@@ -310,6 +325,19 @@ export function useInventario() {
   const [evaluaciones, setEvaluaciones] = useState({}); // "tipo:fid" → evaluación
   const [error, setError] = useState(null);
   const [iniciando, setIniciando] = useState(false);
+  // El racimo evita que el mapa se arrastre con miles de puntos, pero para
+  // una captura estorba: en la foto salen burbujas con un número en vez de
+  // los activos. Se puede apagar, y la elección se recuerda porque quien
+  // documenta en campo lo apaga una vez y lo quiere apagado toda la jornada.
+  const [cluster, setCluster] = useState(() => {
+    try { return localStorage.getItem('invCluster') !== 'off'; }
+    catch { return true; }   // modo privado o almacenamiento bloqueado
+  });
+
+  const alternarCluster = useCallback(() => setCluster(v => {
+    try { localStorage.setItem('invCluster', v ? 'off' : 'on'); } catch { /* da igual */ }
+    return !v;
+  }), []);
   // índice de búsqueda: un registro por activo, con lo justo para
   // encontrarlo y volar hasta él
   const [indice, setIndice] = useState([]);
@@ -635,6 +663,7 @@ export function useInventario() {
     indice, buscar, irA, destacado, limpiarDestacado,
     evaluando, abrirEvaluacion, cerrarEvaluacion, guardarEvaluacion, formularios,
     alternarCapa, apagarTodas, evaluacionDe, totalVisibles, recargar: iniciar,
+    cluster, alternarCluster,
   };
 }
 
@@ -676,7 +705,12 @@ export function CapasInventario({ inv }) {
       // Dentro del racimo el marcador puede no estar en el mapa todavía:
       // markercluster solo añade los que toca dibujar. Por eso se busca en
       // la lista del grupo, no recorriendo las capas del mapa.
-      const grupo = refCluster.current;
+      //
+      // Con el racimo apagado NO se consulta el grupo aunque la referencia
+      // siga apuntando a algo: sería un grupo ya desmontado, y sus marcadores
+      // no están en el mapa. Abrirles el popup no haría nada y la búsqueda
+      // fallaría sin decir por qué. Se recorre el mapa, que es la verdad.
+      const grupo = inv.cluster ? refCluster.current : null;
       if (grupo && grupo.getLayers) {
         const m = grupo.getLayers().find(coincide);
         if (m) return m;
@@ -695,7 +729,7 @@ export function CapasInventario({ inv }) {
       const m = hallar();
       if (DEPURAR) console.log('[inv] intento', intentos, '| marcador:', !!m);
       if (m) {
-        const grupo = refCluster.current;
+        const grupo = inv.cluster ? refCluster.current : null;
         // Si está agrupado, el popup no se puede abrir sin desplegarlo antes.
         if (grupo && grupo.hasLayer && grupo.hasLayer(m) && grupo.zoomToShowLayer) {
           grupo.zoomToShowLayer(m, () => m.openPopup());
@@ -723,7 +757,10 @@ export function CapasInventario({ inv }) {
       clearTimeout(temporizador);
       mapa.off('moveend', abrir);
     };
-  }, [destacado, mapa, limpiarDestacado]);
+    // inv.cluster entra en las dependencias porque el efecto lo lee: si se
+    // apaga el racimo mientras hay una búsqueda en vuelo, hay que rehacerla
+    // contra el mapa en vez de contra un grupo que ya no está.
+  }, [destacado, mapa, limpiarDestacado, inv.cluster]);
 
   return (
     <>
@@ -783,8 +820,11 @@ export function CapasInventario({ inv }) {
 
       {/* Los puntos de TODAS las capas van al mismo racimo. Uno por capa
           dejaría veintidós racimos pisándose en el mismo sitio; con uno
-          solo, lo que se ve es cuántas estructuras hay en cada zona. */}
-      <GrupoCluster ref={refCluster}>
+          solo, lo que se ve es cuántas estructuras hay en cada zona.
+
+          El racimo se puede apagar: para documentar con una captura estorba,
+          porque en la foto salen burbujas con un número en vez de los activos. */}
+      <Racimo activo={inv.cluster} innerRef={refCluster}>
       {TODAS.map(capa => {
         if (!inv.visibles[capa.codigo]) return null;
         if (capa.tipo === 'line' || capa.tipo === 'poly') return null;
@@ -926,7 +966,7 @@ export function CapasInventario({ inv }) {
           );
         });
       })}
-      </GrupoCluster>
+      </Racimo>
     </>
   );
 }

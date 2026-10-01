@@ -8,6 +8,7 @@ import RailGIS from './RailGIS';
 import {
   FaGlobe, FaSyncAlt, FaCamera, FaShareAlt,
   FaPlus, FaMinus, FaRulerCombined, FaDrawPolygon, FaEraser, FaLocationArrow,
+  FaObjectGroup, FaObjectUngroup,
 } from 'react-icons/fa';
 import { MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
 import './MapaHerramientas.css';
@@ -154,6 +155,16 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
         <button className="gis-tool" title="Limpiar medición"
           onClick={() => setHerramienta(null)}><FaEraser /></button>
         <div className="gis-tool-sep" />
+        {/* Va pegado a la cámara porque es ahí donde hace falta: con el racimo
+            encendido, la captura sale con burbujas numeradas en vez de los
+            activos. El estado se recuerda entre sesiones. */}
+        <button className={`gis-tool ${inv.cluster ? 'activo' : ''}`}
+          title={inv.cluster
+            ? 'Agrupando puntos cercanos — apágalo para ver cada activo en la captura'
+            : 'Mostrando cada activo — enciéndelo si el mapa va lento'}
+          onClick={inv.alternarCluster}>
+          {inv.cluster ? <FaObjectGroup /> : <FaObjectUngroup />}
+        </button>
         <button className="gis-tool" title="Capturar mapa"
           onClick={descargar} disabled={capturando}><FaCamera /></button>
         <button className="gis-tool" title="Compartir captura"
