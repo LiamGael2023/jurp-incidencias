@@ -29,11 +29,29 @@ import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion,
 
 const CENTRO = [-8.4186, -78.7533];
 
+// El satélite y las calles salían de mt1.google.com, que NO envía cabeceras
+// CORS. Eso hacía imposible capturar el mapa: html2canvas dibujaba las teselas
+// pero el canvas quedaba contaminado, y toDataURL lanzaba SecurityError — que
+// el botón convertía en un "No se pudo capturar el mapa" sin decir por qué.
+//
+// ESRI World Imagery responde con Access-Control-Allow-Origin, así que las
+// teselas entran en la captura. Es además el endpoint publicado para este uso,
+// mientras que mt1.google.com es interno de Google Maps y usarlo directamente
+// queda fuera de sus condiciones.
 const BASES = {
-  satelite:    'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-  calles:      'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+  satelite:    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  calles:      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
   topografico: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
   oscuro:      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+};
+
+// Atribución exigida por cada proveedor. No es decorativa: es la condición de
+// uso de las teselas, y por eso viaja también dentro de la captura.
+const CREDITOS = {
+  satelite:    'Esri, Maxar, Earthstar Geographics',
+  calles:      '&copy; OpenStreetMap, &copy; CARTO',
+  topografico: '&copy; OpenStreetMap, SRTM · OpenTopoMap (CC-BY-SA)',
+  oscuro:      '&copy; OpenStreetMap, &copy; CARTO',
 };
 
 // Coordenadas UTM en la esquina, igual que en el visor de incidencias.
@@ -90,7 +108,11 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
       <div className="gis-mapa" ref={contenedorRef}>
         <MapContainer center={CENTRO} zoom={10} style={{ height: '100%', width: '100%' }}
           ref={mapRef} zoomControl={false}>
-          <TileLayer url={BASES[base] || BASES.satelite} maxZoom={20} />
+          {/* crossOrigin pide las teselas con CORS desde el primer momento. Sin
+              esto el navegador las guarda sin permiso de lectura y el canvas de
+              la captura queda contaminado aunque el servidor sí lo permita. */}
+          <TileLayer url={BASES[base] || BASES.satelite} maxZoom={20}
+            crossOrigin="anonymous" attribution={CREDITOS[base] || CREDITOS.satelite} />
           <UTMDisplay />
           <MiniMapa tileUrl={BASES[base] || BASES.satelite} />
           <IrA pos={destino} />
@@ -159,12 +181,28 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
         <div className="gis-tool-sep" />
         {/* Va pegado a la cámara porque es ahí donde hace falta: con el racimo
             encendido, la captura sale con burbujas numeradas en vez de los
-            activos. El estado se recuerda entre sesiones. */}
+            activos. El estado se recuerda entre sesiones.
+
+            Apagarlo con el inventario entero encendido pinta miles de
+            marcadores de una vez y el navegador deja de responder unos
+            segundos — que desde fuera se ve igual que un botón roto. Por eso
+            se avisa antes y se sugiere la salida: apagar capas primero. */}
         <button className={`gis-tool ${inv.cluster ? 'activo' : ''}`}
           title={inv.cluster
-            ? 'Agrupando puntos cercanos — apágalo para ver cada activo en la captura'
-            : 'Mostrando cada activo — enciéndelo si el mapa va lento'}
-          onClick={inv.alternarCluster}>
+            ? `Agrupando ${inv.totalVisibles.toLocaleString('es-PE')} activos — apágalo para verlos uno a uno`
+            : `Mostrando ${inv.totalVisibles.toLocaleString('es-PE')} activos sin agrupar — enciéndelo si el mapa va lento`}
+          onClick={() => {
+            const MUCHOS = 800;
+            if (inv.cluster && inv.totalVisibles > MUCHOS) {
+              const sigue = window.confirm(
+                `Vas a mostrar ${inv.totalVisibles.toLocaleString('es-PE')} activos sin agrupar.\n\n`
+                + 'El mapa puede tardar unos segundos en responder. Si solo necesitas '
+                + 'fotografiar una zona, apaga antes las capas que no vas a mostrar.\n\n'
+                + '¿Continuar?');
+              if (!sigue) return;
+            }
+            inv.alternarCluster();
+          }}>
           {inv.cluster ? <FaObjectGroup /> : <FaObjectUngroup />}
         </button>
         <button className="gis-tool" title="Capturar mapa"

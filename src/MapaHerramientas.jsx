@@ -439,6 +439,20 @@ function Stat({ label, val, sub }) {
  * Lo que sí se conserva dentro de la foto es la atribución de las teselas: es
  * un requisito de licencia del proveedor, no adorno de la aplicación.
  */
+/**
+ * Traduce el fallo de la captura a algo accionable.
+ *
+ * "No se pudo capturar el mapa" no sirve para nada: la causa casi siempre es
+ * una capa base servida sin cabeceras CORS, y eso el usuario lo arregla
+ * cambiando de capa en un segundo — si alguien se lo dice.
+ */
+function explicarFalloCaptura(e) {
+  if (e?.name === 'SecurityError' || /taint/i.test(e?.message || ''))
+    return 'La capa base no permite copiarse. Cambia de capa en el selector de '
+         + 'arriba y vuelve a intentarlo.';
+  return `No se pudo capturar el mapa: ${e?.message || e}`;
+}
+
 export function useCapturaMapa(contenedorRef) {
   const [ocupado, setOcupado] = useState(false);
 
@@ -448,7 +462,12 @@ export function useCapturaMapa(contenedorRef) {
     if (!nodo) throw new Error('No hay mapa que capturar');
     // useCORS permite capturar tiles de Google/OSM servidos con CORS.
     const canvas = await html2canvas(nodo, {
-      useCORS: true, allowTaint: true, backgroundColor: null, scale: 2,
+      // allowTaint va en false a propósito. En true, una tesela servida sin
+      // cabeceras CORS se dibuja igual pero contamina el canvas, y el fallo
+      // aparece después, al convertirlo a PNG, como un SecurityError que no
+      // dice nada del origen. En false la tesela sencillamente no se dibuja y
+      // el problema se ve en la imagen, que es donde se puede entender.
+      useCORS: true, allowTaint: false, backgroundColor: null, scale: 2,
       // Por si algo de interfaz acaba dentro del mapa: los controles propios
       // de Leaflet (zoom, escala) y cualquier cosa marcada a mano.
       ignoreElements: (el) => (
@@ -468,7 +487,7 @@ export function useCapturaMapa(contenedorRef) {
       a.href = canvas.toDataURL('image/png');
       a.download = `mapa_jurp_${Date.now()}.png`;
       a.click();
-    } catch (e) { console.error(e); alert('No se pudo capturar el mapa.'); }
+    } catch (e) { console.error(e); alert(explicarFalloCaptura(e)); }
     finally { setOcupado(false); }
   }, [generar]);
 
@@ -488,7 +507,7 @@ export function useCapturaMapa(contenedorRef) {
         a.download = file.name; a.click();
         alert('Tu navegador no permite compartir directamente; se descargó la imagen.');
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error(e); alert(explicarFalloCaptura(e)); }
     finally { setOcupado(false); }
   }, [generar]);
 
