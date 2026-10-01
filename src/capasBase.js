@@ -16,6 +16,14 @@
 //  usando y las que se sabe que cargan bien desde sus equipos. Las capas
 //  marcadas con `exportable` sí permiten la captura; el botón de la cámara
 //  ofrece cambiarse a una de ellas cuando hace falta.
+//
+//  SOBRE maxNativeZoom. Es hasta dónde el proveedor tiene imagen de verdad.
+//  Más allá, Leaflet amplía la última tesela buena en vez de pedir uno que no
+//  existe: la imagen se ve algo más blanda, pero el mapa sigue. Sin este
+//  valor, al acercarse sobre el valle aparecían recuadros grises con «Map data
+//  not yet available», que es lo que Google devuelve cuando no tiene imagen a
+//  ese zoom en esa zona. maxZoom puede ser mayor porque para ubicar un activo
+//  hace falta acercarse más de lo que llega el satélite.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const CAPAS_BASE = {
@@ -23,37 +31,41 @@ export const CAPAS_BASE = {
     etiqueta: 'Satélite',
     url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
     credito: 'Imágenes © Google',
-    maxZoom: 20,
+    maxZoom: 21,
+    maxNativeZoom: 19,
     exportable: false,
   },
   calles: {
     etiqueta: 'Calles',
     url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
     credito: '© Google',
-    maxZoom: 20,
+    maxZoom: 21,
+    maxNativeZoom: 19,
     exportable: false,
   },
   satelite_esri: {
     etiqueta: 'Satélite (exportable)',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     credito: 'Esri, Maxar, Earthstar Geographics',
-    maxZoom: 19,
+    maxZoom: 21,
+    maxNativeZoom: 19,
     exportable: true,
   },
   topografico: {
     etiqueta: 'Topográfico',
     url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
     credito: '© OpenStreetMap, SRTM · OpenTopoMap (CC-BY-SA)',
-    // OpenTopoMap no publica teselas por encima del 17. Antes se pedían hasta
-    // el 20 y por encima de ese zoom el mapa salía en blanco.
-    maxZoom: 17,
+    // OpenTopoMap no publica teselas por encima del 17.
+    maxZoom: 21,
+    maxNativeZoom: 17,
     exportable: true,
   },
   oscuro: {
     etiqueta: 'Oscuro',
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     credito: '© OpenStreetMap, © CARTO',
-    maxZoom: 20,
+    maxZoom: 21,
+    maxNativeZoom: 20,
     exportable: true,
   },
 };
@@ -88,6 +100,7 @@ export const propsTeselas = (clave) => {
     url: c.url,
     attribution: c.credito,
     maxZoom: c.maxZoom,
+    maxNativeZoom: c.maxNativeZoom,
     ...(c.exportable ? { crossOrigin: 'anonymous' } : {}),
   };
 };
