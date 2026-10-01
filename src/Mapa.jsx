@@ -1187,20 +1187,51 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
            </div>`,
     iconSize: [70, 40], iconAnchor: [35, 40],
   });
-    // Los pluviómetros y las estaciones Davis se distinguen por el ícono y el
-  // color del borde: 🌧️ celeste para pluviómetro, 🌡️ violeta para Davis.
-  // Las que registran lluvia hoy laten, para que salten a la vista.
+  // Los pluviómetros y las estaciones Davis se distinguen por el ícono: 🌧️ para
+  // pluviómetro, la veleta para Davis, 📡 para Innova.
+  //
+  // El COLOR DE LA ETIQUETA dice cuánto llovió. Antes el borde solo distinguía
+  // "llueve" de "no llueve", y 2.8 mm se veía igual que 0.2 mm; con cincuenta
+  // estaciones en pantalla no se distinguía dónde está cayendo el agua.
+  //
+  // Los umbrales están aquí arriba a propósito: son el único número que la
+  // Junta va a querer mover, y moverlo no debería obligar a tocar el dibujo.
+  const UMBRALES_LLUVIA = [
+    { desde: 0.1, fill: '#5598e7', etiqueta: 'Ligera'   },  // 0.1 – 5 mm
+    { desde: 5,   fill: '#86b6ef', etiqueta: 'Moderada' },  // 5 – 20 mm
+    { desde: 20,  fill: '#cde2fb', etiqueta: 'Fuerte'   },  // > 20 mm, es su alerta
+  ];
+
+  // Tres niveles y no más: dentro de un mismo tono, la luminancia solo sostiene
+  // tres pasos que se distingan entre sí Y aguanten texto legible encima — con
+  // cuatro, dos pasos contiguos quedan a 1.19:1 y se ven iguales. El valor
+  // exacto no lo lleva el color: ya está escrito en la etiqueta.
+  const nivelLluvia = (r) => UMBRALES_LLUVIA.filter(u => r >= u.desde).pop() || null;
+
   const crearIconoLluvia = (r, cr, tipo = 'pluviometro', sinDatos = false, nombre = '') => {
     const esDavis = tipo === 'davis';
     const esInnova = tipo === 'innova';
-    const llueve = r > 0;
-    const borde = sinDatos ? '#64748b' : cr ? '#ef4444'
-      : (llueve ? '#35B6E9' : (esInnova ? '#4ade80' : (esDavis ? '#a78bfa' : '#5b7590')));
+    const nivel = sinDatos ? null : nivelLluvia(r);
+    const llueve = !!nivel;
+
+    // Sin lluvia la estación recede: fondo oscuro y tinta apagada. Lo que llama
+    // la atención debe ser el agua, no el inventario de estaciones.
+    const fondo = llueve ? nivel.fill : '#111827';
+    const tinta = llueve ? '#0b2545' : (sinDatos ? '#64748b' : '#8da8c0');
+    const tintaNombre = llueve ? '#1e3a5f' : (sinDatos ? '#64748b' : '#c6d8e8');
+
+    // El fondo del mapa va de #273b40 a #b19f86: ningún relleno contrasta con
+    // los dos extremos, así que la separación la da un anillo oscuro propio,
+    // no el color. En la alerta ese anillo se vuelve rojo y es el único rojo
+    // del mapa — el azul sigue midiendo cuánto, el rojo avisa que hay que mirar.
+    const anillo = cr ? '#ef4444' : (llueve ? '#0b1b2b' : '#334155');
+    const grosor = cr ? 2 : 1;
+
     const clase = llueve ? (cr ? 'gis-lluvia-alerta' : 'gis-lluvia-activa') : '';
     return divIcon({
       className: 'icono-vacio',
-      html: `<div class="${clase}" style="display:flex;flex-direction:column;align-items:center;margin-top:-30px;opacity:${sinDatos ? 0.6 : 1}">
-               <div style="background:${cr ? '#1e293b' : '#111827'};border:1px solid ${borde};color:${borde};font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;text-align:center;line-height:1.25">${nombre ? `<span style="display:block;color:#e8f1fa;font-size:9px">${nombre}</span>` : ''}${sinDatos ? 'sin datos' : r.toFixed(1) + ' mm'}</div>
+      html: `<div class="${clase}" style="display:flex;flex-direction:column;align-items:center;margin-top:-30px;opacity:${sinDatos ? 0.55 : (llueve ? 1 : 0.8)}">
+               <div style="background:${fondo};border:${grosor}px solid ${anillo};color:${tinta};font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;text-align:center;line-height:1.25;box-shadow:0 1px 4px rgba(0,0,0,.55)">${nombre ? `<span style="display:block;color:${tintaNombre};font-size:9px;font-weight:600">${nombre}</span>` : ''}${sinDatos ? 'sin datos' : (cr ? '⚠ ' : '') + r.toFixed(1) + ' mm'}</div>
                <div style="line-height:0;margin-top:3px">${esInnova ? '<span style="font-size:22px;line-height:1">📡</span>' : (esDavis ? '<svg width="30" height="32" viewBox="0 0 28 30" style="display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"><g stroke="#111827" stroke-width="1.5" stroke-linejoin="round" paint-order="stroke"><g fill="#ffffff"><rect x="12.7" y="5" width="2.6" height="20" rx="0.6"/><rect x="5.5" y="6.1" width="17" height="1.9" rx="0.9"/><rect x="16.4" y="11.2" width="5.2" height="7" rx="2.2"/><path d="M8.6 28.6 L12.4 24.4 h3.2 l3.8 4.2 z"/></g><g fill="#111827"><circle cx="5.6" cy="7" r="2.3"/><circle cx="14" cy="3.6" r="2.3"/><circle cx="22.4" cy="7" r="2.3"/></g></g></svg>' : '<span style="font-size:22px;line-height:1">🌧️</span>')}</div>
              </div>`,
       iconSize: [130, 74], iconAnchor: [65, 52],
@@ -1924,6 +1955,20 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         <span><i style={{ background: '#f76707' }} />Moderada</span>
         <span><i style={{ background: '#ef4444' }} />Grave</span>
         <span><i style={{ background: '#2fb344' }} />Resuelto</span>
+
+        {/* La escala de lluvia solo aparece cuando hay estaciones en pantalla:
+            una leyenda que explica algo que no se ve es ruido. */}
+        {lluviasAPI.length > 0 && (
+          <>
+            <span className="gis-leyenda-sep" />
+            <span className="gis-leyenda-tit">Lluvia hoy</span>
+            <span><i style={{ background: '#111827', border: '1px solid #334155' }} />Sin lluvia</span>
+            <span><i style={{ background: '#5598e7' }} />{'< 5'}</span>
+            <span><i style={{ background: '#86b6ef' }} />5–20</span>
+            <span><i style={{ background: '#cde2fb', boxShadow: '0 0 0 1.5px #ef4444' }} />{'> 20 mm'}</span>
+          </>
+        )}
+
         <span className="gis-leyenda-sep" />
         <code>{cargandoAPIs ? 'ACTUALIZANDO…' : `ÚLT. ACT. ${haceRato(ultimaAct, ahora)}`}</code>
       </div>
