@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON, ImageOverlay, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, Popup, GeoJSON, ImageOverlay, useMap, useMapEvents } from 'react-leaflet';
 import L, { divIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
@@ -19,7 +19,7 @@ import Swal from 'sweetalert2';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 // ── Herramientas del visor ───────────────────────────────────────────────────
 import { BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
-import { propsTeselas, OPCIONES_BASE } from './capasBase';
+import { TeselasBase, SelectorBase, capaBase } from './capasBase';
 import './MapaHerramientas.css';
 import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion, FaClipboardCheck } from './InventarioGIS';
 import { useRuta, CapaRuta, fmtDistancia, fmtTiempo } from './RutaGIS';
@@ -243,6 +243,7 @@ const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFrac
 function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVerIncidente }) {
   const centroMapa = [-8.4186, -78.7533];
   const [mapaBase, setMapaBase] = useState('satelite');
+  const [opacidadBase, setOpacidadBase] = useState(1);
   const [filtroTiempo, setFiltroTiempo] = useState(0);
   const [filtroTramo, setFiltroTramo] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
@@ -1174,7 +1175,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const toggleCapa = (n) => setCapas(p => ({ ...p, [n]: !p[n] }));
   const toggleCapaKMZ = (key) => { const v = !capasKMZ[key]; setCapasKMZ(p => ({ ...p, [key]: v })); if (v) { const cfg = KMZ_CONFIG.find(c => c.key === key); if (cfg?.data?.features?.length && mapRef.current) { const b = L.geoJSON(cfg.data).getBounds(); if (b.isValid()) mapRef.current.flyToBounds(b, { padding: [40, 40], maxZoom: 15, duration: 1 }); } } };
 
-  const obtenerUrlMapa = () => propsTeselas(mapaBase).url;
+  const obtenerUrlMapa = () => capaBase(mapaBase).url;
 
   // ── Iconos ────────────────────────────────────────────────────────────
   const iconoGPS = divIcon({ className: 'icono-vacio', html: '<div style="background:#0ea5e9;border:3px solid #fff;width:16px;height:16px;border-radius:50%;box-shadow:0 0 12px #0ea5e988"></div>', iconSize: [22, 22], iconAnchor: [11, 11] });
@@ -1288,7 +1289,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           cabecera, panel, herramientas ni leyenda, que son hermanos de este div. */}
       <div className="gis-mapa" ref={contenedorRef}>
         <MapContainer center={centroMapa} zoom={10} style={{ height: '100%', width: '100%' }} ref={mapRef} zoomControl={false}>
-          <TileLayer {...propsTeselas(mapaBase)} />
+          <TeselasBase base={mapaBase} opacidad={opacidadBase} />
           <FlyToComp pos={miUbicacion || flyTarget} />
           <UTMDisplay />
           <MiniMapa base={mapaBase} />
@@ -1466,11 +1467,8 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
         <div className="gis-acciones gis-glass">
           <span className="gis-chip-activo"><span className="gis-punto" />ACTIVO</span>
-          <select className="gis-select" value={mapaBase} onChange={e => setMapaBase(e.target.value)}>
-            {OPCIONES_BASE.map(o => (
-              <option key={o.clave} value={o.clave}>{o.etiqueta}</option>
-            ))}
-          </select>
+          <SelectorBase base={mapaBase} onBase={setMapaBase}
+            opacidad={opacidadBase} onOpacidad={setOpacidadBase} />
           <button className="gis-btn-primario" onClick={obtenerDatosDeApis}>
             <FaSyncAlt className={cargandoAPIs ? 'icon-spin' : ''} />{cargandoAPIs ? '…' : 'Actualizar'}
           </button>

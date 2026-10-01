@@ -14,7 +14,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MapContainer, TileLayer, Rectangle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { capaBase, esExportable, alternativaExportable, propsTeselas } from './capasBase';
+import { capaBase, puedeExportar, alternativaExportable, propsMinimapa } from './capasBase';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot
 } from 'recharts';
@@ -122,11 +122,11 @@ export function MiniMapa({ base }) {
             style={{ height: '100%', width: '100%' }}
             ref={miniRef}
           >
-            {/* Las mismas props que el mapa grande, incluido crossOrigin solo
-                donde corresponde: pedirlo a un servidor que no envía la
-                cabecera hace que el navegador descarte la tesela y el
-                minimapa se quede en blanco. */}
-            <TileLayer {...propsTeselas(base)} />
+            {/* La misma capa que el mapa grande pero sin pedir CORS: el
+                minimapa no sale en la foto, así que no lo necesita, y pedirlo
+                a un servidor que no envía la cabecera hace que el navegador
+                descarte la tesela y el minimapa se quede en blanco. */}
+            <TileLayer {...propsMinimapa(base)} />
             {bounds && <Rectangle bounds={bounds} pathOptions={{ color: '#E72276', weight: 2, fillOpacity: 0.1 }} />}
           </MapContainer>
         )}
@@ -498,7 +498,7 @@ export function useCapturaMapa(contenedorRef, opciones = {}) {
    * Devuelve false si el usuario prefiere no capturar.
    */
   const prepararBase = useCallback(async () => {
-    if (!base || !cambiarBase || esExportable(base)) return true;
+    if (!base || !cambiarBase || puedeExportar(base)) return true;
     const alt = alternativaExportable(base);
     const ok = window.confirm(
       `La capa «${capaBase(base).etiqueta}» no permite exportarse, así que la foto `

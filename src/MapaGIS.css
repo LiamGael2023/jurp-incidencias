@@ -136,6 +136,25 @@
   color: #cde6f7; font-family: inherit; outline: none;
 }
 .gis-select option { background: #0e2438; color: #cde6f7; }
+.gis-select optgroup { background: #0a1c2d; color: #6f95b1; font-size: 11px; font-style: normal; }
+
+/* Capa base + opacidad: dos controles que se usan juntos (se baja el satélite
+   para que se lean los activos encima y se vuelve a subir). */
+.base-sel { display: flex; align-items: center; gap: 8px; }
+.base-opacidad {
+  width: 64px; height: 4px; -webkit-appearance: none; appearance: none; cursor: pointer;
+  background: rgba(116, 192, 252, .25); border-radius: 2px; outline: none;
+}
+.base-opacidad::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 12px; height: 12px;
+  border-radius: 50%; background: #74c0fc; border: none; cursor: pointer;
+}
+.base-opacidad::-moz-range-thumb {
+  width: 12px; height: 12px; border-radius: 50%; background: #74c0fc;
+  border: none; cursor: pointer;
+}
+/* En pantallas estrechas la cabecera ya va justa; el selector es lo que hace falta. */
+@media (max-width: 1100px) { .base-opacidad { display: none; } }
 .gis-btn-primario {
   display: flex; align-items: center; gap: 6px; padding: 8px 14px; border: none;
   border-radius: 10px; background: #206bc4; color: #fff; cursor: pointer;

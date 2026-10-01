@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './MapaDashboard.css';
 import './MapaGIS.css';
 import RailGIS from './RailGIS';
-import { propsTeselas, OPCIONES_BASE, CAPA_POR_DEFECTO } from './capasBase';
+import { TeselasBase, SelectorBase, CAPA_POR_DEFECTO } from './capasBase';
 import {
   FaGlobe, FaSyncAlt, FaCamera, FaShareAlt,
   FaPlus, FaMinus, FaRulerCombined, FaDrawPolygon, FaEraser, FaLocationArrow,
@@ -64,6 +64,7 @@ function IrA({ pos }) {
 
 function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }) {
   const [base, setBase] = useState(CAPA_POR_DEFECTO);
+  const [opacidad, setOpacidad] = useState(1);
   const [herramienta, setHerramienta] = useState(null);
   const [destino, setDestino] = useState(null);
 
@@ -85,7 +86,7 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
       <div className="gis-mapa" ref={contenedorRef}>
         <MapContainer center={CENTRO} zoom={10} style={{ height: '100%', width: '100%' }}
           ref={mapRef} zoomControl={false}>
-          <TileLayer {...propsTeselas(base)} />
+          <TeselasBase base={base} opacidad={opacidad} />
           <UTMDisplay />
           <MiniMapa base={base} />
           <IrA pos={destino} />
@@ -118,11 +119,8 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
 
         <div className="gis-acciones gis-glass">
           <span className="gis-chip-activo"><span className="gis-punto" />ACTIVO</span>
-          <select className="gis-select" value={base} onChange={e => setBase(e.target.value)}>
-            {OPCIONES_BASE.map(o => (
-              <option key={o.clave} value={o.clave}>{o.etiqueta}</option>
-            ))}
-          </select>
+          <SelectorBase base={base} onBase={setBase}
+            opacidad={opacidad} onOpacidad={setOpacidad} />
           <button className="gis-btn-primario" onClick={inv.recargar} disabled={inv.iniciando}>
             <FaSyncAlt className={inv.iniciando ? 'icon-spin' : ''} />
             {inv.iniciando ? '…' : 'Actualizar'}
