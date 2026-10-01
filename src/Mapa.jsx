@@ -1196,19 +1196,29 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   //
   // Los umbrales están aquí arriba a propósito: son el único número que la
   // Junta va a querer mover, y moverlo no debería obligar a tocar el dibujo.
-  // Semáforo: verde, ámbar, rojo. El verde tira a menta y no a verde puro, y es
-  // a propósito: verde puro contra rojo da ΔE 4.1 en deuteranopia —  para una
-  // de cada doce personas con daltonismo rojo-verde, "ligera" y "fuerte" serían
-  // el mismo color en un mapa de alertas. Estos tres miden ΔE 15.0 en
-  // daltonismo y 21.4 en visión normal, y los tres contrastan con el cerro.
+  // Los cortes y los colores son los MISMOS que usa el backend para notificar
+  // (RAIN_ALERT_THRESHOLD_MM en el .env de producción), y las claves son las
+  // mismas: ama / nar / roj. Que el mapa y el aviso del teléfono salgan del
+  // mismo número es lo que hace que se le crea a los dos; si el mapa pintara
+  // ámbar donde el aviso dice roja, el operario aprendería a desconfiar.
+  //
+  // Son milímetros de lluvia, no del acumulado del día sino del intervalo
+  // entre lecturas. Parecen poquísimos hasta que uno recuerda dónde están
+  // estas estaciones: en Virú y Chao, 3 mm en un día es un evento.
+  //
+  // Los colores NO se tocan: son el código oficial de alerta meteorológica,
+  // ya declarado arriba en NIVELES_ALERTA, y el operario los lee para saber la
+  // gravedad. Naranja y roja quedan a ΔE 12.5 en visión normal — por debajo
+  // del piso de 15, o sea que cuestan de distinguir incluso con vista normal.
+  // Lo que las separa es el número escrito en la propia etiqueta.
   const UMBRALES_LLUVIA = [
-    { desde: 0.1, fill: '#63e6be', etiqueta: 'Ligera'   },  // 0.1 – 5 mm
-    { desde: 5,   fill: '#fab219', etiqueta: 'Moderada' },  // 5 – 20 mm
-    { desde: 20,  fill: '#fa5252', etiqueta: 'Fuerte'   },  // > 20 mm, es su alerta
+    { desde: 0.21, nivel: 'ama', fill: NIVELES_ALERTA.ama.color, texto: '#0b2545' },
+    { desde: 0.63, nivel: 'nar', fill: NIVELES_ALERTA.nar.color, texto: '#0b2545' },
+    { desde: 1.06, nivel: 'roj', fill: NIVELES_ALERTA.roj.color, texto: '#ffffff' },
   ];
 
-  // Los tres llevan el mismo texto oscuro: la receta de la etiqueta no cambia a
-  // mitad de la escala. El valor exacto no lo lleva el color, ya está escrito.
+  // El texto va oscuro o blanco según el nivel, porque el amarillo oficial no
+  // sostiene texto blanco y el rojo oficial no sostiene texto oscuro.
   const nivelLluvia = (r) => UMBRALES_LLUVIA.filter(u => r >= u.desde).pop() || null;
 
   const crearIconoLluvia = (r, cr, tipo = 'pluviometro', sinDatos = false, nombre = '') => {
@@ -1220,8 +1230,10 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     // Sin lluvia la estación recede: fondo oscuro y tinta apagada. Lo que llama
     // la atención debe ser el agua, no el inventario de estaciones.
     const fondo = llueve ? nivel.fill : '#111827';
-    const tinta = llueve ? '#0b2545' : (sinDatos ? '#64748b' : '#8da8c0');
-    const tintaNombre = llueve ? '#1e3a5f' : (sinDatos ? '#64748b' : '#c6d8e8');
+    const tinta = llueve ? nivel.texto : (sinDatos ? '#64748b' : '#8da8c0');
+    const tintaNombre = llueve
+      ? (nivel.texto === '#ffffff' ? 'rgba(255,255,255,.85)' : '#1e3a5f')
+      : (sinDatos ? '#64748b' : '#c6d8e8');
 
     // El fondo del mapa va de #273b40 a #b19f86: ningún relleno contrasta con
     // los dos extremos, así que la separación la da un anillo oscuro propio,
@@ -1231,7 +1243,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     const anillo = llueve ? '#0b1b2b' : '#334155';
     const grosor = cr ? 2 : 1;
 
-    const clase = llueve ? (cr ? 'gis-lluvia-alerta' : 'gis-lluvia-activa') : '';
+    // El latido rápido lo gana la alerta roja, no solo lo extraordinario: es el
+    // nivel que el backend ya considera digno de notificar a todo el mundo.
+    const clase = llueve
+      ? (nivel.nivel === 'roj' ? 'gis-lluvia-alerta' : 'gis-lluvia-activa')
+      : '';
     return divIcon({
       className: 'icono-vacio',
       html: `<div class="${clase}" style="display:flex;flex-direction:column;align-items:center;margin-top:-30px;opacity:${sinDatos ? 0.55 : (llueve ? 1 : 0.8)}">
@@ -1965,11 +1981,14 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         {lluviasAPI.length > 0 && (
           <>
             <span className="gis-leyenda-sep" />
-            <span className="gis-leyenda-tit">Lluvia hoy</span>
+            <span className="gis-leyenda-tit">Lluvia</span>
             <span><i style={{ background: '#111827', border: '1px solid #334155' }} />Sin lluvia</span>
-            <span><i style={{ background: '#63e6be' }} />{'< 5'}</span>
-            <span><i style={{ background: '#fab219' }} />5–20</span>
-            <span><i style={{ background: '#fa5252' }} />{'20+ mm'}</span>
+            {UMBRALES_LLUVIA.map(u => (
+              <span key={u.nivel} title={`Alerta ${NIVELES_ALERTA[u.nivel].texto.replace('Alerta ', '')} desde ${u.desde} mm`}>
+                <i style={{ background: u.fill }} />{u.desde}+
+              </span>
+            ))}
+            <span className="gis-leyenda-um">mm</span>
           </>
         )}
 

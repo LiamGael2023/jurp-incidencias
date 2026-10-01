@@ -407,6 +407,10 @@
    gravedad de las incidencias, que sí son puntos. */
 .gis-leyenda-tit ~ span i { width: 14px; height: 10px; border-radius: 3px; }
 
+/* La unidad va una sola vez al final de la escala y no repetida en cada tramo:
+   "0.21+  0.63+  1.06+  mm" se lee de corrido. */
+.gis-leyenda-um { font-size: 10.5px; font-weight: 600; color: #6f95b1; margin-left: -8px; }
+
 /* ---------- panel de capas ---------- */
 .gis-capas {
   position: absolute; left: calc(var(--rail-w, 300px) + 70px); bottom: 56px; width: 290px; max-height: 62vh; z-index: 45;
