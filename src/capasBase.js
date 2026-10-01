@@ -18,12 +18,22 @@
 //  ofrece cambiarse a una de ellas cuando hace falta.
 //
 //  SOBRE maxNativeZoom. Es hasta dónde el proveedor tiene imagen de verdad.
-//  Más allá, Leaflet amplía la última tesela buena en vez de pedir uno que no
-//  existe: la imagen se ve algo más blanda, pero el mapa sigue. Sin este
-//  valor, al acercarse sobre el valle aparecían recuadros grises con «Map data
-//  not yet available», que es lo que Google devuelve cuando no tiene imagen a
-//  ese zoom en esa zona. maxZoom puede ser mayor porque para ubicar un activo
-//  hace falta acercarse más de lo que llega el satélite.
+//  Más allá, Leaflet amplía la última tesela buena en vez de pedir una que no
+//  existe: se ve algo más blanda, pero el mapa sigue. Sin este valor, al
+//  acercarse sobre el valle aparecían recuadros grises con «Map data not yet
+//  available», que es lo que Google devuelve cuando no tiene imagen a ese zoom
+//  en esa zona.
+//
+//  El valor es un compromiso y conviene saber por qué está donde está. Google
+//  sirve el nivel 20 en la mayor parte del valle, así que ponerlo en 19 —como
+//  se hizo primero— quitaba detalle que sí existe. En 20 se conserva todo el
+//  detalle real; si en algún punto suelto Google tampoco tuviera el 20, ahí
+//  reaparecería el recuadro gris, y la salida es cambiar a «Satélite
+//  (exportable)» en el selector.
+//
+//  maxZoom va más alto a propósito: para ubicar un activo hace falta acercarse
+//  más de lo que llega cualquier satélite, y a partir de maxNativeZoom eso ya
+//  no produce recuadros grises sino imagen ampliada.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const CAPAS_BASE = {
@@ -31,23 +41,23 @@ export const CAPAS_BASE = {
     etiqueta: 'Satélite',
     url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
     credito: 'Imágenes © Google',
-    maxZoom: 21,
-    maxNativeZoom: 19,
+    maxZoom: 22,
+    maxNativeZoom: 20,
     exportable: false,
   },
   calles: {
     etiqueta: 'Calles',
     url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
     credito: '© Google',
-    maxZoom: 21,
-    maxNativeZoom: 19,
+    maxZoom: 22,
+    maxNativeZoom: 20,
     exportable: false,
   },
   satelite_esri: {
     etiqueta: 'Satélite (exportable)',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     credito: 'Esri, Maxar, Earthstar Geographics',
-    maxZoom: 21,
+    maxZoom: 22,
     maxNativeZoom: 19,
     exportable: true,
   },
@@ -56,7 +66,7 @@ export const CAPAS_BASE = {
     url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
     credito: '© OpenStreetMap, SRTM · OpenTopoMap (CC-BY-SA)',
     // OpenTopoMap no publica teselas por encima del 17.
-    maxZoom: 21,
+    maxZoom: 22,
     maxNativeZoom: 17,
     exportable: true,
   },
@@ -64,7 +74,7 @@ export const CAPAS_BASE = {
     etiqueta: 'Oscuro',
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     credito: '© OpenStreetMap, © CARTO',
-    maxZoom: 21,
+    maxZoom: 22,
     maxNativeZoom: 20,
     exportable: true,
   },
