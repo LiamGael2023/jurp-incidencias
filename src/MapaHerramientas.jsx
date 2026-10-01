@@ -104,7 +104,11 @@ export function MiniMapa({ tileUrl }) {
   return (
     <>
       <MiniMapaSync setBounds={setBounds} setCenter={setCenter} />
-      <div className="jurp-minimapa-wrap" style={{ height: colapsado ? '28px' : '150px' }}>
+      {/* Fuera de la captura: es un widget de navegación, no contenido del
+          mapa, y en una foto para documentar un activo un segundo mapa en la
+          esquina solo tapa terreno. */}
+      <div className="jurp-minimapa-wrap jurp-no-capture"
+           style={{ height: colapsado ? '28px' : '150px' }}>
         <button className="jurp-minimapa-toggle" onClick={() => setColapsado(v => !v)} title={colapsado ? 'Mostrar minimapa' : 'Ocultar minimapa'}>
           {colapsado ? '🗺' : '▁'}
         </button>
@@ -421,15 +425,37 @@ function Stat({ label, val, sub }) {
 // ═══════════════════════════════════════════════════════════════════════════
 //  CAPTURA / COMPARTIR — screenshot del contenedor del mapa con html2canvas
 // ═══════════════════════════════════════════════════════════════════════════
+/**
+ * Captura del mapa.
+ *
+ * `contenedorRef` debe apuntar al div que envuelve SOLO al mapa (.gis-mapa), no
+ * a la pantalla entera. La foto es para documentar en campo: si entra el panel
+ * de capas, la cabecera o la barra de herramientas, lo que se quería enseñar
+ * queda tapado por la interfaz. Todo eso vive como hermano de .gis-mapa, así
+ * que apuntar bien al contenedor lo deja fuera sin tener que ir enumerando
+ * clases — una lista de clases se queda corta en cuanto alguien agrega un
+ * panel nuevo y se olvida de marcarlo.
+ *
+ * Lo que sí se conserva dentro de la foto es la atribución de las teselas: es
+ * un requisito de licencia del proveedor, no adorno de la aplicación.
+ */
 export function useCapturaMapa(contenedorRef) {
   const [ocupado, setOcupado] = useState(false);
 
   const generar = useCallback(async () => {
     const { default: html2canvas } = await import('html2canvas');
+    const nodo = contenedorRef.current;
+    if (!nodo) throw new Error('No hay mapa que capturar');
     // useCORS permite capturar tiles de Google/OSM servidos con CORS.
-    const canvas = await html2canvas(contenedorRef.current, {
+    const canvas = await html2canvas(nodo, {
       useCORS: true, allowTaint: true, backgroundColor: null, scale: 2,
-      ignoreElements: (el) => el.classList?.contains('jurp-no-capture'),
+      // Por si algo de interfaz acaba dentro del mapa: los controles propios
+      // de Leaflet (zoom, escala) y cualquier cosa marcada a mano.
+      ignoreElements: (el) => (
+        el.classList?.contains('jurp-no-capture') ||
+        el.classList?.contains('leaflet-control-zoom') ||
+        el.classList?.contains('leaflet-control-scale')
+      ),
     });
     return canvas;
   }, [contenedorRef]);

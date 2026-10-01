@@ -1280,10 +1280,12 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   ];
 
   return (
-    <div className="gis" ref={contenedorRef}>
+    <div className="gis">
 
       {/* ══════════════ MAPA A SANGRE COMPLETA ══════════════ */}
-      <div className="gis-mapa">
+      {/* La captura cuelga de aquí y no de .gis: así la foto sale sin
+          cabecera, panel, herramientas ni leyenda, que son hermanos de este div. */}
+      <div className="gis-mapa" ref={contenedorRef}>
         <MapContainer center={centroMapa} zoom={10} style={{ height: '100%', width: '100%' }} ref={mapRef} zoomControl={false}>
           <TileLayer url={obtenerUrlMapa()} maxZoom={20} />
           <FlyToComp pos={miUbicacion || flyTarget} />

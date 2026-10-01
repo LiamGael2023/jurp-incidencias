@@ -82,10 +82,12 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
   useEffect(() => { if (!inv.abierto) inv.alternar(); }, []);   // solo al montar
 
   return (
-    <div className="gis" ref={contenedorRef}>
+    <div className="gis">
 
       {/* ══════════════ MAPA ══════════════ */}
-      <div className="gis-mapa">
+      {/* La captura cuelga de aquí y no de .gis: así la foto sale sin
+          cabecera, panel, herramientas ni leyenda, que son hermanos de este div. */}
+      <div className="gis-mapa" ref={contenedorRef}>
         <MapContainer center={CENTRO} zoom={10} style={{ height: '100%', width: '100%' }}
           ref={mapRef} zoomControl={false}>
           <TileLayer url={BASES[base] || BASES.satelite} maxZoom={20} />
