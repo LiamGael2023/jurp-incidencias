@@ -593,6 +593,53 @@
   color: #7ba7c7;
 }
 
+/* ── bloques plegables del formulario ──
+   Las fichas del ANA llegan a setenta campos. La ficha de papel los agrupa
+   por componente de la obra y el formulario hace lo mismo: así en el teléfono
+   se ve un bloque a la vez y no una lista que no termina. */
+.inv-bloque { margin-bottom: 4px; }
+
+.inv-bloque-tit {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  margin: 10px 0 7px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .04);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  color: #c8dcea;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inv-bloque-tit:hover {
+  background: rgba(255, 255, 255, .07);
+  border-color: rgba(255, 255, 255, .13);
+}
+
+.inv-bloque-tit span { flex: 1; }
+
+/* Cuántos obligatorios quedan sin llenar dentro del bloque cerrado: sin
+   esto, al fallar el guardado habría que abrir los bloques uno por uno
+   buscando el campo que falta. */
+.inv-bloque-falta {
+  flex-shrink: 0;
+  min-width: 17px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: #d9480f;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+
 /* ── campos ── */
 .inv-campo { margin-bottom: 10px; }
 

@@ -938,15 +938,69 @@ export function CapasInventario({ inv }) {
    con sus opciones ya resueltas. Agregar un campo evaluable en la base
    lo hace aparecer en este formulario sin tocar el visor.
    ══════════════════════════════════════════════════════════ */
+/**
+ * Decide si un campo debe desaparecer del formulario por lo que ya se
+ * respondió antes. Dos reglas, las dos tomadas de cómo se llena la ficha:
+ *
+ *  1. El detalle de una pregunta de inspección solo tiene sentido si la
+ *     respuesta fue «Sí». Preguntar «¿está obstruida?» → No y acto seguido
+ *     pedir el detalle de la obstrucción es pedir que se deje en blanco.
+ *  2. Un bloque que empieza por «¿cuenta con…?» respondido No no necesita
+ *     material, estado ni dimensiones. Se mira cualquier prefijo ancestro,
+ *     así que un No en 'pur_hay' esconde también 'pur_esc_estado'.
+ *
+ * Solo esconde con un No explícito: sin responder, el campo sigue visible.
+ */
+function ocultoPorRespuesta(campo, valores) {
+  const n = campo.campo;
+
+  if (n.startsWith('insp_') && n.endsWith('_c')) {
+    return valores[n.slice(0, -2)] !== 'S';
+  }
+
+  const partes = n.split('_');
+  for (let i = 1; i < partes.length; i++) {
+    const padre = partes.slice(0, i).join('_') + '_hay';
+    if (padre !== n && valores[padre] === 'N') return true;
+  }
+  return false;
+}
+
 export function ModalEvaluacion({ inv }) {
   const [valores, setValores] = useState({});
   const [resumen, setResumen] = useState({});
   const [guardando, setGuardando] = useState(false);
   const [fallo, setFallo] = useState(null);
+  const [cerradas, setCerradas] = useState({});
 
   const ev = inv.evaluando;
   const campos = ev ? (inv.formularios[ev.tipo] || null) : null;
   const previa = ev ? inv.evaluacionDe(ev.tipo, ev.fid) : null;
+
+  // Las fichas del ANA llegan a setenta campos y en una sola lista no se
+  // pueden llenar en un teléfono. La ficha de papel va por bloques (Ingreso,
+  // Cuerpo, Salida, Inspección…) y el catálogo los trae en la etiqueta, antes
+  // del separador ' · ', así que el formulario los recupera de ahí. Sin
+  // separador, el campo va al bloque general, que queda arriba y abierto.
+  const secciones = useMemo(() => {
+    if (!campos) return null;
+    const grupos = [];
+    const porNombre = new Map();
+    campos.forEach(c => {
+      const corte = c.etiqueta.indexOf(' · ');
+      const titulo = corte > 0 ? c.etiqueta.slice(0, corte) : '';
+      const etiqueta = corte > 0 ? c.etiqueta.slice(corte + 3) : c.etiqueta;
+      if (!porNombre.has(titulo)) {
+        const g = { titulo, campos: [] };
+        porNombre.set(titulo, g);
+        grupos.push(g);
+      }
+      // La etiqueta corta evita repetir el nombre del bloque en cada fila;
+      // la larga se conserva porque es la que valida 'guardar'.
+      porNombre.get(titulo).campos.push({ ...c, corta: etiqueta });
+    });
+    return grupos;
+  }, [campos]);
 
   // Al abrir: precarga con la evaluación previa si existe, y si no con el
   // dato que ya tiene el inventario. El técnico confirma o corrige, en vez
@@ -976,7 +1030,12 @@ export function ModalEvaluacion({ inv }) {
   const cambiar = (campo, v) => setValores(s => ({ ...s, [campo]: v }));
 
   const guardar = async () => {
-    const faltan = (campos || [])
+    // Un campo que el formulario escondió no se exige ni se envía: si el
+    // técnico dijo que no hay canal de salida, un material tecleado antes de
+    // cambiar de respuesta quedaría guardado contradiciendo al propio dato.
+    const activos = (campos || []).filter(c => !ocultoPorRespuesta(c, valores));
+
+    const faltan = activos
       .filter(c => c.obligatorio && (valores[c.campo] === '' || valores[c.campo] == null))
       .map(c => c.etiqueta);
     if (faltan.length) {
@@ -989,7 +1048,7 @@ export function ModalEvaluacion({ inv }) {
 
     // los numéricos viajan como número, no como texto
     const limpios = {};
-    (campos || []).forEach(c => {
+    activos.forEach(c => {
       const v = valores[c.campo];
       if (v === '' || v == null) return;
       limpios[c.campo] = (c.tipo_dato === 'numero' || c.tipo_dato === 'entero')
@@ -1044,38 +1103,67 @@ export function ModalEvaluacion({ inv }) {
             </div>
           )}
 
-          {campos && campos.map(c => {
-            const base = ev.props?.[c.campo];
-            const cambiado = base != null && String(base) !== String(valores[c.campo]);
-            return (
-              <div className="inv-campo" key={c.campo}>
-                <label>
-                  {c.etiqueta}
-                  {c.obligatorio && <b className="inv-req">*</b>}
-                  {cambiado && (
-                    <span className="inv-campo-base">antes: {String(base)}</span>
-                  )}
-                </label>
+          {secciones && secciones.map((g, i) => {
+            // El bloque general va abierto; los demás cerrados, porque con
+            // diez bloques abiertos de golpe no se ve dónde empieza nada.
+            const abierta = g.titulo === '' || !(cerradas[g.titulo] ?? true);
+            const visibles = g.campos.filter(c => !ocultoPorRespuesta(c, valores));
+            if (!visibles.length) return null;
+            const faltanAqui = visibles.filter(
+              c => c.obligatorio && (valores[c.campo] === '' || valores[c.campo] == null)
+            ).length;
 
-                {c.tipo_dato === 'opcion' && c.opciones?.length ? (
-                  <select value={valores[c.campo] ?? ''}
-                          onChange={e => cambiar(c.campo, e.target.value)}>
-                    <option value="">— sin dato —</option>
-                    {c.opciones.map(o => (
-                      <option key={o.codigo} value={o.codigo}>{o.etiqueta}</option>
-                    ))}
-                  </select>
-                ) : c.tipo_dato === 'booleano' ? (
-                  <input type="checkbox" checked={!!valores[c.campo]}
-                         onChange={e => cambiar(c.campo, e.target.checked)} />
-                ) : (
-                  <input
-                    type={c.tipo_dato === 'numero' || c.tipo_dato === 'entero'
-                          ? 'number' : 'text'}
-                    step={c.tipo_dato === 'numero' ? '0.01' : '1'}
-                    value={valores[c.campo] ?? ''}
-                    onChange={e => cambiar(c.campo, e.target.value)} />
+            return (
+              <div className="inv-bloque" key={g.titulo || '_general'}>
+                {g.titulo !== '' && (
+                  <button type="button" className="inv-bloque-tit"
+                    onClick={() => setCerradas(s => ({ ...s, [g.titulo]: abierta }))}>
+                    {abierta ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
+                    <span>{g.titulo}</span>
+                    {faltanAqui > 0 && (
+                      <b className="inv-bloque-falta">{faltanAqui}</b>
+                    )}
+                  </button>
                 )}
+
+                {abierta && visibles.map(c => {
+                  const base = ev.props?.[c.campo];
+                  const cambiado = base != null && String(base) !== String(valores[c.campo]);
+                  return (
+                    <div className="inv-campo" key={c.campo}>
+                      <label>
+                        {c.corta}
+                        {c.obligatorio && <b className="inv-req">*</b>}
+                        {cambiado && (
+                          <span className="inv-campo-base">antes: {String(base)}</span>
+                        )}
+                      </label>
+
+                      {c.tipo_dato === 'opcion' && c.opciones?.length ? (
+                        <select value={valores[c.campo] ?? ''}
+                                onChange={e => cambiar(c.campo, e.target.value)}>
+                          <option value="">— sin dato —</option>
+                          {c.opciones.map(o => (
+                            <option key={o.codigo} value={o.codigo}>{o.etiqueta}</option>
+                          ))}
+                        </select>
+                      ) : c.tipo_dato === 'booleano' ? (
+                        <input type="checkbox" checked={!!valores[c.campo]}
+                               onChange={e => cambiar(c.campo, e.target.checked)} />
+                      ) : c.tipo_dato === 'texto' && /detalle$/i.test(c.corta) ? (
+                        <textarea rows={2} value={valores[c.campo] ?? ''}
+                                  onChange={e => cambiar(c.campo, e.target.value)} />
+                      ) : (
+                        <input
+                          type={c.tipo_dato === 'numero' || c.tipo_dato === 'entero'
+                                ? 'number' : 'text'}
+                          step={c.tipo_dato === 'numero' ? '0.01' : '1'}
+                          value={valores[c.campo] ?? ''}
+                          onChange={e => cambiar(c.campo, e.target.value)} />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
