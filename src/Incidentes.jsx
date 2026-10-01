@@ -1300,7 +1300,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       // Las horas salen de las actividades: sin ellas no hay nada que costear.
       if (actividades.length === 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Agrega al menos una actividad al parte.' });
       const totalHM = parseFloat(horasMaquina) || 0;
-      if (totalHM <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Las actividades del parte no suman horas. Revisa sus horómetros.' });
+      // Lo que se exige es que el horómetro haya avanzado, no que haya horas
+      // cobrables. Un parte entero de horas muertas —la máquina encendida que
+      // no pudo trabajar— es un parte válido y hay que registrarlo: el
+      // horómetro corrió, el combustible se gastó y queda escrito por qué no
+      // se cobra. Cada línea reducida ya exige su motivo al agregarse.
+      if (tramoDeLista(actividades) <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Las actividades del parte no suman horas. Revisa sus horómetros.' });
       if (!nuevoRecurso.numeroParte) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Número de Parte es obligatorio' });
       if (!nuevoRecurso.proveedor || !nuevoRecurso.proveedor.trim()) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Proveedor es obligatorio' });
       if (!nuevoRecurso.equipo) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un equipo' });
@@ -1443,8 +1448,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       if (!r.descripcion) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa una descripción' });
     } else {
       if (actividades.length === 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El parte debe tener al menos una actividad.' });
-      const totalHM = parseFloat(horasMaquina) || 0;
-      if (totalHM <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Las actividades del parte no suman horas. Revisa sus horómetros.' });
+      // Igual que al crearlo: basta con que el horómetro haya avanzado. Un
+      // parte de puras horas muertas se cobra en cero pero existe.
+      if (tramoDeLista(actividades) <= 0) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Las actividades del parte no suman horas. Revisa sus horómetros.' });
       if (!r.proveedor?.trim()) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El Proveedor es obligatorio' });
     }
 
