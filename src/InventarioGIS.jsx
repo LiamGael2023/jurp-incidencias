@@ -1,6 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { GeoJSON, Marker, Popup, useMap } from 'react-leaflet';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { GeoJSON, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
+import { createPathComponent } from '@react-leaflet/core';
 import L from 'leaflet';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import {
   FaClipboardCheck, FaTimes, FaSyncAlt, FaCrosshairs,
   FaChevronDown, FaChevronRight, FaExclamationCircle, FaPlusCircle, FaSearch,
@@ -56,48 +60,86 @@ import icoGaritaOtros from './assets/simbologia/garita_otros.png';
 const API = '/vigapi/inventario';
 
 // Agrupación para el panel. El orden es el que ve el usuario.
+/*
+ * Criterio de color de las capas
+ * ------------------------------
+ * Verde, amarillo, naranja y rojo están RESERVADOS para el estado de
+ * conservación (bueno / regular / malo / colapsado). Ninguna capa los usa
+ * como identidad: antes una "entrega" naranja se confundía con un activo
+ * en mal estado, que es justo lo que el mapa tiene que dejar claro.
+ *
+ * Sobre imagen satelital todas las capas se ven a la vez, y en ese caso no
+ * se sostienen más de tres identidades de color distinguibles. Por eso hay
+ * solo dos familias cromáticas y un neutro:
+ *
+ *   azul  → agua: canales, tomas, entregas, obras de arte
+ *   lima  → territorio: sectores, licencias, lotes (solo contorno)
+ *   gris  → vías, caminos y todo lo que es de terceros
+ *
+ * Dentro del agua la distinción no la hace el tono sino la jerarquía: el
+ * canal madre va oscuro y grueso, y las ramas se aclaran y adelgazan. Las
+ * tuberías a presión van punteadas. Los puntos, además, llevan su propio
+ * icono de simbología, así que el color ahí es lo de menos.
+ *
+ * El territorio va en lima, no en verde: el satélite de esta zona es oliva
+ * donde hay cultivo (#70765c) y arena donde no (#ada686), y un verde de
+ * hoja se pierde entre los campos. El lima se levanta del terreno y, sobre
+ * todo, se separa del verde "bueno" del estado — que es el riesgo real de
+ * usar esta familia. Contra ese verde da ΔE 17.4 en visión normal y contra
+ * el azul del agua 26.4, sobre un mínimo de 15.
+ *
+ * Los tonos más oscuros de la misma familia se descartaron por eso mismo:
+ * #8fb840 queda en 12.5 contra el estado y #2d913e en 3.8, o sea
+ * indistinguible de un activo en buen estado.
+ *
+ * Aun así, sobre una ortofoto ningún color puro llega al contraste
+ * mínimo: el fondo es de luminancia media y compite con todo. Eso no se
+ * arregla con el tono sino con un halo oscuro bajo cada trazo, que está
+ * en InventarioGIS.css. Es lo que hace que las capas se lean igual sobre
+ * cultivo, sobre desierto y sobre el mar.
+ */
 const GRUPOS = [
   {
     titulo: 'Obras de captación y entrega',
     capas: [
-      { codigo: 'tomas_l10',            label: 'Tomas Lateral 10',      color: '#f59f00', ico: icoToma },
-      { codigo: 'tomas_otros_sectores', label: 'Tomas otros sectores',  color: '#f08c00', ico: icoToma },
-      { codigo: 'entregas',             label: 'Entregas',              color: '#e8590c', ico: icoEntrega },
-      { codigo: 'laterales',            label: 'Laterales',             color: '#d9480f', ico: icoCanalTrap },
-      { codigo: 'partidor',             label: 'Partidores',            color: '#c92a2a', ico: icoTransicion },
+      { codigo: 'tomas_l10',            label: 'Tomas Lateral 10',      color: '#4dabf7', ico: icoToma },
+      { codigo: 'tomas_otros_sectores', label: 'Tomas otros sectores',  color: '#74c0fc', ico: icoToma },
+      { codigo: 'entregas',             label: 'Entregas',              color: '#3bc9db', ico: icoEntrega },
+      { codigo: 'laterales',            label: 'Laterales',             color: '#22b8cf', ico: icoCanalTrap },
+      { codigo: 'partidor',             label: 'Partidores',            color: '#15aabf', ico: icoTransicion },
     ],
   },
   {
     titulo: 'Obras de arte',
     capas: [
       { codigo: 'canoas',              label: 'Canoas',               color: '#4c6ef5', ico: icoCanoa },
-      { codigo: 'sifon',               label: 'Sifones',              color: '#3b5bdb', ico: icoSifon },
-      { codigo: 'alcantarilla',        label: 'Alcantarillas',        color: '#7048e8', ico: icoAlcantarilla },
-      { codigo: 'aliviadero',          label: 'Aliviaderos',          color: '#9c36b5', ico: icoAliviadero },
-      { codigo: 'desarenadores',       label: 'Desarenadores',        color: '#0c8599', ico: icoDesarenador },
-      { codigo: 'camara_rompepresion', label: 'Cámaras rompepresión', color: '#1098ad', ico: icoCaida },
-      { codigo: 'cajas_hidraulicas',   label: 'Cajas hidráulicas',    color: '#0ca678', ico: icoCanalRect },
-      { codigo: 'pases_de_tuberias',   label: 'Pases de tuberías',    color: '#2f9e44', ico: icoConducCubierto },
-      { codigo: 'reservorios',         label: 'Reservorios',          color: '#1971c2', ico: icoAcueducto },
+      { codigo: 'sifon',               label: 'Sifones',              color: '#4dabf7', ico: icoSifon },
+      { codigo: 'alcantarilla',        label: 'Alcantarillas',        color: '#9775fa', ico: icoAlcantarilla },
+      { codigo: 'aliviadero',          label: 'Aliviaderos',          color: '#b197fc', ico: icoAliviadero },
+      { codigo: 'desarenadores',       label: 'Desarenadores',        color: '#22b8cf', ico: icoDesarenador },
+      { codigo: 'camara_rompepresion', label: 'Cámaras rompepresión', color: '#3bc9db', ico: icoCaida },
+      { codigo: 'cajas_hidraulicas',   label: 'Cajas hidráulicas',    color: '#66d9e8', ico: icoCanalRect },
+      { codigo: 'pases_de_tuberias',   label: 'Pases de tuberías',    color: '#74c0fc', ico: icoConducCubierto },
+      { codigo: 'reservorios',         label: 'Reservorios',          color: '#1c7ed6', ico: icoAcueducto },
     ],
   },
   {
     titulo: 'Cruces',
     capas: [
-      { codigo: 'puente_vehicular', label: 'Puentes vehiculares', color: '#868e96', ico: icoPaseVehicular },
-      { codigo: 'puente_peatonal',  label: 'Puentes peatonales',  color: '#adb5bd', ico: icoPasePeatonal },
+      { codigo: 'puente_vehicular', label: 'Puentes vehiculares', color: '#adb5bd', ico: icoPaseVehicular },
+      { codigo: 'puente_peatonal',  label: 'Puentes peatonales',  color: '#ced4da', ico: icoPasePeatonal },
     ],
   },
   {
     titulo: 'Red y territorio',
     capas: [
-      { codigo: 'canal_madre',       label: 'Canal madre',       color: '#1c7ed6', tipo: 'line' },
-      { codigo: 'canal_lateral_10',  label: 'Canal Lateral 10',  color: '#f03e3e', tipo: 'line' },
-      { codigo: 'subalterales',      label: 'Subalterales',      color: '#ae3ec9', tipo: 'line' },
-      { codigo: 'redes_presurizado', label: 'Redes presurizado', color: '#f59f00', tipo: 'line' },
-      { codigo: 'sectores_pech',     label: 'Sectores PECH',     color: '#c92a2a', tipo: 'poly' },
-      { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#f76707', tipo: 'poly' },
-      { codigo: 'lotes',             label: 'Lotes',             color: '#e8590c', tipo: 'poly' },
+      { codigo: 'canal_madre',       label: 'Canal madre',       color: '#1c7ed6', tipo: 'line', weight: 4 },
+      { codigo: 'canal_lateral_10',  label: 'Canal Lateral 10',  color: '#4dabf7', tipo: 'line', weight: 3 },
+      { codigo: 'subalterales',      label: 'Subalterales',      color: '#a5d8ff', tipo: 'line', weight: 2 },
+      { codigo: 'redes_presurizado', label: 'Redes presurizado', color: '#74c0fc', tipo: 'line', dash: '3 5', weight: 2 },
+      { codigo: 'sectores_pech',     label: 'Sectores PECH',     color: '#aec14a', tipo: 'poly' },
+      { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#c0d259', tipo: 'poly' },
+      { codigo: 'lotes',             label: 'Lotes',             color: '#d2e070', tipo: 'poly' },
     ],
   },
 ];
@@ -109,32 +151,65 @@ const GRUPOS_CONTEXTO = [
     titulo: 'Chavimochic — obras del PECH',
     contexto: true,
     capas: [
-      { codigo: 'bocatomas',          label: 'Bocatomas',            color: '#495057', ico: icoBocatoma },
-      { codigo: 'estaciones_control', label: 'Estaciones de control', color: '#5c7cfa', ico: icoBocatoma },
-      { codigo: 'rapidas',            label: 'Rápidas',              color: '#f03e3e', ico: icoRapida },
-      { codigo: 'tomas_canal_madre',  label: 'Tomas Canal Madre',    color: '#e8590c', ico: icoToma },
-      { codigo: 'garitas_jurp',       label: 'Garitas JURP',         color: '#1098ad', ico: icoGaritaJURP },
-      { codigo: 'garitas_otros',      label: 'Garitas de terceros',  color: '#9c36b5', ico: icoGaritaOtros },
+      { codigo: 'bocatomas',          label: 'Bocatomas',            color: '#7a93ab', ico: icoBocatoma },
+      { codigo: 'estaciones_control', label: 'Estaciones de control', color: '#8ea9c2', ico: icoBocatoma },
+      { codigo: 'rapidas',            label: 'Rápidas',              color: '#6b8ca8', ico: icoRapida },
+      // Formato B-1.C del ANA: la obra es del PECH pero el inventario lo
+      // levanta y lo firma la Junta como operador, asi que estas tomas si
+      // entran en campana. Por eso 'evaluable' va aparte del ambito.
+      { codigo: 'tomas_canal_madre',  label: 'Tomas Canal Madre',    color: '#a1bcd1', ico: icoToma, evaluable: true },
+      { codigo: 'garitas_jurp',       label: 'Garitas JURP',         color: '#15aabf', ico: icoGaritaJURP },
+      { codigo: 'garitas_otros',      label: 'Garitas de terceros',  color: '#94a3b8', ico: icoGaritaOtros },
     ],
   },
   {
     titulo: 'Chavimochic — trazados y vías',
     contexto: true,
     capas: [
-      { codigo: 'canal_madre_kmz',       label: 'Canal Madre',       color: '#1971c2', tipo: 'poly' },
-      { codigo: 'canal_lateral_10_kmz',  label: 'Lateral 10',        color: '#4dabf7', tipo: 'poly' },
-      { codigo: 'redes_presurizado_kmz', label: 'Redes presurizado', color: '#74c0fc', tipo: 'poly' },
-      { codigo: 'evacuador_kmz',         label: 'Evacuadores',       color: '#a5d8ff', tipo: 'poly' },
-      { codigo: 'caminos_servicio_kmz',  label: 'Caminos de servicio', color: '#e67700', tipo: 'poly' },
-      { codigo: 'vias_acceso_kmz',       label: 'Vías de acceso',    color: '#d6336c', tipo: 'poly' },
-      { codigo: 'via_auxiliar_kmz',      label: 'Vía auxiliar',      color: '#ae3ec9', tipo: 'poly' },
-      { codigo: 'red_nacional_kmz',      label: 'Red vial nacional', color: '#d63939', tipo: 'poly' },
+      { codigo: 'canal_madre_kmz',       label: 'Canal Madre',       color: '#6b8ca8', tipo: 'poly' },
+      { codigo: 'canal_lateral_10_kmz',  label: 'Lateral 10',        color: '#86a5bd', tipo: 'poly' },
+      { codigo: 'redes_presurizado_kmz', label: 'Redes presurizado', color: '#a1bcd1', tipo: 'poly' },
+      { codigo: 'evacuador_kmz',         label: 'Evacuadores',       color: '#bcd3e4', tipo: 'poly' },
+      { codigo: 'caminos_servicio_kmz',  label: 'Caminos de servicio', color: '#868e96', tipo: 'poly' },
+      { codigo: 'vias_acceso_kmz',       label: 'Vías de acceso',    color: '#adb5bd', tipo: 'poly' },
+      { codigo: 'via_auxiliar_kmz',      label: 'Vía auxiliar',      color: '#9aa3ab', tipo: 'poly' },
+      { codigo: 'red_nacional_kmz',      label: 'Red vial nacional', color: '#dee2e6', tipo: 'poly' },
     ],
   },
 ];
 
 const TODOS_GRUPOS = [...GRUPOS, ...GRUPOS_CONTEXTO];
 const TODAS = TODOS_GRUPOS.flatMap(g => g.capas);
+
+// Desde este zoom cada activo lleva su nombre al lado. Mas lejos no se
+// rotula: con dos mil seiscientos puntos el mapa se vuelve una mancha de
+// texto, y ademas la mayoria sigue metida en un racimo.
+const ZOOM_ETIQUETAS = 16;
+
+/**
+ * Racimo de marcadores.
+ *
+ * Con las capas encendidas hay más de dos mil puntos, y pintarlos uno a uno
+ * deja el mapa inservible. Leaflet.markercluster los agrupa por cercanía y
+ * solo dibuja lo que cabe en pantalla.
+ *
+ * El truco está en devolver el grupo como 'layerContainer' del contexto:
+ * con eso los <Marker> hijos se añaden al racimo en vez de al mapa, y sus
+ * popups siguen siendo JSX normal. No hay que reescribirlos a mano.
+ */
+// eslint-disable-next-line no-unused-vars -- children se descarta a propósito:
+// los hijos los coloca react-leaflet dentro del grupo, no este factory.
+const GrupoCluster = createPathComponent(({ children: _hijos, ...opciones }, ctx) => {
+  const grupo = L.markerClusterGroup({
+    chunkedLoading: true,        // añade por tandas, sin congelar la pestaña
+    showCoverageOnHover: false,  // el polígono al pasar el ratón estorba
+    maxClusterRadius: 55,
+    disableClusteringAtZoom: 18, // de cerca, cada estructura por separado
+    spiderfyOnMaxZoom: true,     // las que comparten punto se abren en abanico
+    ...opciones,
+  });
+  return { instance: grupo, context: { ...ctx, layerContainer: grupo } };
+});
 
 // Filtro de ámbito. 'todo' no manda el parámetro y el backend devuelve
 // Chavimochic completo.
@@ -251,6 +326,36 @@ export function useInventario() {
   // clic en el gris solo Chavimochic, clic otra vez vuelve a ambos.
   const [filtroCapa, setFiltroCapa] = useState({});
 
+  // Trae todas las capas de a pocas. De golpe serían treinta y siete
+  // peticiones a la vez: el navegador las encola igual y el backend las
+  // sufre, así que se piden en tandas y el mapa se va llenando solo.
+  const cargarTodas = useCallback(async (amb, codigos) => {
+    const ambito_ = amb || 'todo';
+    const filtro = ambito_ === 'todo' ? '' : `&ambito=${ambito_}`;
+
+    // El fetch va aquí y no reusa cargarCapa a propósito: aquella se
+    // recrea en cada render y la versión que quedaría capturada vería
+    // una caché vieja. Aquí sabemos que no hay nada cargado todavía.
+    const traer = async (codigo) => {
+      setCargando(c => ({ ...c, [codigo]: true }));
+      try {
+        const r = await fetch(`${API}/capas/${codigo}/?srid=4326${filtro}`,
+                              { headers: cabeceras() });
+        if (r.ok) {
+          const geo = await r.json();
+          setDatos(d => ({ ...d, [`${codigo}::${ambito_}`]: geo }));
+        }
+      } catch (e) { /* esa capa queda vacía; el badge lo refleja */ }
+      finally { setCargando(c => ({ ...c, [codigo]: false })); }
+    };
+
+    const TANDA = 4;
+    const pendientes = codigos ? [...codigos] : TODAS.map(c => c.codigo);
+    while (pendientes.length) {
+      await Promise.all(pendientes.splice(0, TANDA).map(traer));
+    }
+  }, []);
+
   // Carga inicial: campaña vigente, totales por capa y evaluaciones hechas.
   const iniciar = useCallback(async () => {
     if (!token()) { setError('Sesión no iniciada'); return; }
@@ -305,12 +410,16 @@ export function useInventario() {
           }
         } catch (e) { /* sin altas, el panel simplemente no las muestra */ }
       }
+      // Se abre con todo encendido: el mapa sirve para ver qué hay, y
+      // llegar a eso marcando treinta y siete casillas no es verlo.
+      setVisibles(Object.fromEntries(TODAS.map(c => [c.codigo, true])));
+      cargarTodas();
     } catch (e) {
       setError(e.message || 'Error al cargar el inventario');
     } finally {
       setIniciando(false);
     }
-  }, []);
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ámbito que rige para una capa: el suyo si lo tiene, si no el general.
   const ambitoDe = useCallback(
@@ -354,8 +463,9 @@ export function useInventario() {
   const cambiarAmbito = useCallback((nuevo) => {
     setAmbito(nuevo);
     setFiltroCapa({});
-    Object.entries(visibles).forEach(([cod, v]) => { if (v) cargarCapa(cod, nuevo); });
-  }, [visibles, cargarCapa]);
+    const encendidas = Object.entries(visibles).filter(([, v]) => v).map(([cod]) => cod);
+    cargarTodas(nuevo, encendidas);
+  }, [visibles, cargarTodas]);
 
   // Cada mitad del badge se comporta como una casilla: suma o quita ese
   // ámbito, sin pisar al otro. Los dos marcados = 'todo'; ninguno = la capa
@@ -533,6 +643,15 @@ export function useInventario() {
    ══════════════════════════════════════════════════════════ */
 export function CapasInventario({ inv }) {
   const mapa = useMap();
+  const refCluster = useRef(null);
+  const [zoom, setZoom] = useState(() => mapa.getZoom());
+  const rotular = zoom >= ZOOM_ETIQUETAS;
+
+  useEffect(() => {
+    const alZoom = () => setZoom(mapa.getZoom());
+    mapa.on('zoomend', alZoom);
+    return () => mapa.off('zoomend', alZoom);
+  }, [mapa]);
   const { destacado, limpiarDestacado } = inv;
   const DEPURAR = false;   // ponlo en true para ver el rastro en consola
 
@@ -547,16 +666,24 @@ export function CapasInventario({ inv }) {
     // renders y quedaba solo uno registrado de los cuarenta y nueve.
     // La tolerancia es ~1 m, suficiente para no confundir dos estructuras.
     const TOL = 1e-5;
+    const coincide = (capa) => {
+      if (!capa || !capa.getLatLng || !capa.getPopup || !capa.getPopup()) return false;
+      const ll = capa.getLatLng();
+      return Math.abs(ll.lat - destacado.lat) < TOL
+          && Math.abs(ll.lng - destacado.lng) < TOL;
+    };
     const hallar = () => {
+      // Dentro del racimo el marcador puede no estar en el mapa todavía:
+      // markercluster solo añade los que toca dibujar. Por eso se busca en
+      // la lista del grupo, no recorriendo las capas del mapa.
+      const grupo = refCluster.current;
+      if (grupo && grupo.getLayers) {
+        const m = grupo.getLayers().find(coincide);
+        if (m) return m;
+      }
       let encontrado = null;
       mapa.eachLayer((capa) => {
-        if (encontrado || !capa.getLatLng || !capa.getPopup) return;
-        const ll = capa.getLatLng();
-        if (Math.abs(ll.lat - destacado.lat) < TOL
-            && Math.abs(ll.lng - destacado.lng) < TOL
-            && capa.getPopup()) {
-          encontrado = capa;
-        }
+        if (!encontrado && coincide(capa)) encontrado = capa;
       });
       return encontrado;
     };
@@ -568,7 +695,13 @@ export function CapasInventario({ inv }) {
       const m = hallar();
       if (DEPURAR) console.log('[inv] intento', intentos, '| marcador:', !!m);
       if (m) {
-        m.openPopup();
+        const grupo = refCluster.current;
+        // Si está agrupado, el popup no se puede abrir sin desplegarlo antes.
+        if (grupo && grupo.hasLayer && grupo.hasLayer(m) && grupo.zoomToShowLayer) {
+          grupo.zoomToShowLayer(m, () => m.openPopup());
+        } else {
+          m.openPopup();
+        }
         limpiarDestacado();
         return;
       }
@@ -610,11 +743,17 @@ export function CapasInventario({ inv }) {
                 const esPech = (f?.properties?.ambito) === 'PECH';
                 return {
                   color: capa.color,
-                  weight: capa.tipo === 'line' ? 3 : 1.5,
-                  opacity: esPech ? 0.5 : 0.9,
-                  dashArray: esPech ? '6 4' : null,
+                  // El grosor es la otra mitad de la jerarquía: el troncal
+                  // pesa, las ramas adelgazan. Sin esto, cuatro pasos de
+                  // azul no se distinguen de un vistazo.
+                  weight: capa.tipo === 'line' ? (capa.weight || 3) : 1.2,
+                  opacity: esPech ? 0.5 : 0.95,
+                  dashArray: esPech ? '6 4' : (capa.dash || null),
                   fillColor: capa.color,
-                  fillOpacity: capa.tipo === 'poly' ? (esPech ? 0.06 : 0.12) : 0,
+                  // Las áreas van casi sin relleno: son el suelo sobre el que
+                  // se leen los canales, no la información principal. Con
+                  // relleno fuerte tapaban la imagen satelital entera.
+                  fillOpacity: capa.tipo === 'poly' ? (esPech ? 0.04 : 0.08) : 0,
                 };
               }}
               onEachFeature={(f, layer) => {
@@ -639,6 +778,18 @@ export function CapasInventario({ inv }) {
             />
           );
         }
+        return null;
+      })}
+
+      {/* Los puntos de TODAS las capas van al mismo racimo. Uno por capa
+          dejaría veintidós racimos pisándose en el mismo sitio; con uno
+          solo, lo que se ve es cuántas estructuras hay en cada zona. */}
+      <GrupoCluster ref={refCluster}>
+      {TODAS.map(capa => {
+        if (!inv.visibles[capa.codigo]) return null;
+        if (capa.tipo === 'line' || capa.tipo === 'poly') return null;
+        const fc = inv.datosDe(capa.codigo);
+        if (!fc?.features?.length) return null;
 
         // Puntos: marcador propio para poder pintar el estado evaluado.
         return fc.features.map(f => {
@@ -649,6 +800,7 @@ export function CapasInventario({ inv }) {
 
           const p = f.properties || {};
           const ev = inv.evaluacionDe(capa.codigo, p.fid);
+          const entraEnCampania = p.ambito === 'JURP' || !!capa.evaluable;
           const esDestacado = destacado
             && destacado.tipo === capa.codigo
             && String(destacado.fid) === String(p.fid);
@@ -667,6 +819,12 @@ export function CapasInventario({ inv }) {
                 },
               }}
             >
+              {rotular && (
+                <Tooltip permanent direction="right" offset={[12, 0]}
+                  className="inv-eti" opacity={1}>
+                  {p.nombre || p.codigo || `${capa.label} #${p.fid}`}
+                </Tooltip>
+              )}
               <Popup>
                 <div className="inv-pop">
                   <div className="inv-pop-tit" style={{ borderColor: capa.color }}>
@@ -739,9 +897,10 @@ export function CapasInventario({ inv }) {
 
                       {ev.observaciones && <div className="inv-pop-eval-obs">{ev.observaciones}</div>}
                     </div>
-                  ) : p.ambito === 'JURP' ? (
+                  ) : entraEnCampania ? (
                     <div className="inv-pop-pend">
                       Sin evaluar en la campaña {inv.campania?.anio || ''}
+                      {p.ambito === 'PECH' && ' — obra del PECH que opera la Junta'}
                       {p.campania_alta > (inv.campania?.anio || 0) &&
                         ' — alta posterior a esta campaña'}
                     </div>
@@ -751,8 +910,10 @@ export function CapasInventario({ inv }) {
                     </div>
                   ) : null}
 
-                  {/* solo lo que administra la Junta entra en la campaña */}
-                  {p.ambito === 'JURP' && inv.campania
+                  {/* Entra en campaña lo que administra la Junta, más las
+                      capas marcadas como evaluables aunque la obra sea de
+                      terceros: la Junta las opera y las inventaría. */}
+                  {entraEnCampania && inv.campania
                     && inv.campania.estado !== 'cerrada' && (
                     <button type="button" className="inv-btn-evaluar"
                       onClick={() => inv.abrirEvaluacion(capa.codigo, p.fid, p)}>
@@ -765,6 +926,7 @@ export function CapasInventario({ inv }) {
           );
         });
       })}
+      </GrupoCluster>
     </>
   );
 }
@@ -776,15 +938,69 @@ export function CapasInventario({ inv }) {
    con sus opciones ya resueltas. Agregar un campo evaluable en la base
    lo hace aparecer en este formulario sin tocar el visor.
    ══════════════════════════════════════════════════════════ */
+/**
+ * Decide si un campo debe desaparecer del formulario por lo que ya se
+ * respondió antes. Dos reglas, las dos tomadas de cómo se llena la ficha:
+ *
+ *  1. El detalle de una pregunta de inspección solo tiene sentido si la
+ *     respuesta fue «Sí». Preguntar «¿está obstruida?» → No y acto seguido
+ *     pedir el detalle de la obstrucción es pedir que se deje en blanco.
+ *  2. Un bloque que empieza por «¿cuenta con…?» respondido No no necesita
+ *     material, estado ni dimensiones. Se mira cualquier prefijo ancestro,
+ *     así que un No en 'pur_hay' esconde también 'pur_esc_estado'.
+ *
+ * Solo esconde con un No explícito: sin responder, el campo sigue visible.
+ */
+function ocultoPorRespuesta(campo, valores) {
+  const n = campo.campo;
+
+  if (n.startsWith('insp_') && n.endsWith('_c')) {
+    return valores[n.slice(0, -2)] !== 'S';
+  }
+
+  const partes = n.split('_');
+  for (let i = 1; i < partes.length; i++) {
+    const padre = partes.slice(0, i).join('_') + '_hay';
+    if (padre !== n && valores[padre] === 'N') return true;
+  }
+  return false;
+}
+
 export function ModalEvaluacion({ inv }) {
   const [valores, setValores] = useState({});
   const [resumen, setResumen] = useState({});
   const [guardando, setGuardando] = useState(false);
   const [fallo, setFallo] = useState(null);
+  const [cerradas, setCerradas] = useState({});
 
   const ev = inv.evaluando;
   const campos = ev ? (inv.formularios[ev.tipo] || null) : null;
   const previa = ev ? inv.evaluacionDe(ev.tipo, ev.fid) : null;
+
+  // Las fichas del ANA llegan a setenta campos y en una sola lista no se
+  // pueden llenar en un teléfono. La ficha de papel va por bloques (Ingreso,
+  // Cuerpo, Salida, Inspección…) y el catálogo los trae en la etiqueta, antes
+  // del separador ' · ', así que el formulario los recupera de ahí. Sin
+  // separador, el campo va al bloque general, que queda arriba y abierto.
+  const secciones = useMemo(() => {
+    if (!campos) return null;
+    const grupos = [];
+    const porNombre = new Map();
+    campos.forEach(c => {
+      const corte = c.etiqueta.indexOf(' · ');
+      const titulo = corte > 0 ? c.etiqueta.slice(0, corte) : '';
+      const etiqueta = corte > 0 ? c.etiqueta.slice(corte + 3) : c.etiqueta;
+      if (!porNombre.has(titulo)) {
+        const g = { titulo, campos: [] };
+        porNombre.set(titulo, g);
+        grupos.push(g);
+      }
+      // La etiqueta corta evita repetir el nombre del bloque en cada fila;
+      // la larga se conserva porque es la que valida 'guardar'.
+      porNombre.get(titulo).campos.push({ ...c, corta: etiqueta });
+    });
+    return grupos;
+  }, [campos]);
 
   // Al abrir: precarga con la evaluación previa si existe, y si no con el
   // dato que ya tiene el inventario. El técnico confirma o corrige, en vez
@@ -814,7 +1030,12 @@ export function ModalEvaluacion({ inv }) {
   const cambiar = (campo, v) => setValores(s => ({ ...s, [campo]: v }));
 
   const guardar = async () => {
-    const faltan = (campos || [])
+    // Un campo que el formulario escondió no se exige ni se envía: si el
+    // técnico dijo que no hay canal de salida, un material tecleado antes de
+    // cambiar de respuesta quedaría guardado contradiciendo al propio dato.
+    const activos = (campos || []).filter(c => !ocultoPorRespuesta(c, valores));
+
+    const faltan = activos
       .filter(c => c.obligatorio && (valores[c.campo] === '' || valores[c.campo] == null))
       .map(c => c.etiqueta);
     if (faltan.length) {
@@ -827,7 +1048,7 @@ export function ModalEvaluacion({ inv }) {
 
     // los numéricos viajan como número, no como texto
     const limpios = {};
-    (campos || []).forEach(c => {
+    activos.forEach(c => {
       const v = valores[c.campo];
       if (v === '' || v == null) return;
       limpios[c.campo] = (c.tipo_dato === 'numero' || c.tipo_dato === 'entero')
@@ -882,38 +1103,67 @@ export function ModalEvaluacion({ inv }) {
             </div>
           )}
 
-          {campos && campos.map(c => {
-            const base = ev.props?.[c.campo];
-            const cambiado = base != null && String(base) !== String(valores[c.campo]);
-            return (
-              <div className="inv-campo" key={c.campo}>
-                <label>
-                  {c.etiqueta}
-                  {c.obligatorio && <b className="inv-req">*</b>}
-                  {cambiado && (
-                    <span className="inv-campo-base">antes: {String(base)}</span>
-                  )}
-                </label>
+          {secciones && secciones.map((g, i) => {
+            // El bloque general va abierto; los demás cerrados, porque con
+            // diez bloques abiertos de golpe no se ve dónde empieza nada.
+            const abierta = g.titulo === '' || !(cerradas[g.titulo] ?? true);
+            const visibles = g.campos.filter(c => !ocultoPorRespuesta(c, valores));
+            if (!visibles.length) return null;
+            const faltanAqui = visibles.filter(
+              c => c.obligatorio && (valores[c.campo] === '' || valores[c.campo] == null)
+            ).length;
 
-                {c.tipo_dato === 'opcion' && c.opciones?.length ? (
-                  <select value={valores[c.campo] ?? ''}
-                          onChange={e => cambiar(c.campo, e.target.value)}>
-                    <option value="">— sin dato —</option>
-                    {c.opciones.map(o => (
-                      <option key={o.codigo} value={o.codigo}>{o.etiqueta}</option>
-                    ))}
-                  </select>
-                ) : c.tipo_dato === 'booleano' ? (
-                  <input type="checkbox" checked={!!valores[c.campo]}
-                         onChange={e => cambiar(c.campo, e.target.checked)} />
-                ) : (
-                  <input
-                    type={c.tipo_dato === 'numero' || c.tipo_dato === 'entero'
-                          ? 'number' : 'text'}
-                    step={c.tipo_dato === 'numero' ? '0.01' : '1'}
-                    value={valores[c.campo] ?? ''}
-                    onChange={e => cambiar(c.campo, e.target.value)} />
+            return (
+              <div className="inv-bloque" key={g.titulo || '_general'}>
+                {g.titulo !== '' && (
+                  <button type="button" className="inv-bloque-tit"
+                    onClick={() => setCerradas(s => ({ ...s, [g.titulo]: abierta }))}>
+                    {abierta ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
+                    <span>{g.titulo}</span>
+                    {faltanAqui > 0 && (
+                      <b className="inv-bloque-falta">{faltanAqui}</b>
+                    )}
+                  </button>
                 )}
+
+                {abierta && visibles.map(c => {
+                  const base = ev.props?.[c.campo];
+                  const cambiado = base != null && String(base) !== String(valores[c.campo]);
+                  return (
+                    <div className="inv-campo" key={c.campo}>
+                      <label>
+                        {c.corta}
+                        {c.obligatorio && <b className="inv-req">*</b>}
+                        {cambiado && (
+                          <span className="inv-campo-base">antes: {String(base)}</span>
+                        )}
+                      </label>
+
+                      {c.tipo_dato === 'opcion' && c.opciones?.length ? (
+                        <select value={valores[c.campo] ?? ''}
+                                onChange={e => cambiar(c.campo, e.target.value)}>
+                          <option value="">— sin dato —</option>
+                          {c.opciones.map(o => (
+                            <option key={o.codigo} value={o.codigo}>{o.etiqueta}</option>
+                          ))}
+                        </select>
+                      ) : c.tipo_dato === 'booleano' ? (
+                        <input type="checkbox" checked={!!valores[c.campo]}
+                               onChange={e => cambiar(c.campo, e.target.checked)} />
+                      ) : c.tipo_dato === 'texto' && /detalle$/i.test(c.corta) ? (
+                        <textarea rows={2} value={valores[c.campo] ?? ''}
+                                  onChange={e => cambiar(c.campo, e.target.value)} />
+                      ) : (
+                        <input
+                          type={c.tipo_dato === 'numero' || c.tipo_dato === 'entero'
+                                ? 'number' : 'text'}
+                          step={c.tipo_dato === 'numero' ? '0.01' : '1'}
+                          value={valores[c.campo] ?? ''}
+                          onChange={e => cambiar(c.campo, e.target.value)} />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -978,8 +1228,13 @@ export function ModalEvaluacion({ inv }) {
    Busca sobre el índice que se descarga al abrir el panel, así que
    encuentra cualquier activo aunque su capa esté apagada. Al elegir uno,
    enciende la capa, vuela y le abre la ficha.
+
+   Se exporta porque la barra superior del visor usa este mismo componente:
+   tenía un buscador propio que solo miraba las capas ya descargadas y
+   comparaba el texto tal cual, así que encontraba menos cosas y de otra
+   manera. Dos buscadores parecidos pero distintos confunden más que uno.
    ══════════════════════════════════════════════════════════ */
-function BuscadorInventario({ inv }) {
+export function BuscadorInventario({ inv, clase = '' }) {
   const [texto, setTexto] = useState('');
   const [abierto, setAbierto] = useState(false);
 
@@ -992,7 +1247,7 @@ function BuscadorInventario({ inv }) {
   };
 
   return (
-    <div className="inv-buscador">
+    <div className={`inv-buscador ${clase}`.trim()}>
       <FaSearch className="inv-buscador-ico" />
       <input
         value={texto}
