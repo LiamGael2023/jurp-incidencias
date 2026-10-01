@@ -19,13 +19,35 @@ import './Incidentes.css';
 
 const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
-// Rango por defecto: el mes en curso. Con el histórico creciendo, abrir con
-// "todo" sería una lista inmanejable desde el primer día.
+// En fecha local, no UTC: toISOString() devuelve el día de Greenwich, y de
+// 7 p.m. en adelante en Perú eso ya es mañana.
+const aISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const hoyISO = () => aISO(new Date());
+
 const primerDiaDelMes = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 };
-const hoyISO = () => new Date().toISOString().slice(0, 10);
+const haceDias = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return aISO(d);
+};
+
+/**
+ * Desde cuándo se abre la vista.
+ *
+ * El mes en curso, porque abrir con todo el histórico sería una lista
+ * inmanejable. Pero el primer día del mes eso es un rango de un solo día y la
+ * pantalla sale vacía aunque haya trabajo de la semana pasada: parece rota.
+ * Así que nunca se abre con menos de quince días, y a principios de mes el
+ * rango alcanza al mes anterior.
+ */
+const desdePorDefecto = () => {
+  const mes = primerDiaDelMes(), quincena = haceDias(15);
+  return mes < quincena ? mes : quincena;
+};
 
 const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtCant = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
@@ -35,13 +57,14 @@ function Partes({ irAIncidente }) {
   const [partes, setPartes] = useState([]);
   const [totales, setTotales] = useState({ total_partes: 0, total_horas: 0, total_costo: 0, total_combustible: 0, abiertos: 0, cerrados: 0 });
   const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState(null);
   const [maquinas, setMaquinas] = useState([]);
   const [detalle, setDetalle] = useState(null);      // parte abierto en el modal
   const [pdfUrl, setPdfUrl] = useState(null);
   const [cerrando, setCerrando] = useState(null);    // id del parte en proceso
 
   // ── Filtros ─────────────────────────────────────────────────────────
-  const [desde, setDesde] = useState(primerDiaDelMes());
+  const [desde, setDesde] = useState(desdePorDefecto());
   const [hasta, setHasta] = useState(hoyISO());
   const [estado, setEstado] = useState('');          // '' | abierto | cerrado
   const [maquina, setMaquina] = useState('');
@@ -59,7 +82,8 @@ function Partes({ irAIncidente }) {
       if (maquina) p.set('maquina', maquina);
       if (q.trim()) p.set('q', q.trim());
       const r = await fetch(`${API}/partes-diarios/?${p.toString()}`);
-      if (r.ok) {
+      if (!r.ok) throw new Error(`El servidor respondió ${r.status}`);
+      {
         const d = await r.json();
         setPartes(d.partes || []);
         setTotales({
@@ -71,8 +95,17 @@ function Partes({ irAIncidente }) {
           cerrados: d.cerrados || 0,
         });
         setPagina(1);
+        setError(null);
       }
-    } catch (e) { console.error('Partes:', e); }
+    } catch (e) {
+      console.error('Partes:', e);
+      // Antes esto se tragaba el error y la pantalla quedaba igual que cuando
+      // de verdad no hay partes. Son dos cosas distintas y hay que poder
+      // distinguirlas: una se arregla cambiando el filtro y la otra no.
+      setError(e.message || 'No se pudo contactar al servidor');
+      setPartes([]);
+      setTotales({ total_partes: 0, total_horas: 0, total_costo: 0, total_combustible: 0, abiertos: 0, cerrados: 0 });
+    }
     finally { setCargando(false); }
   }, [desde, hasta, estado, maquina, q]);
 
@@ -87,11 +120,11 @@ function Partes({ irAIncidente }) {
   }, []);
 
   const limpiar = () => {
-    setDesde(primerDiaDelMes()); setHasta(hoyISO());
+    setDesde(desdePorDefecto()); setHasta(hoyISO());
     setEstado(''); setMaquina(''); setQ('');
   };
   const hayFiltros = estado || maquina || q.trim() ||
-    desde !== primerDiaDelMes() || hasta !== hoyISO();
+    desde !== desdePorDefecto() || hasta !== hoyISO();
 
   // ── Cerrar un parte desde aquí ──────────────────────────────────────
   // Es la razón principal de esta vista: hasta ahora, para finalizar un parte
@@ -298,10 +331,27 @@ function Partes({ irAIncidente }) {
         {/* ── Tabla ── */}
         {cargando ? (
           <div className="tbl-empty">Cargando partes…</div>
+        ) : error ? (
+          <div className="tbl-empty" style={{ textAlign: 'center', padding: 40 }}>
+            <FaExclamationTriangle size={22} color="#d97706" />
+            <div style={{ fontSize: 14, color: '#0f172a', fontWeight: 600, margin: '10px 0 4px' }}>
+              No se pudieron traer los partes
+            </div>
+            <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 14 }}>
+              {error}. No es que no haya partes en este rango: no hubo respuesta que leer.
+            </div>
+            <button onClick={cargar} className="tbl-btn tbl-btn-primary" style={{ fontSize: 13 }}>
+              <FaSyncAlt size={11} style={{ marginRight: 6 }} />Reintentar
+            </button>
+          </div>
         ) : partes.length === 0 ? (
           <div className="tbl-empty" style={{ textAlign: 'center', padding: 40 }}>
-            <div style={{ fontSize: 14, color: '#64748b', marginBottom: 10 }}>
+            <div style={{ fontSize: 14, color: '#64748b', marginBottom: 4 }}>
               No hay partes diarios en este rango.
+            </div>
+            <div style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 14 }}>
+              Del {desde.split('-').reverse().join('/')} al {hasta.split('-').reverse().join('/')}.
+              Si el parte que buscas es anterior, amplía la fecha «Desde».
             </div>
             {hayFiltros && <button onClick={limpiar} className="tbl-btn tbl-btn-primary" style={{ fontSize: 13 }}>Limpiar filtros</button>}
           </div>
