@@ -9,7 +9,7 @@ import { TeselasBase, SelectorBase, CAPA_POR_DEFECTO } from './capasBase';
 import {
   FaGlobe, FaSyncAlt, FaCamera, FaShareAlt,
   FaPlus, FaMinus, FaRulerCombined, FaDrawPolygon, FaEraser, FaLocationArrow,
-  FaObjectGroup, FaObjectUngroup,
+  FaObjectGroup, FaObjectUngroup, FaLayerGroup,
 } from 'react-icons/fa';
 import { MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
 import './MapaHerramientas.css';
@@ -130,6 +130,13 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
 
       {/* ══════════════ HERRAMIENTAS ══════════════ */}
       <div className="gis-tools gis-glass">
+        {/* El panel del inventario se puede cerrar con su aspa, así que tiene
+            que haber por dónde volver a abrirlo. Va el primero: es el panel
+            de esta vista, no una herramienta más. */}
+        <button className={`gis-tool ${inv.abierto ? 'activo' : ''}`}
+          title={inv.abierto ? 'Ocultar el inventario' : 'Mostrar el inventario'}
+          onClick={inv.alternar}><FaLayerGroup /></button>
+        <div className="gis-tool-sep" />
         <button className="gis-tool" title="Vista general"
           onClick={() => mapRef.current?.flyTo(CENTRO, 10, { duration: 1 })}><FaGlobe /></button>
         <button className="gis-tool" title="Mi ubicación"
