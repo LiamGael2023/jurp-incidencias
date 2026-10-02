@@ -45,8 +45,8 @@ else:
     django.setup()
 
 from django.apps import apps                      # noqa: E402
+from django.db import connection                  # noqa: E402
 from django.db import models as djm               # noqa: E402
-from django.db.models.functions import TruncDate  # noqa: E402
 from django.utils import timezone                 # noqa: E402
 
 PERU = datetime.timezone(datetime.timedelta(hours=-5))
@@ -192,17 +192,30 @@ cuentas = [c for c in cuentas if c[1] > 0]
 cuentas.sort(key=lambda x: -x[1])
 mirar = [c[0] for c in cuentas[:3]] + [c[0] for c in cuentas[len(cuentas) // 2:len(cuentas) // 2 + 1]]
 
+# Se agrupa por dia con SQL y no con TruncDate: esa funcion no existe en la
+# version de Django de este servidor, y date_trunc de Postgres hace lo mismo
+# sin traerse las filas. El nombre de la tabla y de la columna salen del
+# propio modelo, para no escribirlos a mano y que se rompa si cambian.
+TABLA = RawDavis._meta.db_table
+COL_FECHA = RawDavis._meta.get_field(CF).column
+COL_EST = RawDavis._meta.get_field(CE).column
 desde14 = AHORA - datetime.timedelta(days=14)
+
 for pk in mirar:
-    por_dia = (RawDavis.objects.filter(**{CE: pk, CF + "__gte": desde14})
-               .annotate(d=TruncDate(CF)).values("d")
-               .annotate(n=djm.Count("id")).order_by("d"))
-    linea = ["{} ({:,} filas en total)".format(nombre(pk), dict(cuentas)[pk])]
+    with connection.cursor() as cur:
+        cur.execute(
+            "SELECT date_trunc('day', {f} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima')::date AS d,"
+            " COUNT(*), COUNT(DISTINCT {f})"
+            " FROM {t} WHERE {e} = %s AND {f} >= %s GROUP BY 1 ORDER BY 1".format(
+                t=TABLA, f=COL_FECHA, e=COL_EST),
+            [pk, desde14])
+        por_dia = cur.fetchall()
     print("")
-    print("  " + linea[0])
-    for r in por_dia:
-        barra = "#" * min(60, int(r["n"] / 50) + 1)
-        print("    {}  {:>7,}  {}".format(r["d"], r["n"], barra))
+    print("  {} ({:,} filas en total)".format(nombre(pk), dict(cuentas)[pk]))
+    for d, n, distintos in por_dia:
+        barra = "#" * min(60, int(n / 50) + 1)
+        extra = "   <- {} repetidas".format(n - distintos) if distintos < n else ""
+        print("    {}  {:>7,}  {}{}".format(d, n, barra, extra))
 
 print("")
 print("Listo. Nada se modifico.")
