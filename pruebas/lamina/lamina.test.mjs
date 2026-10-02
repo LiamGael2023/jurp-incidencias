@@ -107,6 +107,87 @@ console.log('\n═══ La leyenda nombra lo dibujado, no lo encendido ══�
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+console.log('\n═══ El popup se lee, y no sale impreso ═══');
+{
+  const { nav, pag } = await abrir({ dir, capaDe: (c) => c === 'sectores_pech' ? SECTORES
+    : capaJURP(c, { paso: 400, n: 25 }) });
+  await pag.waitForTimeout(5000);
+  await pag.locator('.lam-panel input').nth(1).fill('4+000');
+  await pag.waitForTimeout(600);
+  await pag.getByText('Encuadrar').click();
+  await pag.waitForTimeout(2000);
+  await pag.locator('.lam-mapa .leaflet-marker-icon').first().click({ force: true });
+  await pag.waitForTimeout(900);
+
+  const colores = await pag.evaluate(() => {
+    const w = document.querySelector('.leaflet-popup-content-wrapper');
+    const t = document.querySelector('.inv-pop-tit') || document.querySelector('.inv-pop');
+    if (!w || !t) return null;
+    return { fondo: getComputedStyle(w).backgroundColor, texto: getComputedStyle(t).color };
+  });
+  ok('el popup se abre', !!colores);
+
+  if (colores) {
+    // Contraste real: el fondo lleva transparencia, así que se compone sobre
+    // el blanco del papel antes de medir. Un popup con texto claro sobre
+    // fondo claro da menos de 2:1 y no se lee, que es como estaba.
+    const nums = (s) => (s.match(/[\d.]+/g) || []).map(Number);
+    const sobreBlanco = ([r, g, b, a = 1]) => [r, g, b].map(v => v * a + 255 * (1 - a));
+    const lum = ([r, g, b]) => {
+      const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const f = sobreBlanco(nums(colores.fondo)), t = sobreBlanco(nums(colores.texto));
+    const [a, b] = [lum(f), lum(t)].sort((x, y) => y - x);
+    const razon = (a + 0.05) / (b + 0.05);
+    ok('el texto contrasta con el fondo del popup', razon >= 4.5,
+      `${razon.toFixed(1)}:1 (fondo ${colores.fondo}, texto ${colores.texto})`);
+  }
+
+  /**
+   * ¿Sale el popup impreso?
+   *
+   * Contar píxeles oscuros a secas no sirve: los marcadores ya son oscuros y
+   * dan medio punto porcentual por su cuenta. Lo que lo distingue es que
+   * exportar con el popup abierto y con el popup cerrado dé la MISMA lámina.
+   * Si se colara, la versión abierta tendría una mancha de miles de píxeles.
+   */
+  const exportar = async (nombre) => {
+    const [dd] = await Promise.all([
+      pag.waitForEvent('download', { timeout: 45000 }).catch(() => null),
+      pag.getByText('PNG', { exact: false }).click(),
+    ]);
+    if (!dd) return null;
+    const ruta = `/tmp/${nombre}.png`;
+    await dd.saveAs(ruta);
+    const fs2 = await import('node:fs');
+    return pag.evaluate(async (datos) => {
+      const img = new Image();
+      await new Promise(r => { img.onload = r; img.src = datos; });
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      c.getContext('2d').drawImage(img, 0, 0);
+      const d2 = c.getContext('2d').getImageData(0, 0, img.width, Math.floor(img.height * 0.6)).data;
+      let n = 0;
+      for (let i = 0; i < d2.length; i += 4) if (d2[i] < 45 && d2[i + 1] < 55 && d2[i + 2] < 70) n++;
+      return n;
+    }, 'data:image/png;base64,' + fs2.readFileSync(ruta, 'base64'));
+  };
+
+  const conPopup = await exportar('lamina_popup_abierto');
+  ok('la lámina se exporta con el popup abierto', conPopup != null);
+  await pag.locator('.leaflet-popup-close-button').click({ force: true }).catch(() => {});
+  await pag.waitForTimeout(1200);
+  const sinPopup = await exportar('lamina_popup_cerrado');
+  if (conPopup != null && sinPopup != null) {
+    const diferencia = Math.abs(conPopup - sinPopup);
+    ok('y sale igual que con el popup cerrado', diferencia < 2000,
+      `${diferencia} píxeles oscuros de diferencia (abierto ${conPopup}, cerrado ${sinPopup})`);
+  }
+  await nav.close();
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 console.log('\n═══ Mientras carga, el navegador no se congela ═══');
 console.log('    (con el racimo apagado son miles de marcadores sueltos)');
 {

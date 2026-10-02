@@ -548,7 +548,12 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
       scale: 2, logging: false,
       width: ancho, height: alto,
       windowWidth: ancho + 80, windowHeight: alto + 80,
-      ignoreElements: (n) => n.classList?.contains('lam-no-imprimir'),
+      // El popup es una ventana de consulta, no contenido del plano: si queda
+      // abierto al exportar, sale impreso tapando el terreno.
+      // El popup es una ventana de consulta, no contenido del plano: si queda
+      // abierto al exportar, sale impreso tapando el terreno.
+      ignoreElements: (n) => n.classList?.contains('lam-no-imprimir')
+        || n.classList?.contains('leaflet-popup'),
       onclone: (doc) => {
         const hoja = doc.querySelector('.lam-hoja');
         if (hoja) { hoja.style.zoom = '1'; hoja.style.boxShadow = 'none'; }

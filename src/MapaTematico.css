@@ -206,3 +206,20 @@
    serlo. Prefiere achicarse antes que romperse. */
 .lam-datos > div:last-child .grande { white-space: nowrap; font-size: 8.5px; letter-spacing: -.2px; }
 .lam-datos > div:last-child { min-width: 92px; }
+
+/* ── Popups ─────────────────────────────────────────────────────────────────
+   Los estilos del contenido (.inv-pop) están pensados para fondo oscuro y
+   viven en InventarioGIS.css, pero el fondo oscuro se lo daba MapaGIS.css
+   bajo `.gis`, que esta pantalla no usa. Resultado: texto claro sobre el
+   blanco de Leaflet, ilegible. Se repite aquí el mismo tratamiento en vez de
+   arrastrar toda la hoja del visor. */
+.lam .leaflet-popup-content-wrapper,
+.lam .leaflet-popup-tip {
+  background: rgba(12, 26, 40, .97);
+  color: #dce9f5;
+  border: 1px solid rgba(116, 192, 252, .2);
+  box-shadow: 0 12px 44px rgba(0, 0, 0, .5);
+}
+.lam .leaflet-popup-content-wrapper { border-radius: 14px; }
+.lam .leaflet-popup-close-button { color: #8fb4cd !important; }
+.lam .leaflet-popup-content { margin: 12px 14px; }
