@@ -16,7 +16,8 @@ import Maquinaria from './Maquinaria';
 import Partes from './Partes';
 import MapaInventario from './MapaInventario';
 import ReportesInventario from './ReportesInventario';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck } from 'react-icons/fa';
+import MapaTematico from './MapaTematico';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
 const URL_HYDROMETRIX = 'http://sistema.jriegopresurizado.org.pe/';
@@ -37,6 +38,7 @@ const MENU = [
   // Inventario: rótulo de sección y sus dos vistas, al final del menú.
   { clave: 'sec-inventario', seccion: true, modulo: 'inventario', apps: ['pluvira'] },
   { clave: 'inv-mapa',     titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,   apps: ['pluvira'] },
+  { clave: 'inv-laminas',  titulo: 'Mapas temáticos', icono: <FaDraftingCompass />, apps: ['pluvira'] },
   { clave: 'inv-reportes', titulo: 'Reportes',      icono: <FaClipboardCheck />, apps: ['pluvira'] },
 ];
 
@@ -162,6 +164,12 @@ function App() {
   // El visor trae su propio RailGIS: se monta a pantalla completa.
   if (vistaActual === 'inv-mapa') {
     return <MapaInventario {...propsRail} />;
+  }
+
+  // La lámina trae su propio Rail, como el visor: ocupa la pantalla entera
+  // porque el papel A1 no cabe de otra forma.
+  if (vistaActual === 'inv-laminas') {
+    return <MapaTematico {...propsRail} RailGIS={RailGIS} />;
   }
 
   if (vistaActual === 'inv-reportes') {

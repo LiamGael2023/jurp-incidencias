@@ -1,6 +1,7 @@
 import {
   latLngToUTM, lngDeEste, latDeNorte, escalaDeLamina, escalaRedonda,
   pasoCuadricula, barraEscala, numeroLamina, cuadriculaUTM, distanciaMetros, utmALatLng,
+  zoomParaEscala, escalaDeZoom, terrenoDeLamina, cabeEnLamina,
 } from './cartografia.js';
 
 let mal = 0;
@@ -84,6 +85,32 @@ for (const l of [g.verticales[2], g.horizontales[2]]) {
   const esVertical = l.puntos[0].x !== undefined && desvY > desvX;
   console.log(`  linea ${l.valor}: se desvia ${(esVertical ? desvX : desvY).toFixed(2)} px de la recta`);
 }
+
+console.log('\n─── Escala fija: de 1:10 000 al zoom del mapa ───');
+// El area de mapa de la lamina A1: 821 x 462 mm de papel, dibujada en 1642 px.
+const AREA = { anchoMm: 821, altoMm: 462, anchoPx: 1642 };
+const LAT_VIRU = -8.42;
+const z10k = zoomParaEscala({ escala: 10000, lat: LAT_VIRU, anchoPx: AREA.anchoPx, anchoMm: AREA.anchoMm });
+console.log(`  zoom para 1:10 000 en Viru: ${z10k.toFixed(4)}`);
+t('y de vuelta da la misma escala',
+  escalaDeZoom({ zoom: z10k, lat: LAT_VIRU, anchoPx: AREA.anchoPx, anchoMm: AREA.anchoMm }), 10000, 0.5);
+t('1:25 000 exige alejarse justo un zoom menos un poco',
+  zoomParaEscala({ escala: 25000, lat: LAT_VIRU, anchoPx: AREA.anchoPx, anchoMm: AREA.anchoMm }) < z10k, true);
+// La latitud importa: el mismo zoom NO es la misma escala lejos del ecuador.
+const zEcuador = zoomParaEscala({ escala: 10000, lat: 0, anchoPx: AREA.anchoPx, anchoMm: AREA.anchoMm });
+t('en el ecuador el zoom para 1:10 000 es otro', Math.abs(zEcuador - z10k) > 0.015, true);
+t('ignorar la latitud desviaria la escala (%)',
+  Math.abs(escalaDeZoom({ zoom: zEcuador, lat: LAT_VIRU, anchoPx: AREA.anchoPx, anchoMm: AREA.anchoMm }) / 10000 - 1) * 100,
+  1.08, 0.2);
+
+console.log('\n─── Cuanto terreno entra en la lamina ───');
+t('ancho a 1:10 000 (km)', terrenoDeLamina(10000, AREA.anchoMm) / 1000, 8.21, 0.01);
+t('alto  a 1:10 000 (km)', terrenoDeLamina(10000, AREA.altoMm) / 1000, 4.62, 0.01);
+const cabe = (largoKm) => cabeEnLamina({ escala: 10000, anchoMm: AREA.anchoMm, altoMm: AREA.altoMm,
+  anchoMetros: largoKm * 1000, altoMetros: 500 });
+t('el Tramo III (7.0 km) entra', cabe(7.0).cabe, true);
+t('el Tramo V (8.4 km) no entra', cabe(8.4).cabe, false);
+t('y dice cuanto sobra (m)', Math.round(cabe(8.4).sobraAncho), 190, 2);
 
 console.log('\n─── Distancia ───');
 // Un grado de latitud ~ 110.6 km

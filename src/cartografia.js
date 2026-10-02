@@ -137,6 +137,71 @@ export function escalaDeLamina(oesteEsteMetros, anchoPapelMm) {
   return oesteEsteMetros / (anchoPapelMm / 1000);
 }
 
+/**
+ * El camino inverso: de una escala fija al encuadre que le toca.
+ *
+ * Hasta aquí la escala salía del encuadre —se miraba el mapa y se calculaba
+ * en cuánto había quedado reducido—. La lámina del inventario trabaja al
+ * revés: la escala es 1:10 000 y no se negocia, así que lo que hay que
+ * averiguar es cuánto terreno cabe y a qué zoom hay que poner el mapa para
+ * que un milímetro de papel sean diez metros exactos.
+ *
+ * Cuánto terreno abarca un lado del papel, en metros.
+ */
+export const terrenoDeLamina = (escala, ladoPapelMm) => (ladoPapelMm / 1000) * escala;
+
+/**
+ * Zoom —con decimales— al que hay que poner el mapa para que lo que se
+ * dibuja en pantalla salga impreso a la escala pedida.
+ *
+ * Leaflet trabaja en zoom; la lámina trabaja en escala. El puente es la
+ * resolución: a zoom z, en la latitud φ, cada píxel de la proyección Web
+ * Mercator vale 156543.034·cos(φ)/2^z metros. Se despeja z de los metros por
+ * píxel que exige la escala.
+ *
+ * Importa el coseno de la latitud: Web Mercator estira el terreno conforme se
+ * aleja del ecuador, así que el mismo zoom NO es la misma escala en Virú que
+ * en Lima. Ignorarlo es el error clásico de rotular 1:10 000 una lámina que
+ * no lo es.
+ *
+ * Hace falta zoomSnap: 0 en el mapa; con el valor por defecto Leaflet redondea
+ * al entero más cercano y la escala se va al doble o a la mitad.
+ */
+export function zoomParaEscala({ escala, lat, anchoPx, anchoMm, tamTesela = 256 }) {
+  if (!(escala > 0) || !(anchoPx > 0) || !(anchoMm > 0)) return null;
+  const metrosPorPixel = terrenoDeLamina(escala, anchoMm) / anchoPx;
+  const resolucionZ0 = (2 * Math.PI * A) / tamTesela;   // 156543.034 m/px en el ecuador
+  const r = resolucionZ0 * Math.cos(lat * Math.PI / 180);
+  return Math.log2(r / metrosPorPixel);
+}
+
+/** La comprobación de vuelta: a qué escala quedó de verdad un mapa dibujado. */
+export function escalaDeZoom({ zoom, lat, anchoPx, anchoMm, tamTesela = 256 }) {
+  if (!(anchoPx > 0) || !(anchoMm > 0)) return null;
+  const resolucionZ0 = (2 * Math.PI * A) / tamTesela;
+  const metrosPorPixel = resolucionZ0 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+  return (metrosPorPixel * anchoPx) / (anchoMm / 1000);
+}
+
+/**
+ * ¿Entra este tramo en una lámina?
+ *
+ * Devuelve los metros que abarca el encuadre y cuánto sobra, para poder
+ * decirlo antes de generar en vez de entregar una lámina recortada. El largo
+ * del tramo se mide en línea recta entre sus extremos, que es lo que ocupa en
+ * el papel; un canal sinuoso recorre más metros de los que ocupa.
+ */
+export function cabeEnLamina({ escala, anchoMm, altoMm, anchoMetros, altoMetros }) {
+  const capAncho = terrenoDeLamina(escala, anchoMm);
+  const capAlto = terrenoDeLamina(escala, altoMm);
+  return {
+    capAncho, capAlto,
+    cabe: anchoMetros <= capAncho && altoMetros <= capAlto,
+    sobraAncho: Math.max(0, anchoMetros - capAncho),
+    sobraAlto: Math.max(0, altoMetros - capAlto),
+  };
+}
+
 /** Redondea la escala a un valor de catálogo: nadie rotula 1:73.418. */
 const ESCALAS = [
   500, 1000, 2000, 2500, 5000, 7500, 10000, 15000, 20000, 25000,

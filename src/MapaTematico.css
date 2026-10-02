@@ -1,0 +1,196 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   MapaTematico.css — la lámina A1 del Anexo V.
+
+   Todo lo que está dentro de .lam-hoja se mide en píxeles absolutos, a dos
+   por milímetro. No hay nada responsivo ahí dentro a propósito: la hoja tiene
+   un tamaño físico y lo que se ve en pantalla tiene que ser lo que sale
+   impreso. Lo que sí se adapta es el zoom del lienzo que la contiene.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lam { position: fixed; inset: 0; display: flex; background: #334155; overflow: hidden; }
+
+/* ── Panel ──────────────────────────────────────────────────────────────── */
+.lam-panel {
+  width: 360px; flex: 0 0 360px; background: #0f172a; color: #cbd5e1;
+  overflow-y: auto; position: relative; border-right: 1px solid #1e293b;
+  font-size: 12.5px;
+}
+.lam-panel.cerrado { width: 34px; flex-basis: 34px; overflow: visible; }
+.lam-panel-tirador {
+  position: absolute; top: 10px; right: 8px; z-index: 5;
+  background: #1e293b; color: #94a3b8; border: 1px solid #334155;
+  border-radius: 6px; width: 24px; height: 24px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.lam-panel-cuerpo { padding: 16px 16px 40px; }
+.lam-panel h2 { margin: 0 34px 6px 0; font-size: 15px; color: #e2e8f0; }
+.lam-ayuda { margin: 0 0 14px; font-size: 11.5px; line-height: 1.5; color: #94a3b8; }
+.lam-ayuda b { color: #cbd5e1; }
+.lam-panel hr { border: none; border-top: 1px solid #1e293b; margin: 16px 0; }
+
+.lam-panel label { display: block; margin-bottom: 10px; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; }
+.lam-panel select, .lam-panel input, .lam-panel textarea {
+  display: block; width: 100%; margin-top: 4px; padding: 7px 9px;
+  background: #1e293b; border: 1px solid #334155; border-radius: 6px;
+  color: #e2e8f0; font-size: 12.5px; font-family: inherit; text-transform: none;
+}
+.lam-panel textarea { resize: vertical; line-height: 1.45; }
+.lam-par { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.lam-medida {
+  background: #1e293b; border-left: 3px solid #0ea5e9; border-radius: 0 6px 6px 0;
+  padding: 9px 11px; margin: 4px 0 12px; font-size: 11.5px; line-height: 1.5;
+}
+.lam-medida b { color: #e2e8f0; }
+.lam-medida-n { margin-top: 4px; color: #64748b; }
+
+.lam-aviso {
+  background: #1e293b; border-radius: 6px; padding: 9px 11px; margin-bottom: 12px;
+  font-size: 11.5px; line-height: 1.5;
+}
+.lam-aviso-ojo { border-left: 3px solid #d97706; }
+.lam-aviso svg { color: #d97706; margin-right: 6px; vertical-align: -2px; }
+.lam-aviso code { background: #0f172a; padding: 1px 4px; border-radius: 3px; }
+.lam-aviso button {
+  display: block; margin-top: 8px; background: #334155; color: #cbd5e1;
+  border: none; border-radius: 5px; padding: 5px 10px; font-size: 11.5px; cursor: pointer;
+}
+
+.lam-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 9px 14px; border: 1px solid #334155; border-radius: 7px;
+  background: #1e293b; color: #cbd5e1; font-size: 12.5px; font-weight: 600;
+  font-family: inherit; cursor: pointer; width: 100%;
+}
+.lam-btn:disabled { opacity: .45; cursor: default; }
+.lam-btn-primario { background: #206bc4; border-color: #206bc4; color: #fff; }
+.lam-acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+.lam-acciones .lam-btn { width: auto; }
+
+.lam-prof-tit { font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+  color: #94a3b8; margin: 14px 0 8px; display: flex; align-items: center; gap: 6px; }
+.lam-prof-fila { display: grid; grid-template-columns: 70px 1fr; gap: 6px; margin-bottom: 6px; }
+.lam-prof-fila span { font-size: 11px; color: #64748b; align-self: center; }
+.lam-prof-fila input { margin-top: 0; }
+.lam-prof-fila input:last-child { grid-column: 2; font-size: 11px; color: #94a3b8; }
+
+.lam-lamina-num { font-size: 11.5px; color: #94a3b8; margin: -4px 0 4px; }
+.lam-lamina-num b { color: #38bdf8; font-family: ui-monospace, monospace; }
+
+.lam-capas-grupo { margin-bottom: 10px; }
+.lam-capas-tit { font-size: 10.5px; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+.lam-capa { display: flex !important; align-items: center; gap: 7px; margin-bottom: 3px;
+  text-transform: none !important; letter-spacing: 0 !important; font-size: 12px !important;
+  color: #cbd5e1 !important; cursor: pointer; }
+.lam-capa input { width: auto !important; margin: 0 !important; }
+.lam-capa i { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 11px; }
+
+/* ── Lienzo ─────────────────────────────────────────────────────────────── */
+/* La hoja mide 1682 px y casi ninguna pantalla los tiene: se reduce con zoom,
+   que a diferencia de transform:scale sí deja el scroll del tamaño correcto. */
+.lam-lienzo {
+  flex: 1; overflow: auto; padding: 24px; display: flex; justify-content: center;
+  align-items: flex-start;
+}
+.lam-hoja {
+  position: relative; background: #fff; flex: none;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .45);
+  zoom: .62;
+  font-family: Arial, Helvetica, sans-serif; color: #111;
+}
+@media (min-width: 2100px) { .lam-hoja { zoom: .85; } }
+@media (max-width: 1500px) { .lam-hoja { zoom: .48; } }
+
+.lam-mapa { position: absolute; overflow: hidden; border: 1px solid #111; }
+.lam-mapa .leaflet-container { background: #e2e8f0; }
+
+.lam-grid { position: absolute; inset: 0; z-index: 450; pointer-events: none; }
+.lam-grid polyline { fill: none; stroke: rgba(255, 255, 255, .55); stroke-width: 1; }
+.lam-grid text {
+  font-size: 11px; fill: #fff; font-family: Arial, sans-serif;
+  paint-order: stroke; stroke: rgba(0, 0, 0, .65); stroke-width: 2.5px;
+}
+
+.lam-norte { position: absolute; left: 10px; top: 10px; z-index: 500; }
+
+/* ── Pie ────────────────────────────────────────────────────────────────── */
+.lam-pie {
+  position: absolute; display: grid; gap: 0;
+  grid-template-columns: 1.45fr .52fr 1.05fr .62fr .92fr 1.75fr;
+  border: 1px solid #111; background: #fff;
+}
+.lam-caja { border-right: 1px solid #111; padding: 4px 6px; overflow: hidden; position: relative; }
+.lam-caja-tit {
+  font-size: 9px; font-weight: 700; text-align: center; letter-spacing: .03em;
+  padding-bottom: 3px; border-bottom: 1px solid #ccc; margin-bottom: 4px;
+}
+.lam-caja-tit.azul { background: #dbeafe; color: #1d4ed8; padding: 4px; margin: -4px -6px 4px; border-bottom: 1px solid #111; }
+.lam-caja-sub { font-size: 8px; text-align: center; color: #444; border-bottom: 1px solid #ccc;
+  padding-bottom: 3px; margin-bottom: 4px; }
+.lam-vacio { font-size: 9px; color: #999; text-align: center; padding-top: 10px; }
+
+.lam-leyenda-cols { columns: 3; column-gap: 8px; font-size: 8.5px; }
+.lam-leyenda-grupo { break-inside: avoid; margin-bottom: 5px; }
+.lam-leyenda-sub { font-weight: 700; font-size: 8px; margin-bottom: 2px; }
+.lam-leyenda-it { display: flex; align-items: center; gap: 4px; margin-bottom: 1.5px; }
+.lam-leyenda-it img { width: 9px; height: 9px; object-fit: contain; }
+.lam-leyenda-it i { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 9px; }
+.lam-leyenda-it i.area { border-radius: 2px; }
+.lam-leyenda-it i.linea { height: 0; border-radius: 0; }
+
+.lam-escala { text-align: center; }
+.lam-escala-num { font-size: 10px; font-weight: 700; margin: 6px 0 8px; }
+.lam-barra { display: flex; height: 7px; margin: 0 auto; border: 1px solid #111; }
+.lam-barra span { flex: 1; }
+.lam-barra span.oscuro { background: #111; }
+.lam-barra span.claro { background: #fff; }
+.lam-barra-rot { display: flex; justify-content: space-between; margin: 2px auto 0; font-size: 7.5px; }
+.lam-barra-uni { font-size: 8px; font-weight: 700; margin-top: 4px; }
+
+.lam-notas ol { margin: 0; padding-left: 12px; font-size: 7.5px; line-height: 1.35; }
+
+.lam-loc { padding: 4px; }
+.lam-loc-mapa { width: 100%; height: calc(100% - 18px); }
+.lam-loc-vacio { height: calc(100% - 18px); display: flex; align-items: center;
+  justify-content: center; color: #bbb; font-size: 10px; background: #f1f5f9; }
+
+.lam-prof table { width: 100%; border-collapse: collapse; font-size: 8px; }
+.lam-prof th { text-align: left; font-weight: 400; width: 52px; vertical-align: middle;
+  border-top: 1px solid #ddd; padding: 3px 0; }
+.lam-prof td { border-top: 1px solid #ddd; padding: 3px 0; text-align: center; }
+.lam-prof .n { font-weight: 600; }
+.lam-prof .c { font-size: 6.5px; color: #666; }
+
+.lam-membrete { padding: 4px 6px; display: flex; flex-direction: column; }
+.lam-membrete-top { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #111;
+  padding-bottom: 4px; margin-bottom: 4px; }
+.lam-logo { height: 26px; object-fit: contain; }
+.lam-entidad { font-size: 8.5px; font-weight: 700; color: #1d4ed8; line-height: 1.25; }
+.lam-fila { display: flex; gap: 6px; font-size: 7.5px; border-bottom: 1px solid #ddd;
+  padding: 3px 0; align-items: flex-start; }
+.lam-fila b { flex: 0 0 48px; }
+.lam-fila .azul { color: #1d4ed8; font-weight: 700; text-align: center; flex: 1; }
+.lam-fila .centrado { text-align: center; flex: 1; font-weight: 700; }
+.lam-datos { display: grid; grid-template-columns: 1.4fr .8fr 1fr 1.2fr; gap: 4px;
+  font-size: 7px; margin-top: auto; padding-top: 4px; border-top: 1px solid #111; }
+.lam-datos > div { border-right: 1px solid #ddd; padding-right: 4px; }
+.lam-datos > div:last-child { border-right: none; }
+.lam-datos .grande { font-size: 9px; font-weight: 700; margin-top: 2px; }
+
+.lam-estado {
+  position: fixed; right: 14px; bottom: 10px; background: rgba(15, 23, 42, .85);
+  color: #94a3b8; padding: 5px 10px; border-radius: 6px; font-size: 11px;
+  font-family: ui-monospace, monospace;
+}
+
+/* El tamaño de cada caja es una medida física, así que el borde va DENTRO:
+   con content-box, el marco de 1 px del área de mapa la dejaba en 1644 px y
+   el zoom estaba calculado para 1642. Son 0.12 % de escala, invisibles a
+   ojo y suficientes para que la lámina rotule un número que no es. */
+.lam-hoja, .lam-hoja * { box-sizing: border-box; }
+
+/* El número de lámina es un identificador: partido en dos líneas deja de
+   serlo. Prefiere achicarse antes que romperse. */
+.lam-datos > div:last-child .grande { white-space: nowrap; font-size: 8.5px; letter-spacing: -.2px; }
+.lam-datos > div:last-child { min-width: 92px; }

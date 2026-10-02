@@ -181,6 +181,11 @@ const GRUPOS_CONTEXTO = [
 const TODOS_GRUPOS = [...GRUPOS, ...GRUPOS_CONTEXTO];
 const TODAS = TODOS_GRUPOS.flatMap(g => g.capas);
 
+// La leyenda de la lámina temática se arma de aquí, no de una lista paralela:
+// una leyenda que no sale del mismo sitio que el dibujo acaba mintiendo el día
+// que alguien cambia un color o agrega una capa.
+export { GRUPOS as GRUPOS_CAPAS, TODAS as TODAS_LAS_CAPAS };
+
 // Desde este zoom cada activo lleva su nombre al lado. Mas lejos no se
 // rotula: con dos mil seiscientos puntos el mapa se vuelve una mancha de
 // texto, y ademas la mayoria sigue metida en un racimo.
@@ -670,7 +675,12 @@ export function useInventario() {
 /* ══════════════════════════════════════════════════════════
    Capas sobre el mapa — va DENTRO del <MapContainer>
    ══════════════════════════════════════════════════════════ */
-export function CapasInventario({ inv }) {
+export function CapasInventario({ inv, racimo = null }) {
+  // `racimo` fuerza el agrupamiento para esta vista sin tocar la preferencia
+  // del usuario: la lámina temática lo necesita apagado siempre —en el papel
+  // saldrían burbujas con un número en vez de las estructuras— pero quien
+  // trabaja en el visor lo quiere como lo dejó.
+  const conRacimo = racimo == null ? inv.cluster : racimo;
   const mapa = useMap();
   const refCluster = useRef(null);
   const [zoom, setZoom] = useState(() => mapa.getZoom());
@@ -710,7 +720,7 @@ export function CapasInventario({ inv }) {
       // siga apuntando a algo: sería un grupo ya desmontado, y sus marcadores
       // no están en el mapa. Abrirles el popup no haría nada y la búsqueda
       // fallaría sin decir por qué. Se recorre el mapa, que es la verdad.
-      const grupo = inv.cluster ? refCluster.current : null;
+      const grupo = conRacimo ? refCluster.current : null;
       if (grupo && grupo.getLayers) {
         const m = grupo.getLayers().find(coincide);
         if (m) return m;
@@ -729,7 +739,7 @@ export function CapasInventario({ inv }) {
       const m = hallar();
       if (DEPURAR) console.log('[inv] intento', intentos, '| marcador:', !!m);
       if (m) {
-        const grupo = inv.cluster ? refCluster.current : null;
+        const grupo = conRacimo ? refCluster.current : null;
         // Si está agrupado, el popup no se puede abrir sin desplegarlo antes.
         if (grupo && grupo.hasLayer && grupo.hasLayer(m) && grupo.zoomToShowLayer) {
           grupo.zoomToShowLayer(m, () => m.openPopup());
@@ -757,10 +767,10 @@ export function CapasInventario({ inv }) {
       clearTimeout(temporizador);
       mapa.off('moveend', abrir);
     };
-    // inv.cluster entra en las dependencias porque el efecto lo lee: si se
+    // conRacimo entra en las dependencias porque el efecto lo lee: si se
     // apaga el racimo mientras hay una búsqueda en vuelo, hay que rehacerla
     // contra el mapa en vez de contra un grupo que ya no está.
-  }, [destacado, mapa, limpiarDestacado, inv.cluster]);
+  }, [destacado, mapa, limpiarDestacado, conRacimo]);
 
   return (
     <>
@@ -824,7 +834,7 @@ export function CapasInventario({ inv }) {
 
           El racimo se puede apagar: para documentar con una captura estorba,
           porque en la foto salen burbujas con un número en vez de los activos. */}
-      <Racimo activo={inv.cluster} innerRef={refCluster}>
+      <Racimo activo={conRacimo} innerRef={refCluster}>
       {TODAS.map(capa => {
         if (!inv.visibles[capa.codigo]) return null;
         if (capa.tipo === 'line' || capa.tipo === 'poly') return null;
