@@ -7,7 +7,15 @@
    impreso. Lo que sí se adapta es el zoom del lienzo que la contiene.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.lam { position: fixed; inset: 0; display: flex; background: #334155; overflow: hidden; }
+/* El rail de navegación flota encima de todo (position: fixed), así que hay
+   que dejarle el sitio: si no, se come el borde izquierdo del panel y los
+   rótulos salen cortados. --rail-w lo publica RailGIS y cambia solo al
+   plegarse, por eso se usa la variable y no un número. */
+.lam {
+  position: fixed; inset: 0; display: flex; background: #334155; overflow: hidden;
+  padding-left: var(--rail-w, 286px);
+  transition: padding-left .35s ease;   /* a la par del rail, que se anima */
+}
 
 /* ── Panel ──────────────────────────────────────────────────────────────── */
 .lam-panel {
@@ -15,6 +23,9 @@
   overflow-y: auto; position: relative; border-right: 1px solid #1e293b;
   font-size: 12.5px;
 }
+/* Sin esto, el relleno y el borde se suman al 100 % del ancho y todos los
+   campos se salen por la derecha del panel, que los recorta. */
+.lam-panel, .lam-panel * { box-sizing: border-box; }
 .lam-panel.cerrado { width: 34px; flex-basis: 34px; overflow: visible; }
 .lam-panel-tirador {
   position: absolute; top: 10px; right: 8px; z-index: 5;
@@ -96,11 +107,12 @@
 .lam-hoja {
   position: relative; background: #fff; flex: none;
   box-shadow: 0 10px 40px rgba(0, 0, 0, .45);
-  zoom: .62;
   font-family: Arial, Helvetica, sans-serif; color: #111;
+  /* El zoom lo fija el componente midiendo el hueco disponible: con un valor
+     en CSS la hoja salía pequeña y con media queries dependía del ancho de la
+     ventana, que no es el del hueco —el rail y el panel se llevan su parte—. */
+  zoom: var(--lam-zoom, .62);
 }
-@media (min-width: 2100px) { .lam-hoja { zoom: .85; } }
-@media (max-width: 1500px) { .lam-hoja { zoom: .48; } }
 
 .lam-mapa { position: absolute; overflow: hidden; border: 1px solid #111; }
 .lam-mapa .leaflet-container { background: #e2e8f0; }

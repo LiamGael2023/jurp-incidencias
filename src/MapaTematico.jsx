@@ -344,6 +344,32 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
 
   const laminaRef = useRef(null);
   const mapRef = useRef(null);
+  const lienzoRef = useRef(null);
+
+  /**
+   * La hoja, tan grande como quepa.
+   *
+   * Se mide el hueco de verdad y no el ancho de la ventana: el rail y el
+   * panel se llevan su parte, y de ellos el rail además cambia al plegarse.
+   * Nunca pasa de 1, porque ampliar una hoja de papel por encima de su tamaño
+   * solo la vuelve borrosa.
+   */
+  useEffect(() => {
+    const caja = lienzoRef.current;
+    if (!caja || typeof ResizeObserver === 'undefined') return;
+    const ajustar = () => {
+      const disponible = caja.clientWidth - 48;      // el aire de .lam-lienzo
+      const z = Math.max(0.35, Math.min(1, disponible / mm(PAPEL.anchoMm)));
+      caja.style.setProperty('--lam-zoom', z.toFixed(3));
+      // Leaflet mide su contenedor en píxeles de pantalla: si cambia el zoom
+      // y no se le avisa, sigue dibujando teselas para el tamaño anterior.
+      mapRef.current?.invalidateSize();
+    };
+    ajustar();
+    const ro = new ResizeObserver(ajustar);
+    ro.observe(caja);
+    return () => ro.disconnect();
+  }, []);
 
   // Carga el inventario al entrar: sin él no hay sectores ni tramos que elegir.
   useEffect(() => { if (!inv.campania && !inv.iniciando) inv.recargar(); }, []);
@@ -655,7 +681,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
       </aside>
 
       {/* ══════════════ LÁMINA ══════════════ */}
-      <div className="lam-lienzo">
+      <div className="lam-lienzo" ref={lienzoRef}>
         <div className="lam-hoja" ref={laminaRef}
           style={{ width: mm(PAPEL.anchoMm), height: mm(PAPEL.altoMm) }}>
 
