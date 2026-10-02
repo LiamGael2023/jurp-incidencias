@@ -196,6 +196,42 @@ if not APLICAR:
 
 tocados = sorted(set(c["archivo"] for c in aplicables))
 
+
+def puede_escribir(ruta):
+    """
+    ¿Se puede reescribir este archivo?
+
+    Esta comprobacion existe porque su ausencia dejo un servidor de
+    produccion a medio parchear: el script escribio el primer archivo y se
+    estrello con PermissionError en el segundo. El .bak si se habia creado,
+    porque la carpeta era escribible y el archivo no.
+
+    No vale abrirlo en modo escritura para probar: eso ya lo truncaria.
+    """
+    if os.access(ruta, os.W_OK):
+        return True, ""
+    if os.access(os.path.dirname(ruta), os.W_OK):
+        return False, "el archivo es de solo lectura (la carpeta si es escribible)"
+    return False, "sin permiso de escritura"
+
+
+problemas = []
+for a in tocados:
+    ok, motivo = puede_escribir(rutas[a])
+    if not ok:
+        problemas.append((rutas[a], motivo))
+
+if problemas:
+    print("NO SE ESCRIBE NADA. Falta permiso de escritura en:")
+    for ruta, motivo in problemas:
+        print("  {}".format(ruta))
+        print("      {}".format(motivo))
+    print("")
+    print("Se comprueban TODOS los archivos antes de tocar el primero, para no")
+    print("dejar el codigo a medias. Vuelve a lanzarlo con permisos:")
+    print("    sudo python3 {} --aplicar".format(os.path.basename(sys.argv[0])))
+    sys.exit(1)
+
 for a in tocados:
     shutil.copy2(rutas[a], rutas[a] + ".bak")
     print("Copia de seguridad: {}.bak".format(rutas[a]))
