@@ -208,9 +208,17 @@ console.log('    (estaban en pantalla y no en el PDF, según dónde cayera el en
         }
         return n2;
       }, 'data:image/png;base64,' + fs2.readFileSync(ruta, 'base64'));
-      // Grosor del trazo, medido en el papel: el canal es horizontal, así
-      // que se cuenta la racha de píxeles azules de una columna. Para
-      // imprimir se dibuja a 6.4 px, y la lámina se exporta al doble.
+      /**
+       * Grosor del trazo medido en el papel.
+       *
+       * Hay que mirar varias columnas y quedarse con la mediana: una sola
+       * puede caer sobre un marcador, y entonces se mide el marcador. Así
+       * empezó midiendo 4 px y acusando al código de dibujar con el trazo de
+       * pantalla, cuando el trazo estaba bien.
+       *
+       * El color se acota al del canal —azul claro— para no contar los
+       * marcadores, que son morados.
+       */
       const grosor = await pag.evaluate(async (datos) => {
         const img = new Image();
         await new Promise(r => { img.onload = r; img.src = datos; });
@@ -218,17 +226,21 @@ console.log('    (estaban en pantalla y no en el PDF, según dónde cayera el en
         c.width = img.width; c.height = img.height;
         const cx = c.getContext('2d');
         cx.drawImage(img, 0, 0);
-        const col = Math.floor(img.width * 0.5);
         const alto = Math.floor(img.height * 0.6);
-        const p3 = cx.getImageData(col, 0, 1, alto).data;
-        let mejor = 0, racha = 0;
-        for (let y = 0; y < alto; y++) {
-          const i = y * 4;
-          const azul = Math.abs(p3[i] - 28) < 45 && Math.abs(p3[i + 1] - 126) < 45 && Math.abs(p3[i + 2] - 214) < 45;
-          racha = azul ? racha + 1 : 0;
-          if (racha > mejor) mejor = racha;
+        const esCanal = (r2, g2, b2) => b2 > r2 + 60 && g2 > 90 && g2 < 200 && b2 > 150;
+        const rachas = [];
+        for (let col = 0; col < img.width; col += 20) {
+          const p3 = cx.getImageData(col, 0, 1, alto).data;
+          let mejor = 0, racha = 0;
+          for (let y = 0; y < alto; y++) {
+            const i = y * 4;
+            if (esCanal(p3[i], p3[i + 1], p3[i + 2])) { racha++; if (racha > mejor) mejor = racha; }
+            else racha = 0;
+          }
+          if (mejor) rachas.push(mejor);
         }
-        return mejor;
+        rachas.sort((a, b) => a - b);
+        return rachas.length ? rachas[rachas.length >> 1] : 0;
       }, 'data:image/png;base64,' + fs2.readFileSync(ruta, 'base64'));
       azules.push({ ancho, n, grosor });
     }
@@ -243,10 +255,117 @@ console.log('    (estaban en pantalla y no en el PDF, según dónde cayera el en
   ok('y con el mismo peso en todos', max - min < max * 0.2,
     `entre ${min} y ${max} píxeles`);
   // En pantalla el canal va a 4 px; impreso, a 6.4, y la lámina se exporta al
-  // doble. Menos de 8 px de racha significa que se volvió a dibujar con el
-  // trazo de pantalla, que sobre satélite a A1 no se lee.
+  // doble: unos 9 px frente a unos 14. El umbral va en medio, que es lo que
+  // distingue un trazo del otro.
   ok('con el trazo de impresión, no el de pantalla',
-    azules.every(a => a.grosor >= 8), azules.map(a => `${a.ancho}px → ${a.grosor} px de grosor`).join('  ·  '));
+    azules.every(a => a.grosor >= 11), azules.map(a => `${a.ancho}px → ${a.grosor} px`).join('  ·  '));
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+console.log('\n═══ Girar la lámina ═══');
+{
+  // Canal en diagonal, que es el caso que justifica girar: así aprovecha el
+  // papel en vez de cruzar la hoja por una esquina.
+  const linea = [];
+  for (let m = 0; m <= 24000; m += 200) linea.push([alLng(m), LAT - 0.00008 * (m / 200)]);
+  const CANAL = { type: 'FeatureCollection', features: [{ type: 'Feature',
+    properties: { fid: 1, nombre: 'Canal Madre' },
+    geometry: { type: 'LineString', coordinates: linea } }] };
+  const PUNTOS = (c) => ({ type: 'FeatureCollection', features: Array.from({ length: 20 }, (_, i) => {
+    const m = i * 1200 + 300;
+    return { type: 'Feature', geometry: { type: 'Point', coordinates: [alLng(m), LAT - 0.00008 * (m / 200)] },
+      properties: { fid: `${c}-${i}`, nombre: `P${i}`, nombre_canal: 'L10',
+        progresiva: m, estado: 'R', ambito: 'JURP' } };
+  }) });
+  const capaDe = (c) => c === 'canal_madre' ? CANAL : c === 'sectores_pech' ? SECTORES
+    : /canal|subal|redes|vias|lotes|areas|red_nacional|camino|via_/.test(c)
+      ? { type: 'FeatureCollection', features: [] } : PUNTOS(c);
+
+  const { nav, pag } = await abrir({ dir, ancho: 2000, capaDe });
+  await pag.waitForTimeout(6000);
+  await pag.getByText('Encuadrar').click();
+  await pag.waitForTimeout(2000);
+
+  const estado = () => pag.evaluate(() => {
+    const g = document.querySelector('.lam-mapa-giro');
+    const rec = document.querySelector('.lam-mapa').getBoundingClientRect();
+    const caja = g.getBoundingClientRect();
+    const m = (sel) => { const e = document.querySelector(sel); return e ? getComputedStyle(e).transform : null; };
+    const angulo = (t) => { if (!t || t === 'none') return 0;
+      const n = t.match(/[-\d.e+]+/g).map(Number);
+      return +(Math.atan2(n[1], n[0]) * 180 / Math.PI).toFixed(1); };
+    return {
+      contenedor: [g.offsetWidth, g.offsetHeight],
+      cubre: caja.width >= rec.width - 2 && caja.height >= rec.height - 2,
+      rosa: angulo(m('.lam-norte')),
+      rotulo: angulo(m('.inv-eti-txt')),
+      escala: (document.querySelector('.lam-estado')?.innerText || '').match(/1:[\d.,]+/)?.[0],
+    };
+  });
+
+  const a = await estado();
+  ok('sin girar, el contenedor es el del recuadro',
+    a.contenedor[0] === 1642 && a.contenedor[1] === 924, a.contenedor.join('×'));
+
+  await pag.evaluate(() => {
+    const i = [...document.querySelectorAll('.lam-giro-fila input')][1];
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    set.call(i, '30'); i.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await pag.waitForTimeout(2200);
+  const b = await estado();
+
+  ok('al girar, el contenedor crece y sigue tapando el recuadro',
+    b.cubre && b.contenedor[0] > a.contenedor[0] && b.contenedor[1] > a.contenedor[1],
+    `${a.contenedor.join('×')} → ${b.contenedor.join('×')}`);
+  ok('la rosa de los vientos gira con la lámina', Math.abs(b.rosa - 30) < 1, `${b.rosa}°`);
+  ok('los rótulos se enderezan para poder leerse', Math.abs(b.rotulo + 30) < 1, `${b.rotulo}°`);
+  // Lo que no puede pasar: que girar cambie la escala. Rotar no acerca.
+  ok('y la escala sigue siendo la misma', b.escala === a.escala, `${a.escala} → ${b.escala}`);
+
+  /**
+   * ¿Sigue el canal dentro de la lámina girada?
+   *
+   * Contar su azul no sirve: el trazo va al 95 % de opacidad, así que se
+   * mezcla con lo que tenga debajo —aquí el relleno del sector— y el color
+   * exacto cambia. Lo que no cambia es que apagar la capa tiene que quitar
+   * un montón de píxeles: se exporta con el canal y sin él, y se compara.
+   */
+  const exportar = async (nombre) => {
+    const [dd] = await Promise.all([
+      pag.waitForEvent('download', { timeout: 60000 }).catch(() => null),
+      pag.getByText('PNG', { exact: false }).click(),
+    ]);
+    if (!dd) return null;
+    const ruta = `/tmp/${nombre}.png`;
+    await dd.saveAs(ruta);
+    const fs2 = await import('node:fs');
+    return pag.evaluate(async (datos) => {
+      const img = new Image();
+      await new Promise(r => { img.onload = r; img.src = datos; });
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      c.getContext('2d').drawImage(img, 0, 0);
+      const p4 = c.getContext('2d').getImageData(0, 0, img.width, Math.floor(img.height * 0.6)).data;
+      let n = 0;
+      for (let i = 0; i < p4.length; i += 4) {
+        if (p4[i + 2] > p4[i] + 35 && p4[i + 2] > 90 && p4[i + 2] < 235) n++;
+      }
+      return n;
+    }, 'data:image/png;base64,' + fs2.readFileSync(ruta, 'base64'));
+  };
+
+  const conCanal = await exportar('lamina_girada');
+  ok('la lámina girada se exporta', conCanal != null);
+  await pag.evaluate(() => [...document.querySelectorAll('.lam-capa')]
+    .find(e => e.innerText.trim() === 'Canal madre').querySelector('input').click());
+  await pag.waitForTimeout(1500);
+  const sinCanal = await exportar('lamina_girada_sin_canal');
+  if (conCanal != null && sinCanal != null) {
+    ok('con el canal dentro', conCanal - sinCanal > 8000,
+      `${conCanal - sinCanal} píxeles que aporta el canal (con ${conCanal}, sin ${sinCanal})`);
+  }
+  await nav.close();
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -259,7 +378,13 @@ console.log('\n═══ El popup se lee, y no sale impreso ═══');
   await pag.waitForTimeout(600);
   await pag.getByText('Encuadrar').click();
   await pag.waitForTimeout(2000);
-  await pag.locator('.lam-mapa .leaflet-marker-icon').first().click({ force: true });
+  // El clic se lanza sobre el elemento, no con el ratón: con novecientos
+  // marcadores apilados, un clic por coordenadas cae sobre cualquiera. Las
+  // marcas de kilometraje y los nombres de sector también son
+  // .leaflet-marker-icon, y van sin interacción: hay que apuntar a un activo.
+  await pag.evaluate(() => document
+    .querySelector('.lam-mapa .leaflet-marker-icon:not(.lam-pk-icono):not(.lam-sector-icono)')
+    .dispatchEvent(new MouseEvent('click', { bubbles: true })));
   await pag.waitForTimeout(900);
 
   const colores = await pag.evaluate(() => {

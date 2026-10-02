@@ -922,8 +922,11 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
               {rotular && (etiquetas !== 'nombre' || p.nombre) && (
                 <Tooltip permanent direction="right" offset={[12, 0]}
                   className={`inv-eti${etiquetas ? ' inv-eti-lamina' : ''}`} opacity={1}>
+                  {/* El texto va en su propio span para poder devolverle el
+                      giro cuando la lámina está orientada: si gira con el
+                      mapa, el rótulo sale tumbado y no se lee. */}
                   {etiquetas === 'nombre'
-                    ? p.nombre
+                    ? <span className="inv-eti-txt">{p.nombre}</span>
                     : (p.nombre || p.codigo || `${capa.label} #${p.fid}`)}
                 </Tooltip>
               )}

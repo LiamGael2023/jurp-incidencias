@@ -415,6 +415,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
   const [centro, setCentro] = useState(null);
+  const [giro, setGiro] = useState(0);        // grados, en sentido horario
   const [version, setVersion] = useState(0);     // repinta la cuadrícula al mover
   const [limites, setLimites] = useState(null);
   const [ocupado, setOcupado] = useState(null);
@@ -697,6 +698,35 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
     });
   }, [limites, descargando, inv.visibles, inv.datos, estructura]);
 
+  /**
+   * El mapa girado.
+   *
+   * Leaflet no sabe girar, así que se gira su contenedor con CSS y se le hace
+   * más grande para que al girar siga tapando el recuadro de la lámina: un
+   * rectángulo girado deja las esquinas al aire si conserva su tamaño. El
+   * sobrante lo recorta el recuadro, que va con overflow oculto.
+   *
+   * El giro NO toca la escala: rotar no acerca ni aleja, y el zoom de Leaflet
+   * —que es de donde sale el 1:10 000— no se modifica. Lo que sí cambia es
+   * cuánto terreno hay que traer, de ahí el contenedor mayor.
+   */
+  const cajaGirada = useMemo(() => {
+    const r = Math.abs(giro % 180) * Math.PI / 180;
+    const c = Math.abs(Math.cos(r)), sn = Math.abs(Math.sin(r));
+    const w = mm(MAPA_MM.ancho), h = mm(MAPA_MM.alto);
+    return { ancho: Math.ceil(w * c + h * sn), alto: Math.ceil(w * sn + h * c) };
+  }, [giro]);
+
+  // Al cambiar el tamaño del contenedor hay que avisar a Leaflet; si no, sigue
+  // dibujando teselas para el tamaño anterior y quedan franjas vacías.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      mapRef.current?.invalidateSize({ animate: false });
+      alMover();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [cajaGirada.ancho, cajaGirada.alto]);
+
   /** Los sectores que asoman en el encuadre, con dónde escribir su nombre. */
   const etiquetasSector = useMemo(() => {
     if (!limites || descargando) return [];
@@ -870,6 +900,24 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
             <FaCrosshairs /> Encuadrar
           </button>
 
+          {/* Girar la lámina sirve para que un canal en diagonal aproveche el
+              papel. No cambia la escala: rotar no acerca ni aleja. */}
+          <label className="lam-giro">Giro de la lámina
+            <div className="lam-giro-fila">
+              <input type="range" min="-180" max="180" step="1" value={giro}
+                onChange={e => setGiro(Number(e.target.value))} />
+              <input type="number" min="-180" max="180" step="1" value={giro}
+                onChange={e => setGiro(Math.max(-180, Math.min(180, Number(e.target.value) || 0)))} />
+              <span>°</span>
+            </div>
+            <div className="lam-giro-atajos">
+              {[0, 90, 180, 270].map(g => (
+                <button key={g} type="button" className={((giro % 360) + 360) % 360 === g ? 'activo' : ''}
+                  onClick={() => setGiro(g > 180 ? g - 360 : g)}>{g}°</button>
+              ))}
+            </div>
+          </label>
+
           <hr />
 
           <label>Mapa (título de la lámina)
@@ -964,7 +1012,14 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
           <div className="lam-mapa" style={{
             left: mm(MARGEN_MM), top: mm(MARGEN_MM),
             width: mm(MAPA_MM.ancho), height: mm(MAPA_MM.alto),
+            '--giro': `${giro}deg`,
           }}>
+          <div className={`lam-mapa-giro${giro ? ' girada' : ''}`}
+            style={{
+              width: cajaGirada.ancho, height: cajaGirada.alto,
+              left: (mm(MAPA_MM.ancho) - cajaGirada.ancho) / 2,
+              top: (mm(MAPA_MM.alto) - cajaGirada.alto) / 2,
+            }}>
             {/* preferCanvas es lo que hace que los canales y los sectores
                 salgan en la lámina exportada.
 
@@ -993,7 +1048,13 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               <EncuadreFijo centro={centro} zoom={zoom} onMover={alMover} />
               <CuadriculaUTM version={version} />
             </MapContainer>
-            <div className="lam-norte"><RosaDeLosVientos /></div>
+          </div>
+            {/* La rosa va FUERA del contenedor girado: no es parte del mapa
+                sino del papel. Gira ella sola, que es justo lo que tiene que
+                hacer — señalar dónde quedó el norte. */}
+            <div className="lam-norte" style={{ transform: `rotate(${giro}deg)` }}>
+              <RosaDeLosVientos />
+            </div>
           </div>
 
           {/* Pie */}

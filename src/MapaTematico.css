@@ -267,3 +267,45 @@
      1px 0 3px #fff, -1px 0 3px #fff, 0 1px 3px #fff, 0 -1px 3px #fff,
      2px 2px 4px #fff, -2px -2px 4px #fff;
 }
+
+/* ── Giro de la lámina ───────────────────────────────────────────────────── */
+/* Leaflet no gira, así que se gira su contenedor. Va más grande que el
+   recuadro —un rectángulo girado deja las esquinas al aire— y el recuadro,
+   que ya recortaba, se queda con lo que cabe. */
+/* Sin giro no lleva transformación ninguna, ni siquiera la de centrarse: se
+   centra con left/top calculados. No es imprescindible —html2canvas exporta
+   bien con transform—, pero una rama sin transformar es una variable menos
+   en el camino hasta el papel, y el caso sin girar es el de todos los días. */
+.lam-mapa-giro { position: absolute; }
+.lam-mapa-giro.girada {
+  transform: rotate(var(--giro, 0deg));
+  transform-origin: center center;
+}
+.lam-mapa-giro .leaflet-container { width: 100%; height: 100%; }
+
+/* Los rótulos giran con el mapa y quedarían tumbados. Se les devuelve el
+   giro para que el texto siga leyéndose en horizontal, que es como se lee un
+   plano por mucho que esté orientado de otra forma. */
+.lam .lam-pk,
+.lam .lam-sector,
+.lam .inv-eti-txt {
+  --anti-giro: calc(-1 * var(--giro, 0deg));
+}
+.lam .lam-pk { transform: translate(-50%, -140%) rotate(var(--anti-giro)); }
+.lam .lam-sector { transform: translate(-50%, -50%) rotate(var(--anti-giro)); }
+.lam .inv-eti-txt { display: inline-block; transform: rotate(var(--anti-giro)); }
+
+/* La rosa de los vientos gira sola: señala dónde quedó el norte. */
+.lam-norte { transform-origin: center center; }
+
+.lam-giro { margin-top: 14px; }
+.lam-giro-fila { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.lam-giro-fila input[type=range] { flex: 1; margin: 0; padding: 0; }
+.lam-giro-fila input[type=number] { width: 64px; margin: 0; }
+.lam-giro-fila span { color: #64748b; }
+.lam-giro-atajos { display: flex; gap: 6px; margin-top: 6px; }
+.lam-giro-atajos button {
+  flex: 1; padding: 4px 0; font-size: 11.5px; font-family: inherit; cursor: pointer;
+  background: #1e293b; color: #94a3b8; border: 1px solid #334155; border-radius: 5px;
+}
+.lam-giro-atajos button.activo { background: #206bc4; border-color: #206bc4; color: #fff; }
