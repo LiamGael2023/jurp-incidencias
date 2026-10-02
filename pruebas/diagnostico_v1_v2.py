@@ -89,6 +89,34 @@ CAMPOS_LLUVIA = [f for f in RawDavis._meta.concrete_fields
                  if "rain" in f.name.lower()]
 
 
+def dia_local(col):
+    """
+    Expresion SQL que da el DIA en hora de Lima de una columna de fecha.
+
+    No se escribe a ciegas porque depende del tipo de la columna, y
+    equivocarse corre los dias unas horas sin que nada falle:
+
+      - timestamptz: una sola conversion, 'col AT TIME ZONE Lima' ya entrega
+        la hora de pared local.
+      - timestamp (sin zona, USE_TZ=False): hay que decir primero que lo
+        guardado es UTC y despues llevarlo a Lima.
+
+    El tipo se le pregunta a Postgres en vez de suponerlo.
+    """
+    with connection.cursor() as cur:
+        cur.execute(
+            "SELECT data_type FROM information_schema.columns"
+            " WHERE table_name = %s AND column_name = %s", [TABLA, col])
+        fila = cur.fetchone()
+    tipo = (fila[0] if fila else "") or ""
+    if "with time zone" in tipo:
+        return "({} AT TIME ZONE 'America/Lima')::date".format(col)
+    return "({} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima')::date".format(col)
+
+
+DIA_LOCAL = dia_local(COL_FECHA)
+
+
 def nombre_de(obj):
     for a in ("nombre", "name", "descripcion"):
         v = getattr(obj, a, None)
@@ -154,18 +182,24 @@ with connection.cursor() as cur:
 desde14 = AHORA - datetime.timedelta(days=14)
 with connection.cursor() as cur:
     cur.execute(
-        "SELECT {e}, date_trunc('day', {f} AT TIME ZONE 'UTC'"
-        " AT TIME ZONE 'America/Lima')::date AS d, COUNT(*)"
+        "SELECT {e}, {d} AS dia, COUNT(*)"
         " FROM {t} WHERE {f} >= %s AND {e} = ANY(%s)"
-        " GROUP BY 1, 2 ORDER BY 2".format(e=COL_EST, f=COL_FECHA, t=TABLA),
+        " GROUP BY 1, 2 ORDER BY 2".format(
+            e=COL_EST, d=DIA_LOCAL, f=COL_FECHA, t=TABLA),
         [desde14, pks])
     pordia = cur.fetchall()
 
 # ── Ultima lectura y alertas de siempre ───────────────────────────────────
+# El .order_by() vacio NO es decorativo: si el modelo trae Meta.ordering,
+# Django mete el campo de orden en el GROUP BY y la agregacion se parte en
+# una fila por (estacion, instante) en vez de una por estacion. El Max sale
+# entonces de un grupo cualquiera y da fechas absurdas, sin avisar.
 ultimas = dict((r["station"], r["u"]) for r in RawDavis.objects.filter(
-    station__in=pks).values("station").annotate(u=djm.Max("collect_time")))
+    station__in=pks).values("station").order_by()
+    .annotate(u=djm.Max("collect_time")))
 alertas = dict((r["station"], r["n"]) for r in RainAlerts.objects.filter(
-    station__in=pks).values("station").annotate(n=djm.Count("id")))
+    station__in=pks).values("station").order_by()
+    .annotate(n=djm.Count("id")))
 
 
 # ══════════════════════════════════════════════════════════════════════════
