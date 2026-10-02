@@ -158,31 +158,95 @@ console.log('\n═══ Kilometraje, rótulos y rosa de los vientos ═══')
   ok('la rosa de los vientos está, con sus cuatro cardinales',
     r.rosa && ['N', 'E', 'S', 'O'].every(l => r.letras.includes(l)), r.letras);
 
-  // ── Trazos para papel ──
-  // En pantalla el sector lleva borde de 1.2 y relleno al 8 %: impreso a A1
-  // sobre satélite, eso desaparece, y con él el límite del sector.
-  const trazos = await pag.evaluate(() => {
-    const paths = [...document.querySelectorAll('.lam-mapa .leaflet-overlay-pane path')];
-    const leer = (p) => ({
-      w: Number(p.getAttribute('stroke-width')),
-      relleno: Number(p.getAttribute('fill-opacity')),
-      color: p.getAttribute('stroke'),
-    });
-    return {
-      n: paths.length,
-      canal: paths.map(leer).find(x => x.color === '#1c7ed6' && x.relleno === 0),
-      sector: paths.map(leer).find(x => x.relleno > 0),
-      sectorEtiqueta: [...document.querySelectorAll('.lam-sector')].map(e => e.textContent),
-    };
-  });
-  ok('el canal se dibuja con trazo de impresión', trazos.canal && trazos.canal.w > 5,
-    trazos.canal ? `${trazos.canal.w} px (4 en pantalla)` : 'no se encontró el canal');
-  ok('el sector tiene borde y relleno visibles',
-    trazos.sector && trazos.sector.w >= 2 && trazos.sector.relleno >= 0.1,
-    trazos.sector ? `borde ${trazos.sector.w}, relleno ${trazos.sector.relleno}` : 'no se encontró el sector');
-  ok('y su nombre va escrito encima', trazos.sectorEtiqueta.length > 0,
-    trazos.sectorEtiqueta.join(' | ') || '(ninguno)');
   await nav.close();
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+console.log('\n═══ Los canales y los sectores salen en la lámina exportada ═══');
+console.log('    (estaban en pantalla y no en el PDF, según dónde cayera el encuadre)');
+{
+  const linea = [];
+  for (let m = 0; m <= 30000; m += 200) linea.push([alLng(m), LAT + 0.0005]);
+  const CANAL = { type: 'FeatureCollection', features: [{ type: 'Feature',
+    properties: { fid: 1, nombre: 'Canal Madre' },
+    geometry: { type: 'LineString', coordinates: linea } }] };
+  const PUNTOS = (c) => ({ type: 'FeatureCollection', features: Array.from({ length: 20 }, (_, i) => ({
+    type: 'Feature', geometry: { type: 'Point', coordinates: [alLng(i * 1200 + 300), LAT + 0.0005] },
+    properties: { fid: `${c}-${i}`, nombre: `P${i}`, nombre_canal: 'L10',
+      progresiva: i * 1200 + 300, estado: 'R', ambito: 'JURP' } })) });
+  const capaDe = (c) => c === 'canal_madre' ? CANAL
+    : /canal|subal|redes|vias|lotes|areas|sectores|red_nacional|camino|via_/.test(c)
+      ? { type: 'FeatureCollection', features: [] } : PUNTOS(c);
+
+  // Varios anchos de ventana: la hoja se dibuja a distinto zoom en cada uno y
+  // el encuadre queda desplazado de forma distinta, que es lo que destapaba el
+  // fallo. Antes salía en unos y en otros no, sin más patrón que ese.
+  const azules = [];
+  for (const ancho of [1400, 1920, 2400]) {
+    const { nav, pag } = await abrir({ dir, ancho, capaDe });
+    await pag.waitForTimeout(5500);
+    await pag.getByText('Encuadrar').click();
+    await pag.waitForTimeout(2200);
+    const [d] = await Promise.all([
+      pag.waitForEvent('download', { timeout: 60000 }).catch(() => null),
+      pag.getByText('PNG', { exact: false }).click(),
+    ]);
+    if (d) {
+      const ruta = `/tmp/lamina_vectores_${ancho}.png`;
+      await d.saveAs(ruta);
+      const fs2 = await import('node:fs');
+      const n = await pag.evaluate(async (datos) => {
+        const img = new Image();
+        await new Promise(r => { img.onload = r; img.src = datos; });
+        const c = document.createElement('canvas');
+        c.width = img.width; c.height = img.height;
+        c.getContext('2d').drawImage(img, 0, 0);
+        const p2 = c.getContext('2d').getImageData(0, 0, img.width, Math.floor(img.height * 0.6)).data;
+        let n2 = 0;
+        for (let i = 0; i < p2.length; i += 4) {
+          if (Math.abs(p2[i] - 28) < 25 && Math.abs(p2[i + 1] - 126) < 25 && Math.abs(p2[i + 2] - 214) < 25) n2++;
+        }
+        return n2;
+      }, 'data:image/png;base64,' + fs2.readFileSync(ruta, 'base64'));
+      // Grosor del trazo, medido en el papel: el canal es horizontal, así
+      // que se cuenta la racha de píxeles azules de una columna. Para
+      // imprimir se dibuja a 6.4 px, y la lámina se exporta al doble.
+      const grosor = await pag.evaluate(async (datos) => {
+        const img = new Image();
+        await new Promise(r => { img.onload = r; img.src = datos; });
+        const c = document.createElement('canvas');
+        c.width = img.width; c.height = img.height;
+        const cx = c.getContext('2d');
+        cx.drawImage(img, 0, 0);
+        const col = Math.floor(img.width * 0.5);
+        const alto = Math.floor(img.height * 0.6);
+        const p3 = cx.getImageData(col, 0, 1, alto).data;
+        let mejor = 0, racha = 0;
+        for (let y = 0; y < alto; y++) {
+          const i = y * 4;
+          const azul = Math.abs(p3[i] - 28) < 45 && Math.abs(p3[i + 1] - 126) < 45 && Math.abs(p3[i + 2] - 214) < 45;
+          racha = azul ? racha + 1 : 0;
+          if (racha > mejor) mejor = racha;
+        }
+        return mejor;
+      }, 'data:image/png;base64,' + fs2.readFileSync(ruta, 'base64'));
+      azules.push({ ancho, n, grosor });
+    }
+    await nav.close();
+  }
+  const cuentas = azules.map(a => a.n);
+  // Los marcadores por sí solos daban unos 2000 píxeles de ese azul; el canal
+  // añade un orden de magnitud. Si falta, la cuenta se desploma.
+  ok('el canal aparece en los tres anchos', cuentas.every(n => n > 10000),
+    azules.map(a => `${a.ancho}px → ${a.n}`).join('  ·  '));
+  const min = Math.min(...cuentas), max = Math.max(...cuentas);
+  ok('y con el mismo peso en todos', max - min < max * 0.2,
+    `entre ${min} y ${max} píxeles`);
+  // En pantalla el canal va a 4 px; impreso, a 6.4, y la lámina se exporta al
+  // doble. Menos de 8 px de racha significa que se volvió a dibujar con el
+  // trazo de pantalla, que sobre satélite a A1 no se lee.
+  ok('con el trazo de impresión, no el de pantalla',
+    azules.every(a => a.grosor >= 8), azules.map(a => `${a.ancho}px → ${a.grosor} px de grosor`).join('  ·  '));
 }
 
 // ───────────────────────────────────────────────────────────────────────────

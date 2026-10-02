@@ -965,7 +965,22 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
             left: mm(MARGEN_MM), top: mm(MARGEN_MM),
             width: mm(MAPA_MM.ancho), height: mm(MAPA_MM.alto),
           }}>
+            {/* preferCanvas es lo que hace que los canales y los sectores
+                salgan en la lámina exportada.
+
+                Por defecto Leaflet dibuja los vectores en un <svg> al que
+                coloca con un `transform` y un `viewBox` desplazado, uno
+                compensando al otro. html2canvas no reproduce bien esa pareja:
+                el dibujo acaba corrido y, según dónde quedara el encuadre, el
+                canal cae fuera del recuadro del mapa y desaparece de la foto
+                —en pantalla estaba, y en el PDF no—. Medido: a cinco anchos de
+                ventana distintos, en tres salía y en dos no, sin más patrón
+                que el desplazamiento del encuadre.
+
+                Con el lienzo no hay SVG que trasladar: los vectores se pintan
+                en un <canvas>, y html2canvas copia un canvas tal cual. */}
             <MapContainer
+              preferCanvas
               center={centro || [-8.4186, -78.7533]} zoom={zoom || 15}
               zoomSnap={0} zoomDelta={0} zoomControl={false} attributionControl={false}
               scrollWheelZoom={false} doubleClickZoom={false} touchZoom={false} boxZoom={false}
