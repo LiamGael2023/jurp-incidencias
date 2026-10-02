@@ -115,6 +115,66 @@ export function utmALatLng(este, norte, zona, sur = true) {
 }
 
 /** Distancia en metros entre dos [lat,lng] (haversine). */
+/**
+ * ¿Cae este punto dentro del polígono?
+ *
+ * Lanza un rayo hacia el este y cuenta cruces: impar, dentro; par, fuera. Es
+ * el algoritmo de toda la vida y aquí basta, porque los sectores son
+ * polígonos de riego de pocos kilómetros y a esa escala la curvatura de la
+ * Tierra no cambia de qué lado del borde cae un punto.
+ *
+ * `anillos` es la lista de anillos en formato GeoJSON —el primero el
+ * contorno, los siguientes los huecos—, cada uno como [[lng, lat], …].
+ */
+export function puntoEnPoligono([lng, lat], anillos) {
+  let dentro = false;
+  for (let a = 0; a < anillos.length; a++) {
+    const anillo = anillos[a];
+    let cruza = false;
+    for (let i = 0, j = anillo.length - 1; i < anillo.length; j = i++) {
+      const [xi, yi] = anillo[i], [xj, yj] = anillo[j];
+      // El rayo cruza este lado si el lado atraviesa la latitud del punto y
+      // el corte queda al este. El `!==` evita contar dos veces un vértice.
+      if ((yi > lat) !== (yj > lat)
+        && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) cruza = !cruza;
+    }
+    // El contorno suma y los huecos restan: un punto en un hueco está fuera.
+    if (a === 0) dentro = cruza; else if (cruza) dentro = false;
+  }
+  return dentro;
+}
+
+/**
+ * El mismo test sobre una geometría GeoJSON completa, sea Polygon o
+ * MultiPolygon. Antes de hacer cuentas descarta por la caja envolvente, que
+ * es lo que vuelve viable probar miles de puntos contra decenas de sectores.
+ */
+export function puntoEnGeometria(punto, geom) {
+  if (!geom) return false;
+  const partes = geom.type === 'MultiPolygon' ? geom.coordinates
+    : geom.type === 'Polygon' ? [geom.coordinates] : [];
+  for (const anillos of partes) if (puntoEnPoligono(punto, anillos)) return true;
+  return false;
+}
+
+/** Caja envolvente de una geometría, para descartar rápido. */
+export function cajaDe(geom) {
+  let oeste = Infinity, este = -Infinity, sur = Infinity, norte = -Infinity;
+  const ver = (c) => {
+    if (typeof c[0] === 'number') {
+      if (c[0] < oeste) oeste = c[0];
+      if (c[0] > este) este = c[0];
+      if (c[1] < sur) sur = c[1];
+      if (c[1] > norte) norte = c[1];
+    } else for (const x of c) ver(x);
+  };
+  if (!geom?.coordinates) return null;
+  ver(geom.coordinates);
+  return { oeste, este, sur, norte };
+}
+export const enCaja = ([lng, lat], c) =>
+  !!c && lng >= c.oeste && lng <= c.este && lat >= c.sur && lat <= c.norte;
+
 export function distanciaMetros(a, b) {
   const R = 6371008.8;
   const dLat = (b[0] - a[0]) * Math.PI / 180;

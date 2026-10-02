@@ -2,6 +2,7 @@ import {
   latLngToUTM, lngDeEste, latDeNorte, escalaDeLamina, escalaRedonda,
   pasoCuadricula, barraEscala, numeroLamina, cuadriculaUTM, distanciaMetros, utmALatLng,
   zoomParaEscala, escalaDeZoom, terrenoDeLamina, cabeEnLamina,
+  puntoEnPoligono, puntoEnGeometria, cajaDe, enCaja,
 } from './cartografia.js';
 
 let mal = 0;
@@ -111,6 +112,32 @@ const cabe = (largoKm) => cabeEnLamina({ escala: 10000, anchoMm: AREA.anchoMm, a
 t('el Tramo III (7.0 km) entra', cabe(7.0).cabe, true);
 t('el Tramo V (8.4 km) no entra', cabe(8.4).cabe, false);
 t('y dice cuanto sobra (m)', Math.round(cabe(8.4).sobraAncho), 190, 2);
+
+console.log('\n─── Punto en poligono: a que sector pertenece un activo ───');
+// Un cuadrado de 1 grado con un hueco en el medio.
+const CUADRADO = [[[0,0],[4,0],[4,4],[0,4],[0,0]], [[1,1],[2,1],[2,2],[1,2],[1,1]]];
+t('dentro', puntoEnPoligono([3, 3], CUADRADO), true);
+t('fuera', puntoEnPoligono([5, 3], CUADRADO), false);
+t('dentro del hueco cuenta como fuera', puntoEnPoligono([1.5, 1.5], CUADRADO), true === false);
+// Los vertices y los bordes son el caso que rompe las implementaciones ingenuas:
+// un vertice a la altura exacta del rayo se cuenta dos veces y da "fuera".
+t('un punto a la altura de un vertice no se cuenta dos veces',
+  puntoEnPoligono([3, 4 - 1e-9], CUADRADO), true);
+t('justo al oeste del poligono', puntoEnPoligono([-0.001, 2], CUADRADO), false);
+
+const MULTI = { type: 'MultiPolygon', coordinates: [
+  [[[0,0],[1,0],[1,1],[0,1],[0,0]]],
+  [[[5,5],[6,5],[6,6],[5,6],[5,5]]],
+]};
+t('MultiPolygon: en la primera parte', puntoEnGeometria([0.5, 0.5], MULTI), true);
+t('MultiPolygon: en la segunda parte', puntoEnGeometria([5.5, 5.5], MULTI), true);
+t('MultiPolygon: entre las dos', puntoEnGeometria([3, 3], MULTI), false);
+
+const caja = cajaDe(MULTI);
+t('la caja envolvente abarca las dos partes', JSON.stringify(caja),
+  JSON.stringify({ oeste: 0, este: 6, sur: 0, norte: 6 }));
+t('la caja descarta lo lejano', enCaja([10, 10], caja), false);
+t('y no descarta lo que si puede estar', enCaja([5.5, 5.5], caja), true);
 
 console.log('\n─── Distancia ───');
 // Un grado de latitud ~ 110.6 km

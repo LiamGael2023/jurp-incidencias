@@ -183,8 +183,10 @@ const TODAS = TODOS_GRUPOS.flatMap(g => g.capas);
 
 // La leyenda de la lámina temática se arma de aquí, no de una lista paralela:
 // una leyenda que no sale del mismo sitio que el dibujo acaba mintiendo el día
-// que alguien cambia un color o agrega una capa.
-export { GRUPOS as GRUPOS_CAPAS, TODAS as TODAS_LAS_CAPAS };
+// que alguien cambia un color o agrega una capa. Van los dos grupos, incluidas
+// las de contexto: si se dibujan sobre la lámina, tienen que estar en su
+// leyenda.
+export { TODOS_GRUPOS as GRUPOS_CAPAS, TODAS as TODAS_LAS_CAPAS };
 
 // Desde este zoom cada activo lleva su nombre al lado. Mas lejos no se
 // rotula: con dos mil seiscientos puntos el mapa se vuelve una mancha de

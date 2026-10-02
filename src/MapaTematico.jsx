@@ -12,6 +12,7 @@ import { useInventario, CapasInventario, GRUPOS_CAPAS, TODAS_LAS_CAPAS } from '.
 import {
   latLngToUTM, utmTexto, zonaDe, cuadriculaUTM, barraEscala, numeroLamina,
   zoomParaEscala, escalaDeZoom, terrenoDeLamina, cabeEnLamina, distanciaMetros,
+  puntoEnGeometria, cajaDe, enCaja,
 } from './cartografia';
 import logoJURP from './assets/logo1.png';
 import './MapaTematico.css';
@@ -91,6 +92,35 @@ const AGRUPACIONES = [
   { clave: 'canal', re: /^nombre_canal$/i, etiqueta: 'Canal' },
 ];
 
+// El sector no es un atributo de los activos: es una capa de polígonos. Para
+// poder agrupar por él hay que preguntar en cuál cae cada punto.
+const CAPA_SECTORES = 'sectores_pech';
+
+/**
+ * Asigna a cada punto el sector que lo contiene.
+ *
+ * Se prueba contra la caja envolvente antes que contra el polígono: son miles
+ * de activos contra decenas de sectores y el test completo en todos los pares
+ * cuesta lo suficiente como para que se note al cambiar de capa.
+ */
+function asignarSector(puntos, fcSectores) {
+  if (!fcSectores?.features?.length) return;
+  const sectores = fcSectores.features.map(f => ({
+    nombre: valorDe(f.properties, /^(sector|nombre)$/i),
+    geom: f.geometry,
+    caja: cajaDe(f.geometry),
+  })).filter(s => s.nombre && s.geom);
+  if (!sectores.length) return;
+  for (const p of puntos) {
+    if (p.sector) continue;            // si el activo ya lo trae, manda el dato
+    const c = [p.lng, p.lat];
+    for (const s of sectores) {
+      if (!enCaja(c, s.caja)) continue;
+      if (puntoEnGeometria(c, s.geom)) { p.sector = s.nombre; break; }
+    }
+  }
+}
+
 /** Romanos para ordenar los tramos: "Tramo IX" va después de "Tramo V". */
 const VALOR_ROMANO = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
 const deRomano = (s) => {
@@ -144,6 +174,8 @@ function leerEstructura(inv) {
       puntos.push(punto);
     }
   }
+  asignarSector(puntos, inv.datosDe(CAPA_SECTORES));
+
   // Solo se ofrecen los niveles que tienen valores: un selector vacío no es
   // una opción, es una pregunta sin respuesta.
   const niveles = AGRUPACIONES
@@ -318,10 +350,29 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
 
   const estructura = useMemo(() => leerEstructura(inv), [inv.datos]);
 
-  // Los puntos que pasan todos los niveles elegidos, antes de recortar por
-  // progresiva.
-  const delTramo = useMemo(() => estructura.puntos.filter(p =>
-    Object.entries(filtros).every(([k, v]) => !v || p[k] === v)), [estructura, filtros]);
+  /**
+   * Los puntos que pasan los niveles elegidos, antes de recortar por
+   * progresiva.
+   *
+   * Los niveles no conviven en la misma capa: `tramo` solo lo traen las capas
+   * de Chavimochic y `nombre_canal` solo las de JURP, así que exigir que un
+   * punto cumpla los dos deja la selección vacía siempre. La regla es: un
+   * punto entra si no contradice ningún nivel elegido y coincide al menos con
+   * uno. Un nivel que ese punto no tiene, simplemente no opina.
+   */
+  const delTramo = useMemo(() => {
+    const elegidos = Object.entries(filtros).filter(([, v]) => v);
+    if (!elegidos.length) return estructura.puntos;
+    return estructura.puntos.filter(p => {
+      let coincideAlguno = false;
+      for (const [k, v] of elegidos) {
+        if (p[k] == null) continue;
+        if (p[k] !== v) return false;
+        coincideAlguno = true;
+      }
+      return coincideAlguno;
+    });
+  }, [estructura, filtros]);
 
   const rangoTramo = useMemo(() => extremos(delTramo), [delTramo]);
 
