@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-¿El rain_window_* que devuelve la API sobrevive al recorte de la serie?
+¿El rain_window_* que calcula la vista sobrevive al recorte de la serie?
 
     docker compose exec -T jurp_web python - < comprobar_ventana_api.py
 
@@ -8,13 +8,24 @@ QUE COMPRUEBA. El endpoint manda al cliente una de cada N lecturas cuando la
 estacion reporta muy seguido. La pregunta es si los campos nuevos siguen
 siendo correctos pese a eso, porque se calculan antes del recorte.
 
-No se compara a ojo: para cada estacion se calcula la ventana DIRECTAMENTE
-SOBRE LA BASE y se contrasta con lo que responde la API. Si no coinciden, lo
-dice y sale con error.
+No se compara a ojo: para cada estacion se calcula la misma ventana
+DIRECTAMENTE SOBRE LA BASE, con todas las filas, y se contrasta con lo que
+devuelve la vista. Si no coinciden, lo dice y sale con error.
 
-Tambien avisa de lo contrario: si para la estacion que mas reporta la API
-devolviera un numero igual al que sale de sumar el array recortado, seria
-señal de que el calculo no esta donde creemos.
+POR QUE SE LLAMA A LA VISTA Y NO AL ENDPOINT POR HTTP.
+
+Porque lo que se esta verificando es el CALCULO, y la capa HTTP solo mete
+ruido: el cliente de pruebas manda un Host que ALLOWED_HOSTS rechaza, la
+vista va detras de staff_or_redirect —que mira request.user antes de que DRF
+procese el token, asi que una cabecera Authorization no basta— y force_login
+no existe en esta version de Django.
+
+Nada de eso tiene que ver con si la ventana esta bien calculada. Se construye
+la peticion y se llama al metodo get() de la vista, que es donde vive el
+codigo que acabamos de tocar.
+
+Lo que esto NO comprueba, y conviene mirar aparte, es si la app puede leer
+este endpoint con su token.
 
 No modifica nada: solo lee.
 """
@@ -22,7 +33,6 @@ No modifica nada: solo lee.
 from __future__ import print_function, unicode_literals
 
 import datetime
-import json
 import os
 import sys
 
@@ -43,14 +53,13 @@ else:
     import django
     django.setup()
 
-from django.conf import settings                  # noqa: E402
 from django.apps import apps                      # noqa: E402
-from django.test import Client                    # noqa: E402
 from django.utils import timezone                 # noqa: E402
 
 PERU = datetime.timezone(datetime.timedelta(hours=-5))
 AHORA = timezone.now()
 RAYA = "=" * 78
+RUTA = "/api/v1/mobile/davis/rain-gauges/filtered-data/"
 VENTANA_POR_DEFECTO = 30
 
 RawDavis = apps.get_model("davis", "RawDavis")
@@ -59,45 +68,49 @@ Equipo = RawDavis._meta.get_field("station").related_model
 hoy = AHORA.astimezone(PERU).date()
 f = hoy.strftime("%Y-%m-%d")
 
-# El Host tiene que estar permitido: el cliente de pruebas manda 'testserver'
-# por defecto y ALLOWED_HOSTS lo rechaza.
-permitidos = [h for h in (settings.ALLOWED_HOSTS or []) if h not in ("*",)]
-HOST = permitidos[0] if permitidos else "localhost"
-if HOST.startswith("."):
-    HOST = HOST[1:]
-print("Host usado en la peticion: {}".format(HOST))
-
-# Un token de usuario con permiso: la vista va detras de staff_or_redirect,
-# asi que con un token cualquiera saldria una redireccion, no datos.
-try:
-    from rest_framework.authtoken.models import Token
-    token = None
-    for t in Token.objects.select_related("user").all()[:200]:
-        u = t.user
-        if getattr(u, "is_staff", False) or getattr(u, "is_superuser", False):
-            token = t
-            break
-    if token is None:
-        print("No encontre ningun token de usuario staff. La vista lo exige.")
-        sys.exit(1)
-    print("Token de: {} (staff)".format(token.user))
-except Exception as exc:
-    print("No se pudo obtener un token: {}".format(exc))
-    sys.exit(1)
-
-
-# Los limites del dia, por rango y no con collect_time__date: ese lookup no
-# existe en la version de Django de este servidor y revienta con
-# "Unsupported lookup 'date'".
+# Limites del dia por rango: el lookup collect_time__date no existe en la
+# version de Django de este servidor.
 INI = timezone.make_aware(datetime.datetime.combine(hoy, datetime.time.min))
 FIN = timezone.make_aware(datetime.datetime.combine(hoy, datetime.time.max))
 
+# ── La vista, sacada de la propia tabla de rutas ──────────────────────────
+try:
+    from django.core.urlresolvers import resolve      # Django viejo
+except ImportError:
+    from django.urls import resolve                   # Django nuevo
+
+try:
+    coincidencia = resolve(RUTA)
+    funcion = coincidencia.func
+    VistaCls = getattr(funcion, "cls", None) or getattr(funcion, "view_class", None)
+    if VistaCls is None:
+        raise RuntimeError("la ruta no apunta a una vista de clase")
+    print("Vista encontrada: {}.{}".format(VistaCls.__module__, VistaCls.__name__))
+except Exception as exc:
+    print("No se pudo resolver {}: {}".format(RUTA, exc))
+    sys.exit(1)
+
+from rest_framework.test import APIRequestFactory    # noqa: E402
+from rest_framework.request import Request           # noqa: E402
+
+fabrica = APIRequestFactory()
+vista = VistaCls()
+
+
+def pedir(pk):
+    """Llama al get() de la vista y devuelve su diccionario de respuesta."""
+    peticion = Request(fabrica.get(RUTA, {
+        "start_date": f, "end_date": f,
+        "station_id": str(pk), "metric": "rainfall_mm",
+    }))
+    respuesta = vista.get(peticion)
+    return getattr(respuesta, "data", None), getattr(respuesta, "status_code", None)
+
 
 def ventana_desde_base(pk, minutos):
-    """La verdad: misma cuenta, pero sobre TODAS las filas de la base."""
-    ini, fin = INI, FIN
+    """La verdad: la misma cuenta, pero sobre TODAS las filas de la base."""
     filas = list(RawDavis.objects
-                 .filter(station=pk, collect_time__range=(ini, fin))
+                 .filter(station=pk, collect_time__range=(INI, FIN))
                  .order_by("collect_time")
                  .values_list("collect_time", "rainfall_mm", "rainfall_mm_per_day"))
     if not filas:
@@ -133,22 +146,12 @@ def ventana_desde_base(pk, minutos):
     return round(ult, 2), round(pico, 2), len(filas)
 
 
-cliente = Client(SERVER_NAME=HOST)
+def nombre_de(pk):
+    try:
+        return str(getattr(Equipo.objects.get(pk=pk), "nombre", pk))[:20]
+    except Exception:
+        return str(pk)
 
-# Se entra por SESION y no solo con la cabecera del token.
-#
-# La vista va detras de staff_or_redirect, un decorador sobre dispatch que
-# mira request.user. En ese momento DRF todavia no ha procesado la cabecera
-# Authorization, asi que el usuario es anonimo y la respuesta es 403 por mas
-# que el token sea de un staff.
-#
-# Esto comprueba el CALCULO de la ventana, que es lo que acabamos de tocar,
-# no el camino de autenticacion de la app.
-try:
-    cliente.force_login(token.user)
-    print("Sesion iniciada como {}".format(token.user))
-except Exception as exc:
-    print("No se pudo iniciar sesion ({}); se intenta solo con el token.".format(exc))
 
 estaciones = sorted(set(RawDavis.objects
                         .filter(collect_time__range=(INI, FIN))
@@ -159,35 +162,35 @@ if not estaciones:
 
 print("")
 print(RAYA)
-print("API CONTRA BASE DE DATOS, HOY ({})".format(hoy))
+print("LA VISTA CONTRA LA BASE DE DATOS, HOY ({})".format(hoy))
 print(RAYA)
-print("{:>5}  {:<20} {:>7} {:>7} {:<12} {:>9} {:>9}  {}".format(
-    "ID", "ESTACION", "FILAS", "PUNTOS", "MODO", "API PICO", "BD PICO", "VEREDICTO"))
+print("{:>5}  {:<20} {:>7} {:>7} {:<12} {:>8} {:>8}  {}".format(
+    "ID", "ESTACION", "FILAS", "PUNTOS", "MODO", "VISTA", "BASE", "VEREDICTO"))
 print("-" * 96)
 
-fallos = 0
-recortadas = 0
+fallos, recortadas, comprobadas = 0, 0, 0
 for pk in estaciones:
-    r = cliente.get("/api/v1/mobile/davis/rain-gauges/filtered-data/",
-                    {"start_date": f, "end_date": f,
-                     "station_id": pk, "metric": "rainfall_mm"},
-                    HTTP_AUTHORIZATION="Token " + token.key)
-    if r.status_code != 200:
-        # Se imprime el cuerpo: un codigo a secas no dice si falta permiso,
-        # si falta un parametro o si reviento la vista.
-        try:
-            cuerpo = r.content.decode("utf-8")[:200].replace("\n", " ")
-        except Exception:
-            cuerpo = "(no se pudo leer)"
-        print("{:>5}  la API responde {} -> {}".format(pk, r.status_code, cuerpo))
+    try:
+        d, codigo = pedir(pk)
+    except Exception as exc:
+        print("{:>5}  {:<20} la vista revienta: {}".format(pk, nombre_de(pk), exc))
         fallos += 1
         if fallos >= 3:
             print("")
-            print("Tres fallos seguidos: no sigo pidiendo las 27 estaciones.")
+            print("Tres fallos seguidos: no sigo.")
             break
         continue
 
-    d = json.loads(r.content.decode("utf-8"))
+    if not d or codigo != 200:
+        print("{:>5}  {:<20} la vista responde {}: {}".format(
+            pk, nombre_de(pk), codigo, str(d)[:120]))
+        fallos += 1
+        if fallos >= 3:
+            print("")
+            print("Tres fallos seguidos: no sigo.")
+            break
+        continue
+
     minutos = d.get("rain_window_minutes") or VENTANA_POR_DEFECTO
     api_ult = d.get("rain_window_mm")
     api_pico = d.get("rain_window_peak_mm")
@@ -196,28 +199,26 @@ for pk in estaciones:
 
     bd_ult, bd_pico, filas = ventana_desde_base(pk, minutos)
 
-    try:
-        nombre = str(getattr(Equipo.objects.get(pk=pk), "nombre", pk))[:20]
-    except Exception:
-        nombre = str(pk)
-
     if api_pico is None:
         veredicto = "SIN CAMPO: el servidor no tiene el parche"
         fallos += 1
     elif bd_pico is None:
-        veredicto = "sin filas"
-    elif abs(float(api_pico) - bd_pico) > 0.011 or abs(float(api_ult) - bd_ult) > 0.011:
-        veredicto = "NO COINCIDE"
+        veredicto = "sin filas en la base"
+    elif (abs(float(api_pico) - bd_pico) > 0.011
+          or abs(float(api_ult) - bd_ult) > 0.011):
+        veredicto = "NO COINCIDE (base: ult {:.2f})".format(bd_ult)
         fallos += 1
     else:
         veredicto = "coincide"
+        comprobadas += 1
+
     if modo == "downsampled":
         recortadas += 1
         veredicto += "  <- recortada 1 de cada {}".format(
             max(1, int(round(float(filas) / max(1, puntos)))))
 
-    print("{:>5}  {:<20} {:>7,} {:>7,} {:<12} {:>9} {:>9}  {}".format(
-        pk, nombre, filas, puntos, str(modo),
+    print("{:>5}  {:<20} {:>7,} {:>7,} {:<12} {:>8} {:>8}  {}".format(
+        pk, nombre_de(pk), filas, puntos, str(modo),
         "--" if api_pico is None else "{:.2f}".format(float(api_pico)),
         "--" if bd_pico is None else "{:.2f}".format(bd_pico),
         veredicto))
@@ -227,14 +228,18 @@ print(RAYA)
 if fallos:
     print("HAY {} ESTACION(ES) QUE NO CUADRAN. No sigas con la app hasta verlo.".format(fallos))
 else:
-    print("Todas coinciden con la base.")
+    print("Las {} estaciones coinciden con la base.".format(comprobadas))
     if recortadas:
-        print("Y {} venian RECORTADAS: ahi esta la prueba de que el numero se".format(recortadas))
-        print("calcula antes del recorte. Un cliente que sumara el array 'data'")
-        print("de esas estaciones obtendria una fraccion de la lluvia real.")
+        print("")
+        print("Y {} venian RECORTADAS. Ahi esta la prueba: el cliente recibe una".format(recortadas))
+        print("fraccion de los puntos y el numero sigue siendo el correcto, porque")
+        print("se calcula antes del recorte. Un cliente que sumara el array 'data'")
+        print("de esas estaciones veria mucha menos lluvia de la que cayo.")
     else:
-        print("Hoy ninguna estacion supera el limite de puntos, asi que el recorte")
-        print("no se ha ejercitado. Vuelve a correrlo un dia con mas lecturas.")
+        print("")
+        print("Hoy ninguna supera el limite de puntos, asi que el recorte no se ha")
+        print("ejercitado: esto confirma la cuenta, pero no la parte que motivo el")
+        print("cambio. Vuelve a correrlo un dia con mas lecturas.")
 print("")
 print("Listo. Nada se modifico.")
 sys.exit(1 if fallos else 0)
