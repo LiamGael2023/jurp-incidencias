@@ -86,10 +86,16 @@ except Exception as exc:
     sys.exit(1)
 
 
+# Los limites del dia, por rango y no con collect_time__date: ese lookup no
+# existe en la version de Django de este servidor y revienta con
+# "Unsupported lookup 'date'".
+INI = timezone.make_aware(datetime.datetime.combine(hoy, datetime.time.min))
+FIN = timezone.make_aware(datetime.datetime.combine(hoy, datetime.time.max))
+
+
 def ventana_desde_base(pk, minutos):
     """La verdad: misma cuenta, pero sobre TODAS las filas de la base."""
-    ini = timezone.make_aware(datetime.datetime.combine(hoy, datetime.time.min))
-    fin = timezone.make_aware(datetime.datetime.combine(hoy, datetime.time.max))
+    ini, fin = INI, FIN
     filas = list(RawDavis.objects
                  .filter(station=pk, collect_time__range=(ini, fin))
                  .order_by("collect_time")
@@ -130,7 +136,7 @@ def ventana_desde_base(pk, minutos):
 cliente = Client(SERVER_NAME=HOST)
 
 estaciones = sorted(set(RawDavis.objects
-                        .filter(collect_time__date=hoy)
+                        .filter(collect_time__range=(INI, FIN))
                         .values_list("station", flat=True).distinct()))
 if not estaciones:
     print("Ninguna estacion tiene lecturas hoy; nada que comprobar.")
