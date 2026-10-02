@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# pruebas: paquete que se compila al vuelo
+pruebas/lamina/.build/

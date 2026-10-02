@@ -414,15 +414,27 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
 
   const rangoTramo = useMemo(() => extremos(delTramo), [delTramo]);
 
-  // Al cambiar de nivel se proponen sus extremos; el usuario recorta desde ahí.
-  // La firma depende de los valores elegidos, no del recálculo: si no, pisaría
-  // lo que el usuario acaba de escribir en las progresivas.
+  /**
+   * Las progresivas se proponen solas, y dejan de proponerse en cuanto el
+   * usuario escribe.
+   *
+   * Hay que distinguir dos cosas que parecen una: proponer un rango nuevo
+   * —al entrar, cuando por fin llegan los datos, y al cambiar de nivel— y no
+   * pisar lo que el usuario acaba de teclear. Colgar el efecto solo de los
+   * filtros resolvía lo segundo y rompía lo primero: al montar la pantalla no
+   * hay datos todavía, el efecto corría una vez en vacío y los campos se
+   * quedaban en blanco para siempre. Con los campos vacíos la selección es el
+   * canal entero, que es justo lo que no cabe en una lámina.
+   */
+  const tocado = useRef(false);
   const firmaFiltros = JSON.stringify(filtros);
+  useEffect(() => { tocado.current = false; }, [firmaFiltros]);
   useEffect(() => {
-    if (!rangoTramo || rangoTramo.progMin == null) { setDesde(''); setHasta(''); return; }
+    if (tocado.current) return;
+    if (!rangoTramo || rangoTramo.progMin == null) return;
     setDesde(metrosAProg(rangoTramo.progMin));
     setHasta(metrosAProg(rangoTramo.progMax));
-  }, [firmaFiltros]);
+  }, [firmaFiltros, rangoTramo?.progMin, rangoTramo?.progMax]);
 
   const seleccion = useMemo(() => {
     const a = progAMetros(desde), b = progAMetros(hasta);
@@ -477,9 +489,46 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
   const lamina = numeroLamina({ anio: new Date().getFullYear(), subSector, correlativo });
 
   // Las capas encendidas, en el orden del catálogo, para la leyenda.
+  /**
+   * Cajas envolventes de cada rasgo, por capa.
+   *
+   * Se calculan una vez por descarga y no en cada movimiento: recorrer los
+   * vértices de los lotes y las vías cada vez que cambia el encuadre cuesta
+   * bastante más que comparar cuatro números.
+   */
+  const cajasPorCapa = useMemo(() => {
+    const m = {};
+    for (const capa of TODAS_LAS_CAPAS) {
+      const fc = inv.datosDe(capa.codigo);
+      if (!fc?.features?.length) continue;
+      m[capa.codigo] = fc.features.map(f => cajaDe(f.geometry)).filter(Boolean);
+    }
+    return m;
+  }, [inv.datos]);
+
+  const asomaEnLamina = useCallback((codigo) => {
+    const cajas = cajasPorCapa[codigo];
+    if (!cajas?.length || !limites) return false;
+    return cajas.some(c => c.este >= limites.oeste && c.oeste <= limites.este
+      && c.norte >= limites.sur && c.sur <= limites.norte);
+  }, [cajasPorCapa, limites]);
+
+  /**
+   * La leyenda describe la lámina, no el panel de capas.
+   *
+   * Antes listaba todo lo que estuviera encendido: treinta y siete entradas
+   * para un encuadre donde se ven cinco tipos de estructura, y la última ni
+   * siquiera cabía en el recuadro. Una leyenda que nombra cosas que no están
+   * dibujadas es peor que no tenerla, porque quien lee el plano las busca.
+   *
+   * Para líneas y polígonos se compara la caja envolvente de cada rasgo, así
+   * que un trazado muy diagonal puede colarse aunque solo su caja toque el
+   * encuadre. Es el error que conviene tener: de más en la leyenda, nunca de
+   * menos.
+   */
   const leyenda = useMemo(() => GRUPOS_CAPAS
-    .map(g => ({ titulo: g.titulo, capas: g.capas.filter(c => inv.visibles[c.codigo]) }))
-    .filter(g => g.capas.length), [inv.visibles]);
+    .map(g => ({ titulo: g.titulo, capas: g.capas.filter(c => inv.visibles[c.codigo] && asomaEnLamina(c.codigo)) }))
+    .filter(g => g.capas.length), [inv.visibles, asomaEnLamina]);
 
   // ── Exportar ────────────────────────────────────────────────────────────
   /**
@@ -612,10 +661,12 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
 
           <div className="lam-par">
             <label>Desde (progresiva)
-              <input value={desde} onChange={e => setDesde(e.target.value)} placeholder="43+750" />
+              <input value={desde} placeholder="43+750"
+                onChange={e => { tocado.current = true; setDesde(e.target.value); }} />
             </label>
             <label>Hasta
-              <input value={hasta} onChange={e => setHasta(e.target.value)} placeholder="50+790" />
+              <input value={hasta} placeholder="50+790"
+                onChange={e => { tocado.current = true; setHasta(e.target.value); }} />
             </label>
           </div>
 
@@ -762,7 +813,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               <div className="lam-caja-tit">LEYENDA</div>
               <div className="lam-leyenda-cols">
                 {leyenda.length === 0
-                  ? <div className="lam-vacio">Sin capas encendidas</div>
+                  ? <div className="lam-vacio">Nada dibujado en este encuadre</div>
                   : leyenda.map(g => (
                     <div key={g.titulo} className="lam-leyenda-grupo">
                       <div className="lam-leyenda-sub">{g.titulo}</div>
