@@ -130,6 +130,7 @@ console.log('\n═══ Kilometraje, rótulos y rosa de los vientos ═══')
     : c === 'canal_madre' ? CANAL
     : /canal|subalaterales|redes|vias|lotes|areas|red_nacional|camino|via_/.test(c)
       ? { type: 'FeatureCollection', features: [] } : sobreCanal(c);
+  // El canal madre va con weight 4 en el catálogo de capas; impreso, x1.6.
 
   const { nav, pag } = await abrir({ dir, capaDe });
   await pag.waitForTimeout(6000);
@@ -156,6 +157,31 @@ console.log('\n═══ Kilometraje, rótulos y rosa de los vientos ═══')
     r.etiquetas.slice(0, 5).join(', '));
   ok('la rosa de los vientos está, con sus cuatro cardinales',
     r.rosa && ['N', 'E', 'S', 'O'].every(l => r.letras.includes(l)), r.letras);
+
+  // ── Trazos para papel ──
+  // En pantalla el sector lleva borde de 1.2 y relleno al 8 %: impreso a A1
+  // sobre satélite, eso desaparece, y con él el límite del sector.
+  const trazos = await pag.evaluate(() => {
+    const paths = [...document.querySelectorAll('.lam-mapa .leaflet-overlay-pane path')];
+    const leer = (p) => ({
+      w: Number(p.getAttribute('stroke-width')),
+      relleno: Number(p.getAttribute('fill-opacity')),
+      color: p.getAttribute('stroke'),
+    });
+    return {
+      n: paths.length,
+      canal: paths.map(leer).find(x => x.color === '#1c7ed6' && x.relleno === 0),
+      sector: paths.map(leer).find(x => x.relleno > 0),
+      sectorEtiqueta: [...document.querySelectorAll('.lam-sector')].map(e => e.textContent),
+    };
+  });
+  ok('el canal se dibuja con trazo de impresión', trazos.canal && trazos.canal.w > 5,
+    trazos.canal ? `${trazos.canal.w} px (4 en pantalla)` : 'no se encontró el canal');
+  ok('el sector tiene borde y relleno visibles',
+    trazos.sector && trazos.sector.w >= 2 && trazos.sector.relleno >= 0.1,
+    trazos.sector ? `borde ${trazos.sector.w}, relleno ${trazos.sector.relleno}` : 'no se encontró el sector');
+  ok('y su nombre va escrito encima', trazos.sectorEtiqueta.length > 0,
+    trazos.sectorEtiqueta.join(' | ') || '(ninguno)');
   await nav.close();
 }
 

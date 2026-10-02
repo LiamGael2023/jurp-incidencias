@@ -346,6 +346,24 @@ function MarcasProgresiva({ marcas }) {
   ));
 }
 
+/**
+ * El nombre del sector, escrito sobre su polígono.
+ *
+ * Un sector de riego es más grande que la lámina, así que su contorno casi
+ * nunca entra en el encuadre: lo único que queda de él es un tinte, y un tinte
+ * no dice de qué sector se trata. En las láminas del Proyecto el nombre va
+ * escrito encima, y es lo que permite ubicarse. Se coloca en el centro de la
+ * parte visible, no en el del polígono, que puede caer a kilómetros de aquí.
+ */
+function EtiquetasSector({ sectores }) {
+  if (!sectores?.length) return null;
+  return sectores.map(s => (
+    <Marker key={`sec-${s.nombre}`} position={s.pos} interactive={false}
+      icon={L.divIcon({ className: 'lam-sector-icono',
+        html: `<span class="lam-sector">${s.nombre}</span>`, iconSize: null })} />
+  ));
+}
+
 /** Mapa de localización: la región con el recuadro de lo que cubre la lámina. */
 function Localizacion({ limites }) {
   if (!limites) return <div className="lam-loc-vacio">—</div>;
@@ -679,6 +697,30 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
     });
   }, [limites, descargando, inv.visibles, inv.datos, estructura]);
 
+  /** Los sectores que asoman en el encuadre, con dónde escribir su nombre. */
+  const etiquetasSector = useMemo(() => {
+    if (!limites || descargando) return [];
+    const fc = inv.datosDe(CAPA_SECTORES);
+    if (!fc?.features?.length || !inv.visibles[CAPA_SECTORES]) return [];
+    const salida = [];
+    for (const f of fc.features) {
+      const nombre = valorDe(f.properties, /^(sector|nombre)$/i);
+      const caja = cajaDe(f.geometry);
+      if (!nombre || !caja) continue;
+      // Centro de lo que se ve de él, recortando su caja contra la lámina.
+      const sur = Math.max(caja.sur, limites.sur), norte = Math.min(caja.norte, limites.norte);
+      const oeste = Math.max(caja.oeste, limites.oeste), este = Math.min(caja.este, limites.este);
+      if (sur >= norte || oeste >= este) continue;
+      const centro = [(sur + norte) / 2, (oeste + este) / 2];
+      // Que el centro de lo visible caiga DENTRO del polígono: si el sector
+      // entra por una esquina, su centro visible puede quedar fuera y el
+      // nombre acabaría sobre el sector de al lado.
+      if (!puntoEnGeometria([centro[1], centro[0]], f.geometry)) continue;
+      salida.push({ nombre, pos: centro });
+    }
+    return salida;
+  }, [limites, descargando, inv.datos, inv.visibles]);
+
   // ── Exportar ────────────────────────────────────────────────────────────
   /**
    * La lámina a lienzo.
@@ -930,8 +972,9 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               style={{ height: '100%', width: '100%' }} ref={mapRef}>
               <TeselasBase base={base} />
               {!descargando && <CapasInventario inv={inv} racimo={false} limites={limites}
-                etiquetas="nombre" />}
+                etiquetas="nombre" impresion />}
               <MarcasProgresiva marcas={marcasPK} />
+              <EtiquetasSector sectores={etiquetasSector} />
               <EncuadreFijo centro={centro} zoom={zoom} onMover={alMover} />
               <CuadriculaUTM version={version} />
             </MapContainer>

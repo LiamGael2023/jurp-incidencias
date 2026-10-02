@@ -254,3 +254,16 @@
 /* La rosa de los vientos: grande y sin caja, como en el Anexo V. */
 .lam-norte { position: absolute; left: 14px; top: 14px; z-index: 500; }
 .lam-rosa { display: block; }
+
+/* El nombre del sector: grande, espaciado y tenue, como un rótulo de zona.
+   No compite con los nombres de las estructuras porque no está en su escala. */
+.lam-sector-icono { background: none; border: none; }
+.lam-sector {
+  display: inline-block; white-space: nowrap;
+  transform: translate(-50%, -50%);
+  font-size: 13px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: #1f2937;
+  text-shadow:
+     1px 0 3px #fff, -1px 0 3px #fff, 0 1px 3px #fff, 0 -1px 3px #fff,
+     2px 2px 4px #fff, -2px -2px 4px #fff;
+}

@@ -677,7 +677,7 @@ export function useInventario() {
 /* ══════════════════════════════════════════════════════════
    Capas sobre el mapa — va DENTRO del <MapContainer>
    ══════════════════════════════════════════════════════════ */
-export function CapasInventario({ inv, racimo = null, limites = null, etiquetas = null }) {
+export function CapasInventario({ inv, racimo = null, limites = null, etiquetas = null, impresion = false }) {
   /**
    * `etiquetas` fuerza el rótulo de cada activo sin esperar al zoom. En el
    * visor las etiquetas aparecen solo de cerca, porque con dos mil seiscientos
@@ -817,19 +817,39 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
               style={(f) => {
                 // Las obras del PECH van más tenues: son contexto.
                 const esPech = (f?.properties?.ambito) === 'PECH';
+                /*
+                 * El papel no perdona lo que la pantalla sí.
+                 *
+                 * En un monitor, un polígono con 4 % de relleno y un borde de
+                 * 1.2 px se ve: la pantalla ilumina y el ojo lo encuentra. Al
+                 * imprimirlo a A1 sobre imagen satelital, ese mismo polígono
+                 * desaparece —y con él el límite del sector, que es media
+                 * razón de ser de la lámina—. Lo mismo con las líneas de
+                 * contexto, que al 50 % y punteadas se confunden con un camino
+                 * de la foto.
+                 *
+                 * Así que para imprimir se sube el trazo y se le da borde
+                 * franco a las áreas, sin llegar a tapar la imagen: el relleno
+                 * sigue siendo tenue, lo que manda es el contorno.
+                 */
+                const grueso = impresion ? 1.6 : 1;
                 return {
                   color: capa.color,
                   // El grosor es la otra mitad de la jerarquía: el troncal
                   // pesa, las ramas adelgazan. Sin esto, cuatro pasos de
                   // azul no se distinguen de un vistazo.
-                  weight: capa.tipo === 'line' ? (capa.weight || 3) : 1.2,
-                  opacity: esPech ? 0.5 : 0.95,
+                  weight: capa.tipo === 'line'
+                    ? (capa.weight || 3) * grueso
+                    : (impresion ? 2.2 : 1.2),
+                  opacity: esPech ? (impresion ? 0.8 : 0.5) : 0.95,
                   dashArray: esPech ? '6 4' : (capa.dash || null),
                   fillColor: capa.color,
                   // Las áreas van casi sin relleno: son el suelo sobre el que
                   // se leen los canales, no la información principal. Con
                   // relleno fuerte tapaban la imagen satelital entera.
-                  fillOpacity: capa.tipo === 'poly' ? (esPech ? 0.04 : 0.08) : 0,
+                  fillOpacity: capa.tipo === 'poly'
+                    ? (impresion ? (esPech ? 0.10 : 0.16) : (esPech ? 0.04 : 0.08))
+                    : 0,
                 };
               }}
               onEachFeature={(f, layer) => {
