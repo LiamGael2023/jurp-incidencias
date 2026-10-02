@@ -195,8 +195,18 @@ print(RAYA)
 print("DADOS DE ALTA QUE NUNCA HAN TRANSMITIDO")
 print(RAYA)
 con_datos = set(r[ce] for r in filas)
+# Solo los que son de lluvia. La relación 'station' apunta a la tabla de
+# equipos entera —medidores de caudal incluidos—, y sin filtrar salían
+# cientos de medidores como si fueran pluviómetros sin transmitir.
+TIPOS_LLUVIA = ("pluviometro", "estacion_davis", "davis")
 try:
-    nunca = [o for o in rel.objects.all() if o.pk not in con_datos]
+    todos = rel.objects.all()
+    campo_tipo = next((f.name for f in rel._meta.get_fields()
+                       if getattr(f, "attname", None) in ("device_type", "tipo", "tipo_equipo")), None)
+    if campo_tipo:
+        todos = [o for o in todos if str(getattr(o, campo_tipo, "")).lower() in TIPOS_LLUVIA]
+        print("  (filtrado por {} : solo pluviometros y estaciones Davis)".format(campo_tipo))
+    nunca = [o for o in todos if o.pk not in con_datos]
     if nunca:
         for o in nunca:
             lat, lng = ubic.get(o.pk, (None, None))
