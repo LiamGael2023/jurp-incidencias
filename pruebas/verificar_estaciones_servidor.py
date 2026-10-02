@@ -1,9 +1,16 @@
+# -*- coding: utf-8 -*-
 """
 Qué estación transmite de verdad, preguntándoselo a la base.
 
-    docker compose exec web python manage.py shell < verificar_estaciones_servidor.py
+    docker compose exec -T <servicio> python - < verificar_estaciones_servidor.py
 
-(o `python manage.py shell < ...` si corre fuera de contenedor)
+OJO con la forma de ejecutarlo. NO va con `manage.py shell < archivo`: eso lo
+mete en una consola interactiva, donde una línea en blanco dentro de un bloque
+lo da por terminado y salta IndentationError. `python -` lo ejecuta como lo
+que es, un script, y por eso arranca Django él mismo.
+
+Tampoco lleva f-strings: el backend de JURP corre sobre Python 3.5, que es
+anterior a ellas.
 
 POR QUÉ AQUÍ Y NO EN LA APP. El navegador solo sabe una cosa: que
 filtered-data no devolvió lecturas de hoy. Eso no distingue tres casos muy
@@ -15,27 +22,60 @@ fila, el equipo transmitió.
 No modifica nada: solo lee.
 """
 
+from __future__ import print_function, unicode_literals
+
+import os
+import sys
 import datetime
-from django.apps import apps
-from django.db import models as djm
-from django.utils import timezone
-from django.conf import settings
 
+# ── Arranque de Django ─────────────────────────────────────────────────────
+if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+    for intento in ("config.settings", "core.settings", "jurp.settings",
+                    "settings", "src.config.settings"):
+        os.environ["DJANGO_SETTINGS_MODULE"] = intento
+        try:
+            import django
+            django.setup()
+            break
+        except Exception:
+            continue
+    else:
+        print("No se pudo arrancar Django. Dime cuál es el módulo de settings.")
+        sys.exit(1)
+else:
+    import django
+    django.setup()
+
+from django.apps import apps                     # noqa: E402
+from django.db import models as djm              # noqa: E402
+from django.utils import timezone                # noqa: E402
+from django.conf import settings                 # noqa: E402
+
+PERU = datetime.timezone(datetime.timedelta(hours=-5))
 AHORA = timezone.now()
+RAYA = "=" * 78
 
-print("=" * 78)
+
+def hora_peru(d):
+    if timezone.is_naive(d):
+        d = timezone.make_aware(d)
+    return d.astimezone(PERU).strftime("%Y-%m-%d %H:%M")
+
+
+print(RAYA)
 print("HUSO HORARIO DEL SERVIDOR")
-print("=" * 78)
-print(f"  TIME_ZONE = {settings.TIME_ZONE}    USE_TZ = {settings.USE_TZ}")
-print(f"  ahora (UTC)  {AHORA.astimezone(datetime.timezone.utc):%Y-%m-%d %H:%M}")
-print(f"  ahora (Perú) {AHORA.astimezone(datetime.timezone(datetime.timedelta(hours=-5))):%Y-%m-%d %H:%M}")
-print("  Si las dos fechas CAEN EN DÍAS DISTINTOS, una lectura de la noche puede")
-print("  quedar en el día de al lado y el mapa la daría por 'sin datos'.\n")
+print(RAYA)
+print("  TIME_ZONE = {}    USE_TZ = {}".format(settings.TIME_ZONE, settings.USE_TZ))
+print("  ahora (UTC)  {}".format(AHORA.astimezone(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")))
+print("  ahora (Peru) {}".format(AHORA.astimezone(PERU).strftime("%Y-%m-%d %H:%M")))
+print("  Si las dos fechas CAEN EN DIAS DISTINTOS, una lectura de la noche puede")
+print("  quedar en el dia de al lado y el mapa la daria por 'sin datos'.")
+print("")
 
 
 def campo_fecha(modelo):
-    """El campo de fecha más probable de un modelo de lecturas."""
-    preferidos = ("timestamp", "fecha", "date_time", "datetime", "created_at", "fecha_hora")
+    preferidos = ("timestamp", "fecha", "date_time", "datetime", "created_at",
+                  "fecha_hora", "time", "recorded_at", "dateutc")
     fechas = [f.name for f in modelo._meta.get_fields()
               if isinstance(f, (djm.DateTimeField, djm.DateField))]
     for p in preferidos:
@@ -45,131 +85,149 @@ def campo_fecha(modelo):
 
 
 def campo_estacion(modelo):
-    """La relación que apunta al equipo."""
-    claves = ("station", "device", "estacion", "equipo", "gauge", "sensor")
-    for f in modelo._meta.get_fields():
-        if isinstance(f, djm.ForeignKey) and any(c in f.name.lower() for c in claves):
+    claves = ("station", "device", "estacion", "equipo", "gauge", "sensor", "pluvi")
+    fks = [f for f in modelo._meta.get_fields() if isinstance(f, djm.ForeignKey)]
+    for f in fks:
+        if any(c in f.name.lower() for c in claves):
             return f.name
-    for f in modelo._meta.get_fields():
-        if isinstance(f, djm.ForeignKey):
-            return f.name
-    return None
+    return fks[0].name if fks else None
 
 
-print("=" * 78)
-print("MODELOS QUE PARECEN DE LECTURAS")
-print("=" * 78)
-candidatos = []
+# ── Inventario completo, por si la corazonada falla ────────────────────────
+SALTAR = {"admin", "auth", "contenttypes", "sessions", "authtoken", "sites"}
+inventario = []
 for modelo in apps.get_models():
-    nombre = modelo.__name__.lower()
-    etiqueta = modelo._meta.app_label.lower()
-    pinta = any(p in nombre for p in ("rain", "lluvia", "reading", "lectura", "measure",
-                                      "medicion", "data", "dato", "archive", "precip"))
-    pinta = pinta or any(p in etiqueta for p in ("davis", "lluvia", "rain", "pluvi"))
-    if not pinta:
-        continue
-    f = campo_fecha(modelo)
-    e = campo_estacion(modelo)
-    if not f:
+    if modelo._meta.app_label in SALTAR:
         continue
     try:
         n = modelo.objects.count()
-    except Exception as ex:
-        print(f"  {etiqueta}.{modelo.__name__}: no se pudo contar ({ex})")
+    except Exception:
+        n = -1
+    inventario.append((n, modelo))
+inventario.sort(key=lambda x: x[0], reverse=True)
+
+print(RAYA)
+print("LOS 15 MODELOS CON MAS FILAS")
+print(RAYA)
+for n, modelo in inventario[:15]:
+    print("  {:>12,}  {}.{}   fecha={} equipo={}".format(
+        n, modelo._meta.app_label, modelo.__name__,
+        campo_fecha(modelo), campo_estacion(modelo)))
+print("")
+
+# ── El modelo de lecturas ──────────────────────────────────────────────────
+PINTA_MODELO = ("rain", "lluvia", "reading", "lectura", "measure", "medicion",
+                "data", "dato", "archive", "precip", "weather", "clima", "obs")
+PINTA_APP = ("davis", "lluvia", "rain", "pluvi", "weather", "clima", "estacion")
+
+candidatos = []
+for n, modelo in inventario:
+    if n <= 0:
         continue
-    print(f"  {etiqueta}.{modelo.__name__}: {n:,} filas · fecha='{f}' · equipo='{e}'")
-    if n and e:
+    nombre, etiqueta = modelo.__name__.lower(), modelo._meta.app_label.lower()
+    if not (any(p in nombre for p in PINTA_MODELO) or any(p in etiqueta for p in PINTA_APP)):
+        continue
+    f, e = campo_fecha(modelo), campo_estacion(modelo)
+    if f and e:
         candidatos.append((modelo, f, e, n))
 
+print(RAYA)
+print("MODELOS QUE PARECEN DE LECTURAS")
+print(RAYA)
+for modelo, f, e, n in candidatos:
+    print("  {}.{}: {:,} filas - fecha='{}' equipo='{}'".format(
+        modelo._meta.app_label, modelo.__name__, n, f, e))
 if not candidatos:
-    print("\n  Ninguno. Pásame los modelos de la app de Davis y lo ajusto.")
-    raise SystemExit
+    print("  Ninguno. Mira la lista de arriba y dime cual es el de lecturas.")
+    sys.exit(0)
 
-# El de más filas es el de las lecturas; los demás suelen ser alertas o resúmenes.
-modelo, cf, ce, _ = max(candidatos, key=lambda x: x[3])
-print(f"\n  → Se usa {modelo._meta.app_label}.{modelo.__name__} "
-      f"(fecha '{cf}', equipo '{ce}')")
+modelo, cf, ce, _ = candidatos[0]          # el de mas filas
+print("")
+print("  -> Se usa {}.{} (fecha '{}', equipo '{}')".format(
+    modelo._meta.app_label, modelo.__name__, cf, ce))
 
-print("\n" + "=" * 78)
-print("ÚLTIMA LECTURA POR ESTACIÓN")
-print("=" * 78)
+# ── Última lectura por estación ────────────────────────────────────────────
+print("")
+print(RAYA)
+print("ULTIMA LECTURA POR ESTACION")
+print(RAYA)
 
-ultimos = (modelo.objects
-           .values(ce)
+resumen = (modelo.objects.values(ce)
            .annotate(ultima=djm.Max(cf), n=djm.Count("id"))
            .order_by("ultima"))
+filas = list(resumen)
 
-# Nombre del equipo, si se puede resolver.
 rel = modelo._meta.get_field(ce).related_model
-nombres = {}
+nombres, ubic = {}, {}
 try:
     for obj in rel.objects.all():
-        etq = (getattr(obj, "nombre", None) or getattr(obj, "name", None)
-               or getattr(obj, "station_name", None) or str(obj))
-        nombres[obj.pk] = etq
-except Exception:
-    pass
+        nombres[obj.pk] = (getattr(obj, "nombre", None) or getattr(obj, "name", None)
+                           or getattr(obj, "station_name", None) or str(obj))
+        lat = getattr(obj, "latitude", None) or getattr(obj, "latitud", None)
+        lng = getattr(obj, "longitude", None) or getattr(obj, "longitud", None)
+        ubic[obj.pk] = (lat, lng)
+except Exception as ex:
+    print("  (no se pudieron leer los nombres: {})".format(ex))
 
-filas = list(ultimos)
-print(f"{'ID':>6}  {'ESTACIÓN':<28} {'ÚLTIMA LECTURA':<20} {'CALLADA':>9}  LECTURAS")
+print("{:>6}  {:<28} {:<18} {:>9}  {}".format("ID", "ESTACION", "ULTIMA (Peru)", "CALLADA", "LECTURAS"))
 print("-" * 78)
 callados = []
 for r in filas:
-    pk = r[ce]
-    ult = r["ultima"]
+    pk, ult = r[ce], r["ultima"]
     if ult is None:
         continue
     if isinstance(ult, datetime.datetime):
-        if timezone.is_naive(ult):
-            ult = timezone.make_aware(ult)
-        dias = (AHORA - ult).days
-        texto = f"{ult.astimezone(datetime.timezone(datetime.timedelta(hours=-5))):%Y-%m-%d %H:%M}"
+        texto = hora_peru(ult)
+        dias = (AHORA - (ult if timezone.is_aware(ult) else timezone.make_aware(ult))).days
     else:
-        dias = (AHORA.date() - ult).days
-        texto = str(ult)
-    marca = "  " if dias < 1 else ("· " if dias < 2 else "! ")
-    print(f"{marca}{pk:>4}  {str(nombres.get(pk, '?'))[:28]:<28} {texto:<20} {dias:>6} d  {r['n']:>8,}")
+        texto, dias = str(ult), (AHORA.date() - ult).days
+    marca = "  " if dias < 1 else ("- " if dias < 2 else "! ")
+    print("{}{:>4}  {:<28} {:<18} {:>6} d  {:>8,}".format(
+        marca, pk, str(nombres.get(pk, "?"))[:28], texto, dias, r["n"]))
     if dias >= 2:
         callados.append((pk, nombres.get(pk, "?"), texto, dias))
+print("")
+print("  (hora de Peru; '!' = dos dias o mas sin mandar)")
 
-print("\n  (hora de Perú; '!' = lleva dos días o más sin mandar)")
-
-# ── Equipos dados de alta que NUNCA han mandado nada ──────────────────────
-print("\n" + "=" * 78)
+# ── Dados de alta que nunca han transmitido ────────────────────────────────
+print("")
+print(RAYA)
 print("DADOS DE ALTA QUE NUNCA HAN TRANSMITIDO")
-print("=" * 78)
-con_datos = {r[ce] for r in filas}
+print(RAYA)
+con_datos = set(r[ce] for r in filas)
 try:
     nunca = [o for o in rel.objects.all() if o.pk not in con_datos]
     if nunca:
         for o in nunca:
-            lat = getattr(o, "latitude", None)
-            lng = getattr(o, "longitude", None)
-            ubic = ""
+            lat, lng = ubic.get(o.pk, (None, None))
+            extra = ""
             if lat in (None, 0) or lng in (None, 0):
-                ubic = "   ← además sin ubicar (0,0): el mapa no lo dibuja"
-            print(f"  {o.pk:>4}  {nombres.get(o.pk, '?')}{ubic}")
+                extra = "   <- ademas sin ubicar (0,0): el mapa no lo dibuja"
+            print("  {:>4}  {}{}".format(o.pk, nombres.get(o.pk, "?"), extra))
     else:
         print("  Ninguno: todos los equipos registrados tienen al menos una lectura.")
 except Exception as ex:
-    print(f"  No se pudo comprobar ({ex})")
+    print("  No se pudo comprobar ({})".format(ex))
 
-# ── Lo que el mapa pediría HOY ────────────────────────────────────────────
-print("\n" + "=" * 78)
-print("LO QUE EL MAPA VERÍA HOY")
-print("=" * 78)
-hoy_peru = AHORA.astimezone(datetime.timezone(datetime.timedelta(hours=-5))).date()
+# ── Lo que el mapa pediría hoy ─────────────────────────────────────────────
+print("")
+print(RAYA)
+print("LO QUE EL MAPA VERIA HOY")
+print(RAYA)
+hoy_peru = AHORA.astimezone(PERU).date()
 ini = datetime.datetime.combine(hoy_peru, datetime.time.min)
 fin = datetime.datetime.combine(hoy_peru, datetime.time.max)
 if settings.USE_TZ:
     ini, fin = timezone.make_aware(ini), timezone.make_aware(fin)
-hoy = (modelo.objects.filter(**{f"{cf}__range": (ini, fin)})
-       .values(ce).annotate(n=djm.Count("id")))
-mapa = {r[ce]: r["n"] for r in hoy}
-print(f"  Día consultado (hora de Perú): {hoy_peru}")
-print(f"  Estaciones con lecturas hoy: {len(mapa)} de {len(con_datos)} que alguna vez mandaron")
+hoy = modelo.objects.filter(**{cf + "__range": (ini, fin)}).values(ce).annotate(n=djm.Count("id"))
+mapa = dict((r[ce], r["n"]) for r in hoy)
+print("  Dia consultado (hora de Peru): {}".format(hoy_peru))
+print("  Estaciones con lecturas hoy: {} de {} que alguna vez mandaron".format(
+    len(mapa), len(con_datos)))
 for pk, nom, texto, dias in callados[:20]:
     if pk in mapa:
-        print(f"  ¡OJO! {nom} tiene {mapa[pk]} lecturas hoy pero su última figura "
-              f"hace {dias} días: hay un problema de fechas, no del equipo.")
-print("\nListo. Nada se modificó.")
+        print("  OJO: {} tiene {} lecturas hoy pero su ultima figura hace {} dias:".format(
+            nom, mapa[pk], dias))
+        print("       es un problema de fechas, no del equipo.")
+print("")
+print("Listo. Nada se modifico.")
