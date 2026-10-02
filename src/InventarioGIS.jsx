@@ -677,7 +677,24 @@ export function useInventario() {
 /* ══════════════════════════════════════════════════════════
    Capas sobre el mapa — va DENTRO del <MapContainer>
    ══════════════════════════════════════════════════════════ */
-export function CapasInventario({ inv, racimo = null }) {
+export function CapasInventario({ inv, racimo = null, limites = null }) {
+  /**
+   * `limites` recorta a lo que se ve. Sin recortar, el inventario entero son
+   * más de tres mil marcadores y dibujarlos de una vez bloquea el navegador
+   * medio segundo largo, aunque la mayoría caigan fuera de la pantalla. La
+   * lámina temática lo usa porque su encuadre cubre ocho kilómetros y el
+   * resto del valle no se ve.
+   *
+   * Lleva holgura a propósito: al desplazar el mapa, el recorte se recalcula
+   * después del movimiento, y sin margen se verían huecos mientras tanto.
+   */
+  const dentro = (lat, lng) => {
+    if (!limites) return true;
+    const hLat = (limites.norte - limites.sur) * 0.25;
+    const hLng = (limites.este - limites.oeste) * 0.25;
+    return lat >= limites.sur - hLat && lat <= limites.norte + hLat
+      && lng >= limites.oeste - hLng && lng <= limites.este + hLng;
+  };
   // `racimo` fuerza el agrupamiento para esta vista sin tocar la preferencia
   // del usuario: la lámina temática lo necesita apagado siempre —en el papel
   // saldrían burbujas con un número en vez de las estructuras— pero quien
@@ -849,6 +866,7 @@ export function CapasInventario({ inv, racimo = null }) {
           if (!c) return null;
           const [lng, lat] = Array.isArray(c[0]) ? c[0] : c;  // MultiPoint o Point
           if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+          if (!dentro(lat, lng)) return null;
 
           const p = f.properties || {};
           const ev = inv.evaluacionDe(capa.codigo, p.fid);

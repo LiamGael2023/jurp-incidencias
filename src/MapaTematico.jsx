@@ -354,17 +354,29 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
    * Nunca pasa de 1, porque ampliar una hoja de papel por encima de su tamaño
    * solo la vuelve borrosa.
    */
+  const zoomHoja = useRef(null);
   useEffect(() => {
     const caja = lienzoRef.current;
     if (!caja || typeof ResizeObserver === 'undefined') return;
+
     const ajustar = () => {
-      const disponible = caja.clientWidth - 48;      // el aire de .lam-lienzo
-      const z = Math.max(0.35, Math.min(1, disponible / mm(PAPEL.anchoMm)));
-      caja.style.setProperty('--lam-zoom', z.toFixed(3));
+      // Dos decimales y un margen de 56 px, no 48: el ajuste se mide a sí
+      // mismo. Si el zoom deja la hoja al borde justo del hueco, aparece la
+      // barra de desplazamiento, el hueco encoge, el zoom baja, la barra se
+      // va, el hueco crece… y el mapa tiembla. El margen evita rozar ese
+      // borde y el redondeo evita que un píxel de diferencia cuente como
+      // cambio.
+      const disponible = caja.clientWidth - 56;
+      const z = +Math.max(0.35, Math.min(1, disponible / mm(PAPEL.anchoMm))).toFixed(2);
+      if (z === zoomHoja.current) return;        // nada que hacer: se corta el bucle
+      zoomHoja.current = z;
+      caja.style.setProperty('--lam-zoom', String(z));
       // Leaflet mide su contenedor en píxeles de pantalla: si cambia el zoom
       // y no se le avisa, sigue dibujando teselas para el tamaño anterior.
-      mapRef.current?.invalidateSize();
+      // Va en el siguiente cuadro para que mida ya con el zoom aplicado.
+      requestAnimationFrame(() => mapRef.current?.invalidateSize({ animate: false }));
     };
+
     ajustar();
     const ro = new ResizeObserver(ajustar);
     ro.observe(caja);
@@ -429,7 +441,18 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
     return { anchoM, altoM, ...cabeEnLamina({ escala: ESCALA, anchoMm: MAPA_MM.ancho, altoMm: MAPA_MM.alto, anchoMetros: anchoM, altoMetros: altoM }) };
   }, [envolvente]);
 
-  const latCentro = envolvente ? (envolvente.norte + envolvente.sur) / 2 : -8.42;
+  /**
+   * La latitud con la que se calcula el zoom es la del encuadre dibujado, no
+   * la de la selección.
+   *
+   * Parece lo mismo y no lo es. La selección cambia sola mientras el
+   * inventario se descarga —cada capa que llega mueve un poco la envolvente—,
+   * y si el zoom cuelga de ahí, el mapa se reacomoda a cada rato: se ve como
+   * un temblor. El encuadre, en cambio, solo cambia cuando el usuario pulsa
+   * «Encuadrar», que es exactamente cuando la lámina debe moverse. Y es
+   * además la latitud correcta: la escala hay que calcularla donde se dibuja.
+   */
+  const latCentro = centro ? centro[0] : -8.42;
   const zoom = useMemo(() => zoomParaEscala({
     escala: ESCALA, lat: latCentro, anchoPx: mm(MAPA_MM.ancho), anchoMm: MAPA_MM.ancho,
   }), [latCentro]);
@@ -526,6 +549,21 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
 
   const sinTramos = !inv.iniciando && estructura.niveles.length === 0 && estructura.puntos.length > 0;
 
+  /**
+   * Hasta que el inventario termine de bajar no se dibujan los activos.
+   *
+   * En la lámina el racimo va apagado —en el papel saldrían burbujas con un
+   * número— y eso son más de tres mil marcadores sueltos. Cada capa que
+   * llega provoca un repintado de todos, y las treinta capas seguidas
+   * bloqueaban el hilo principal unos cinco segundos repartidos en ráfagas:
+   * desde fuera eso se ve como un temblor, no como una espera.
+   *
+   * Esperar a tenerlas todas convierte treinta repintados en uno. Mientras
+   * tanto se ve la cartografía base y un aviso, que es información honesta:
+   * la lámina todavía no está completa.
+   */
+  const descargando = inv.iniciando || Object.values(inv.cargando || {}).some(Boolean);
+
   return (
     <div className="lam">
       {RailGIS && <RailGIS menu={menu} vistaActual={vistaActual} onNavegar={onNavegar}
@@ -547,7 +585,11 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
             escala rotulada sea la de verdad.
           </p>
 
-          {inv.iniciando && <div className="lam-aviso">Cargando el inventario…</div>}
+          {descargando && (
+            <div className="lam-aviso">
+              Cargando el inventario… los activos aparecen en la lámina cuando estén todos.
+            </div>
+          )}
 
           {sinTramos && (
             <div className="lam-aviso lam-aviso-ojo">
@@ -696,7 +738,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               scrollWheelZoom={false} doubleClickZoom={false} touchZoom={false} boxZoom={false}
               style={{ height: '100%', width: '100%' }} ref={mapRef}>
               <TeselasBase base={base} />
-              <CapasInventario inv={inv} racimo={false} />
+              {!descargando && <CapasInventario inv={inv} racimo={false} limites={limites} />}
               <EncuadreFijo centro={centro} zoom={zoom} onMover={alMover} />
               <CuadriculaUTM version={version} />
             </MapContainer>
