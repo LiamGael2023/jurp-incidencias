@@ -27,8 +27,8 @@ import './MapaTematico.css';
  * se calcula a partir de la escala y queda bloqueado. Si se pudiera acercar,
  * la lámina diría 1:10 000 y no lo sería, que es peor que no rotular nada.
  *
- * EL ENCUADRE SALE DE LOS DATOS, no de dónde quedó la vista: sector, tramo y
- * el rango de progresivas. Así la misma lámina sale igual mañana y la de un
+ * EL ENCUADRE SALE DE LOS DATOS, no de dónde quedó la vista: el canal o tramo
+ * y el rango de progresivas. Así la misma lámina sale igual mañana y la del
  * tramo vecino encaja al lado.
  *
  * LA CAPA BASE ES OTRA. Los visores abren con Google porque es lo que la
@@ -73,9 +73,23 @@ const valorDe = (props, re) => {
   }
   return null;
 };
-const RE_TRAMO = /^tramo$/i;
 const RE_PROG = /^progresiva$/i;
-const RE_SECTOR = /(sub)?_?sector/i;
+
+/**
+ * Por qué se puede agrupar, en orden de lo general a lo particular.
+ *
+ * No está fijo a propósito. El Anexo V habla de sector y tramo, pero lo que
+ * el inventario sirve hoy es `nombre_canal` —los shapefiles originales sí
+ * traían TRAMO y la capa publicada no lo expone—. Antes que pedir que cambie
+ * la base para poder abrir la pantalla, se usa lo que haya: se miran los
+ * datos cargados y se arma un selector por cada campo que exista de verdad.
+ * El día que el backend publique `tramo`, aparece su selector sin tocar nada.
+ */
+const AGRUPACIONES = [
+  { clave: 'sector', re: /^(sub)?_?sector$/i, etiqueta: 'Sector' },
+  { clave: 'tramo', re: /^tramo$/i, etiqueta: 'Tramo' },
+  { clave: 'canal', re: /^nombre_canal$/i, etiqueta: 'Canal' },
+];
 
 /** Romanos para ordenar los tramos: "Tramo IX" va después de "Tramo V". */
 const VALOR_ROMANO = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
@@ -89,15 +103,27 @@ const deRomano = (s) => {
   }
   return n;
 };
-const ordenTramo = (t) => {
-  const r = deRomano(t);
+/**
+ * Orden natural de los valores de agrupación.
+ *
+ * "Tramo IX" va después de "Tramo V" y "Lateral 10" después de "Lateral 9":
+ * ordenar como texto pone el 10 antes del 2, que es justo lo que confunde a
+ * quien busca su canal en la lista.
+ */
+const ordenValor = (t) => {
+  const s = String(t ?? '');
+  const r = /^\s*tramo\b/i.test(s) ? deRomano(s) : null;
   if (r != null) return r;
-  const n = parseFloat(String(t).replace(/[^\d.]/g, ''));
-  return Number.isFinite(n) ? n : 9999;
+  const n = parseFloat(s.replace(/[^\d.]/g, ''));
+  return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+};
+const compararValores = (a, b) => {
+  const d = ordenValor(a) - ordenValor(b);
+  return d !== 0 ? d : String(a).localeCompare(String(b), 'es');
 };
 
 /**
- * Lee del inventario ya cargado qué sectores y tramos hay, y dónde cae cada
+ * Lee del inventario ya cargado por qué se puede agrupar y dónde cae cada
  * estructura. Trabaja sobre lo que está en memoria —no pide nada— porque el
  * inventario ya se descargó para dibujarse.
  */
@@ -113,18 +139,17 @@ function leerEstructura(inv) {
       const [lng, lat] = par;
       if (typeof lat !== 'number' || typeof lng !== 'number') continue;
       const p = f.properties || {};
-      puntos.push({
-        lat, lng, capa: capa.codigo,
-        tramo: valorDe(p, RE_TRAMO),
-        sector: valorDe(p, RE_SECTOR),
-        prog: progAMetros(valorDe(p, RE_PROG)),
-      });
+      const punto = { lat, lng, capa: capa.codigo, prog: progAMetros(valorDe(p, RE_PROG)) };
+      for (const g of AGRUPACIONES) punto[g.clave] = valorDe(p, g.re);
+      puntos.push(punto);
     }
   }
-  const sectores = [...new Set(puntos.map(p => p.sector).filter(Boolean))].sort();
-  const tramos = [...new Set(puntos.map(p => p.tramo).filter(Boolean))]
-    .sort((a, b) => ordenTramo(a) - ordenTramo(b));
-  return { puntos, sectores, tramos };
+  // Solo se ofrecen los niveles que tienen valores: un selector vacío no es
+  // una opción, es una pregunta sin respuesta.
+  const niveles = AGRUPACIONES
+    .map(g => ({ ...g, valores: [...new Set(puntos.map(p => p[g.clave]).filter(Boolean))].sort(compararValores) }))
+    .filter(g => g.valores.length);
+  return { puntos, niveles };
 }
 
 /** Extremos de progresiva y envolvente de un conjunto de puntos. */
@@ -260,8 +285,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
   // La capa base arranca en una exportable: aquí la captura es el producto.
   const [base, setBase] = useState(() => alternativaExportable(CAPA_POR_DEFECTO));
 
-  const [sector, setSector] = useState('');
-  const [tramo, setTramo] = useState('');
+  const [filtros, setFiltros] = useState({});   // clave de nivel → valor elegido
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
   const [centro, setCentro] = useState(null);
@@ -294,18 +318,22 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
 
   const estructura = useMemo(() => leerEstructura(inv), [inv.datos]);
 
-  // Los puntos del tramo elegido, antes de recortar por progresiva.
+  // Los puntos que pasan todos los niveles elegidos, antes de recortar por
+  // progresiva.
   const delTramo = useMemo(() => estructura.puntos.filter(p =>
-    (!sector || p.sector === sector) && (!tramo || p.tramo === tramo)), [estructura, sector, tramo]);
+    Object.entries(filtros).every(([k, v]) => !v || p[k] === v)), [estructura, filtros]);
 
   const rangoTramo = useMemo(() => extremos(delTramo), [delTramo]);
 
-  // Al cambiar de tramo se proponen sus extremos; el usuario recorta desde ahí.
+  // Al cambiar de nivel se proponen sus extremos; el usuario recorta desde ahí.
+  // La firma depende de los valores elegidos, no del recálculo: si no, pisaría
+  // lo que el usuario acaba de escribir en las progresivas.
+  const firmaFiltros = JSON.stringify(filtros);
   useEffect(() => {
     if (!rangoTramo || rangoTramo.progMin == null) { setDesde(''); setHasta(''); return; }
     setDesde(metrosAProg(rangoTramo.progMin));
     setHasta(metrosAProg(rangoTramo.progMax));
-  }, [tramo, sector]);   // no en cada recálculo: pisaría lo que el usuario escribe
+  }, [firmaFiltros]);
 
   const seleccion = useMemo(() => {
     const a = progAMetros(desde), b = progAMetros(hasta);
@@ -419,7 +447,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
   const editarProf = (i, campo, v) =>
     setProfesionales(ps => ps.map((p, j) => j === i ? { ...p, [campo]: v } : p));
 
-  const sinTramos = !inv.cargando && !inv.iniciando && estructura.tramos.length === 0;
+  const sinTramos = !inv.iniciando && estructura.niveles.length === 0 && estructura.puntos.length > 0;
 
   return (
     <div className="lam">
@@ -437,34 +465,31 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
         <div className="lam-panel-cuerpo">
           <h2>Lámina temática</h2>
           <p className="lam-ayuda">
-            Escala fija <b>1:{ESCALA.toLocaleString('es-PE')}</b>. El encuadre sale del tramo,
-            no de dónde quede la vista, y el zoom está bloqueado para que la escala rotulada
-            sea la de verdad.
+            Escala fija <b>1:{ESCALA.toLocaleString('es-PE')}</b>. El encuadre sale de lo que
+            elijas abajo, no de dónde quede la vista, y el zoom está bloqueado para que la
+            escala rotulada sea la de verdad.
           </p>
 
           {inv.iniciando && <div className="lam-aviso">Cargando el inventario…</div>}
 
           {sinTramos && (
             <div className="lam-aviso lam-aviso-ojo">
-              <FaExclamationTriangle /> El inventario cargado no trae el campo <code>tramo</code>.
-              Puedes encuadrar a mano moviendo el mapa, pero el encuadre no será reproducible.
+              <FaExclamationTriangle /> El inventario cargado no trae ningún campo por el que
+              agrupar (<code>sector</code>, <code>tramo</code> o <code>nombre_canal</code>).
+              Puedes encuadrar moviendo el mapa, pero el encuadre no será reproducible.
               <button onClick={inv.recargar}><FaSyncAlt /> Recargar</button>
             </div>
           )}
 
-          <label>Sector
-            <select value={sector} onChange={e => setSector(e.target.value)}>
-              <option value="">Todos</option>
-              {estructura.sectores.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </label>
-
-          <label>Tramo
-            <select value={tramo} onChange={e => setTramo(e.target.value)}>
-              <option value="">Todos</option>
-              {estructura.tramos.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </label>
+          {estructura.niveles.map(n => (
+            <label key={n.clave}>{n.etiqueta}
+              <select value={filtros[n.clave] || ''}
+                onChange={e => setFiltros(f => ({ ...f, [n.clave]: e.target.value }))}>
+                <option value="">Todos</option>
+                {n.valores.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </label>
+          ))}
 
           <div className="lam-par">
             <label>Desde (progresiva)
@@ -477,7 +502,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
 
           {rangoTramo?.progMin != null && (
             <div className="lam-medida">
-              El tramo va de <b>{metrosAProg(rangoTramo.progMin)}</b> a <b>{metrosAProg(rangoTramo.progMax)}</b>.
+              Va de <b>{metrosAProg(rangoTramo.progMin)}</b> a <b>{metrosAProg(rangoTramo.progMax)}</b>.
               {medida && (
                 medida.cabe
                   ? <> Lo elegido mide {(medida.anchoM / 1000).toFixed(2)} km y <b>entra</b> en la lámina.</>
