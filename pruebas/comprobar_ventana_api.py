@@ -135,6 +135,21 @@ def ventana_desde_base(pk, minutos):
 
 cliente = Client(SERVER_NAME=HOST)
 
+# Se entra por SESION y no solo con la cabecera del token.
+#
+# La vista va detras de staff_or_redirect, un decorador sobre dispatch que
+# mira request.user. En ese momento DRF todavia no ha procesado la cabecera
+# Authorization, asi que el usuario es anonimo y la respuesta es 403 por mas
+# que el token sea de un staff.
+#
+# Esto comprueba el CALCULO de la ventana, que es lo que acabamos de tocar,
+# no el camino de autenticacion de la app.
+try:
+    cliente.force_login(token.user)
+    print("Sesion iniciada como {}".format(token.user))
+except Exception as exc:
+    print("No se pudo iniciar sesion ({}); se intenta solo con el token.".format(exc))
+
 estaciones = sorted(set(RawDavis.objects
                         .filter(collect_time__range=(INI, FIN))
                         .values_list("station", flat=True).distinct()))
@@ -158,8 +173,18 @@ for pk in estaciones:
                      "station_id": pk, "metric": "rainfall_mm"},
                     HTTP_AUTHORIZATION="Token " + token.key)
     if r.status_code != 200:
-        print("{:>5}  {:<20} la API responde {}".format(pk, "?", r.status_code))
+        # Se imprime el cuerpo: un codigo a secas no dice si falta permiso,
+        # si falta un parametro o si reviento la vista.
+        try:
+            cuerpo = r.content.decode("utf-8")[:200].replace("\n", " ")
+        except Exception:
+            cuerpo = "(no se pudo leer)"
+        print("{:>5}  la API responde {} -> {}".format(pk, r.status_code, cuerpo))
         fallos += 1
+        if fallos >= 3:
+            print("")
+            print("Tres fallos seguidos: no sigo pidiendo las 27 estaciones.")
+            break
         continue
 
     d = json.loads(r.content.decode("utf-8"))
