@@ -1,7 +1,7 @@
 // Pruebas de la lámina temática. Se ejecutan con:  node pruebas/lamina/lamina.test.mjs
 import {
   compilar, servir, abrir, medirEscala, contador, soloGraves,
-  capaJURP, capaKMZ, CAPAS_KMZ, SECTORES,
+  capaJURP, capaKMZ, CAPAS_KMZ, SECTORES, alLng, LAT,
 } from './banco.mjs';
 
 const { ok, fin } = contador();
@@ -103,6 +103,59 @@ console.log('\n═══ La leyenda nombra lo dibujado, no lo encendido ══�
     pag.getByText('PNG', { exact: false }).click(),
   ]);
   ok('la lámina se exporta', !!d, d ? d.suggestedFilename() : 'no hubo descarga');
+  await nav.close();
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+console.log('\n═══ Kilometraje, rótulos y rosa de los vientos ═══');
+{
+  // Un canal de 30 km cuyo trazado empieza en su vértice 0 pero cuyo
+  // kilometraje OFICIAL arranca en el 40+000: si la lámina rotulara lo que
+  // mide la línea, pondría 0+000 donde va 40+000.
+  const DESFASE = 40000;
+  const linea = [];
+  for (let m = 0; m <= 30000; m += 200) linea.push([alLng(m), LAT + Math.sin(m / 6000) * 0.004]);
+  const CANAL = { type: 'FeatureCollection', features: [{ type: 'Feature',
+    properties: { fid: 1, nombre: 'Canal Madre' },
+    geometry: { type: 'LineString', coordinates: linea } }] };
+  const sobreCanal = (codigo) => ({ type: 'FeatureCollection',
+    features: Array.from({ length: 24 }, (_, i) => {
+      const m = i * 1200 + 300;
+      return { type: 'Feature',
+        geometry: { type: 'Point', coordinates: [alLng(m), LAT + Math.sin(m / 6000) * 0.004] },
+        properties: { fid: `${codigo}-${i}`, nombre: `L${i + 1}-I`, nombre_canal: 'Lateral 10',
+          progresiva: m + DESFASE, estado: 'R', ambito: 'JURP' } };
+    }) });
+  const capaDe = (c) => c === 'sectores_pech' ? SECTORES
+    : c === 'canal_madre' ? CANAL
+    : /canal|subalaterales|redes|vias|lotes|areas|red_nacional|camino|via_/.test(c)
+      ? { type: 'FeatureCollection', features: [] } : sobreCanal(c);
+
+  const { nav, pag } = await abrir({ dir, capaDe });
+  await pag.waitForTimeout(6000);
+  await pag.getByText('Encuadrar').click();
+  await pag.waitForTimeout(2500);
+
+  const r = await pag.evaluate(() => ({
+    pk: [...document.querySelectorAll('.lam-pk')].map(e => e.textContent),
+    etiquetas: [...document.querySelectorAll('.inv-eti-lamina')].map(e => e.textContent),
+    rosa: !!document.querySelector('.lam-rosa svg, svg.lam-rosa'),
+    letras: [...document.querySelectorAll('.lam-rosa text')].map(e => e.textContent).join(''),
+  }));
+
+  ok('hay marcas de kilometraje', r.pk.length >= 3, r.pk.join('  '));
+  const km = r.pk.map(t => Number(t.split('+')[0]) * 1000 + Number(t.split('+')[1]));
+  ok('rotulan el kilometraje OFICIAL, no lo que mide la línea',
+    km.every(v => v >= DESFASE), `${r.pk[0]} … ${r.pk.at(-1)}`);
+  const pasos = km.slice(1).map((v, i) => v - km[i]);
+  ok('van a paso constante, sin saltos ni repeticiones',
+    pasos.length > 0 && pasos.every(d => d === pasos[0]) && pasos[0] > 0,
+    `pasos de ${[...new Set(pasos)].join(', ')} m`);
+  ok('los rótulos son solo el nombre del activo',
+    r.etiquetas.length > 0 && r.etiquetas.every(e => /^L\d+-I$/.test(e)),
+    r.etiquetas.slice(0, 5).join(', '));
+  ok('la rosa de los vientos está, con sus cuatro cardinales',
+    r.rosa && ['N', 'E', 'S', 'O'].every(l => r.letras.includes(l)), r.letras);
   await nav.close();
 }
 

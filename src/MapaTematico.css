@@ -223,3 +223,34 @@
 .lam .leaflet-popup-content-wrapper { border-radius: 14px; }
 .lam .leaflet-popup-close-button { color: #8fb4cd !important; }
 .lam .leaflet-popup-content { margin: 12px 14px; }
+
+/* ── Rótulos sobre el mapa ──────────────────────────────────────────────── */
+/* En la lámina el rótulo es tinta sobre papel, no una etiqueta de pantalla:
+   sin fondo oscuro, con halo blanco para que se lea lo mismo sobre el
+   desierto claro que sobre el cultivo oscuro. */
+.lam .leaflet-tooltip.inv-eti-lamina {
+  background: none;
+  color: #111;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 0;
+  text-shadow:
+     1px 0 2px #fff, -1px 0 2px #fff, 0 1px 2px #fff, 0 -1px 2px #fff,
+     1px 1px 2px #fff, -1px -1px 2px #fff;
+}
+
+/* Kilometraje: verde sobre halo blanco, como en las láminas del Proyecto. */
+.lam-pk-icono { background: none; border: none; }
+.lam-pk {
+  display: inline-block; white-space: nowrap;
+  transform: translate(-50%, -140%);
+  font-size: 9.5px; font-weight: 700; color: #1a7f37;
+  text-shadow:
+     1px 0 2px #fff, -1px 0 2px #fff, 0 1px 2px #fff, 0 -1px 2px #fff,
+     1px 1px 2px #fff, -1px -1px 2px #fff;
+}
+.lam-pk.fin { color: #1a7f37; text-decoration: underline; }
+
+/* La rosa de los vientos: grande y sin caja, como en el Anexo V. */
+.lam-norte { position: absolute; left: 14px; top: 14px; z-index: 500; }
+.lam-rosa { display: block; }

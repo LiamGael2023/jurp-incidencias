@@ -3,6 +3,8 @@ import {
   pasoCuadricula, barraEscala, numeroLamina, cuadriculaUTM, distanciaMetros, utmALatLng,
   zoomParaEscala, escalaDeZoom, terrenoDeLamina, cabeEnLamina,
   puntoEnPoligono, puntoEnGeometria, cajaDe, enCaja,
+  acumuladas, longitudPolilinea, puntoADistancia, proyectarEnPolilinea,
+  desfaseProgresiva, marcasProgresiva, progresivaTexto,
 } from './cartografia.js';
 
 let mal = 0;
@@ -138,6 +140,58 @@ t('la caja envolvente abarca las dos partes', JSON.stringify(caja),
   JSON.stringify({ oeste: 0, este: 6, sur: 0, norte: 6 }));
 t('la caja descarta lo lejano', enCaja([10, 10], caja), false);
 t('y no descarta lo que si puede estar', enCaja([5.5, 5.5], caja), true);
+
+console.log('\n─── Progresivas sobre el trazado ───');
+// Un canal recto hacia el este, de 20 km, a la latitud de Viru.
+const LATC = -8.42;
+// El metro por grado se saca de la propia distanciaMetros en vez de poner la
+// constante a mano: con 111320 el trazado salia un 0.11 % mas corto que lo
+// que la funcion mide, y la prueba acusaba al codigo de su propio error.
+const GRADO_LNG = distanciaMetros([LATC, 0], [LATC, 1]);
+const alLngC = (m) => -78.80 + m / GRADO_LNG;
+const TRAZADO = [];
+for (let m = 0; m <= 20000; m += 250) TRAZADO.push([LATC, alLngC(m)]);
+
+t('la longitud medida coincide con la construida (km)',
+  longitudPolilinea(TRAZADO) / 1000, 20, 0.02);
+const medio = puntoADistancia(TRAZADO, 7500);
+t('el punto a 7.5 km cae donde toca (m de error)',
+  distanciaMetros(medio, [LATC, alLngC(7500)]), 0, 2);
+
+console.log('\n  El desfase: el trazado empieza en el 0 pero el canal va por el 40+000');
+// Activos con progresiva OFICIAL = recorrido + 40000, un poco fuera del eje.
+const activos = [];
+for (let m = 1000; m <= 19000; m += 1000) {
+  activos.push({ lat: LATC + 0.0003, lng: alLngC(m), prog: m + 40000 });
+}
+const cal = desfaseProgresiva(TRAZADO, activos);
+t('lo detecta', Math.round(cal.desfase), 40000, 3);
+t('y usa todos los activos', cal.n, 19);
+t('con dispersion casi nula (m)', cal.dispersion, 0, 1);
+
+console.log('\n  Un activo disparatado no debe mover el rotulo');
+// Uno de otro canal, a 400 m del eje, con una progresiva de otro mundo.
+const conIntruso = [...activos, { lat: LATC + 0.004, lng: alLngC(5000), prog: 999000 }];
+t('se descarta por lejania', Math.round(desfaseProgresiva(TRAZADO, conIntruso).desfase), 40000, 3);
+// Y uno encima del eje pero con la progresiva equivocada: lo frena la mediana.
+const conError = [...activos, { lat: LATC, lng: alLngC(5000), prog: 5000 }];
+t('y si cae encima, la mediana lo aguanta',
+  Math.round(desfaseProgresiva(TRAZADO, conError).desfase), 40000, 1100);
+
+console.log('\n  Sin con que calibrar, no se rotula');
+t('menos de tres activos → null', desfaseProgresiva(TRAZADO, activos.slice(0, 2)), null);
+t('ninguno con progresiva → null',
+  desfaseProgresiva(TRAZADO, [{ lat: LATC, lng: alLngC(1000) }]), null);
+
+console.log('\n  Las marcas');
+const marcas = marcasProgresiva(TRAZADO, { paso: 5000, desfase: cal.desfase });
+console.log('   ', marcas.map(m => progresivaTexto(m.prog)).join('  '));
+t('la primera es un multiplo de 5 km', marcas[0].prog % 5000, 0);
+t('ninguna se sale del trazado',
+  marcas.every(m => m.prog >= cal.desfase - 1 && m.prog <= cal.desfase + 20000 + 1), true);
+t('la ultima marca el final del canal', Math.round(marcas.at(-1).prog), 60000, 2);
+t('el formato es el de obra', progresivaTexto(157503.4), '157+503');
+t('y rellena con ceros', progresivaTexto(5007), '5+007');
 
 console.log('\n─── Distancia ───');
 // Un grado de latitud ~ 110.6 km

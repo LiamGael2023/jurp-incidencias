@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { MapContainer, Rectangle, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, Rectangle, useMap, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import html2canvas from 'html2canvas';
 import {
@@ -13,6 +14,7 @@ import {
   latLngToUTM, utmTexto, zonaDe, cuadriculaUTM, barraEscala, numeroLamina,
   zoomParaEscala, escalaDeZoom, terrenoDeLamina, cabeEnLamina, distanciaMetros,
   puntoEnGeometria, cajaDe, enCaja,
+  desfaseProgresiva, marcasProgresiva, progresivaTexto,
 } from './cartografia';
 import logoJURP from './assets/logo1.png';
 import './MapaTematico.css';
@@ -211,12 +213,21 @@ function extremos(puntos) {
  */
 function EncuadreFijo({ centro, zoom, onMover }) {
   const map = useMap();
+
+  // Publicar los límites en cuanto hay mapa, sin esperar a que alguien lo
+  // mueva. De esto cuelga todo lo que se recorta al encuadre —los activos,
+  // sus rótulos, la leyenda, el kilometraje—, y hasta que no existiera se
+  // dibujaba el valle entero: más de tres mil marcadores con sus rótulos, y
+  // once segundos de navegador congelado antes de pulsar nada.
+  useEffect(() => { onMover?.(); }, [map]);
+
   useEffect(() => {
     if (!centro || zoom == null) return;
     map.setMinZoom(zoom); map.setMaxZoom(zoom);
     map.setView(centro, zoom, { animate: false });
     onMover?.();
   }, [centro?.[0], centro?.[1], zoom, map]);
+
   useMapEvents({ moveend: () => onMover?.() });
   return null;
 }
@@ -268,6 +279,71 @@ function CuadriculaUTM({ version }) {
       ))}
     </svg>
   );
+}
+
+/**
+ * Rosa de los vientos, la de ocho puntas de las láminas del PECH.
+ *
+ * Se dibuja con rombos partidos en dos mitades, oscura y clara, que es lo que
+ * le da el relieve: cada punta se lee como una cara iluminada y otra en
+ * sombra. Las puntas diagonales van más cortas para que las cardinales manden.
+ *
+ * Va en SVG y no como imagen porque se imprime a tamaño A1: una imagen de
+ * mapa de bits se vería dentada, y esto sale limpio a cualquier escala.
+ */
+function RosaDeLosVientos({ tam = 92 }) {
+  // Cada punta: dos triángulos que comparten el eje, uno relleno y otro hueco.
+  const punta = (ang, largo, ancho, clave) => {
+    const r = (g) => (g * Math.PI) / 180;
+    const pt = (a, d) => [50 + Math.sin(r(a)) * d, 50 - Math.cos(r(a)) * d];
+    const [px, py] = pt(ang, largo);              // vértice exterior
+    const [ax, ay] = pt(ang + 90, ancho);         // costado derecho
+    const [bx, by] = pt(ang - 90, ancho);         // costado izquierdo
+    return (
+      <g key={clave}>
+        <polygon points={`${px},${py} ${ax},${ay} 50,50`} fill="#111" />
+        <polygon points={`${px},${py} ${bx},${by} 50,50`} fill="#fff" stroke="#111" strokeWidth=".7" />
+      </g>
+    );
+  };
+  const CARDINALES = [[0, 'N'], [90, 'E'], [180, 'S'], [270, 'O']];
+  return (
+    <svg viewBox="0 0 100 100" width={tam} height={tam} className="lam-rosa">
+      <circle cx="50" cy="50" r="49" fill="rgba(255,255,255,.72)" stroke="none" />
+      {[45, 135, 225, 315].map(a => punta(a, 27, 5, `d${a}`))}
+      {[0, 90, 180, 270].map(a => punta(a, 44, 7, `c${a}`))}
+      <circle cx="50" cy="50" r="4" fill="#fff" stroke="#111" strokeWidth="1" />
+      {CARDINALES.map(([a, letra]) => {
+        const r = (a * Math.PI) / 180;
+        return (
+          <text key={letra} x={50 + Math.sin(r) * 44} y={50 - Math.cos(r) * 44}
+            textAnchor="middle" dominantBaseline="central"
+            fontSize="13" fontWeight="700" fill="#111"
+            stroke="#fff" strokeWidth="2.6" paintOrder="stroke">{letra}</text>
+        );
+      })}
+    </svg>
+  );
+}
+
+/**
+ * Marcas de kilometraje sobre los trazados.
+ *
+ * El número que se imprime es la progresiva oficial, no lo que mide la línea
+ * dibujada: se calibra el trazado contra los activos, que sí la traen (ver
+ * cartografia.js). Si no hay con qué calibrar, no se rotula nada — un
+ * kilometraje inventado en una lámina es peor que ninguno.
+ */
+function MarcasProgresiva({ marcas }) {
+  if (!marcas?.length) return null;
+  return marcas.map(m => (
+    <Marker key={`pk-${m.prog}`} position={m.pos} interactive={false}
+      icon={L.divIcon({
+        className: 'lam-pk-icono',
+        html: `<span class="lam-pk${m.fin ? ' fin' : ''}">${progresivaTexto(m.prog)}</span>`,
+        iconSize: null,
+      })} />
+  ));
 }
 
 /** Mapa de localización: la región con el recuadro de lo que cubre la lámina. */
@@ -530,6 +606,79 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
     .map(g => ({ titulo: g.titulo, capas: g.capas.filter(c => inv.visibles[c.codigo] && asomaEnLamina(c.codigo)) }))
     .filter(g => g.capas.length), [inv.visibles, asomaEnLamina]);
 
+  /**
+   * Hasta que el inventario termine de bajar no se dibujan los activos.
+   *
+   * En la lámina el racimo va apagado —en el papel saldrían burbujas con un
+   * número— y eso son más de tres mil marcadores sueltos. Cada capa que
+   * llega provoca un repintado de todos, y las treinta capas seguidas
+   * bloqueaban el hilo principal unos cinco segundos repartidos en ráfagas:
+   * desde fuera eso se ve como un temblor, no como una espera.
+   *
+   * Esperar a tenerlas todas convierte treinta repintados en uno. Mientras
+   * tanto se ve la cartografía base y un aviso, que es información honesta:
+   * la lámina todavía no está completa.
+   */
+  const descargando = inv.iniciando || Object.values(inv.cargando || {}).some(Boolean);
+
+  /**
+   * Las marcas de kilometraje que se dibujan sobre la lámina.
+   *
+   * El paso se elige para que caigan entre cuatro y diez en el encuadre: con
+   * menos no se lee como kilometraje y con más tapan el canal. A 1:10 000, que
+   * cubre 8.2 km, salen cada kilómetro.
+   *
+   * Cada trazado se calibra con los activos que tiene cerca —no con todos—,
+   * porque un canal lateral no sabe nada del kilometraje del canal madre.
+   */
+  const marcasPK = useMemo(() => {
+    if (!limites || descargando) return [];
+    const anchoM = terrenoDeLamina(ESCALA, MAPA_MM.ancho);
+    const paso = [100, 250, 500, 1000, 2000, 5000].find(p => anchoM / p <= 10) || 5000;
+    const salida = [];
+
+    for (const capa of TODAS_LAS_CAPAS) {
+      if (capa.tipo !== 'line' || !inv.visibles[capa.codigo]) continue;
+      const fc = inv.datosDe(capa.codigo);
+      if (!fc?.features?.length) continue;
+
+      for (const f of fc.features) {
+        const g = f.geometry;
+        if (!g) continue;
+        const tramos = g.type === 'MultiLineString' ? g.coordinates
+          : g.type === 'LineString' ? [g.coordinates] : [];
+        for (const tramo of tramos) {
+          if (!tramo || tramo.length < 2) continue;
+          const caja = cajaDe({ type: 'LineString', coordinates: tramo });
+          if (!caja || caja.este < limites.oeste || caja.oeste > limites.este
+            || caja.norte < limites.sur || caja.sur > limites.norte) continue;
+
+          const linea = tramo.map(([lng, lat]) => [lat, lng]);
+          // Solo los activos de los alrededores de ESTE trazado.
+          const h = 0.01;   // ~1 km de holgura alrededor de su caja
+          const cerca = estructura.puntos.filter(p => p.prog != null
+            && p.lat >= caja.sur - h && p.lat <= caja.norte + h
+            && p.lng >= caja.oeste - h && p.lng <= caja.este + h);
+          const cal = desfaseProgresiva(linea, cerca);
+          if (!cal) continue;      // sin calibrar no se rotula
+
+          for (const m of marcasProgresiva(linea, { paso, desfase: cal.desfase })) {
+            if (m.pos[0] < limites.sur || m.pos[0] > limites.norte
+              || m.pos[1] < limites.oeste || m.pos[1] > limites.este) continue;
+            salida.push({ ...m, clave: `${capa.codigo}-${m.prog}` });
+          }
+        }
+      }
+    }
+    // Dos trazados que se solapan pueden proponer la misma marca.
+    const vistas = new Set();
+    return salida.filter(m => {
+      const k = `${m.prog}|${m.pos[0].toFixed(5)}`;
+      if (vistas.has(k)) return false;
+      vistas.add(k); return true;
+    });
+  }, [limites, descargando, inv.visibles, inv.datos, estructura]);
+
   // ── Exportar ────────────────────────────────────────────────────────────
   /**
    * La lámina a lienzo.
@@ -603,20 +752,6 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
 
   const sinTramos = !inv.iniciando && estructura.niveles.length === 0 && estructura.puntos.length > 0;
 
-  /**
-   * Hasta que el inventario termine de bajar no se dibujan los activos.
-   *
-   * En la lámina el racimo va apagado —en el papel saldrían burbujas con un
-   * número— y eso son más de tres mil marcadores sueltos. Cada capa que
-   * llega provoca un repintado de todos, y las treinta capas seguidas
-   * bloqueaban el hilo principal unos cinco segundos repartidos en ráfagas:
-   * desde fuera eso se ve como un temblor, no como una espera.
-   *
-   * Esperar a tenerlas todas convierte treinta repintados en uno. Mientras
-   * tanto se ve la cartografía base y un aviso, que es información honesta:
-   * la lámina todavía no está completa.
-   */
-  const descargando = inv.iniciando || Object.values(inv.cargando || {}).some(Boolean);
 
   return (
     <div className="lam">
@@ -794,18 +929,13 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               scrollWheelZoom={false} doubleClickZoom={false} touchZoom={false} boxZoom={false}
               style={{ height: '100%', width: '100%' }} ref={mapRef}>
               <TeselasBase base={base} />
-              {!descargando && <CapasInventario inv={inv} racimo={false} limites={limites} />}
+              {!descargando && <CapasInventario inv={inv} racimo={false} limites={limites}
+                etiquetas="nombre" />}
+              <MarcasProgresiva marcas={marcasPK} />
               <EncuadreFijo centro={centro} zoom={zoom} onMover={alMover} />
               <CuadriculaUTM version={version} />
             </MapContainer>
-            <div className="lam-norte">
-              <svg viewBox="0 0 40 46" width="34" height="40">
-                <circle cx="20" cy="23" r="17" fill="rgba(255,255,255,.75)" stroke="#111" strokeWidth="1" />
-                <polygon points="20,5 25,23 20,19 15,23" fill="#111" />
-                <polygon points="20,41 25,23 20,27 15,23" fill="#fff" stroke="#111" strokeWidth=".6" />
-                <text x="20" y="4" fontSize="6" textAnchor="middle">N</text>
-              </svg>
-            </div>
+            <div className="lam-norte"><RosaDeLosVientos /></div>
           </div>
 
           {/* Pie */}

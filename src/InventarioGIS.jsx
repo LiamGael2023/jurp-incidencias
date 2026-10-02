@@ -677,7 +677,17 @@ export function useInventario() {
 /* ══════════════════════════════════════════════════════════
    Capas sobre el mapa — va DENTRO del <MapContainer>
    ══════════════════════════════════════════════════════════ */
-export function CapasInventario({ inv, racimo = null, limites = null }) {
+export function CapasInventario({ inv, racimo = null, limites = null, etiquetas = null }) {
+  /**
+   * `etiquetas` fuerza el rótulo de cada activo sin esperar al zoom. En el
+   * visor las etiquetas aparecen solo de cerca, porque con dos mil seiscientos
+   * puntos el mapa se vuelve una mancha de texto; en una lámina impresa, en
+   * cambio, los rótulos son el contenido —un plano sin nombres no sirve para
+   * ir a buscar la estructura al campo—.
+   *
+   * Con "nombre" se rotula solo el nombre: en el papel no hay sitio para la
+   * capa y el número, y el nombre es lo que figura en la ficha.
+   */
   /**
    * `limites` recorta a lo que se ve. Sin recortar, el inventario entero son
    * más de tres mil marcadores y dibujarlos de una vez bloquea el navegador
@@ -703,7 +713,7 @@ export function CapasInventario({ inv, racimo = null, limites = null }) {
   const mapa = useMap();
   const refCluster = useRef(null);
   const [zoom, setZoom] = useState(() => mapa.getZoom());
-  const rotular = zoom >= ZOOM_ETIQUETAS;
+  const rotular = etiquetas ? true : zoom >= ZOOM_ETIQUETAS;
 
   useEffect(() => {
     const alZoom = () => setZoom(mapa.getZoom());
@@ -889,10 +899,12 @@ export function CapasInventario({ inv, racimo = null, limites = null }) {
                 },
               }}
             >
-              {rotular && (
+              {rotular && (etiquetas !== 'nombre' || p.nombre) && (
                 <Tooltip permanent direction="right" offset={[12, 0]}
-                  className="inv-eti" opacity={1}>
-                  {p.nombre || p.codigo || `${capa.label} #${p.fid}`}
+                  className={`inv-eti${etiquetas ? ' inv-eti-lamina' : ''}`} opacity={1}>
+                  {etiquetas === 'nombre'
+                    ? p.nombre
+                    : (p.nombre || p.codigo || `${capa.label} #${p.fid}`)}
                 </Tooltip>
               )}
               <Popup>

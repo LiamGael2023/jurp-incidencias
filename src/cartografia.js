@@ -184,6 +184,131 @@ export function distanciaMetros(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  Progresivas sobre el trazado
+//
+//  Una lámina de canal lleva marcas de kilometraje cada tanto. El número que
+//  se imprime NO puede ser «lo que mide la línea dibujada»: tiene que ser la
+//  progresiva oficial, la que está en las fichas y en las placas de obra. Son
+//  dos cosas distintas y se parecen lo bastante como para colar un error.
+//
+//  Difieren porque el trazado digitalizado empieza donde lo cortaron, no en
+//  el 0+000 del canal, y porque la línea dibujada tiene más o menos vértices
+//  que los que recorrió quien midió en campo. Por eso aquí se mide la línea
+//  pero se ROTULA con el kilometraje de los activos, que sí lo traen: se
+//  proyectan sobre el trazado, se compara su progresiva con la distancia
+//  recorrida y la diferencia típica es el desfase que hay que aplicar.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Longitud acumulada en cada vértice de una polilínea [[lat,lng],…]. */
+export function acumuladas(puntos) {
+  const acc = [0];
+  for (let i = 1; i < puntos.length; i++) {
+    acc.push(acc[i - 1] + distanciaMetros(puntos[i - 1], puntos[i]));
+  }
+  return acc;
+}
+
+export const longitudPolilinea = (puntos) =>
+  puntos.length < 2 ? 0 : acumuladas(puntos).at(-1);
+
+/** El punto que queda a `d` metros del inicio, interpolando en el tramo. */
+export function puntoADistancia(puntos, d, acc = acumuladas(puntos)) {
+  if (puntos.length === 0) return null;
+  if (d <= 0) return puntos[0];
+  if (d >= acc.at(-1)) return puntos.at(-1);
+  let i = 1;
+  while (i < acc.length && acc[i] < d) i++;
+  const t = (d - acc[i - 1]) / (acc[i] - acc[i - 1] || 1);
+  const [la, lo] = puntos[i - 1], [lb, lob] = puntos[i];
+  return [la + (lb - la) * t, lo + (lob - lo) * t];
+}
+
+/**
+ * Proyecta un punto sobre la polilínea: cuánto se ha recorrido al llegar a su
+ * pie de perpendicular, y a qué distancia quedó.
+ *
+ * Se trabaja en grados corregidos por el coseno de la latitud —no en grados
+ * crudos—: a esta latitud un grado de longitud mide un 1 % menos que uno de
+ * latitud, y sin corregirlo el pie de perpendicular se desplaza.
+ */
+export function proyectarEnPolilinea([lat, lng], puntos, acc = acumuladas(puntos)) {
+  if (puntos.length < 2) return null;
+  const k = Math.cos(lat * Math.PI / 180);
+  const x = (p) => [p[1] * k, p[0]];
+  const P = x([lat, lng]);
+  let mejor = null;
+  for (let i = 1; i < puntos.length; i++) {
+    const A = x(puntos[i - 1]), B = x(puntos[i]);
+    const vx = B[0] - A[0], vy = B[1] - A[1];
+    const largo2 = vx * vx + vy * vy;
+    const t = largo2 ? Math.max(0, Math.min(1, ((P[0] - A[0]) * vx + (P[1] - A[1]) * vy) / largo2)) : 0;
+    const pie = [A[0] + vx * t, A[1] + vy * t];
+    const dx = P[0] - pie[0], dy = P[1] - pie[1];
+    const sep = Math.hypot(dx, dy);
+    if (!mejor || sep < mejor.sep) {
+      mejor = { sep, recorrido: acc[i - 1] + (acc[i] - acc[i - 1]) * t };
+    }
+  }
+  // La separación venía en grados; se pasa a metros para poder descartarla.
+  return { recorrido: mejor.recorrido, separacionMetros: mejor.sep * 111320 };
+}
+
+/**
+ * El desfase entre lo que mide el trazado y el kilometraje oficial.
+ *
+ * Se usa la MEDIANA y no el promedio: basta un activo mal ubicado —o uno de
+ * otro canal que cae cerca— para arrastrar un promedio varios cientos de
+ * metros, y eso acabaría impreso. La mediana lo ignora. Además se descartan
+ * los activos que quedan lejos del trazado, que son de otra cosa.
+ *
+ * Devuelve null si no hay con qué calibrar: entonces no se rotula, porque un
+ * kilometraje inventado en una lámina es peor que ninguno.
+ */
+export function desfaseProgresiva(puntos, activos, { maxSeparacion = 150, minimo = 3 } = {}) {
+  if (puntos.length < 2) return null;
+  const acc = acumuladas(puntos);
+  const difs = [];
+  for (const a of activos) {
+    if (a.prog == null) continue;
+    const pr = proyectarEnPolilinea([a.lat, a.lng], puntos, acc);
+    if (!pr || pr.separacionMetros > maxSeparacion) continue;
+    difs.push(a.prog - pr.recorrido);
+  }
+  if (difs.length < minimo) return null;
+  difs.sort((x, y) => x - y);
+  const m = difs.length >> 1;
+  const mediana = difs.length % 2 ? difs[m] : (difs[m - 1] + difs[m]) / 2;
+  // Dispersión, para poder decir si la calibración es de fiar.
+  const desvios = difs.map(d => Math.abs(d - mediana)).sort((x, y) => x - y);
+  return { desfase: mediana, n: difs.length, dispersion: desvios[desvios.length >> 1] };
+}
+
+/**
+ * Marcas de progresiva sobre el trazado, cada `paso` metros de kilometraje
+ * oficial, más la del final.
+ */
+export function marcasProgresiva(puntos, { paso = 5000, desfase = 0, incluirFin = true } = {}) {
+  if (puntos.length < 2) return [];
+  const acc = acumuladas(puntos);
+  const largo = acc.at(-1);
+  const progIni = desfase, progFin = desfase + largo;
+  const marcas = [];
+  const primera = Math.ceil(progIni / paso) * paso;
+  for (let prog = primera; prog <= progFin; prog += paso) {
+    const pos = puntoADistancia(puntos, prog - desfase, acc);
+    if (pos) marcas.push({ prog, pos });
+  }
+  if (incluirFin && (!marcas.length || progFin - marcas.at(-1).prog > paso * 0.15)) {
+    marcas.push({ prog: progFin, pos: puntos.at(-1), fin: true });
+  }
+  return marcas;
+}
+
+/** Kilometraje en formato de obra: 157503 → "157+503". */
+export const progresivaTexto = (m) =>
+  `${Math.floor(m / 1000)}+${String(Math.round(m % 1000)).padStart(3, '0')}`;
+
 /**
  * Escala de la lámina: cuántas veces se redujo el terreno para caber en el
  * papel.
