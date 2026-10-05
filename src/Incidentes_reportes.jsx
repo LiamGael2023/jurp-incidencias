@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
@@ -9,6 +10,19 @@ import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+
+
+// Los modales se cuelgan del <body>, no del árbol de la página.
+//
+// Esta pantalla va dentro de un contenedor con z-index propio, y la barra
+// lateral de la app es un flex item con z-index 1002. En flexbox un z-index
+// distinto de 'auto' crea contexto de apilamiento AUNQUE el elemento sea
+// estático, así que el z-index del velo del modal queda encerrado en ese
+// contenedor y el menú se dibujaba encima del modal.
+//
+// Sacarlos al body los deja en el contexto raíz, que es donde debe vivir algo
+// que cubre toda la pantalla. Comprobado en Chromium con las hojas reales.
+const Portal = ({ children }) => createPortal(children, document.body);
 
 function Incidentes() {
   const [incidentes, setIncidentes] = useState([]);
@@ -526,7 +540,7 @@ function Incidentes() {
 
       {/* ── MODAL PRINCIPAL (GESTIÓN) ──────────────────────────────────── */}
       {modalAbierto && incidenteActivo && (
-        <div className="tbl-modal-backdrop" onClick={() => setModalAbierto(false)}>
+        <Portal><div className="tbl-modal-backdrop" onClick={() => setModalAbierto(false)}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{maxWidth: '960px'}}>
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
@@ -638,12 +652,12 @@ function Incidentes() {
               </div>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
 
       {/* ── MODAL PDF ──────────────────────────────────────────────────── */}
       {modalPdfAbierto && (
-        <div className="tbl-modal-backdrop" onClick={() => setModalPdfAbierto(false)} style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.75)' }}>
+        <Portal><div className="tbl-modal-backdrop" onClick={() => setModalPdfAbierto(false)} style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.75)' }}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '850px', height: '90vh', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10000, marginTop: '2vh' }}>
             <div className="tbl-modal-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
               <div className="tbl-modal-header" style={{ borderBottom: '1px solid #e2e8f0', padding: '15px 20px', backgroundColor: '#f8fafc' }}>
@@ -655,7 +669,7 @@ function Incidentes() {
               </div>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
 
       {/* ── MODAL GALERÍA DE EVIDENCIAS ────────────────────────────────── */}

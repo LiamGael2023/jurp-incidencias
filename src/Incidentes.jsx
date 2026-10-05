@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
@@ -22,6 +23,25 @@ import imgConformacion from './assets/metrado/conformacion.png';
 import imgEnrocado from './assets/metrado/enrocado.png';
 import imgPerfilado from './assets/metrado/perfilado.png';
 import imgHabilitacion from './assets/metrado/habilitacion.png';
+
+// Los modales se cuelgan del <body>, no del árbol de la página.
+//
+// Esta pantalla va envuelta en <div className="inc"> con un <div
+// className="inc-main"> que lleva z-index, y la barra lateral de la app es un
+// flex item con z-index 1002. En flexbox un z-index distinto de 'auto' crea
+// contexto de apilamiento AUNQUE el elemento sea estático, así que la barra
+// forma el suyo y el z-index 9999 del velo del modal queda encerrado dentro de
+// .inc-main: por alto que sea, hacia afuera toda esa caja vale menos que la
+// barra, y el menú se dibujaba encima del modal.
+//
+// Subir el z-index de .inc por encima de 1002 también lo arregla, pero .inc es
+// position:fixed con inset:0 y fondo propio: con el modal cerrado taparía el
+// menú entero. Comprobado en Chromium con las hojas reales.
+//
+// Sacarlos al body los deja en el contexto raíz, que es donde debe vivir algo
+// que cubre toda la pantalla.
+const Portal = ({ children }) => createPortal(children, document.body);
+
 const IMG_METRADO = {
   'CARGUIO DE MATERIAL': imgCarguio, 'CONFORMACION DE DIQUE': imgConformacion,
   'DESCOLMATACION DE CAUCE': imgDescolmatacion, 'ELIMINACION': imgEliminacion,
@@ -2677,7 +2697,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       </div>
       {/* ── MODAL PRINCIPAL (GESTIÓN) — solo cierra con botón Cerrar ─────── */}
       {modalAbierto && incidenteActivo && (
-        <div className="tbl-modal-backdrop">
+        <Portal><div className="tbl-modal-backdrop">
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{maxWidth: '1240px', width: '95vw'}}>
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
@@ -2916,11 +2936,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               </div>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
       {/* ── Modal PASO 1: Selector de máquina ───────────────────────────── */}
       {selectorMaquina && (
-        <div className="tbl-modal-backdrop" style={{ zIndex: 10001 }}>
+        <Portal><div className="tbl-modal-backdrop" style={{ zIndex: 10001 }}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '620px' }}>
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
@@ -2974,12 +2994,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               </div>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
 
       {/* ── Modal: Añadir recurso (Mano de obra / Equipo / Insumo) ──────── */}
       {formTipo && (
-        <div className="tbl-modal-backdrop" style={{ zIndex: 10001 }}>
+        <Portal><div className="tbl-modal-backdrop" style={{ zIndex: 10001 }}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: formTipo === 'Maquinaria' ? '900px' : '760px' }}>
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
@@ -3248,7 +3268,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               </div>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
       {/* ── Modal: partes diarios de una máquina ───────────────────────── */}
       {modalPartes && (
@@ -3458,7 +3478,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       )}
       {/* ── Modal: UNA actividad del parte (zona, tarea y metrado) ─────── */}
       {modalActividad && (
-        <div className="tbl-modal-backdrop" style={{ zIndex: 10002 }}>
+        <Portal><div className="tbl-modal-backdrop" style={{ zIndex: 10002 }}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '820px' }}>
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
@@ -3646,7 +3666,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               </div>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
       {/* ── Modal de imagen de referencia (metrado) ────────────────────── */}
       {imgRefModal && (
@@ -3664,7 +3684,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       )}
       {/* ── MODAL PDF ──────────────────────────────────────────────────── */}
       {modalPdfAbierto && (
-        <div className="tbl-modal-backdrop" onClick={() => setModalPdfAbierto(false)} style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.75)' }}>
+        <Portal><div className="tbl-modal-backdrop" onClick={() => setModalPdfAbierto(false)} style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.75)' }}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '850px', height: '90vh', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10000, marginTop: '2vh' }}>
             <div className="tbl-modal-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
               <div className="tbl-modal-header" style={{ borderBottom: '1px solid #e2e8f0', padding: '15px 20px', backgroundColor: '#f8fafc' }}>
@@ -3676,7 +3696,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               </div>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
       {/* ── MODAL GALERÍA DE EVIDENCIAS ────────────────────────────────── */}
       {modalMediaAbierto && (

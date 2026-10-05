@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FaSyncAlt, FaSearch, FaFilter, FaTimes, FaFilePdf, FaFileExcel,
   FaCheckCircle, FaTruck, FaClipboardList, FaChevronLeft, FaChevronRight,
@@ -16,6 +17,19 @@ import './Incidentes.css';
  * qué se emitió en un rango de fechas, cuánto suman las horas y el costo, y
  * sobre todo qué partes quedaron abiertos sin que nadie los finalizara.
  */
+
+
+// Los modales se cuelgan del <body>, no del árbol de la página.
+//
+// Esta pantalla va dentro de un contenedor con z-index propio, y la barra
+// lateral de la app es un flex item con z-index 1002. En flexbox un z-index
+// distinto de 'auto' crea contexto de apilamiento AUNQUE el elemento sea
+// estático, así que el z-index del velo del modal queda encerrado en ese
+// contenedor y el menú se dibujaba encima del modal.
+//
+// Sacarlos al body los deja en el contexto raíz, que es donde debe vivir algo
+// que cubre toda la pantalla. Comprobado en Chromium con las hojas reales.
+const Portal = ({ children }) => createPortal(children, document.body);
 
 const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
@@ -448,7 +462,7 @@ function Partes({ irAIncidente }) {
 
       {/* ── Modal de detalle ── */}
       {detalle && (
-        <div className="tbl-modal-backdrop" onClick={() => setDetalle(null)} style={{ zIndex: 10001 }}>
+        <Portal><div className="tbl-modal-backdrop" onClick={() => setDetalle(null)} style={{ zIndex: 10001 }}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 720 }}>
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
@@ -509,12 +523,12 @@ function Partes({ irAIncidente }) {
               </div>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
 
       {/* ── Visor de PDF ── */}
       {pdfUrl && (
-        <div className="tbl-modal-backdrop" onClick={() => setPdfUrl(null)} style={{ zIndex: 10002, backgroundColor: 'rgba(0,0,0,.75)' }}>
+        <Portal><div className="tbl-modal-backdrop" onClick={() => setPdfUrl(null)} style={{ zIndex: 10002, backgroundColor: 'rgba(0,0,0,.75)' }}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 880, height: '90vh', display: 'flex', flexDirection: 'column', marginTop: '2vh' }}>
             <div className="tbl-modal-content" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               <div className="tbl-modal-header" style={{ background: '#f8fafc' }}>
@@ -528,7 +542,7 @@ function Partes({ irAIncidente }) {
               </div>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
     </div>
   );
