@@ -3066,8 +3066,16 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                         </button>
                       </div>
 
-                      {/* Hoja resumen */}
-                      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12.5px', background:'#fff', borderRadius:'5px', overflow:'hidden' }}>
+                      {/* Hoja resumen.
+
+                           El contenedor desplaza en horizontal y la tabla tiene
+                           un ancho minimo: son nueve columnas, cinco de ellas de
+                           numeros que no pueden partirse. En pantalla ancha sobra
+                           sitio y el scroll ni aparece; en una tableta estrecha la
+                           tabla se desliza dentro de su caja en vez de reventar el
+                           modal y dejar los botones fuera de la vista. */}
+                      <div style={{ overflowX:'auto' }}>
+                      <table style={{ width:'100%', minWidth:'760px', borderCollapse:'collapse', fontSize:'12.5px', background:'#fff', borderRadius:'5px', overflow:'hidden' }}>
                         <thead>
                           <tr style={{ background:'#e0f2fe' }}>
                             <th style={{ textAlign:'left', padding:'8px 10px', fontSize:'10.5px', color:'#0369a1', width:'34px' }}>#</th>
@@ -3088,13 +3096,30 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                             </td></tr>
                           ) : actividades.map((a, i) => {
                             const mv = calcMetradoDe(a);
+                            const muertas = muertasDeActividad(a);
+                            // Las notas van en una linea aparte, a todo lo ancho.
+                            //
+                            // Antes colgaban de su celda. La de horas muertas
+                            // ademas heredaba el white-space:nowrap de la celda,
+                            // asi que una frase corriente -"no pudo realizar
+                            // acomodo de roca"- no podia partirse y estiraba esa
+                            // columna hasta 345px: medido, la tabla pedia 1001px
+                            // donde solo hay 822, y se comia la columna HE y los
+                            // botones de editar y quitar.
+                            //
+                            // Abajo caben enteras, se leen como frases y las
+                            // columnas vuelven a medir lo que mide su numero.
+                            const notas = [];
+                            if (a.observacion) notas.push({ k:'obs', color:'#94a3b8', etq:'', txt:a.observacion });
+                            if (muertas > 0 && (a.obsReduccion || '').trim())
+                              notas.push({ k:'red', color:'#b45309', etq:'H. muertas:', txt:a.obsReduccion });
                             return (
-                              <tr key={i} style={{ borderTop:'1px solid #f1f5f9' }}>
+                              <Fragment key={i}>
+                              <tr style={{ borderTop:'1px solid #f1f5f9' }}>
                                 <td style={{ padding:'8px 10px', color:'#94a3b8', fontWeight:700 }}>{i + 1}</td>
                                 <td style={{ padding:'8px 10px', color:'#475569' }}>{a.zonaTrabajo || '—'}</td>
                                 <td style={{ padding:'8px 10px', color:'#1e293b', fontWeight:600 }}>
                                   {textoActividad(a) || '—'}
-                                  {a.observacion ? <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:400 }}>{a.observacion}</div> : null}
                                 </td>
                                 <td style={{ padding:'8px 10px', textAlign:'right', color:'#1463A5', fontWeight:700, whiteSpace:'nowrap' }}>
                                   {fmtCant(mv.val)} {mv.unit}
@@ -3105,9 +3130,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                 <td style={{ padding:'8px 10px', textAlign:'right', color:'#64748b', whiteSpace:'nowrap' }}>
                                   {fmtCant(horasDeActividad(a))} h
                                 </td>
-                                <td style={{ padding:'8px 10px', textAlign:'right', whiteSpace:'nowrap', fontWeight: muertasDeActividad(a) > 0 ? 700 : 400, color: muertasDeActividad(a) > 0 ? '#b45309' : '#cbd5e1' }}>
-                                  {muertasDeActividad(a) > 0 ? `${fmtCant(muertasDeActividad(a))} h` : '—'}
-                                  {muertasDeActividad(a) > 0 && <div style={{ fontSize:'10.5px', fontWeight:400, color:'#b45309' }}>{a.obsReduccion}</div>}
+                                <td style={{ padding:'8px 10px', textAlign:'right', whiteSpace:'nowrap', fontWeight: muertas > 0 ? 700 : 400, color: muertas > 0 ? '#b45309' : '#cbd5e1' }}>
+                                  {muertas > 0 ? `${fmtCant(muertas)} h` : '—'}
                                 </td>
                                 <td style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, whiteSpace:'nowrap', color:'#1463A5' }}>
                                   {fmtCant(heDeActividad(a))} h
@@ -3121,6 +3145,20 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                   </div>
                                 </td>
                               </tr>
+                              {notas.length > 0 && (
+                                <tr>
+                                  <td></td>
+                                  <td colSpan="8" style={{ padding:'0 10px 8px', fontSize:'10.5px', lineHeight:1.45 }}>
+                                    {notas.map((n, j) => (
+                                      <span key={n.k} style={{ color:n.color }}>
+                                        {j > 0 && <span style={{ color:'#cbd5e1' }}> · </span>}
+                                        {n.etq && <b>{n.etq} </b>}{n.txt}
+                                      </span>
+                                    ))}
+                                  </td>
+                                </tr>
+                              )}
+                              </Fragment>
                             );
                           })}
                         </tbody>
@@ -3154,6 +3192,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                           );
                         })()}
                       </table>
+                      </div>
                     </div>
 
                     <div className="tbl-row tbl-mb-3">
