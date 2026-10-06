@@ -28,6 +28,31 @@ const ESTADOS = {
   mantenimiento: { c: '#d97706', tinte: '#fff7ed', texto: 'EN MANTENIMIENTO' },
 };
 
+// Código con el que se identifica una incidencia en todo el sistema:
+// INCIDENTE-{id}-DDMMAAAA, con la fecha de CREACIÓN de la incidencia.
+//
+// Se arma igual que en Incidentes.jsx y a partir del mismo dato crudo
+// (created_at convertido en el navegador) para que las dos pantallas no
+// puedan dar códigos distintos del mismo incidente. Si una usara la hora del
+// servidor y la otra la local, un incidente creado de madrugada saldría con
+// dos fechas y nadie sabría cuál buscar.
+//
+// Antes esta tabla mostraba p.incidente_codigo, que es el "Código de
+// Infraestructura" del backend -un 1, un 5- y no identifica a la incidencia.
+const codigoIncidencia = (p) => {
+  if (!p || !p.incidente_id) return '—';
+  const base = `INCIDENTE-${String(p.incidente_id).padStart(3, '0')}`;
+  // El backend aún puede no mandar la fecha: entonces vale más el número
+  // solo que el campo equivocado.
+  const crudo = p.incidente_creado;
+  if (!crudo) return base;
+  const f = new Date(crudo);
+  if (Number.isNaN(f.getTime())) return base;
+  const dd = String(f.getDate()).padStart(2, '0');
+  const mm = String(f.getMonth() + 1).padStart(2, '0');
+  return `${base}-${dd}${mm}${f.getFullYear()}`;
+};
+
 export default function Maquinaria({ irAIncidente }) {
   const [maquinas, setMaquinas] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -454,8 +479,11 @@ export default function Maquinaria({ irAIncidente }) {
     const maq = detalle;
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Historial de Partes');
+    // La 9ª es N° INCIDENCIA: con el código completo (INCIDENTE-001-14082026)
+    // son 22 caracteres, y con ancho 16 quedaba recortado por la columna de al
+    // lado. 24 lo deja entero con un respiro.
     ws.columns = [{ width: 20 }, { width: 12 }, { width: 11 }, { width: 26 }, { width: 14 },
-                  { width: 11 }, { width: 12 }, { width: 22 }, { width: 16 }, { width: 14 }];
+                  { width: 11 }, { width: 12 }, { width: 22 }, { width: 24 }, { width: 14 }];
     const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1463A5' } };
     const grisClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9' } };
     const borde = { top:{style:'thin',color:{argb:'E2E8F0'}}, bottom:{style:'thin',color:{argb:'E2E8F0'}}, left:{style:'thin',color:{argb:'E2E8F0'}}, right:{style:'thin',color:{argb:'E2E8F0'}} };
@@ -521,13 +549,16 @@ export default function Maquinaria({ irAIncidente }) {
         parseFloat(p.horas) || 0,
         parseFloat(p.fuel_gallons) || 0,
         p.provider || '—',
-        p.incidente_codigo || (p.incidente_id ? `#${p.incidente_id}` : '—'),
+        codigoIncidencia(p),
         parseFloat(p.costo) || 0,
       ];
       fila.forEach((v, ci) => {
         const c = ws.getCell(r, ci + 1);
         c.value = v; c.border = borde; c.font = { size: 9 };
         if (ci >= 5 && ci !== 7 && ci !== 8) c.alignment = { horizontal: 'right' };
+        // N° INCIDENCIA centrado, como su cabecera. Antes se quedaba a la
+        // izquierda y la columna salía descuadrada respecto a su título.
+        if (ci === 8) c.alignment = { horizontal: 'center' };
         if (ci === 9) c.numFmt = '#,##0.00';
         if (ci === 5 || ci === 6) c.numFmt = '#,##0.00';
       });
@@ -600,7 +631,7 @@ export default function Maquinaria({ irAIncidente }) {
       `${(parseFloat(p.horas) || 0).toFixed(2)} HE`,
       `${(parseFloat(p.fuel_gallons) || 0).toFixed(2)} Gls`,
       p.provider || '—',
-      p.incidente_codigo || (p.incidente_id ? `#${p.incidente_id}` : '—'),
+      codigoIncidencia(p),
       `S/ ${(parseFloat(p.costo) || 0).toFixed(2)}`,
     ]));
 
@@ -621,6 +652,10 @@ export default function Maquinaria({ irAIncidente }) {
       columnStyles: {
         4: { halign: 'right' }, 5: { halign: 'right' },
         6: { halign: 'right' }, 9: { halign: 'right' },
+        // N° INCIDENCIA: la cabecera va centrada (headStyles lo centra todo) y
+        // el cuerpo se quedaba a la izquierda, así que la columna parecía
+        // descuadrada. Centrar el cuerpo la alinea con su propio título.
+        8: { halign: 'center' },
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       margin: { left: 10, right: 10 },
@@ -1019,7 +1054,7 @@ export default function Maquinaria({ irAIncidente }) {
                             <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.horas)} HE</td>
                             <td style={{ padding: '11px 8px', textAlign: 'right', color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.fuel_gallons || 0)} Gls</td>
                             <td style={{ padding: '11px 8px', color: '#475569', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.provider || ''}>{p.provider || '—'}</td>
-                            <td style={{ padding: '11px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{p.incidente_codigo || (p.incidente_id ? `#${p.incidente_id}` : '—')}</td>
+                            <td style={{ padding: '11px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{codigoIncidencia(p)}</td>
                             <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 700, color: '#1463A5', whiteSpace: 'nowrap' }}>S/ {fmtNum(p.costo)}</td>
                             <td style={{ padding: '11px 14px', textAlign: 'right' }}>
                               <button onClick={() => abrirPdfParte(p.id, p.part_number)} title="Ver PDF"
