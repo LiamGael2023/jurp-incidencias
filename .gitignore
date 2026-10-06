@@ -25,3 +25,8 @@ dist-ssr
 
 # pruebas: paquete que se compila al vuelo
 pruebas/lamina/.build/
+
+# Bytecode de Python: lo deja cualquier import o py_compile de los scripts
+# de pruebas/, y no es codigo fuente.
+__pycache__/
+*.py[cod]
