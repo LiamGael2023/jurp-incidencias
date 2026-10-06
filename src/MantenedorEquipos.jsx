@@ -14,6 +14,7 @@
 //  pertenece a un solo origen.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Swal from 'sweetalert2';
 import { FaPlus, FaEdit, FaTrash, FaTimes, FaChevronRight, FaSync, FaCircle, FaSearch, FaTools, FaCopy } from 'react-icons/fa';
 import './MantenedorEquipos.css';
@@ -339,7 +340,13 @@ export default function MantenedorEquipos({ abierto, onClose }) {
 
   if (!abierto) return null;
 
-  return (
+  // Se cuelga del <body>. Lo abren dos pantallas, Maquinaria e Incidentes, y
+  // en las dos el contenedor del contenido (.maq-main / .inc-main) lleva
+  // z-index, con lo que crea su propio contexto de apilamiento: dentro de él
+  // el z-index 100000 de .mnt-overlay solo ordena a sus hermanos, y hacia
+  // fuera la capa entera vale 1. El rail del menú, que es position:fixed con
+  // z-index 50, se dibujaba encima.
+  return createPortal(
     <div className="mnt-overlay" onClick={onClose}>
       <div className="mnt-modal" onClick={e => e.stopPropagation()}>
         <div className="mnt-header">
@@ -476,6 +483,7 @@ export default function MantenedorEquipos({ abierto, onClose }) {
           <button className="mnt-btn-cerrar" onClick={onClose}>Cerrar</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -5,6 +5,7 @@
 //  se muestra su historial completo de partes diarios (abiertos y cerrados).
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Swal from 'sweetalert2';
 import {
   FaTruck, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaTimes,
@@ -18,6 +19,20 @@ import logo from './assets/jurp.png';
 import './MaquinariaGIS.css';
 
 const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
+
+// Los modales se cuelgan del <body>, no del árbol donde se escriben.
+//
+// MaquinariaGIS.css ya dice que "se dibujan por encima de todo", pero no era
+// cierto: el velo vive dentro de .maq-main, que lleva z-index 1 y por eso crea
+// su propio contexto de apilamiento. Dentro de él, el 9999 del velo solo ordena
+// a sus hermanos; hacia fuera la capa entera vale 1, y el rail del menú, que es
+// position:fixed con z-index 50, se dibuja encima.
+//
+// El efecto es el que se ve: el modal sí está centrado en la pantalla, pero el
+// menú le tapa el lado izquierdo y queda pegado a él, con todo el aire a la
+// derecha. Colgándolo del body el velo pasa a ordenarse contra la página y
+// cubre el menú, que es lo que el CSS ya daba por hecho.
+const Portal = ({ children }) => createPortal(children, document.body);
 
 const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -944,7 +959,7 @@ export default function Maquinaria({ irAIncidente }) {
 
         {/* ══════════════ MODAL: historial de partes ══════════════ */}
         {detalle && (
-          <div onClick={() => { setDetalle(null); setHistorial(null); }} style={overlayStyle}>
+          <Portal><div onClick={() => { setDetalle(null); setHistorial(null); }} style={overlayStyle}>
             <div onClick={e => e.stopPropagation()} style={{ ...modalStyle, maxWidth: '1400px', maxHeight: '94vh' }}>
               <div style={modalHeadStyle}>
                 <h5 style={{ margin: 0, fontSize: '16px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1085,12 +1100,12 @@ export default function Maquinaria({ irAIncidente }) {
                 )}
               </div>
             </div>
-          </div>
+          </div></Portal>
         )}
 
         {/* ══════════════ MODAL: visor de PDF ══════════════ */}
         {pdfModal && (
-          <div onClick={() => setPdfModal(null)} style={{ ...overlayStyle, zIndex: 10000, alignItems: 'flex-start', padding: '2vh 16px' }}>
+          <Portal><div onClick={() => setPdfModal(null)} style={{ ...overlayStyle, zIndex: 10000, alignItems: 'flex-start', padding: '2vh 16px' }}>
             <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '900px', height: '92vh', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: '10px', overflow: 'hidden' }}>
               <div style={modalHeadStyle}>
                 <h5 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1107,7 +1122,7 @@ export default function Maquinaria({ irAIncidente }) {
                 <iframe src={pdfModal.url} style={{ width: '100%', height: '100%', border: 'none' }} title="Visor PDF" />
               </div>
             </div>
-          </div>
+          </div></Portal>
         )}
 
         {/* ══════════════ Mantenedor de catálogos ══════════════ */}
