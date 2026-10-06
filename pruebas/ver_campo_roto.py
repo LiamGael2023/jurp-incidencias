@@ -2,9 +2,10 @@
 """
 Mira el campo con doble guion bajo que bloquea las migraciones.
 
-    docker compose exec -T web python manage.py shell --skip-checks < ver_campo_roto.py
+    docker compose exec -T web python manage.py shell < ver_campo_roto.py
 
-El --skip-checks es imprescindible: ese mismo error impide arrancar el shell.
+SIN --skip-checks: 'shell' no ejecuta system checks, asi que el flag ni
+existe en ese comando. Solo lo llevan los que si los corren, como migrate.
 
 QUE PASA. Django prohibe "__" en un nombre de campo (fields.E002) porque es
 su separador para recorrer relaciones: con un campo n__usuario no sabria si
