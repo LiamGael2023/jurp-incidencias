@@ -81,6 +81,9 @@ export default function Maquinaria({ irAIncidente }) {
   const [cargandoHist, setCargandoHist] = useState(false);
   const [pdfModal, setPdfModal] = useState(null);
   const [modalReporteFlota, setModalReporteFlota] = useState(false);
+  // 'valorizado' lleva los importes; 'horas' sale sin ninguno. Se elige en
+  // el propio modal y no con otro dialogo encima, que ya seria uno sobre otro.
+  const [modoFlota, setModoFlota] = useState('valorizado');
   const [generandoFlota, setGenerandoFlota] = useState(false);         // { url, nombre }
   const [mantenedorAbierto, setMantenedorAbierto] = useState(false);
 
@@ -254,6 +257,9 @@ export default function Maquinaria({ irAIncidente }) {
 
   // ── Reporte de flota en PDF ────────────────────────────────────────────
   const reporteFlotaPDF = async () => {
+    // El costo es siempre la ULTIMA columna de las dos tablas, asi que
+    // quitarla no corre ningun otro indice.
+    const valorizado = modoFlota === 'valorizado';
     setGenerandoFlota(true);
     try {
       const datos = await recopilarFlota();
@@ -269,7 +275,7 @@ export default function Maquinaria({ irAIncidente }) {
       doc.setFontSize(14); doc.setFont(undefined, 'bold');
       doc.text('JUNTA DE RIEGO PRESURIZADO', 34, 12);
       doc.setFontSize(11); doc.setFont(undefined, 'normal');
-      doc.text('Reporte General de Maquinaria', 34, 19);
+      doc.text(`Reporte General de Maquinaria${valorizado ? '' : ' · solo horas'}`, 34, 19);
       doc.setFontSize(8);
       doc.text(`Generado: ${new Date().toLocaleString('es-PE')} · ${lista.length} máquina(s)`, 34, 24.5);
 
@@ -280,18 +286,22 @@ export default function Maquinaria({ irAIncidente }) {
 
       autoTable(doc, {
         startY: 34,
-        head: [['CÓDIGO', 'EQUIPO', 'MARCA', 'MODELO', 'PLACA', 'ORIGEN', 'ESTADO', 'PARTES', 'HORAS', 'COMBUST.', 'COSTO S/']],
+        head: [['CÓDIGO', 'EQUIPO', 'MARCA', 'MODELO', 'PLACA', 'ORIGEN', 'ESTADO', 'PARTES', 'HORAS', 'COMBUST.',
+                ...(valorizado ? ['COSTO S/'] : [])]],
         body: lista.map(m => {
           const g = datos[m.id] || { partes: [], horas: 0, costo: 0, combustible: 0 };
           return [m.codigo, m.equipo || '—', m.marca || '—', m.modelo || '—', m.placa || '—',
                   m.origen === 'JURP' ? 'JURP' : 'EXT', estadoTxt(m),
-                  String(g.partes.length), g.horas.toFixed(2), g.combustible.toFixed(2), g.costo.toFixed(2)];
+                  String(g.partes.length), g.horas.toFixed(2), g.combustible.toFixed(2),
+                  ...(valorizado ? [g.costo.toFixed(2)] : [])];
         }),
-        foot: [['', '', '', '', '', '', 'TOTALES', String(tot.p), tot.h.toFixed(2), tot.f.toFixed(2), tot.c.toFixed(2)]],
+        foot: [['', '', '', '', '', '', 'TOTALES', String(tot.p), tot.h.toFixed(2), tot.f.toFixed(2),
+                ...(valorizado ? [tot.c.toFixed(2)] : [])]],
         styles: { fontSize: 7.5, cellPadding: 2 },
         headStyles: { fillColor: [20, 99, 165], textColor: 255, fontSize: 7.5 },
         footStyles: { fillColor: [224, 242, 254], textColor: [20, 99, 165], fontStyle: 'bold', fontSize: 7.5 },
-        columnStyles: { 7: { halign: 'right' }, 8: { halign: 'right' }, 9: { halign: 'right' }, 10: { halign: 'right' } },
+        columnStyles: { 7: { halign: 'right' }, 8: { halign: 'right' }, 9: { halign: 'right' },
+                        ...(valorizado ? { 10: { halign: 'right' } } : {}) },
         alternateRowStyles: { fillColor: [248, 250, 252] },
         margin: { left: 10, right: 10 },
       });
@@ -311,17 +321,21 @@ export default function Maquinaria({ irAIncidente }) {
 
         autoTable(doc, {
           startY: 26,
-          head: [['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'COMBUST.', 'TOTAL S/']],
+          head: [['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'COMBUST.',
+                  ...(valorizado ? ['TOTAL S/'] : [])]],
           body: g.partes.map(x => ([
             x.parte, x.fecha, x.cerrado ? 'CERRADO' : 'ABIERTO', x.actividad, x.proveedor,
             `${x.metrado.toFixed(2)} ${uMet(x.metradoUnidad)}`,
-            x.horas.toFixed(2), x.combustible.toFixed(2), x.costo.toFixed(2),
+            x.horas.toFixed(2), x.combustible.toFixed(2),
+            ...(valorizado ? [x.costo.toFixed(2)] : []),
           ])),
-          foot: [['', '', '', '', 'TOTALES', '', g.horas.toFixed(2), g.combustible.toFixed(2), g.costo.toFixed(2)]],
+          foot: [['', '', '', '', 'TOTALES', '', g.horas.toFixed(2), g.combustible.toFixed(2),
+                  ...(valorizado ? [g.costo.toFixed(2)] : [])]],
           styles: { fontSize: 7.5, cellPadding: 1.8 },
           headStyles: { fillColor: [100, 116, 139], textColor: 255, fontSize: 7.5 },
           footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 7.5 },
-          columnStyles: { 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' } },
+          columnStyles: { 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' },
+                          ...(valorizado ? { 8: { halign: 'right' } } : {}) },
           alternateRowStyles: { fillColor: [248, 250, 252] },
           margin: { left: 10, right: 10 },
         });
@@ -335,7 +349,7 @@ export default function Maquinaria({ irAIncidente }) {
         doc.text(`Página ${i} de ${paginas}`, W - 10, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
       }
 
-      doc.save(`Reporte_Maquinaria_${new Date().toISOString().slice(0, 10)}.pdf`);
+      doc.save(`Reporte_Maquinaria${valorizado ? '' : '_solo-horas'}_${new Date().toISOString().slice(0, 10)}.pdf`);
       setModalReporteFlota(false);
     } catch (e) {
       console.error(e);
@@ -347,6 +361,13 @@ export default function Maquinaria({ irAIncidente }) {
 
   // ── Reporte de flota en Excel ──────────────────────────────────────────
   const reporteFlotaExcel = async () => {
+    const valorizado = modoFlota === 'valorizado';
+    // Hoja 1 (Flota): el costo es la columna 11. Hoja 2 (Partes): la 9.
+    // En las dos es la ultima, asi que quitarla no corre ninguna otra; lo
+    // unico que hay que acompanar son los merges del membrete.
+    const ultF = valorizado ? 11 : 10;      // ultima columna de la hoja Flota
+    const letraF = valorizado ? 'K' : 'J';
+    const letraP = valorizado ? 'I' : 'H';  // ultima de la hoja Partes
     setGenerandoFlota(true);
     try {
       const datos = await recopilarFlota();
@@ -360,8 +381,9 @@ export default function Maquinaria({ irAIncidente }) {
       // ══ HOJA 1: RESUMEN DE FLOTA ══
       const ws = wb.addWorksheet('Flota');
       ws.columns = [{ width: 14 }, { width: 30 }, { width: 18 }, { width: 16 }, { width: 14 },
-                    { width: 10 }, { width: 19 }, { width: 10 }, { width: 12 }, { width: 13 }, { width: 15 }];
-      for (let r = 1; r <= 3; r++) for (let c = 1; c <= 11; c++) ws.getCell(r, c).fill = azul;
+                    { width: 10 }, { width: 19 }, { width: 10 }, { width: 12 }, { width: 13 },
+                    ...(valorizado ? [{ width: 15 }] : [])];
+      for (let r = 1; r <= 3; r++) for (let c = 1; c <= ultF; c++) ws.getCell(r, c).fill = azul;
       ws.getRow(1).height = 28; ws.getRow(2).height = 20; ws.getRow(3).height = 18;
       try {
         const logoB64 = await imgToBase64(logo);
@@ -370,21 +392,22 @@ export default function Maquinaria({ irAIncidente }) {
           ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 75, height: 65 } });
         }
       } catch (e) {}
-      ws.mergeCells('B1:K1');
+      ws.mergeCells(`B1:${letraF}1`);
       ws.getCell('B1').value = 'JUNTA DE RIEGO PRESURIZADO';
       ws.getCell('B1').font = { bold: true, color: { argb: 'FFFFFF' }, size: 12 };
       ws.getCell('B1').alignment = { vertical: 'middle' };
-      ws.mergeCells('B2:K2');
-      ws.getCell('B2').value = 'Reporte General de Maquinaria';
+      ws.mergeCells(`B2:${letraF}2`);
+      ws.getCell('B2').value = `Reporte General de Maquinaria${valorizado ? '' : ' · solo horas'}`;
       ws.getCell('B2').font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
       ws.getCell('B2').alignment = { vertical: 'middle' };
-      ws.mergeCells('B3:K3');
+      ws.mergeCells(`B3:${letraF}3`);
       ws.getCell('B3').value = `Generado: ${new Date().toLocaleString('es-PE')} · ${lista.length} máquina(s)`;
       ws.getCell('B3').font = { italic: true, size: 9, color: { argb: 'D0D5DD' } };
       ws.getCell('B3').alignment = { vertical: 'middle' };
       ws.getRow(4).height = 6;
 
-      const cab = ['CÓDIGO', 'EQUIPO', 'MARCA', 'MODELO', 'PLACA', 'ORIGEN', 'ESTADO', 'PARTES', 'HORAS', 'COMBUST.', 'COSTO S/'];
+      const cab = ['CÓDIGO', 'EQUIPO', 'MARCA', 'MODELO', 'PLACA', 'ORIGEN', 'ESTADO', 'PARTES', 'HORAS', 'COMBUST.',
+                   ...(valorizado ? ['COSTO S/'] : [])];
       cab.forEach((h, i) => {
         const c = ws.getCell(5, i + 1);
         c.value = h; c.fill = azul; c.border = borde;
@@ -398,7 +421,8 @@ export default function Maquinaria({ irAIncidente }) {
         const r = 6 + i;
         const fila = [m.codigo, m.equipo || '—', m.marca || '—', m.modelo || '—', m.placa || '—',
                       m.origen === 'JURP' ? 'JURP' : 'EXT', estadoTxt(m),
-                      g.partes.length, g.horas, g.combustible, g.costo];
+                      g.partes.length, g.horas, g.combustible,
+                      ...(valorizado ? [g.costo] : [])];
         fila.forEach((v, ci) => {
           const c = ws.getCell(r, ci + 1);
           c.value = v; c.border = borde; c.font = { size: 9 };
@@ -413,7 +437,8 @@ export default function Maquinaria({ irAIncidente }) {
       ws.getCell(`A${rTot}`).alignment = { horizontal: 'right' };
       ws.getCell(`A${rTot}`).fill = azulClaro;
       const sum = (f) => lista.reduce((a, m) => a + (datos[m.id] ? f(datos[m.id]) : 0), 0);
-      [[8, sum(g => g.partes.length)], [9, sum(g => g.horas)], [10, sum(g => g.combustible)], [11, sum(g => g.costo)]]
+      [[8, sum(g => g.partes.length)], [9, sum(g => g.horas)], [10, sum(g => g.combustible)],
+       ...(valorizado ? [[11, sum(g => g.costo)]] : [])]
         .forEach(([col, val]) => {
           const c = ws.getCell(rTot, col);
           c.value = val; c.fill = azulClaro; c.border = borde;
@@ -425,19 +450,21 @@ export default function Maquinaria({ irAIncidente }) {
       // ══ HOJA 2: DETALLE DE PARTES ══
       const wd = wb.addWorksheet('Partes');
       wd.columns = [{ width: 22 }, { width: 13 }, { width: 11 }, { width: 28 }, { width: 20 },
-                    { width: 15 }, { width: 11 }, { width: 12 }, { width: 14 }];
+                    { width: 15 }, { width: 11 }, { width: 12 },
+                    ...(valorizado ? [{ width: 14 }] : [])];
       let f = 1;
       lista.forEach(m => {
         const g = datos[m.id];
         if (!g || !g.partes.length) return;
-        wd.mergeCells(`A${f}:I${f}`);
+        wd.mergeCells(`A${f}:${letraP}${f}`);
         const t = wd.getCell(`A${f}`);
         t.value = `${m.codigo} · ${m.equipo || ''} · ${m.marca || ''} ${m.modelo || ''}  |  Placa: ${m.placa || '—'}  |  ${estadoTxt(m)}`;
         t.fill = azul; t.font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
         wd.getRow(f).height = 20;
         f += 1;
 
-        const ch = ['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'COMBUST.', 'TOTAL S/'];
+        const ch = ['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'PROVEEDOR', 'VOLUMEN', 'HORAS', 'COMBUST.',
+                    ...(valorizado ? ['TOTAL S/'] : [])];
         ch.forEach((h, i) => {
           const c = wd.getCell(f, i + 1);
           c.value = h; c.fill = gris; c.border = borde;
@@ -448,7 +475,8 @@ export default function Maquinaria({ irAIncidente }) {
 
         g.partes.forEach(x => {
           const fila = [x.parte, x.fecha, x.cerrado ? 'CERRADO' : 'ABIERTO', x.actividad, x.proveedor,
-                        `${x.metrado.toFixed(2)} ${uMet(x.metradoUnidad)}`, x.horas, x.combustible, x.costo];
+                        `${x.metrado.toFixed(2)} ${uMet(x.metradoUnidad)}`, x.horas, x.combustible,
+                        ...(valorizado ? [x.costo] : [])];
           fila.forEach((v, ci) => {
             const c = wd.getCell(f, ci + 1);
             c.value = v; c.border = borde; c.font = { size: 9 };
@@ -461,7 +489,7 @@ export default function Maquinaria({ irAIncidente }) {
         wd.getCell(f, 5).value = 'TOTALES';
         wd.getCell(f, 5).font = { bold: true, size: 9 };
         wd.getCell(f, 5).alignment = { horizontal: 'right' };
-        [[7, g.horas], [8, g.combustible], [9, g.costo]].forEach(([col, val]) => {
+        [[7, g.horas], [8, g.combustible], ...(valorizado ? [[9, g.costo]] : [])].forEach(([col, val]) => {
           const c = wd.getCell(f, col);
           c.value = val; c.fill = azulClaro; c.border = borde;
           c.font = { bold: true, size: 9, color: { argb: '1463A5' } };
@@ -476,7 +504,7 @@ export default function Maquinaria({ irAIncidente }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Reporte_Maquinaria_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `Reporte_Maquinaria${valorizado ? '' : '_solo-horas'}_${new Date().toISOString().slice(0, 10)}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
       setModalReporteFlota(false);
@@ -954,7 +982,7 @@ export default function Maquinaria({ irAIncidente }) {
 
         {/* ══════════════ MODAL: formato del reporte de flota ══════════════ */}
         {modalReporteFlota && (
-          <div onClick={() => !generandoFlota && setModalReporteFlota(false)}
+          <Portal><div onClick={() => !generandoFlota && setModalReporteFlota(false)}
             style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
             <div onClick={e => e.stopPropagation()}
               style={{ background:'#fff', borderRadius:'12px', width:'100%', maxWidth:'440px', overflow:'hidden', boxShadow:'0 20px 40px rgba(0,0,0,0.25)' }}>
@@ -974,7 +1002,28 @@ export default function Maquinaria({ irAIncidente }) {
                     Se aplicarán los filtros activos ({maquinasFiltradas.length} de {maquinas.length}).
                   </p>
                 )}
-                <p style={{ margin:'12px 0 16px', fontSize:'13px', color:'#64748b' }}>Elige el formato:</p>
+                {/* El mismo reporte sirve para valorizar lo que se paga y para
+                    acreditar las horas trabajadas. El segundo se entrega a gente
+                    que no tiene por qué ver las tarifas. */}
+                <p style={{ margin:'14px 0 8px', fontSize:'13px', color:'#64748b' }}>Tipo de reporte:</p>
+                <div style={{ display:'flex', gap:'8px', marginBottom:'4px' }}>
+                  {[['valorizado', 'Valorizado', 'Con la columna de costos'],
+                    ['horas', 'Solo horas', 'Sin ningún importe']].map(([valor, titulo, pie]) => {
+                    const activo = modoFlota === valor;
+                    return (
+                      <button key={valor} type="button" disabled={generandoFlota}
+                        onClick={() => setModoFlota(valor)}
+                        style={{ flex:1, textAlign:'left', padding:'10px 12px', borderRadius:'8px', cursor: generandoFlota ? 'default' : 'pointer',
+                                 background: activo ? '#eff6ff' : '#fff',
+                                 border: `2px solid ${activo ? '#1463A5' : '#e2e8f0'}`,
+                                 color: activo ? '#1463A5' : '#64748b' }}>
+                        <div style={{ fontSize:'13px', fontWeight:700 }}>{titulo}</div>
+                        <div style={{ fontSize:'11px', fontWeight:400, marginTop:'2px', color: activo ? '#3b82f6' : '#94a3b8' }}>{pie}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p style={{ margin:'16px 0 16px', fontSize:'13px', color:'#64748b' }}>Elige el formato:</p>
                 {generandoFlota ? (
                   <div style={{ textAlign:'center', padding:'24px 0' }}>
                     <FaSyncAlt className="spin-anim" style={{ fontSize:'26px', color:'#0ea5e9' }} />
@@ -994,7 +1043,7 @@ export default function Maquinaria({ irAIncidente }) {
                 )}
               </div>
             </div>
-          </div>
+          </div></Portal>
         )}
 
         {/* ══════════════ MODAL: historial de partes ══════════════ */}
