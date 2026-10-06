@@ -3143,6 +3143,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                             // Abajo caben enteras, se leen como frases y las
                             // columnas vuelven a medir lo que mide su numero.
                             const notas = [];
+                            // La partida va en la línea de notas y no en una
+                            // columna propia: son nueve columnas y el código
+                            // más la descripción no caben sin volver a
+                            // desbordar la tabla.
+                            if (a.partidaCodigo) notas.push({ k:'par', color:'#0369a1', etq:'Partida:',
+                              txt:`${a.partidaCodigo}${a.partidaDescripcion ? ' · ' + a.partidaDescripcion : ''}` });
                             if (a.observacion) notas.push({ k:'obs', color:'#94a3b8', etq:'', txt:a.observacion });
                             if (muertas > 0 && (a.obsReduccion || '').trim())
                               notas.push({ k:'red', color:'#b45309', etq:'H. muertas:', txt:a.obsReduccion });
