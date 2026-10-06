@@ -268,15 +268,30 @@ if not ok:
         os.path.basename(sys.argv[0])))
     sys.exit(1)
 
-shutil.copy2(RUTA, RUTA + ".bak")
-print("Copia de seguridad: {0}.bak".format(RUTA))
+# El respaldo NO machaca uno que ya exista: en este servidor ya habia un
+# .bak del 28/09, de un parche anterior, y sobrescribirlo habria borrado ese
+# punto de retorno sin avisar. Si .bak esta ocupado, se usa .bak.AAAAMMDD-HHMMSS.
+destino = RUTA + ".bak"
+if os.path.exists(destino):
+    import time
+    destino = RUTA + ".bak." + time.strftime("%Y%m%d-%H%M%S")
+    print("Ya habia un .bak de antes; no lo toco.")
+shutil.copy2(RUTA, destino)
+print("Copia de seguridad: {0}".format(destino))
+RESPALDO = destino
 
 with io.open(RUTA, "w", encoding="utf-8") as f:
     f.write(texto)
 print("Escrito: {0}".format(RUTA))
 print("")
-print("Es una plantilla: basta con recargar el servicio, no hace falta migrar.")
-print("Abre cualquier parte con 'Ver PDF' y mira la tabla de actividades.")
+print("FALTA REINICIAR EL PROCESO. En produccion Django envuelve los cargadores")
+print("de plantillas en el cached loader: el contenedor sigue sirviendo la")
+print("plantilla que compilo al arrancar, aunque el archivo ya este cambiado.")
+print("")
+print("  docker compose up -d --no-deps --force-recreate django_api")
+print("")
+print("Y al mirarlo, abre el PDF con ?v=2 al final de la URL: el visor carga")
+print("siempre la misma direccion y el navegador guarda el PDF anterior.")
 print("")
 print("Para deshacer:")
-print("  mv {0}.bak {0}".format(RUTA))
+print("  mv {0} {1}".format(RESPALDO, RUTA))
