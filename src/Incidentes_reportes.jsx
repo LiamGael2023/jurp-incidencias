@@ -655,9 +655,11 @@ function Incidentes() {
         </div></Portal>
       )}
 
-      {/* ── MODAL PDF ──────────────────────────────────────────────────── */}
+      {/* ── MODAL PDF ──────────────────────────────────────────────────────
+           z-index 10002: se abre DESDE el modal de detalle, que es 9999. Con
+           el mismo número dependía del orden en que se montaran los portales. */}
       {modalPdfAbierto && (
-        <Portal><div className="tbl-modal-backdrop" onClick={() => setModalPdfAbierto(false)} style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.75)' }}>
+        <Portal><div className="tbl-modal-backdrop" onClick={() => setModalPdfAbierto(false)} style={{ zIndex: 10002, backgroundColor: 'rgba(0,0,0,0.75)' }}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '850px', height: '90vh', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10000, marginTop: '2vh' }}>
             <div className="tbl-modal-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
               <div className="tbl-modal-header" style={{ borderBottom: '1px solid #e2e8f0', padding: '15px 20px', backgroundColor: '#f8fafc' }}>
@@ -674,7 +676,7 @@ function Incidentes() {
 
       {/* ── MODAL GALERÍA DE EVIDENCIAS ────────────────────────────────── */}
       {modalMediaAbierto && (
-        <div onClick={() => setModalMediaAbierto(false)} style={{ position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:10001,background:'rgba(0,0,0,0.92)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center' }}>
+        <Portal><div onClick={() => setModalMediaAbierto(false)} style={{ position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:10001,background:'rgba(0,0,0,0.92)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center' }}>
           {/* Botón cerrar */}
           <button onClick={() => setModalMediaAbierto(false)} style={{ position:'absolute',top:'16px',right:'20px',background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',fontSize:'22px',cursor:'pointer',borderRadius:'50%',width:'40px',height:'40px',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002 }}>✕</button>
 
@@ -727,7 +729,7 @@ function Incidentes() {
               <div style={{color:'rgba(255,255,255,0.5)',fontSize:'12px',marginTop:'8px'}}>{galeriaIndex+1} / {galeriaMedia.length} · {galeriaMedia[galeriaIndex].type === 'image' ? 'Foto' : 'Video'}</div>
             </>
           )}
-        </div>
+        </div></Portal>
       )}
 
     </div>

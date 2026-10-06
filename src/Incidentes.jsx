@@ -3311,7 +3311,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       )}
       {/* ── Modal: partes diarios de una máquina ───────────────────────── */}
       {modalPartes && (
-        <div onClick={() => setModalPartes(null)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
+        <Portal><div onClick={() => setModalPartes(null)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
           <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:'10px', overflow:'hidden', maxWidth:'1280px', width:'96vw', maxHeight:'92vh', display:'flex', flexDirection:'column' }}>
             {/* Header */}
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 22px', background:'#1463A5', color:'#fff' }}>
@@ -3419,11 +3419,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               <button onClick={() => setModalPartes(null)} className="tbl-btn tbl-btn-link">Cerrar</button>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
       {/* ── Modal: BITÁCORA DE ATENCIONES (lo que se registra en la app) ── */}
       {modalBitacora && (
-        <div onClick={() => setModalBitacora(null)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
+        <Portal><div onClick={() => setModalBitacora(null)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
           <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:'12px', overflow:'hidden', maxWidth:'760px', width:'100%', maxHeight:'88vh', display:'flex', flexDirection:'column' }}>
             {/* Cabecera */}
             <div style={{ padding:'16px 22px', background:'#1463A5', color:'#fff' }}>
@@ -3513,7 +3513,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               <button onClick={() => setModalBitacora(null)} className="tbl-btn tbl-btn-link">Cerrar</button>
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
       {/* ── Modal: UNA actividad del parte (zona, tarea y metrado) ─────── */}
       {modalActividad && (
@@ -3709,7 +3709,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       )}
       {/* ── Modal de imagen de referencia (metrado) ────────────────────── */}
       {imgRefModal && (
-        <div onClick={() => setImgRefModal(null)} style={{ position:'fixed', inset:0, zIndex:10003, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
+        <Portal><div onClick={() => setImgRefModal(null)} style={{ position:'fixed', inset:0, zIndex:10003, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
           <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:'10px', overflow:'hidden', maxWidth:'1000px', width:'100%', maxHeight:'90vh', display:'flex', flexDirection:'column' }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
               <h5 style={{ margin:0, fontSize:'15px', color:'#1e293b' }}>{imgRefModal.titulo}</h5>
@@ -3719,11 +3719,15 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               <img src={imgRefModal.src} alt={imgRefModal.titulo} style={{ maxWidth:'100%', height:'auto' }} />
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
-      {/* ── MODAL PDF ──────────────────────────────────────────────────── */}
+      {/* ── MODAL PDF ──────────────────────────────────────────────────────
+           z-index 10004: el visor se abre DESDE la gestión de costeo, que es
+           9999. Con el mismo número ganaba solo porque su portal se monta
+           después; cualquier re-render que invirtiera ese orden lo mandaba
+           detrás del modal desde el que se abrió. */}
       {modalPdfAbierto && (
-        <Portal><div className="tbl-modal-backdrop" onClick={() => setModalPdfAbierto(false)} style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.75)' }}>
+        <Portal><div className="tbl-modal-backdrop" onClick={() => setModalPdfAbierto(false)} style={{ zIndex: 10004, backgroundColor: 'rgba(0,0,0,0.75)' }}>
           <div className="tbl-modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '850px', height: '90vh', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10000, marginTop: '2vh' }}>
             <div className="tbl-modal-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', boxShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
               <div className="tbl-modal-header" style={{ borderBottom: '1px solid #e2e8f0', padding: '15px 20px', backgroundColor: '#f8fafc' }}>
@@ -3739,7 +3743,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       )}
       {/* ── MODAL GALERÍA DE EVIDENCIAS ────────────────────────────────── */}
       {modalMediaAbierto && (
-        <div onClick={() => setModalMediaAbierto(false)} style={{ position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:10001,background:'rgba(0,0,0,0.92)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center' }}>
+        <Portal><div onClick={() => setModalMediaAbierto(false)} style={{ position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:10001,background:'rgba(0,0,0,0.92)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center' }}>
           <button onClick={() => setModalMediaAbierto(false)} style={{ position:'absolute',top:'16px',right:'20px',background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',fontSize:'22px',cursor:'pointer',borderRadius:'50%',width:'40px',height:'40px',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002 }}>✕</button>
           {galeriaIncidente && (
             <div onClick={e=>e.stopPropagation()} style={{ color:'#fff',textAlign:'center',marginBottom:'16px',pointerEvents:'none' }}>
@@ -3780,11 +3784,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               <div style={{color:'rgba(255,255,255,0.5)',fontSize:'12px',marginTop:'8px'}}>{galeriaIndex+1} / {galeriaMedia.length} · {galeriaMedia[galeriaIndex].type === 'image' ? 'Foto' : 'Video'}</div>
             </>
           )}
-        </div>
+        </div></Portal>
       )}
       {/* ── Modal: elegir formato del reporte general ─────────────────── */}
       {modalReporteGlobal && (
-        <div onClick={() => !generandoReporte && setModalReporteGlobal(false)}
+        <Portal><div onClick={() => !generandoReporte && setModalReporteGlobal(false)}
           style={{ position:'fixed', inset:0, zIndex:10000, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background:'#fff', borderRadius:'12px', width:'100%', maxWidth:'440px', overflow:'hidden', boxShadow:'0 20px 40px rgba(0,0,0,0.25)' }}>
@@ -3839,7 +3843,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
               )}
             </div>
           </div>
-        </div>
+        </div></Portal>
       )}
 
       {/* ── Mantenedor de catálogos (Equipos/Marcas/Modelos) ─────────────── */}
