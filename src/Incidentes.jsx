@@ -3638,14 +3638,41 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                 : partidas;
               const presupuestado = partidas.reduce((s, p) => s + num(p.metrado) * num(p.precio), 0);
               const ejecutado = partidas.reduce((s, p) => s + num(p.ejecutado) * num(p.precio), 0);
-              // Agrupadas por estructura, en el orden del presupuesto.
-              const grupos = [];
+              // El ARBOL del presupuesto, como en el Excel.
+              //
+              // Antes se agrupaba por el campo 'estructura', y eso mezclaba
+              // niveles: para las ramas cortas (TRABAJOS PRELIMINARES, OBRAS
+              // PROVISIONALES, FLETE) ese campo es el titulo de nivel 2, asi
+              // que las tres acababan colgando de "ESTRUCTURAS DE TRATAMIENTO"
+              // como si fueran hermanas de CAJA DE DERIVACION. No lo son.
+              //
+              // Con la ruta completa el arbol se arma tal cual esta escrito.
+              const raiz = { hijos: [], partidas: [] };
               lista.forEach(p => {
-                const g = p.estructura || 'SIN ESTRUCTURA';
-                let e = grupos.find(x => x.g === g);
-                if (!e) { e = { g, items: [] }; grupos.push(e); }
-                e.items.push(p);
+                let n = raiz;
+                rutaDe(p).forEach(([c, d]) => {
+                  let h = n.hijos.find(x => x.codigo === c);
+                  if (!h) { h = { codigo: c, desc: d, hijos: [], partidas: [] }; n.hijos.push(h); }
+                  n = h;
+                });
+                n.partidas.push(p);
               });
+              // Los subtotales de un titulo SOLO pueden ir en soles: debajo
+              // cuelgan m3, kg, und y glb, y sumar eso daria un numero que no
+              // significa nada. Es lo mismo que hace el Excel, que en los
+              // titulos deja vacias las columnas de unidad y metrado.
+              const totalizar = (n) => {
+                let pres = 0, ejec = 0;
+                n.partidas.forEach(p => {
+                  pres += num(p.metrado) * num(p.precio);
+                  ejec += num(p.ejecutado) * num(p.precio);
+                });
+                n.hijos.forEach(h => { const s = totalizar(h); pres += s.pres; ejec += s.ejec; });
+                n.pres = pres; n.ejec = ejec;
+                return { pres, ejec };
+              };
+              totalizar(raiz);
+              const sinRuta = lista.length > 0 && raiz.hijos.length === 0;
               const Filtro = ({ k, txt, n }) => (
                 <button type="button" onClick={() => setFiltroAvance(k)}
                   style={{ padding:'5px 11px', borderRadius:'6px', fontSize:'12px', fontWeight:600, cursor:'pointer',
@@ -3687,23 +3714,79 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                       <div style={{ padding:'28px', textAlign:'center', color:'#94a3b8', fontSize:'13px', fontStyle:'italic' }}>
                         Ninguna partida en este filtro.
                       </div>
-                    ) : grupos.map(({ g, items }) => (
-                      <div key={g} style={{ marginTop:'14px' }}>
-                        <div style={{ fontSize:'11px', fontWeight:700, color:'#0369a1', letterSpacing:'0.4px', marginBottom:'5px' }}>{g}</div>
-                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12.5px' }}>
-                          <tbody>
-                            {items.map(p => {
+                    ) : (
+                      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12.5px' }}>
+                        <thead>
+                          <tr style={{ fontSize:'10.5px', color:'#64748b', textAlign:'left' }}>
+                            <th style={{ padding:'10px 8px 6px 0', fontWeight:600 }}>Partida</th>
+                            <th style={{ padding:'10px 8px 6px', fontWeight:600, textAlign:'right', whiteSpace:'nowrap' }}>Metrado</th>
+                            <th style={{ padding:'10px 8px 6px', fontWeight:600, textAlign:'right', whiteSpace:'nowrap' }}>Ejecutado</th>
+                            <th style={{ padding:'10px 8px 6px', fontWeight:600, textAlign:'right', whiteSpace:'nowrap' }}>Saldo</th>
+                            <th style={{ padding:'10px 0 6px 8px', fontWeight:600, width:'150px' }}>Avance</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sinRuta && (
+                            /* El presupuesto se cargó sin la ruta: no hay árbol
+                               que dibujar. Se listan planas antes que no
+                               mostrar nada. */
+                            <tr><td colSpan="5" style={{ padding:'8px 0', fontSize:'11px', color:'#b45309' }}>
+                              El presupuesto está cargado sin la ruta, así que no se puede
+                              mostrar el árbol. Recarga el catálogo en el servidor.
+                            </td></tr>
+                          )}
+                          {(function filas(nodo, prof) {
+                            const out = [];
+                            nodo.hijos.forEach(h => {
+                              const pct = h.pres ? h.ejec / h.pres * 100 : 0;
+                              // Los títulos muestran SOLES, no metrado: debajo
+                              // cuelgan unidades distintas y sumarlas no significa
+                              // nada. Es lo que hace el propio Excel.
+                              out.push(
+                                <tr key={'t' + h.codigo} style={{ background: prof === 0 ? '#eff6ff' : '#f8fafc', borderTop:'1px solid #e2e8f0' }}>
+                                  <td style={{ padding:'7px 8px 7px 0', paddingLeft: prof * 18 }}>
+                                    <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#64748b' }}>{h.codigo}</span>
+                                    {'  '}
+                                    <span style={{ fontWeight:700, color: prof === 0 ? '#1463A5' : '#334155',
+                                      fontSize: prof === 0 ? '12px' : '11.5px', letterSpacing: prof === 0 ? '0.3px' : 0 }}>
+                                      {h.desc}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding:'7px 8px', textAlign:'right', whiteSpace:'nowrap', color:'#64748b', fontSize:'11.5px' }}>
+                                    S/ {fmtNum(h.pres)}
+                                  </td>
+                                  <td style={{ padding:'7px 8px', textAlign:'right', whiteSpace:'nowrap', fontWeight:700, fontSize:'11.5px', color: h.ejec > 0 ? '#1463A5' : '#cbd5e1' }}>
+                                    S/ {fmtNum(h.ejec)}
+                                  </td>
+                                  <td style={{ padding:'7px 8px', textAlign:'right', whiteSpace:'nowrap', fontSize:'11.5px', color:'#64748b' }}>
+                                    S/ {fmtNum(h.pres - h.ejec)}
+                                  </td>
+                                  <td style={{ padding:'7px 0 7px 8px' }}>
+                                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                                      <div style={{ flex:1, height:'7px', background:'#e2e8f0', borderRadius:'4px', overflow:'hidden' }}>
+                                        <div style={{ width:`${Math.min(100, pct)}%`, height:'100%', background:'#1463A5' }} />
+                                      </div>
+                                      <span style={{ fontSize:'11.5px', fontWeight:700, width:'52px', textAlign:'right', color:'#475569' }}>
+                                        {pct.toFixed(1)}%
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                              out.push(...filas(h, prof + 1));
+                            });
+                            nodo.partidas.forEach(p => {
                               const pres = num(p.metrado), ejec = num(p.ejecutado);
                               const pct = pres ? ejec / pres * 100 : 0;
                               const pasada = pres > 0 && ejec > pres;
                               const otras = p.otras_unidades && Object.keys(p.otras_unidades).length
                                 ? Object.entries(p.otras_unidades).map(([u, v]) => `${fmtCant(v)} ${u}`).join(', ')
                                 : '';
-                              return (
+                              out.push(
                                 <tr key={p.id} style={{ borderTop:'1px solid #f1f5f9' }}>
-                                  <td style={{ padding:'7px 8px 7px 0', width:'44%' }}>
+                                  <td style={{ padding:'7px 8px 7px 0', paddingLeft: prof * 18 }}>
                                     <div style={{ color:'#1e293b' }}>
-                                      <span style={{ color:'#64748b', fontFamily:'monospace', fontSize:'11.5px' }}>{p.codigo}</span>
+                                      <span style={{ color:'#94a3b8', fontFamily:'monospace', fontSize:'11px' }}>{p.codigo}</span>
                                       {'  '}{p.descripcion}
                                     </div>
                                     {/* Metrado imputado con una unidad que no es la de
@@ -3724,7 +3807,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                   <td style={{ padding:'7px 8px', textAlign:'right', whiteSpace:'nowrap', color: pasada ? '#b91c1c' : '#15803d' }}>
                                     {fmtCant(num(p.saldo))}
                                   </td>
-                                  <td style={{ padding:'7px 0 7px 8px', width:'150px' }}>
+                                  <td style={{ padding:'7px 0 7px 8px' }}>
                                     <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
                                       <div style={{ flex:1, height:'7px', background:'#f1f5f9', borderRadius:'4px', overflow:'hidden' }}>
                                         <div style={{ width:`${Math.min(100, pct)}%`, height:'100%',
@@ -3738,11 +3821,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                                   </td>
                                 </tr>
                               );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    ))}
+                            });
+                            return out;
+                          })(raiz, 0)}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
 
                   <div style={{ padding:'12px 20px', borderTop:'1px solid #e2e8f0', background:'#f8fafc', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
