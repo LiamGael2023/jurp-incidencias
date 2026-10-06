@@ -180,6 +180,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const estadoInicialActividad = {
     zonaTrabajo: '', actividad: '', actividadOtros: '', observacion: '',
     hmInicio: '', hmFin: '', horasEfectivas: '', obsReduccion: '',
+    // Partida del presupuesto a la que se imputa el metrado. Se guarda el id
+    // (para sumar el avance) y tambien el codigo y la descripcion: un
+    // presupuesto se modifica, y un parte ya firmado tiene que seguir
+    // diciendo a que se cargo aunque esa partida cambie despues.
+    partidaId: '', partidaCodigo: '', partidaDescripcion: '',
     calcularMetrado: false, metradoManual: '', unidadMetrado: 'm3',
     longitud: '', altura: '', anchoSup: '', anchoInf: '',
     anchoBase: '', corona: '', talud: '', hPromedio: '',
@@ -189,6 +194,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const [actForm, setActForm] = useState(estadoInicialActividad);
   const [actEditando, setActEditando] = useState(null);     // índice, o null = nueva
   const [modalActividad, setModalActividad] = useState(false);
+  const [partidas, setPartidas] = useState([]);             // presupuesto de obra
 
   // ── Carga de catálogos (equipos/marcas/modelos) ──────────────────────────
   const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
@@ -222,6 +228,25 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     } catch (e) { console.error(e); }
   };
   useEffect(() => { cargarActividades(); }, []);
+
+  // Partidas del presupuesto, con lo ejecutado hasta hoy.
+  //
+  // Se piden todas y se agrupan aquí: son decenas, no miles, y tenerlas en
+  // memoria permite avisar en el formulario cuánto queda de la partida sin
+  // ir al servidor en cada clic.
+  //
+  // Si el endpoint todavía no existe (backend sin desplegar) la lista queda
+  // vacía y el selector no se dibuja: vale más que el formulario siga
+  // funcionando sin partidas a que reviente entero por un 404.
+  const cargarPartidas = async () => {
+    try {
+      const r = await fetch(`${API_OPS}/partidas/`);
+      if (!r.ok) return;
+      const d = await r.json();
+      setPartidas(Array.isArray(d) ? d : (d.partidas || []));
+    } catch (e) { /* backend sin el endpoint: se sigue sin partidas */ }
+  };
+  useEffect(() => { cargarPartidas(); }, []);
 
   // Catálogo de cargos de mano de obra (persistido en el backend).
   const cargarCargos = async () => {
@@ -1076,6 +1101,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       horas_efectivas: a.horasEfectivas === '' || a.horasEfectivas == null
         ? null : round4(parseFloat(a.horasEfectivas) || 0),
       obs_reduccion: a.obsReduccion || '',
+      // El backend espera el id; '' significa sin partida. El codigo y la
+      // descripcion viajan copiados a proposito, no por duplicar.
+      partida: a.partidaId || '',
+      partida_codigo: a.partidaCodigo || '',
+      partida_descripcion: a.partidaDescripcion || '',
       width_top: num(a.anchoSup), width_bottom: num(a.anchoInf),
       height: num(a.altura), length: num(a.longitud),
       metrado: mv.val.toFixed(4),
@@ -1105,6 +1135,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       hmFin: a.end_horometer != null ? String(a.end_horometer) : '',
       horasEfectivas: a.horas_efectivas != null ? String(a.horas_efectivas) : '',
       obsReduccion: a.obs_reduccion || '',
+      partidaId: a.partida != null ? String(a.partida) : '',
+      partidaCodigo: a.partida_codigo || '',
+      partidaDescripcion: a.partida_descripcion || '',
       // Sin 'medidas' (partes de antes de este cambio) se conserva al menos el
       // metrado guardado, en vez de recalcularlo a cero con campos vacíos.
       actividad: crudo.actividad || (IMG_METRADO[a.actividad] ? a.actividad : 'OTROS'),
@@ -3560,6 +3593,79 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                     </select>
                   </div>
                 </div>
+
+                {/* ── Partida del presupuesto ──────────────────────────────
+                     Solo aparece si hay presupuesto cargado. Las opciones van
+                     agrupadas por estructura y empiezan por el código porque
+                     la DESCRIPCIÓN SE REPITE: "Excavación de material suelto
+                     c/maquinaria pesada" está en CAJA DE DERIVACIÓN, LÍNEA DE
+                     DERIVACIÓN y LÍNEA DE PURGA. Eligiendo por texto es fácil
+                     cargar el metrado a la estructura equivocada, y el error
+                     no se ve hasta la valorización. */}
+                {partidas.length > 0 && (() => {
+                  const sel = partidas.find(p => String(p.id) === String(actForm.partidaId));
+                  const norm = (u) => (u || '').toString().trim().toLowerCase()
+                    .replace('³', '3').replace('²', '2');
+                  const mv = calcMetradoDe(actForm);
+                  const uAct = norm(mv.unit || actForm.unidadMetrado);
+                  const choca = sel && uAct && norm(sel.unidad) !== uAct;
+                  // Agrupadas por estructura, en el orden del presupuesto.
+                  const grupos = [];
+                  partidas.forEach(p => {
+                    const g = p.estructura || 'SIN ESTRUCTURA';
+                    let e = grupos.find(x => x.g === g);
+                    if (!e) { e = { g, items: [] }; grupos.push(e); }
+                    e.items.push(p);
+                  });
+                  return (
+                    <div className="tbl-row tbl-mb-3">
+                      <div className="tbl-col">
+                        <label className="tbl-form-label">
+                          Partida del presupuesto <small style={{ color:'#64748b', fontWeight:400 }}>· opcional</small>
+                        </label>
+                        <select className="tbl-form-select" value={actForm.partidaId}
+                          onChange={e => {
+                            const p = partidas.find(x => String(x.id) === e.target.value);
+                            setActForm({ ...actForm,
+                              partidaId: e.target.value,
+                              // Se copian a propósito: si mañana se recarga el
+                              // presupuesto, este parte sigue diciendo a qué se cargó.
+                              partidaCodigo: p ? p.codigo : '',
+                              partidaDescripcion: p ? p.descripcion : '' });
+                          }}>
+                          <option value="">— Sin partida —</option>
+                          {grupos.map(({ g, items }) => (
+                            <optgroup key={g} label={g}>
+                              {items.map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.codigo} · {p.descripcion} ({p.unidad})
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                        {sel && (
+                          <div style={{ marginTop:'6px', fontSize:'11.5px', color:'#475569', display:'flex', gap:'14px', flexWrap:'wrap' }}>
+                            <span>Presupuestado: <b>{fmtCant(sel.metrado)} {sel.unidad}</b></span>
+                            <span>Ejecutado: <b>{fmtCant(sel.ejecutado || 0)} {sel.unidad}</b></span>
+                            <span style={{ color: (sel.saldo ?? 0) < 0 ? '#b91c1c' : '#15803d' }}>
+                              Saldo: <b>{fmtCant(sel.saldo ?? 0)} {sel.unidad}</b>
+                            </span>
+                          </div>
+                        )}
+                        {choca && (
+                          /* Se avisa, no se bloquea: bloquear en campo acaba en
+                             que apuntan cualquier cosa con tal de poder guardar. */
+                          <div style={{ marginTop:'6px', fontSize:'11.5px', color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'6px', padding:'7px 9px' }}>
+                            Esta actividad mide en <b>{mv.unit || actForm.unidadMetrado}</b> y la partida
+                            está en <b>{sel.unidad}</b>. Se guardará igual, pero ese metrado no sumará
+                            al avance de la partida.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Descripción libre — solo cuando es OTROS */}
                 {esActividadOtros && (
