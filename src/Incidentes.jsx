@@ -196,6 +196,10 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const [modalActividad, setModalActividad] = useState(false);
   const [partidas, setPartidas] = useState([]);             // presupuesto de obra
   const [modalAvance, setModalAvance] = useState(false);
+  // Escalera de la partida. Es estado de pantalla, no del parte: lo que se
+  // guarda es partidaId. Al reabrir una actividad se deduce de ella.
+  const [casEstructura, setCasEstructura] = useState('');
+  const [casCapitulo, setCasCapitulo] = useState('');
   const [filtroAvance, setFiltroAvance] = useState('todas');
 
   // ── Carga de catálogos (equipos/marcas/modelos) ──────────────────────────
@@ -1013,11 +1017,18 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       : (nuevoRecurso.hmInicio !== '' && nuevoRecurso.hmInicio != null ? String(nuevoRecurso.hmInicio) : '');
     // Hereda la zona del parte para no volver a escribirla en cada línea.
     setActForm({ ...estadoInicialActividad, zonaTrabajo: nuevoRecurso.zonaTrabajo || '', hmInicio: previo });
+    setCasEstructura(''); setCasCapitulo('');
     setActEditando(null);
     setModalActividad(true);
   };
   const abrirEditarActividad = (i) => {
-    setActForm({ ...estadoInicialActividad, ...actividades[i] });
+    const a = { ...estadoInicialActividad, ...actividades[i] };
+    setActForm(a);
+    // La escalera se reconstruye desde la partida guardada, para que al
+    // reabrir se vea el camino completo y no tres combos en blanco.
+    const p = partidas.find(x => String(x.id) === String(a.partidaId));
+    setCasEstructura(p ? (p.estructura || '') : '');
+    setCasCapitulo(p ? (p.grupo || '') : '');
     setActEditando(i);
     setModalActividad(true);
   };
@@ -3757,75 +3768,118 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                   </div>
                 </div>
 
-                {/* ── Partida del presupuesto ──────────────────────────────
-                     Solo aparece si hay presupuesto cargado. Las opciones van
-                     agrupadas por estructura y empiezan por el código porque
-                     la DESCRIPCIÓN SE REPITE: "Excavación de material suelto
-                     c/maquinaria pesada" está en CAJA DE DERIVACIÓN, LÍNEA DE
-                     DERIVACIÓN y LÍNEA DE PURGA. Eligiendo por texto es fácil
-                     cargar el metrado a la estructura equivocada, y el error
-                     no se ve hasta la valorización. */}
+                {/* ── Partida del presupuesto, en escalera ─────────────────
+                     Estructura → Capítulo → Partida, siguiendo el árbol del
+                     presupuesto, en vez de una lista de 83.
+
+                     El árbol NO es uniforme: 78 partidas cuelgan de un
+                     capítulo y 5 cuelgan directas de la estructura (TRABAJOS
+                     PRELIMINARES, OBRAS PROVISIONALES, FLETE). Por eso el
+                     paso del medio se autocompleta cuando solo hay una
+                     opción: así la escalera tiene siempre los mismos tres
+                     peldaños y no salta de sitio según la rama.
+
+                     Y por eso se filtra por estructura ANTES que por
+                     capítulo: "MOVIMIENTO DE TIERRAS" existe en nueve
+                     estructuras distintas, y "Excavación de material suelto
+                     c/maquinaria pesada" en varias de ellas. Sin el primer
+                     peldaño no hay forma de saber a cuál se carga. */}
                 {partidas.length > 0 && (() => {
-                  const sel = partidas.find(p => String(p.id) === String(actForm.partidaId));
                   const norm = (u) => (u || '').toString().trim().toLowerCase()
                     .replace('³', '3').replace('²', '2');
                   const mv = calcMetradoDe(actForm);
                   const uAct = norm(mv.unit || actForm.unidadMetrado);
+                  const sel = partidas.find(p => String(p.id) === String(actForm.partidaId));
                   const choca = sel && uAct && norm(sel.unidad) !== uAct;
-                  // Agrupadas por estructura, en el orden del presupuesto.
-                  const grupos = [];
-                  partidas.forEach(p => {
-                    const g = p.estructura || 'SIN ESTRUCTURA';
-                    let e = grupos.find(x => x.g === g);
-                    if (!e) { e = { g, items: [] }; grupos.push(e); }
-                    e.items.push(p);
-                  });
+
+                  const unicos = (arr) => arr.filter((x, i) => arr.indexOf(x) === i);
+                  const estructuras = unicos(partidas.map(p => p.estructura || 'SIN ESTRUCTURA'));
+                  const deEstructura = partidas.filter(p => (p.estructura || 'SIN ESTRUCTURA') === casEstructura);
+                  const capitulos = unicos(deEstructura.map(p => p.grupo || '—'));
+                  const delCapitulo = deEstructura.filter(p => (p.grupo || '—') === casCapitulo);
+
+                  const ponerPartida = (id) => {
+                    const p = partidas.find(x => String(x.id) === String(id));
+                    setActForm({ ...actForm,
+                      partidaId: id,
+                      // Se copian a propósito: si mañana se recarga el
+                      // presupuesto, este parte sigue diciendo a qué se cargó.
+                      partidaCodigo: p ? p.codigo : '',
+                      partidaDescripcion: p ? p.descripcion : '' });
+                  };
+                  const elegirEstructura = (v) => {
+                    setCasEstructura(v);
+                    const hijos = partidas.filter(p => (p.estructura || 'SIN ESTRUCTURA') === v);
+                    const caps = unicos(hijos.map(p => p.grupo || '—'));
+                    // Un solo capítulo: se da por elegido. Obligar a abrir un
+                    // combo con una sola opción es trabajo sin información.
+                    setCasCapitulo(caps.length === 1 ? caps[0] : '');
+                    ponerPartida('');
+                  };
+
+                  const sinPartida = !actForm.partidaId;
                   return (
-                    <div className="tbl-row tbl-mb-3">
-                      <div className="tbl-col">
-                        <label className="tbl-form-label">
-                          Partida del presupuesto <small style={{ color:'#64748b', fontWeight:400 }}>· opcional</small>
-                        </label>
-                        <select className="tbl-form-select" value={actForm.partidaId}
-                          onChange={e => {
-                            const p = partidas.find(x => String(x.id) === e.target.value);
-                            setActForm({ ...actForm,
-                              partidaId: e.target.value,
-                              // Se copian a propósito: si mañana se recarga el
-                              // presupuesto, este parte sigue diciendo a qué se cargó.
-                              partidaCodigo: p ? p.codigo : '',
-                              partidaDescripcion: p ? p.descripcion : '' });
-                          }}>
-                          <option value="">— Sin partida —</option>
-                          {grupos.map(({ g, items }) => (
-                            <optgroup key={g} label={g}>
-                              {items.map(p => (
-                                <option key={p.id} value={p.id}>
-                                  {p.codigo} · {p.descripcion} ({p.unidad})
-                                </option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
-                        {sel && (
-                          <div style={{ marginTop:'6px', fontSize:'11.5px', color:'#475569', display:'flex', gap:'14px', flexWrap:'wrap' }}>
-                            <span>Presupuestado: <b>{fmtCant(sel.metrado)} {sel.unidad}</b></span>
-                            <span>Ejecutado: <b>{fmtCant(sel.ejecutado || 0)} {sel.unidad}</b></span>
-                            <span style={{ color: (sel.saldo ?? 0) < 0 ? '#b91c1c' : '#15803d' }}>
-                              Saldo: <b>{fmtCant(sel.saldo ?? 0)} {sel.unidad}</b>
-                            </span>
-                          </div>
-                        )}
-                        {choca && (
-                          /* Se avisa, no se bloquea: bloquear en campo acaba en
-                             que apuntan cualquier cosa con tal de poder guardar. */
-                          <div style={{ marginTop:'6px', fontSize:'11.5px', color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'6px', padding:'7px 9px' }}>
-                            Esta actividad mide en <b>{mv.unit || actForm.unidadMetrado}</b> y la partida
-                            está en <b>{sel.unidad}</b>. Se guardará igual, pero ese metrado no sumará
-                            al avance de la partida.
-                          </div>
-                        )}
+                    <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'12px', marginBottom:'15px' }}>
+                      <div style={{ fontSize:'12.5px', fontWeight:700, color:'#334155', marginBottom:'8px' }}>
+                        Partida del presupuesto <small style={{ color:'#94a3b8', fontWeight:400 }}>· opcional</small>
                       </div>
+                      <div className="tbl-row">
+                        <div className="tbl-col">
+                          <label className="tbl-form-label">1 · Estructura</label>
+                          <select className="tbl-form-select" value={casEstructura}
+                            onChange={e => elegirEstructura(e.target.value)}>
+                            <option value="">— Elegir —</option>
+                            {estructuras.map(e => <option key={e} value={e}>{e}</option>)}
+                          </select>
+                        </div>
+                        <div className="tbl-col">
+                          <label className="tbl-form-label" style={{ color: casEstructura ? undefined : '#cbd5e1' }}>2 · Capítulo</label>
+                          <select className="tbl-form-select" value={casCapitulo} disabled={!casEstructura}
+                            style={!casEstructura ? { background:'#f1f5f9', cursor:'not-allowed' } : {}}
+                            onChange={e => { setCasCapitulo(e.target.value); ponerPartida(''); }}>
+                            <option value="">{casEstructura ? '— Elegir —' : '—'}</option>
+                            {capitulos.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="tbl-row" style={{ marginTop:'10px' }}>
+                        <div className="tbl-col">
+                          <label className="tbl-form-label" style={{ color: casCapitulo ? undefined : '#cbd5e1' }}>3 · Partida</label>
+                          <select className="tbl-form-select" value={actForm.partidaId} disabled={!casCapitulo}
+                            style={!casCapitulo ? { background:'#f1f5f9', cursor:'not-allowed' } : {}}
+                            onChange={e => ponerPartida(e.target.value)}>
+                            <option value="">{casCapitulo ? '— Elegir —' : '—'}</option>
+                            {delCapitulo.map(p => (
+                              <option key={p.id} value={p.id}>
+                                {p.codigo} · {p.descripcion} ({p.unidad})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {sel ? (
+                        <div style={{ marginTop:'8px', fontSize:'11.5px', color:'#475569', display:'flex', gap:'14px', flexWrap:'wrap' }}>
+                          <span>Presupuestado: <b>{fmtCant(sel.metrado)} {sel.unidad}</b></span>
+                          <span>Ejecutado: <b>{fmtCant(sel.ejecutado || 0)} {sel.unidad}</b></span>
+                          <span style={{ color: (sel.saldo ?? 0) < 0 ? '#b91c1c' : '#15803d' }}>
+                            Saldo: <b>{fmtCant(sel.saldo ?? 0)} {sel.unidad}</b>
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ marginTop:'8px', fontSize:'11px', color:'#94a3b8' }}>
+                          Sin partida: la actividad se guarda igual, pero su metrado no entra en el avance.
+                        </div>
+                      )}
+                      {choca && (
+                        /* Se avisa, no se bloquea: bloquear en campo acaba en
+                           que apuntan cualquier cosa con tal de poder guardar. */
+                        <div style={{ marginTop:'8px', fontSize:'11.5px', color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'6px', padding:'7px 9px' }}>
+                          Esta actividad mide en <b>{mv.unit || actForm.unidadMetrado}</b> y la partida
+                          está en <b>{sel.unidad}</b>. Se guardará igual, pero ese metrado no sumará
+                          al avance de la partida.
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
