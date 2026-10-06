@@ -195,6 +195,8 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const [actEditando, setActEditando] = useState(null);     // índice, o null = nueva
   const [modalActividad, setModalActividad] = useState(false);
   const [partidas, setPartidas] = useState([]);             // presupuesto de obra
+  const [modalAvance, setModalAvance] = useState(false);
+  const [filtroAvance, setFiltroAvance] = useState('todas');
 
   // ── Carga de catálogos (equipos/marcas/modelos) ──────────────────────────
   const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
@@ -3093,10 +3095,21 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                             Agrega una línea por cada tarea, con su tramo de horómetro, sus horas efectivas y su metrado. El parte cobra la suma de las HE.
                           </div>
                         </div>
-                        <button type="button" onClick={abrirNuevaActividad}
-                          style={{ display:'inline-flex', alignItems:'center', gap:'6px', background:'#1463A5', color:'#fff', border:'none', borderRadius:'6px', padding:'8px 14px', fontSize:'13px', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
-                          <FaPlus size={11} /> Agregar actividad
-                        </button>
+                        <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                          {partidas.length > 0 && (
+                            /* Puesto aquí a propósito: quien imputa el metrado es
+                               quien tiene que poder ver cuánto queda de la partida
+                               ANTES de cargarle más, no después en otra pantalla. */
+                            <button type="button" onClick={() => { cargarPartidas(); setModalAvance(true); }}
+                              style={{ display:'inline-flex', alignItems:'center', gap:'6px', background:'#fff', color:'#1463A5', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'8px 12px', fontSize:'12.5px', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+                              <FaListUl size={11} /> Avance del presupuesto
+                            </button>
+                          )}
+                          <button type="button" onClick={abrirNuevaActividad}
+                            style={{ display:'inline-flex', alignItems:'center', gap:'6px', background:'#1463A5', color:'#fff', border:'none', borderRadius:'6px', padding:'8px 14px', fontSize:'13px', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+                            <FaPlus size={11} /> Agregar actividad
+                          </button>
+                        </div>
                       </div>
 
                       {/* Hoja resumen.
@@ -3554,6 +3567,150 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
           </div>
         </div></Portal>
       )}
+      {/* ── Modal: AVANCE DEL PRESUPUESTO ───────────────────────────────
+           Ejecutado contra presupuestado, partida por partida.
+
+           El metrado se valoriza al precio unitario del presupuesto, no al
+           costo de la máquina: son dos cuentas distintas y mezclarlas es de
+           donde salen las valorizaciones que no cuadran. Lo que se cobra al
+           cliente es metrado × precio de partida; lo que cuesta mover la
+           máquina es otra cosa y vive en el costeo de la incidencia. */}
+      {modalAvance && (
+        <Portal><div onClick={() => setModalAvance(false)}
+          style={{ position:'fixed', inset:0, zIndex:10002, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'#fff', borderRadius:'12px', width:'100%', maxWidth:'1100px', maxHeight:'92vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
+            {(() => {
+              const num = (x) => parseFloat(x) || 0;
+              const conAvance = partidas.filter(p => num(p.ejecutado) > 0);
+              const pasadas = partidas.filter(p => num(p.metrado) > 0 && num(p.ejecutado) > num(p.metrado));
+              const descuadres = partidas.filter(p => p.otras_unidades && Object.keys(p.otras_unidades).length);
+              const lista = filtroAvance === 'avance' ? conAvance
+                : filtroAvance === 'pasadas' ? pasadas
+                : filtroAvance === 'descuadre' ? descuadres
+                : partidas;
+              const presupuestado = partidas.reduce((s, p) => s + num(p.metrado) * num(p.precio), 0);
+              const ejecutado = partidas.reduce((s, p) => s + num(p.ejecutado) * num(p.precio), 0);
+              // Agrupadas por estructura, en el orden del presupuesto.
+              const grupos = [];
+              lista.forEach(p => {
+                const g = p.estructura || 'SIN ESTRUCTURA';
+                let e = grupos.find(x => x.g === g);
+                if (!e) { e = { g, items: [] }; grupos.push(e); }
+                e.items.push(p);
+              });
+              const Filtro = ({ k, txt, n }) => (
+                <button type="button" onClick={() => setFiltroAvance(k)}
+                  style={{ padding:'5px 11px', borderRadius:'6px', fontSize:'12px', fontWeight:600, cursor:'pointer',
+                           border:`1px solid ${filtroAvance === k ? '#1463A5' : '#e2e8f0'}`,
+                           background: filtroAvance === k ? '#eff6ff' : '#fff',
+                           color: filtroAvance === k ? '#1463A5' : '#64748b' }}>
+                  {txt} <span style={{ opacity:0.7 }}>({n})</span>
+                </button>
+              );
+              return (
+                <>
+                  <div style={{ padding:'16px 20px', background:'#1463A5', color:'#fff' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'12px' }}>
+                      <div>
+                        <h5 style={{ margin:0, fontSize:'16px' }}>Avance del presupuesto</h5>
+                        <div style={{ fontSize:'11.5px', opacity:0.85, marginTop:'3px' }}>
+                          {partidas[0]?.proyecto || partidas[0]?.obra || ''}
+                        </div>
+                      </div>
+                      <button onClick={() => setModalAvance(false)}
+                        style={{ background:'none', border:'none', color:'#fff', cursor:'pointer', fontSize:'18px', display:'flex' }}><FaTimes /></button>
+                    </div>
+                    <div style={{ display:'flex', gap:'22px', marginTop:'12px', flexWrap:'wrap', fontSize:'12.5px' }}>
+                      <span>Presupuestado: <b>S/ {fmtNum(presupuestado)}</b></span>
+                      <span>Ejecutado: <b>S/ {fmtNum(ejecutado)}</b></span>
+                      <span>Avance: <b>{presupuestado ? (ejecutado / presupuestado * 100).toFixed(2) : '0.00'}%</b></span>
+                    </div>
+                  </div>
+
+                  <div style={{ padding:'12px 20px', borderBottom:'1px solid #e2e8f0', display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                    <Filtro k="todas" txt="Todas" n={partidas.length} />
+                    <Filtro k="avance" txt="Con avance" n={conAvance.length} />
+                    <Filtro k="pasadas" txt="Pasadas del 100%" n={pasadas.length} />
+                    <Filtro k="descuadre" txt="Con metrado en otra unidad" n={descuadres.length} />
+                  </div>
+
+                  <div style={{ overflow:'auto', padding:'0 20px 16px' }}>
+                    {lista.length === 0 ? (
+                      <div style={{ padding:'28px', textAlign:'center', color:'#94a3b8', fontSize:'13px', fontStyle:'italic' }}>
+                        Ninguna partida en este filtro.
+                      </div>
+                    ) : grupos.map(({ g, items }) => (
+                      <div key={g} style={{ marginTop:'14px' }}>
+                        <div style={{ fontSize:'11px', fontWeight:700, color:'#0369a1', letterSpacing:'0.4px', marginBottom:'5px' }}>{g}</div>
+                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12.5px' }}>
+                          <tbody>
+                            {items.map(p => {
+                              const pres = num(p.metrado), ejec = num(p.ejecutado);
+                              const pct = pres ? ejec / pres * 100 : 0;
+                              const pasada = pres > 0 && ejec > pres;
+                              const otras = p.otras_unidades && Object.keys(p.otras_unidades).length
+                                ? Object.entries(p.otras_unidades).map(([u, v]) => `${fmtCant(v)} ${u}`).join(', ')
+                                : '';
+                              return (
+                                <tr key={p.id} style={{ borderTop:'1px solid #f1f5f9' }}>
+                                  <td style={{ padding:'7px 8px 7px 0', width:'44%' }}>
+                                    <div style={{ color:'#1e293b' }}>
+                                      <span style={{ color:'#64748b', fontFamily:'monospace', fontSize:'11.5px' }}>{p.codigo}</span>
+                                      {'  '}{p.descripcion}
+                                    </div>
+                                    {/* Metrado imputado con una unidad que no es la de
+                                        la partida: no suma al avance, pero esconderlo
+                                        seria dar por perdido trabajo que se hizo. */}
+                                    {otras && (
+                                      <div style={{ fontSize:'11px', color:'#b45309', marginTop:'2px' }}>
+                                        Sin sumar, en otra unidad: {otras}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td style={{ padding:'7px 8px', textAlign:'right', whiteSpace:'nowrap', color:'#64748b' }}>
+                                    {fmtCant(pres)} {p.unidad}
+                                  </td>
+                                  <td style={{ padding:'7px 8px', textAlign:'right', whiteSpace:'nowrap', fontWeight:700, color: ejec > 0 ? '#1463A5' : '#cbd5e1' }}>
+                                    {fmtCant(ejec)} {p.unidad}
+                                  </td>
+                                  <td style={{ padding:'7px 8px', textAlign:'right', whiteSpace:'nowrap', color: pasada ? '#b91c1c' : '#15803d' }}>
+                                    {fmtCant(num(p.saldo))}
+                                  </td>
+                                  <td style={{ padding:'7px 0 7px 8px', width:'150px' }}>
+                                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                                      <div style={{ flex:1, height:'7px', background:'#f1f5f9', borderRadius:'4px', overflow:'hidden' }}>
+                                        <div style={{ width:`${Math.min(100, pct)}%`, height:'100%',
+                                          background: pasada ? '#dc2626' : pct >= 99.5 ? '#15803d' : '#1463A5' }} />
+                                      </div>
+                                      <span style={{ fontSize:'11.5px', fontWeight:700, width:'52px', textAlign:'right',
+                                        color: pasada ? '#b91c1c' : '#475569' }}>
+                                        {pres ? pct.toFixed(1) : '—'}%
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ padding:'12px 20px', borderTop:'1px solid #e2e8f0', background:'#f8fafc', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
+                    <span style={{ fontSize:'11.5px', color:'#64748b' }}>
+                      El ejecutado se valoriza al precio del presupuesto, no al costo de la máquina.
+                    </span>
+                    <button onClick={() => setModalAvance(false)} className="tbl-btn tbl-btn-link">Cerrar</button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div></Portal>
+      )}
+
       {/* ── Modal: UNA actividad del parte (zona, tarea y metrado) ─────── */}
       {modalActividad && (
         <Portal><div className="tbl-modal-backdrop" style={{ zIndex: 10002 }}>
