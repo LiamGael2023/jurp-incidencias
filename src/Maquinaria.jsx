@@ -1034,7 +1034,10 @@ export default function Maquinaria({ irAIncidente }) {
                           <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>HORAS</th>
                           <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>COMBUST.</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>PROVEEDOR</th>
-                          <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569', whiteSpace: 'nowrap' }}>N° INCIDENCIA</th>
+                          {/* Centrada, igual que en el PDF y en el Excel: es la
+                              misma columna y no tiene por qué leerse distinto
+                              según dónde se mire. */}
+                          <th style={{ textAlign: 'center', padding: '10px 8px', fontSize: '11px', color: '#475569', whiteSpace: 'nowrap' }}>N° INCIDENCIA</th>
                           <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>TOTAL</th>
                           <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '11px', color: '#475569' }}>PDF</th>
                         </tr>
@@ -1054,7 +1057,7 @@ export default function Maquinaria({ irAIncidente }) {
                             <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.horas)} HE</td>
                             <td style={{ padding: '11px 8px', textAlign: 'right', color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.fuel_gallons || 0)} Gls</td>
                             <td style={{ padding: '11px 8px', color: '#475569', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.provider || ''}>{p.provider || '—'}</td>
-                            <td style={{ padding: '11px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{codigoIncidencia(p)}</td>
+                            <td style={{ padding: '11px 8px', textAlign: 'center', color: '#475569', whiteSpace: 'nowrap' }}>{codigoIncidencia(p)}</td>
                             <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 700, color: '#1463A5', whiteSpace: 'nowrap' }}>S/ {fmtNum(p.costo)}</td>
                             <td style={{ padding: '11px 14px', textAlign: 'right' }}>
                               <button onClick={() => abrirPdfParte(p.id, p.part_number)} title="Ver PDF"
