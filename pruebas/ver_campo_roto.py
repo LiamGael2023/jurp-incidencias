@@ -10,8 +10,8 @@ existe en ese comando. Solo lo llevan los que si los corren, como migrate.
 QUE PASA. Django prohibe "__" en un nombre de campo (fields.E002) porque es
 su separador para recorrer relaciones: con un campo n__usuario no sabria si
 pides el campo o el campo 'usuario' de una relacion 'n'. El check se dispara
-en CUALQUIER comando de manage.py, asi que bloquea makemigrations y migrate
-de todo el proyecto, no solo de la app que lo tiene.
+en los comandos que lo exigen -makemigrations, migrate, runserver- y los
+bloquea para TODO el proyecto, no solo para la app que tiene el campo.
 
 La API sigue funcionando porque los system checks no corren en el WSGI; por
 eso el fallo puede llevar meses ahi sin que nadie lo note.
