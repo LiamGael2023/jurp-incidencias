@@ -198,8 +198,11 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const [modalAvance, setModalAvance] = useState(false);
   // Escalera de la partida. Es estado de pantalla, no del parte: lo que se
   // guarda es partidaId. Al reabrir una actividad se deduce de ella.
-  const [casEstructura, setCasEstructura] = useState('');
-  const [casCapitulo, setCasCapitulo] = useState('');
+  // Codigos elegidos en la escalera, de arriba abajo:
+  //   ['01', '01.02', '01.02.04', '01.02.04.01']
+  // La profundidad NO es fija: hay ramas con cuatro ancestros y otras con
+  // tres, asi que se guarda el camino y no un combo por nivel.
+  const [casRuta, setCasRuta] = useState([]);
   const [filtroAvance, setFiltroAvance] = useState('todas');
 
   // ── Carga de catálogos (equipos/marcas/modelos) ──────────────────────────
@@ -253,6 +256,40 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     } catch (e) { /* backend sin el endpoint: se sigue sin partidas */ }
   };
   useEffect(() => { cargarPartidas(); }, []);
+
+  // La ruta viaja como texto JSON. Si viniera rota, se trata como vacia:
+  // la partida seguira siendo elegible desde su nivel, y es preferible a
+  // que el formulario entero reviente por una fila mal cargada.
+  const rutaDe = (p) => {
+    if (!p) return [];
+    if (Array.isArray(p.ruta)) return p.ruta;
+    try { const x = JSON.parse(p.ruta || '[]'); return Array.isArray(x) ? x : []; }
+    catch (e) { return []; }
+  };
+  const cuelgaDe = (p, camino) => {
+    const r = rutaDe(p);
+    return camino.every((c, i) => r[i] && r[i][0] === c);
+  };
+  // Baja sola mientras el nivel tenga UN solo hijo y ninguna partida termine
+  // ahí. Si alguna termina, la decisión es del operario y no mía.
+  //
+  // Arriba del todo esto importa: hay un solo presupuesto y una sola partida
+  // de control, así que sin esto habría que abrir dos combos de una opción
+  // antes de llegar al primero que decide algo.
+  const bajarSolo = (lista, camino) => {
+    let cam = camino.slice();
+    for (;;) {
+      const base = lista.filter(p => cuelgaDe(p, cam));
+      const sig = [];
+      base.forEach(p => {
+        const n = rutaDe(p)[cam.length];
+        if (n && !sig.some(o => o[0] === n[0])) sig.push(n);
+      });
+      const terminan = base.some(p => rutaDe(p).length === cam.length);
+      if (sig.length === 1 && !terminan) cam = cam.concat([sig[0][0]]);
+      else return cam;
+    }
+  };
 
   // Catálogo de cargos de mano de obra (persistido en el backend).
   const cargarCargos = async () => {
@@ -1017,7 +1054,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       : (nuevoRecurso.hmInicio !== '' && nuevoRecurso.hmInicio != null ? String(nuevoRecurso.hmInicio) : '');
     // Hereda la zona del parte para no volver a escribirla en cada línea.
     setActForm({ ...estadoInicialActividad, zonaTrabajo: nuevoRecurso.zonaTrabajo || '', hmInicio: previo });
-    setCasEstructura(''); setCasCapitulo('');
+    setCasRuta(bajarSolo(partidas, []));
     setActEditando(null);
     setModalActividad(true);
   };
@@ -1027,8 +1064,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     // La escalera se reconstruye desde la partida guardada, para que al
     // reabrir se vea el camino completo y no tres combos en blanco.
     const p = partidas.find(x => String(x.id) === String(a.partidaId));
-    setCasEstructura(p ? (p.estructura || '') : '');
-    setCasCapitulo(p ? (p.grupo || '') : '');
+    setCasRuta(p ? rutaDe(p).map(n => n[0]) : []);
     setActEditando(i);
     setModalActividad(true);
   };
@@ -3769,21 +3805,24 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                 </div>
 
                 {/* ── Partida del presupuesto, en escalera ─────────────────
-                     Estructura → Capítulo → Partida, siguiendo el árbol del
-                     presupuesto, en vez de una lista de 83.
+                     Se baja por el árbol del presupuesto, nivel por nivel:
 
-                     El árbol NO es uniforme: 78 partidas cuelgan de un
-                     capítulo y 5 cuelgan directas de la estructura (TRABAJOS
-                     PRELIMINARES, OBRAS PROVISIONALES, FLETE). Por eso el
-                     paso del medio se autocompleta cuando solo hay una
-                     opción: así la escalera tiene siempre los mismos tres
-                     peldaños y no salta de sitio según la rama.
+                       01           CONSTRUCCION Y MEJORAMIENTO ... TOMA 10
+                       01.02        ESTRUCTURAS DE TRATAMIENTO
+                       01.02.01     TRABAJOS PRELIMINARES
+                       01.02.01.01  Movilizacion y desmovilizacion ...
 
-                     Y por eso se filtra por estructura ANTES que por
-                     capítulo: "MOVIMIENTO DE TIERRAS" existe en nueve
-                     estructuras distintas, y "Excavación de material suelto
-                     c/maquinaria pesada" en varias de ellas. Sin el primer
-                     peldaño no hay forma de saber a cuál se carga. */}
+                     La profundidad NO es fija: 78 partidas tienen cuatro
+                     ancestros y 5 tienen tres (TRABAJOS PRELIMINARES, OBRAS
+                     PROVISIONALES, FLETE cuelgan directas). Por eso los
+                     peldaños se dibujan según la rama y no con un número fijo
+                     de combos: con cinco fijos, esas tres ramas mostrarían un
+                     combo vacío que no lleva a ninguna parte.
+
+                     Un nivel con una sola opción se da por elegido. Es lo que
+                     pasa arriba, donde solo hay un presupuesto: se ve el
+                     camino completo sin tener que abrir dos combos que no
+                     deciden nada. */}
                 {partidas.length > 0 && (() => {
                   const norm = (u) => (u || '').toString().trim().toLowerCase()
                     .replace('³', '3').replace('²', '2');
@@ -3792,71 +3831,79 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                   const sel = partidas.find(p => String(p.id) === String(actForm.partidaId));
                   const choca = sel && uAct && norm(sel.unidad) !== uAct;
 
-                  const unicos = (arr) => arr.filter((x, i) => arr.indexOf(x) === i);
-                  const estructuras = unicos(partidas.map(p => p.estructura || 'SIN ESTRUCTURA'));
-                  const deEstructura = partidas.filter(p => (p.estructura || 'SIN ESTRUCTURA') === casEstructura);
-                  const capitulos = unicos(deEstructura.map(p => p.grupo || '—'));
-                  const delCapitulo = deEstructura.filter(p => (p.grupo || '—') === casCapitulo);
+                  const candidatas = partidas.filter(p => cuelgaDe(p, casRuta));
+
+                  // Un peldaño por cada nivel del camino, más el siguiente.
+                  const peldanos = [];
+                  for (let i = 0; i <= casRuta.length; i++) {
+                    const base = partidas.filter(p => cuelgaDe(p, casRuta.slice(0, i)));
+                    const ops = [];
+                    base.forEach(p => {
+                      const n = rutaDe(p)[i];
+                      if (n && !ops.some(o => o[0] === n[0])) ops.push(n);
+                    });
+                    if (ops.length) peldanos.push({ i, ops, valor: casRuta[i] || '' });
+                  }
+
+                  // Las partidas del último nivel: las que ya no tienen más ruta.
+                  const hojas = candidatas.filter(p => rutaDe(p).length === casRuta.length);
 
                   const ponerPartida = (id) => {
                     const p = partidas.find(x => String(x.id) === String(id));
                     setActForm({ ...actForm,
                       partidaId: id,
-                      // Se copian a propósito: si mañana se recarga el
+                      // Copiados a propósito: si mañana se recarga el
                       // presupuesto, este parte sigue diciendo a qué se cargó.
                       partidaCodigo: p ? p.codigo : '',
                       partidaDescripcion: p ? p.descripcion : '' });
                   };
-                  const elegirEstructura = (v) => {
-                    setCasEstructura(v);
-                    const hijos = partidas.filter(p => (p.estructura || 'SIN ESTRUCTURA') === v);
-                    const caps = unicos(hijos.map(p => p.grupo || '—'));
-                    // Un solo capítulo: se da por elegido. Obligar a abrir un
-                    // combo con una sola opción es trabajo sin información.
-                    setCasCapitulo(caps.length === 1 ? caps[0] : '');
+
+                  // Al elegir un nivel se corta lo que había debajo y se
+                  // vuelven a bajar los niveles de un solo hijo.
+                  const elegirNivel = (i, cod) => {
+                    const corte = casRuta.slice(0, i);
+                    setCasRuta(bajarSolo(partidas, cod ? corte.concat([cod]) : corte));
                     ponerPartida('');
                   };
 
-                  const sinPartida = !actForm.partidaId;
+                  const ETQ = ['Presupuesto', 'Partida de control', 'Estructura', 'Capítulo', 'Subcapítulo'];
                   return (
                     <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'12px', marginBottom:'15px' }}>
                       <div style={{ fontSize:'12.5px', fontWeight:700, color:'#334155', marginBottom:'8px' }}>
                         Partida del presupuesto <small style={{ color:'#94a3b8', fontWeight:400 }}>· opcional</small>
                       </div>
-                      <div className="tbl-row">
-                        <div className="tbl-col">
-                          <label className="tbl-form-label">1 · Estructura</label>
-                          <select className="tbl-form-select" value={casEstructura}
-                            onChange={e => elegirEstructura(e.target.value)}>
+
+                      {peldanos.map(({ i, ops, valor }) => (
+                        <div key={i} style={{ marginBottom:'8px' }}>
+                          <label className="tbl-form-label">
+                            {i + 1} · {ETQ[i] || `Nivel ${i + 1}`}
+                          </label>
+                          <select className="tbl-form-select" value={valor}
+                            onChange={e => elegirNivel(i, e.target.value)}>
                             <option value="">— Elegir —</option>
-                            {estructuras.map(e => <option key={e} value={e}>{e}</option>)}
+                            {ops.map(([c, d]) => (
+                              <option key={c} value={c}>{c} · {d}</option>
+                            ))}
                           </select>
                         </div>
-                        <div className="tbl-col">
-                          <label className="tbl-form-label" style={{ color: casEstructura ? undefined : '#cbd5e1' }}>2 · Capítulo</label>
-                          <select className="tbl-form-select" value={casCapitulo} disabled={!casEstructura}
-                            style={!casEstructura ? { background:'#f1f5f9', cursor:'not-allowed' } : {}}
-                            onChange={e => { setCasCapitulo(e.target.value); ponerPartida(''); }}>
-                            <option value="">{casEstructura ? '— Elegir —' : '—'}</option>
-                            {capitulos.map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="tbl-row" style={{ marginTop:'10px' }}>
-                        <div className="tbl-col">
-                          <label className="tbl-form-label" style={{ color: casCapitulo ? undefined : '#cbd5e1' }}>3 · Partida</label>
-                          <select className="tbl-form-select" value={actForm.partidaId} disabled={!casCapitulo}
-                            style={!casCapitulo ? { background:'#f1f5f9', cursor:'not-allowed' } : {}}
+                      ))}
+
+                      {hojas.length > 0 && (
+                        <div style={{ marginBottom:'4px' }}>
+                          <label className="tbl-form-label">
+                            {peldanos.length + 1} · Partida
+                          </label>
+                          <select className="tbl-form-select" value={actForm.partidaId}
                             onChange={e => ponerPartida(e.target.value)}>
-                            <option value="">{casCapitulo ? '— Elegir —' : '—'}</option>
-                            {delCapitulo.map(p => (
+                            <option value="">— Elegir —</option>
+                            {hojas.map(p => (
                               <option key={p.id} value={p.id}>
                                 {p.codigo} · {p.descripcion} ({p.unidad})
                               </option>
                             ))}
                           </select>
                         </div>
-                      </div>
+                      )}
 
                       {sel ? (
                         <div style={{ marginTop:'8px', fontSize:'11.5px', color:'#475569', display:'flex', gap:'14px', flexWrap:'wrap' }}>

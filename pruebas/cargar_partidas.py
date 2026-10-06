@@ -94,6 +94,12 @@ if duplicados:
     print("No se carga nada: arregla el origen primero.")
     sys.exit(1)
 
+sin_ruta = [f.get("codigo") for f in filas if not f.get("ruta")]
+if sin_ruta:
+    print("Aviso: {0} partida(s) sin ruta. El selector en escalera no podra".format(len(sin_ruta)))
+    print("llegar a ellas. Regenera el catalogo con el extractor actualizado.")
+    print("")
+
 sin_unidad = [f.get("codigo") for f in filas if not (f.get("unidad") or "").strip()]
 if sin_unidad:
     print("Hay partidas sin unidad: {0}".format(", ".join(str(c) for c in sin_unidad[:8])))
@@ -117,6 +123,9 @@ for f in filas:
             precio=f.get("precio") or 0,
             estructura=(f.get("estructura") or "").strip()[:200],
             grupo=(f.get("grupo") or "").strip()[:200],
+            # La ruta completa, para poder elegir en escalera. Se guarda tal
+            # cual viene del extractor, que ya normalizo los codigos.
+            ruta=json.dumps(f.get("ruta") or [], ensure_ascii=False),
             activo=True,
         ))
     if creada:
