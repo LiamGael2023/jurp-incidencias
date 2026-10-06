@@ -9,6 +9,7 @@ import './EstadisticasGIS.css';
 import './ReportesGIS.css';
 import './MaquinariaGIS.css';
 import Incidentes from './Incidentes';
+import AvanceObra from './AvanceObra';
 import Estadisticas from './Estadisticas';
 import Vigilancia from './Vigilancia';
 import Reportes from './Reportes';
@@ -17,7 +18,7 @@ import Partes from './Partes';
 import MapaInventario from './MapaInventario';
 import ReportesInventario from './ReportesInventario';
 import MapaTematico from './MapaTematico';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass } from 'react-icons/fa';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
 const URL_HYDROMETRIX = 'http://sistema.jriegopresurizado.org.pe/';
@@ -35,6 +36,9 @@ const MENU = [
   { clave: 'reportes',     titulo: 'Reportes',      icono: <FaFilePdf />,       apps: ['pluvira'] },
   { clave: 'maquinaria',   titulo: 'Maquinaria',    icono: <FaTruck />,         apps: ['pluvira'] },
   { clave: 'partes',       titulo: 'Partes Diarios', icono: <FaClipboardList />, apps: ['pluvira'] },
+  // Va justo después de Partes Diarios porque se alimenta de ellos: el metrado
+  // que se imputa en el parte es lo que esta pantalla valoriza.
+  { clave: 'obra',         titulo: 'Avance de Obra', icono: <FaChartLine />,     apps: ['pluvira'] },
   // Inventario: rótulo de sección y sus dos vistas, al final del menú.
   { clave: 'sec-inventario', seccion: true, modulo: 'inventario', apps: ['pluvira'] },
   { clave: 'inv-mapa',     titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,   apps: ['pluvira'] },
@@ -201,6 +205,17 @@ function App() {
     );
   }
 
+  // Avance de Obra comparte el layout de Maquinaria/Partes: es una vista de
+  // tablero, de ancho completo, y el tema ya esta en MaquinariaGIS.css.
+  if (vistaActual === 'obra') {
+    return (
+      <div className="maq">
+        <RailGIS {...propsRail} />
+        <div className="maq-main"><AvanceObra /></div>
+      </div>
+    );
+  }
+
   if (vistaActual === 'reportes') {
     return (
       <div className="rep">
@@ -302,6 +317,7 @@ function App() {
           {vistaActual === 'reportes' && <Reportes />}
           {vistaActual === 'maquinaria' && <Maquinaria irAIncidente={irAIncidente} />}
           {vistaActual === 'partes' && <Partes irAIncidente={irAIncidente} />}
+          {vistaActual === 'obra' && <AvanceObra />}
           {vistaActual === 'inv-reportes' && <ReportesInventario />}
         </div>
       </div>
