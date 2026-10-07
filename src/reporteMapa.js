@@ -265,43 +265,107 @@ export function aBlob(canvas, tipo = 'image/jpeg', calidad = 0.9) {
 }
 
 /**
+ * ¿Estamos en un móvil?
+ *
+ * Importa porque decide el camino de WhatsApp, y equivocarse se nota: en
+ * Windows `navigator.share` existe y abre la hoja de compartir del SISTEMA,
+ * donde WhatsApp solo aparece si está instalada la app de escritorio. Si no
+ * lo está —que es lo normal en una PC de oficina— el botón de WhatsApp lleva
+ * a una pantalla llena de Outlook, Teams y Paint, y de WhatsApp nada.
+ *
+ * Se mira userAgentData.mobile, que es el dato declarado por el navegador, y
+ * solo si no existe se cae al user-agent.
+ */
+function esMovil() {
+  try {
+    if (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean')
+      return navigator.userAgentData.mobile;
+  } catch { /* algunos navegadores lanzan al tocarlo */ }
+  return /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|Mobile Safari/i
+    .test(navigator.userAgent || '');
+}
+
+/**
+ * Normaliza el número a formato internacional.
+ *
+ * Nueve dígitos que empiezan en 9 es un celular peruano sin prefijo, que es
+ * como lo escribe todo el mundo aquí. Sin el 51 delante el enlace apunta a un
+ * número que no existe y WhatsApp abre un chat vacío, sin decir por qué.
+ *
+ * Se devuelve también si se tocó, para poder enseñarlo: corregir en silencio
+ * un número de teléfono es de las cosas que luego nadie entiende.
+ */
+export function normalizarTelefono(crudo) {
+  const d = String(crudo || '').replace(/\D/g, '');
+  if (!d) return { numero: '', cambiado: false };
+  if (d.length === 9 && d.startsWith('9')) return { numero: '51' + d, cambiado: true };
+  return { numero: d, cambiado: false };
+}
+
+/**
  * Manda por WhatsApp. Devuelve cómo se hizo, para poder decirlo.
  *
- * Los tres caminos están explicados arriba. El orden importa: primero el
- * nativo, que es el único que adjunta la imagen solo.
+ * DOS CAMINOS, según dónde se esté:
+ *
+ *   Móvil      → navigator.share. La hoja del sistema trae WhatsApp y la foto
+ *                va adjunta sola. Es el único camino que no pide pegar nada.
+ *
+ *   Escritorio → WhatsApp Web directo, con la imagen en el portapapeles. NO
+ *                se usa la hoja de compartir de Windows: WhatsApp solo sale
+ *                ahí si está instalada la app de escritorio, y si no lo está
+ *                el botón no lleva a WhatsApp.
+ *
+ * Se va a web.whatsapp.com/send y no a wa.me porque wa.me mete por medio una
+ * página intermedia de «Continuar al chat» con un botón de descarga; un paso
+ * más y una invitación a instalar algo que no hace falta.
  */
-export async function enviarPorWhatsApp(blob, texto, telefono) {
+export async function enviarPorWhatsApp(blob, texto, telefono, opciones = {}) {
+  const { forzarWeb = false } = opciones;
   const file = new File([blob], nombreArchivo(blob.type), { type: blob.type });
 
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+  if (!forzarWeb && esMovil() && navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], text: texto, title: 'Mapa JURP' });
       return { via: 'nativo' };
     } catch (e) {
       // AbortError = el usuario cerró la hoja de compartir. No es un fallo.
       if (e && e.name === 'AbortError') return { via: 'cancelado' };
-      // Cualquier otro fallo cae a los siguientes caminos.
+      // Cualquier otro fallo cae al camino de escritorio.
     }
   }
 
-  // Escritorio: imagen al portapapeles + WhatsApp Web con el texto puesto.
+  // El portapapeles ANTES de abrir la pestaña: una vez que el foco se va a la
+  // ventana nueva, el navegador deja de permitir escribir en el portapapeles.
   let copiada = false;
   try {
     if (navigator.clipboard && window.ClipboardItem) {
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      const png = blob.type === 'image/png' ? blob : await aPng(blob);
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
       copiada = true;
     }
   } catch { copiada = false; }
 
-  const url = telefono
-    ? `https://wa.me/${String(telefono).replace(/\D/g, '')}?text=${encodeURIComponent(texto)}`
-    : `https://wa.me/?text=${encodeURIComponent(texto)}`;
+  const { numero } = normalizarTelefono(telefono);
+  const url = numero
+    ? `https://web.whatsapp.com/send?phone=${numero}&text=${encodeURIComponent(texto)}`
+    // Sin número no hay a quién escribirle: WhatsApp Web se abre y el usuario
+    // elige el chat. El texto no se puede prellenar sin destinatario.
+    : 'https://web.whatsapp.com/';
   window.open(url, '_blank', 'noopener');
 
-  if (copiada) return { via: 'portapapeles' };
+  if (copiada) return { via: 'web', numero, conTexto: !!numero };
 
   descargarBlob(blob);
-  return { via: 'descarga' };
+  return { via: 'web-sin-copia', numero, conTexto: !!numero };
+}
+
+/** Reenvuelve un JPEG como PNG, que es lo único que acepta el portapapeles. */
+async function aPng(blob) {
+  const bmp = await createImageBitmap(blob);
+  const cv = document.createElement('canvas');
+  cv.width = bmp.width; cv.height = bmp.height;
+  cv.getContext('2d').drawImage(bmp, 0, 0);
+  return new Promise(res => cv.toBlob(res, 'image/png'));
 }
 
 export function descargarBlob(blob) {

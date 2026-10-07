@@ -14,6 +14,7 @@ import {
 } from 'react-icons/fa';
 import {
   componerReporte, enviarPorWhatsApp, descargarBlob, notificarApp, aBlob,
+  normalizarTelefono,
 } from './reporteMapa';
 
 const Portal = ({ children }) => createPortal(children, document.body);
@@ -87,12 +88,14 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
       const r = await enviarPorWhatsApp(blob, textoMensaje(), telefono.trim());
       if (r.via === 'nativo') setAviso({ tipo: 'ok', texto: 'Compartido.' });
       else if (r.via === 'cancelado') setAviso(null);
-      else if (r.via === 'portapapeles') setAviso({ tipo: 'ok', texto:
-        'WhatsApp se abrió con el texto puesto y la imagen quedó copiada: '
-        + 'pégala en el chat con Ctrl+V antes de enviar.' });
+      else if (r.via === 'web') setAviso({ tipo: 'ok', texto:
+        (r.conTexto
+          ? 'WhatsApp Web se abrió en el chat, con el texto puesto. '
+          : 'WhatsApp Web se abrió: elige el chat. ')
+        + 'La imagen está copiada: pégala con Ctrl+V antes de enviar.' });
       else setAviso({ tipo: 'aviso', texto:
-        'Tu navegador no deja copiar la imagen, así que se descargó. '
-        + 'Adjúntala a mano en el chat que acaba de abrirse.' });
+        'WhatsApp Web se abrió, pero tu navegador no dejó copiar la imagen, '
+        + 'así que se descargó. Adjúntala a mano en el chat.' });
     } catch (e) {
       setAviso({ tipo: 'error', texto: e?.message || String(e) });
     } finally { setEnviando(''); }
@@ -236,9 +239,24 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
                   style={{ width:'100%', maxWidth:'260px', padding:'9px 12px',
                     border:'1px solid #cbd5e1', borderRadius:'8px', fontSize:'13.5px',
                     fontFamily:'inherit', boxSizing:'border-box' }} />
-                <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>
-                  Si lo dejas vacío, WhatsApp te deja elegir el chat.
-                </div>
+                {(() => {
+                  // El número corregido se ENSEÑA. Arreglar en silencio un
+                  // teléfono es de las cosas que luego nadie entiende: si el
+                  // mensaje no llega, nadie sabe a qué número se mandó.
+                  const n = normalizarTelefono(telefono);
+                  if (n.cambiado) return (
+                    <div style={{ fontSize:'11px', color:'#1463A5', marginTop:'4px' }}>
+                      Se enviará a <b>+{n.numero}</b> — le agregué el 51 de Perú.
+                    </div>
+                  );
+                  return (
+                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>
+                      {n.numero
+                        ? <>Se enviará a <b>+{n.numero}</b>.</>
+                        : 'Si lo dejas vacío, WhatsApp Web se abre y tú eliges el chat.'}
+                    </div>
+                  );
+                })()}
               </>
             )}
 
