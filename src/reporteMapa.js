@@ -319,53 +319,62 @@ export function normalizarTelefono(crudo) {
  * página intermedia de «Continuar al chat» con un botón de descarga; un paso
  * más y una invitación a instalar algo que no hace falta.
  */
-export async function enviarPorWhatsApp(blob, texto, telefono, opciones = {}) {
+export async function enviarPorWhatsApp(hacer, texto, telefono, opciones = {}) {
   const { forzarWeb = false } = opciones;
-  const file = new File([blob], nombreArchivo(blob.type), { type: blob.type });
 
-  if (!forzarWeb && esMovil() && navigator.canShare && navigator.canShare({ files: [file] })) {
+  // ── escritorio ──────────────────────────────────────────────────────────
+  if (forzarWeb || !esMovil()) {
+    // EL ORDEN AQUI ES TODO, Y ES LO QUE FALLABA.
+    //
+    // Antes se componía la imagen, se esperaba a tenerla, y RECIEN entonces
+    // se escribía el portapapeles. Entre el clic y esa escritura pasaba casi
+    // un segundo —componer el canvas, pasarlo a PNG— y para cuando llegaba,
+    // el navegador ya no la consideraba parte del gesto del usuario: la
+    // rechazaba sin ruido y el chat se abría con el texto y sin foto.
+    //
+    // ClipboardItem acepta una PROMESA de blob. Así la escritura se pide en
+    // el mismo instante del clic, mientras la imagen todavía se está
+    // componiendo, y el navegador la concede.
+    const png = hacer('image/png');
+    let copiada = false;
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+        copiada = true;
+      }
+    } catch { copiada = false; }
+
+    const { numero } = normalizarTelefono(telefono);
+    const url = numero
+      ? `https://web.whatsapp.com/send?phone=${numero}&text=${encodeURIComponent(texto)}`
+      // Sin número no hay a quién escribirle: WhatsApp Web se abre y el
+      // usuario elige el chat. El texto no se puede prellenar sin destino.
+      : 'https://web.whatsapp.com/';
+    window.open(url, '_blank', 'noopener');
+
+    if (copiada) return { via: 'web', numero, conTexto: !!numero };
+    descargarBlob(await hacer('image/jpeg'));
+    return { via: 'web-sin-copia', numero, conTexto: !!numero };
+  }
+
+  // ── móvil ───────────────────────────────────────────────────────────────
+  const blob = await hacer('image/jpeg');
+  const file = new File([blob], nombreArchivo(blob.type), { type: blob.type });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], text: texto, title: 'Mapa JURP' });
       return { via: 'nativo' };
     } catch (e) {
       // AbortError = el usuario cerró la hoja de compartir. No es un fallo.
       if (e && e.name === 'AbortError') return { via: 'cancelado' };
-      // Cualquier otro fallo cae al camino de escritorio.
     }
   }
-
-  // El portapapeles ANTES de abrir la pestaña: una vez que el foco se va a la
-  // ventana nueva, el navegador deja de permitir escribir en el portapapeles.
-  let copiada = false;
-  try {
-    if (navigator.clipboard && window.ClipboardItem) {
-      const png = blob.type === 'image/png' ? blob : await aPng(blob);
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
-      copiada = true;
-    }
-  } catch { copiada = false; }
-
   const { numero } = normalizarTelefono(telefono);
-  const url = numero
-    ? `https://web.whatsapp.com/send?phone=${numero}&text=${encodeURIComponent(texto)}`
-    // Sin número no hay a quién escribirle: WhatsApp Web se abre y el usuario
-    // elige el chat. El texto no se puede prellenar sin destinatario.
-    : 'https://web.whatsapp.com/';
-  window.open(url, '_blank', 'noopener');
-
-  if (copiada) return { via: 'web', numero, conTexto: !!numero };
-
+  window.open(numero
+    ? `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`
+    : `https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
   descargarBlob(blob);
   return { via: 'web-sin-copia', numero, conTexto: !!numero };
-}
-
-/** Reenvuelve un JPEG como PNG, que es lo único que acepta el portapapeles. */
-async function aPng(blob) {
-  const bmp = await createImageBitmap(blob);
-  const cv = document.createElement('canvas');
-  cv.width = bmp.width; cv.height = bmp.height;
-  cv.getContext('2d').drawImage(bmp, 0, 0);
-  return new Promise(res => cv.toBlob(res, 'image/png'));
 }
 
 export function descargarBlob(blob) {

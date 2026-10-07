@@ -10,7 +10,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   FaWhatsapp, FaBell, FaDownload, FaTimes, FaSpinner, FaExclamationTriangle,
-  FaCheckCircle, FaCopy,
+  FaCheckCircle, FaCopy, FaPaste,
 } from 'react-icons/fa';
 import {
   componerReporte, enviarPorWhatsApp, descargarBlob, notificarApp, aBlob,
@@ -84,15 +84,15 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
     setEnviando('wa'); setAviso(null);
     try {
       if (telefono.trim()) localStorage.setItem('jurp_wa_destino', telefono.trim());
-      const blob = await blobFinal();
-      const r = await enviarPorWhatsApp(blob, textoMensaje(), telefono.trim());
+      // Se le pasa la FUNCION, no la imagen ya hecha: el portapapeles hay que
+      // pedirlo en el mismo instante del clic, no cuando la imagen esté lista.
+      const r = await enviarPorWhatsApp(blobFinal, textoMensaje(), telefono.trim());
       if (r.via === 'nativo') setAviso({ tipo: 'ok', texto: 'Compartido.' });
       else if (r.via === 'cancelado') setAviso(null);
-      else if (r.via === 'web') setAviso({ tipo: 'ok', texto:
+      else if (r.via === 'web') setAviso({ tipo: 'pegar', texto:
         (r.conTexto
-          ? 'WhatsApp Web se abrió en el chat, con el texto puesto. '
-          : 'WhatsApp Web se abrió: elige el chat. ')
-        + 'La imagen está copiada: pégala con Ctrl+V antes de enviar.' });
+          ? 'WhatsApp Web se abrió en el chat, con el texto puesto.'
+          : 'WhatsApp Web se abrió: elige el chat.') });
       else setAviso({ tipo: 'aviso', texto:
         'WhatsApp Web se abrió, pero tu navegador no dejó copiar la imagen, '
         + 'así que se descargó. Adjúntala a mano en el chat.' });
@@ -260,7 +260,32 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
               </>
             )}
 
-            {aviso && (
+            {/* El «pégala con Ctrl+V» no puede ir como una línea más de aviso:
+                es una instrucción OBLIGATORIA, y si no se cumple el mensaje
+                sale sin foto. Va grande y aparte. */}
+            {aviso && aviso.tipo === 'pegar' && (
+              <div style={{ marginTop:'14px', borderRadius:'11px',
+                border:'2px solid #25D366', background:'#f0fdf4', padding:'14px 16px' }}>
+                <div style={{ fontSize:'12.5px', color:'#15803d', marginBottom:'8px' }}>
+                  {aviso.texto}
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:'11px' }}>
+                  <FaPaste size={22} color="#15803d" style={{ flexShrink:0 }} />
+                  <div>
+                    <div style={{ fontSize:'15px', fontWeight:800, color:'#14532d' }}>
+                      Falta pegar la imagen: haz clic en el chat y pulsa{' '}
+                      <kbd style={kbd}>Ctrl</kbd> + <kbd style={kbd}>V</kbd>
+                    </div>
+                    <div style={{ fontSize:'12px', color:'#15803d', marginTop:'3px' }}>
+                      Ya está copiada. WhatsApp Web no deja adjuntarla sola desde
+                      un enlace: ese paso lo tienes que dar tú.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {aviso && aviso.tipo !== 'pegar' && (
               <div style={{ marginTop:'14px', borderRadius:'9px', padding:'11px 13px',
                 fontSize:'12.5px', lineHeight:1.6, display:'flex', gap:'9px',
                 alignItems:'flex-start',
@@ -302,6 +327,12 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
     </Portal>
   );
 }
+
+const kbd = {
+  display:'inline-block', padding:'1px 6px', border:'1px solid #15803d',
+  borderRadius:'4px', background:'#fff', fontSize:'12.5px', fontFamily:'monospace',
+  fontWeight:700, lineHeight:1.5,
+};
 
 const btnBase = {
   display:'inline-flex', alignItems:'center', gap:'7px', borderRadius:'8px',
