@@ -19,7 +19,7 @@ import {
 
 const Portal = ({ children }) => createPortal(children, document.body);
 
-export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, autor }) {
+export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, autor, clave }) {
   const [paso, setPaso] = useState('generando');   // generando | listo | error
   const [error, setError] = useState('');
   const [nota, setNota] = useState('');
@@ -104,7 +104,6 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
         const sub = await notificarApp(await blobFinal(), {
           api, origen: 'whatsapp', solo: true,
           titulo: 'Monitoreo', cuerpo: nota.trim(),
-          token: localStorage.getItem('userToken'),
         });
         const { numero } = normalizarTelefono(telefono.trim());
         const texto = textoMensaje() + '\n\n' + sub.url;
@@ -150,7 +149,7 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
         titulo: contexto?.nivel?.texto
           ? `Monitoreo · ${contexto.nivel.texto}` : 'Aviso del monitoreo',
         cuerpo: nota.trim() || 'Nueva captura del monitoreo GIS',
-        token: localStorage.getItem('userToken'),
+        clave: clave || '',
       });
       setAviso({ tipo: 'ok', texto:
         `Notificación enviada a ${r.enviados} dispositivo(s).`

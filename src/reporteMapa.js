@@ -400,7 +400,7 @@ export function descargarBlob(blob) {
  * URL pública que se puede pegar en el mensaje de WhatsApp. Con ese enlace,
  * el envío por WhatsApp deja de necesitar que nadie pegue nada.
  */
-export async function notificarApp(blob, { api, titulo, cuerpo, token, origen, solo }) {
+export async function notificarApp(blob, { api, titulo, cuerpo, clave, origen, solo }) {
   const fd = new FormData();
   fd.append('imagen', new File([blob], nombreArchivo(blob.type), { type: blob.type }));
   fd.append('titulo', titulo || 'Aviso del monitoreo');
@@ -410,9 +410,20 @@ export async function notificarApp(blob, { api, titulo, cuerpo, token, origen, s
   // WhatsApp no es motivo para hacer sonar los teléfonos de los vigilantes.
   if (solo) fd.append('solo_publicar', '1');
 
+  // NO se manda Authorization, y es a propósito.
+  //
+  // El backend de vigilancia valida el token de PLUVIRA pero rechaza con él
+  // cualquier escritura: «Las credenciales de PLUVIRA solo permiten consultar
+  // datos». Ese rechazo lo da la capa de autenticación ANTES de llegar a la
+  // vista, así que mandar la cabecera convierte un POST que habría pasado en
+  // un 401. Sin cabecera, la petición llega como anónima y la vista decide:
+  // publicar sí, notificar solo con la clave.
+  const cabeceras = {};
+  if (clave) cabeceras['X-Notif-Clave'] = clave;
+
   const r = await fetch(`${api}/notificaciones/mapa/`, {
     method: 'POST',
-    headers: token ? { Authorization: `Token ${token}` } : {},
+    headers: cabeceras,
     body: fd,
   });
 
