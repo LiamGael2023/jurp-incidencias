@@ -19,7 +19,7 @@ import {
 
 const Portal = ({ children }) => createPortal(children, document.body);
 
-export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, autor, clave }) {
+export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, autor }) {
   const [paso, setPaso] = useState('generando');   // generando | listo | error
   const [error, setError] = useState('');
   const [nota, setNota] = useState('');
@@ -30,6 +30,16 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
   const [destinos, setDestinos] = useState(null); // {dispositivos, usuarios}
   const [confirmando, setConfirmando] = useState(false);
   const [conEnlace, setConEnlace] = useState(false);
+  // La clave de notificaciones NO viaja en el bundle.
+  //
+  // De todos los endpoints de operations este es el unico que puede hacer
+  // dano -hace sonar catorce telefonos de vigilantes-, asi que una clave
+  // compilada en el JavaScript, que lee cualquiera que abra el codigo fuente,
+  // seria ponerla justo donde mas estorba. Se escribe una vez por navegador y
+  // se queda aqui, en el equipo de quien si tiene que poder avisar.
+  const [clave, setClave] = useState(
+    () => localStorage.getItem('jurp_notif_clave') || '');
+  const [pidiendoClave, setPidiendoClave] = useState(false);
   // ¿Existe la hoja de compartir? Se mira una vez, no en cada pintado.
   const puedeCompartir = typeof navigator !== 'undefined' && !!navigator.canShare;
   const [enviando, setEnviando] = useState('');
@@ -143,6 +153,7 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
       return;
     }
     setConfirmando(false);
+    if (clave.trim()) localStorage.setItem('jurp_notif_clave', clave.trim());
     setEnviando('app'); setAviso(null);
     try {
       const blob = await blobFinal();
@@ -151,7 +162,7 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
         titulo: contexto?.nivel?.texto
           ? `Monitoreo · ${contexto.nivel.texto}` : 'Aviso del monitoreo',
         cuerpo: nota.trim() || 'Nueva captura del monitoreo GIS',
-        clave: clave || '',
+        clave: clave.trim(),
       });
       setAviso({ tipo: 'ok', texto:
         `Notificación enviada a ${r.enviados} dispositivo(s).`
@@ -160,10 +171,14 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
         + (r.aviso ? ` ${r.aviso}` : '') });
     } catch (e) {
       if (e?.codigo === 'SIN_PERMISO') {
-        setAviso({ tipo: 'error', texto:
-          'El servidor rechazó el envío por falta de permiso. La imagen NO se '
-          + 'envió. Hay que iniciar sesión, o definir NOTIF_MAPA_CLAVE en el '
-          + 'servidor.' });
+        // Se abre el campo en vez de solo lamentarlo: el que esta delante
+        // probablemente TIENE la clave, y decirle «falta permiso» sin
+        // ofrecerle donde ponerla lo deja mirando un error.
+        setPidiendoClave(true);
+        setAviso({ tipo: 'aviso', texto: clave
+          ? 'El servidor no aceptó esa clave. La imagen NO se envió.'
+          : 'Este envío necesita la clave de notificaciones. La imagen NO se '
+            + 'envió. Escríbela abajo; se queda guardada en este equipo.' });
       } else if (e?.codigo === 'SIN_ENDPOINT') {
         setAviso({ tipo: 'error', texto:
           'El backend todavía no tiene el endpoint de notificaciones '
@@ -363,6 +378,26 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
                   <button onClick={() => setConfirmando(false)} style={btnSec}>
                     Cancelar
                   </button>
+                </div>
+              </div>
+            )}
+
+            {(pidiendoClave || (confirmando && !clave)) && (
+              <div style={{ marginTop:'12px', border:'1px solid #cbd5e1',
+                borderRadius:'10px', padding:'12px 14px', background:'#fff' }}>
+                <label style={{ display:'block', fontSize:'12px', fontWeight:700,
+                  color:'#475569', marginBottom:'5px' }}>
+                  CLAVE DE NOTIFICACIONES
+                </label>
+                <input type="password" value={clave}
+                  onChange={e => setClave(e.target.value)}
+                  placeholder="la que está en NOTIF_MAPA_CLAVE del servidor"
+                  style={{ width:'100%', maxWidth:'360px', padding:'9px 12px',
+                    border:'1px solid #cbd5e1', borderRadius:'8px', fontSize:'13.5px',
+                    fontFamily:'inherit', boxSizing:'border-box' }} />
+                <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>
+                  Se guarda en este equipo y no se vuelve a pedir. No viaja en el
+                  código de la web: por eso hay que escribirla una vez.
                 </div>
               </div>
             )}
