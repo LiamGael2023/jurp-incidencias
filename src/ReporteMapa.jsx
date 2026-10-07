@@ -13,7 +13,7 @@ import {
   FaCheckCircle, FaCopy,
 } from 'react-icons/fa';
 import {
-  componerReporte, enviarPorWhatsApp, descargarBlob, notificarApp,
+  componerReporte, enviarPorWhatsApp, descargarBlob, notificarApp, aBlob,
 } from './reporteMapa';
 
 const Portal = ({ children }) => createPortal(children, document.body);
@@ -25,6 +25,7 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
   const [telefono, setTelefono] = useState(
     () => localStorage.getItem('jurp_wa_destino') || '');
   const [vista, setVista] = useState(null);        // dataURL de la previsualización
+  const [peso, setPeso] = useState(0);            // bytes del JPEG que se enviará
   const [enviando, setEnviando] = useState('');
   const [aviso, setAviso] = useState(null);        // { tipo, texto }
   const mapaRef = useRef(null);                    // canvas del mapa, sin estampar
@@ -57,15 +58,17 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
     const id = setTimeout(() => {
       try {
         const cv = componerReporte(mapaRef.current, { ...contexto, nota, autor });
-        setVista(cv.toDataURL('image/png'));
+        setVista(cv.toDataURL('image/jpeg', 0.9));
+        // El peso se enseña: en campo, con datos móviles, importa.
+        aBlob(cv, 'image/jpeg', 0.9).then(b => b && setPeso(b.size));
       } catch (e) { console.error(e); }
     }, 180);
     return () => clearTimeout(id);
   }, [paso, nota, contexto, autor]);
 
-  const blobFinal = useCallback(async () => {
+  const blobFinal = useCallback(async (tipo = 'image/jpeg') => {
     const cv = componerReporte(mapaRef.current, { ...contexto, nota, autor });
-    return new Promise(res => cv.toBlob(res, 'image/png'));
+    return aBlob(cv, tipo, 0.9);
   }, [contexto, nota, autor]);
 
   const textoMensaje = useCallback(() => {
@@ -128,7 +131,7 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
   const copiarImagen = async () => {
     setEnviando('cp'); setAviso(null);
     try {
-      const blob = await blobFinal();
+      const blob = await blobFinal('image/png');   // ClipboardItem solo traga PNG
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       setAviso({ tipo: 'ok', texto: 'Imagen copiada. Pégala donde quieras con Ctrl+V.' });
     } catch {
@@ -217,8 +220,11 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
                   style={{ width:'100%', padding:'10px 12px', border:'1px solid #cbd5e1',
                     borderRadius:'8px', fontSize:'13.5px', fontFamily:'inherit',
                     resize:'vertical', lineHeight:1.5, boxSizing:'border-box' }} />
-                <div style={{ fontSize:'11px', color:'#94a3b8', textAlign:'right',
-                  marginTop:'3px' }}>{nota.length}/600</div>
+                <div style={{ display:'flex', justifyContent:'space-between',
+                  fontSize:'11px', color:'#94a3b8', marginTop:'3px' }}>
+                  <span>{peso ? `La imagen pesa ${(peso / 1024 / 1024).toFixed(2)} MB` : ''}</span>
+                  <span>{nota.length}/600</span>
+                </div>
 
                 <label style={{ display:'block', fontSize:'12px', fontWeight:700,
                   color:'#475569', margin:'10px 0 5px' }}>

@@ -347,8 +347,15 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
     const { default: html2canvas } = await import('html2canvas');
     const nodo = contenedorRef.current;
     if (!nodo) throw new Error('No hay mapa que fotografiar');
+    // La escala se calcula, no se fija. Con scale:2 sobre un monitor ancho la
+    // foto sale de 5000 px y pesa megas: WhatsApp la recomprime igual y la
+    // subida se arrastra. Se apunta a ~1800 px de ancho, que es lo que de
+    // verdad se mira en un teléfono, y en pantallas pequeñas se deja subir
+    // hasta ×2 para que no salga borrosa.
+    const ancho = nodo.offsetWidth || 1280;
+    const escala = Math.min(2, Math.max(0.6, 1800 / ancho));
     return html2canvas(nodo, {
-      useCORS: true, allowTaint: false, backgroundColor: null, scale: 2,
+      useCORS: true, allowTaint: false, backgroundColor: null, scale: escala,
       ignoreElements: (el) => (
         el.classList?.contains('jurp-no-capture') ||
         el.classList?.contains('leaflet-control-zoom') ||

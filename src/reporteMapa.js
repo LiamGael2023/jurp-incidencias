@@ -239,8 +239,30 @@ function contrasta(hex) {
 //  Envíos
 // ───────────────────────────────────────────────────────────────────────────
 
-const nombreArchivo = () =>
-  `mapa_jurp_${new Date().toISOString().slice(0, 16).replace(/[:T-]/g, '')}.png`;
+/**
+ * El nombre lleva la extensión que de verdad tiene el archivo.
+ *
+ * Un .png que por dentro es JPEG lo rechazan algunos clientes y confunde al
+ * que lo recibe.
+ */
+export const nombreArchivo = (tipo = 'image/jpeg') =>
+  `mapa_jurp_${new Date().toISOString().slice(0, 16).replace(/[:T-]/g, '')}`
+  + (tipo === 'image/png' ? '.png' : '.jpg');
+
+/**
+ * El PNG no es el formato para esto.
+ *
+ * Lo que se fotografía es imagen satelital, o sea contenido fotográfico, y el
+ * PNG lo guarda sin pérdida: 8 MB para algo que WhatsApp va a recomprimir de
+ * todas formas, con la subida arrastrándose por una conexión de campo. En
+ * JPEG al 90 % la misma foto baja a cientos de kilobytes y a ojo no se nota.
+ *
+ * La excepción es el portapapeles: ClipboardItem solo acepta PNG de forma
+ * fiable, así que ahí sí va PNG.
+ */
+export function aBlob(canvas, tipo = 'image/jpeg', calidad = 0.9) {
+  return new Promise(res => canvas.toBlob(res, tipo, calidad));
+}
 
 /**
  * Manda por WhatsApp. Devuelve cómo se hizo, para poder decirlo.
@@ -249,7 +271,7 @@ const nombreArchivo = () =>
  * nativo, que es el único que adjunta la imagen solo.
  */
 export async function enviarPorWhatsApp(blob, texto, telefono) {
-  const file = new File([blob], nombreArchivo(), { type: 'image/png' });
+  const file = new File([blob], nombreArchivo(blob.type), { type: blob.type });
 
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
@@ -285,7 +307,7 @@ export async function enviarPorWhatsApp(blob, texto, telefono) {
 export function descargarBlob(blob) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = nombreArchivo();
+  a.download = nombreArchivo(blob.type);
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
@@ -299,7 +321,7 @@ export function descargarBlob(blob) {
  */
 export async function notificarApp(blob, { api, titulo, cuerpo, token }) {
   const fd = new FormData();
-  fd.append('imagen', new File([blob], nombreArchivo(), { type: 'image/png' }));
+  fd.append('imagen', new File([blob], nombreArchivo(blob.type), { type: blob.type }));
   fd.append('titulo', titulo || 'Aviso del monitoreo');
   fd.append('cuerpo', cuerpo || '');
   fd.append('origen', 'monitoreo_gis');
