@@ -392,12 +392,23 @@ export function descargarBlob(blob) {
  * callado tras un 404 es peor que uno que no está: el operario cree que el
  * aviso salió y nadie lo recibe.
  */
-export async function notificarApp(blob, { api, titulo, cuerpo, token }) {
+/**
+ * Sube la imagen al servidor. Devuelve { url, enviados, ... }.
+ *
+ * Sirve para dos cosas a la vez, y por eso vale la pena: avisa a los
+ * teléfonos con la foto dentro de la notificación, y deja la imagen en una
+ * URL pública que se puede pegar en el mensaje de WhatsApp. Con ese enlace,
+ * el envío por WhatsApp deja de necesitar que nadie pegue nada.
+ */
+export async function notificarApp(blob, { api, titulo, cuerpo, token, origen, solo }) {
   const fd = new FormData();
   fd.append('imagen', new File([blob], nombreArchivo(blob.type), { type: blob.type }));
   fd.append('titulo', titulo || 'Aviso del monitoreo');
   fd.append('cuerpo', cuerpo || '');
-  fd.append('origen', 'monitoreo_gis');
+  fd.append('origen', origen || 'monitoreo_gis');
+  // Publicar sin avisar: para el enlace de WhatsApp. Mandar una foto por
+  // WhatsApp no es motivo para hacer sonar los teléfonos de los vigilantes.
+  if (solo) fd.append('solo_publicar', '1');
 
   const r = await fetch(`${api}/notificaciones/mapa/`, {
     method: 'POST',
@@ -410,10 +421,31 @@ export async function notificarApp(blob, { api, titulo, cuerpo, token }) {
     e.codigo = 'SIN_ENDPOINT';
     throw e;
   }
+  if (r.status === 403) {
+    const e = new Error('SIN_PERMISO');
+    e.codigo = 'SIN_PERMISO';
+    throw e;
+  }
   if (!r.ok) {
     let detalle = '';
     try { detalle = (await r.text()).slice(0, 180); } catch { detalle = ''; }
     throw new Error(`El servidor respondió ${r.status}. ${detalle}`);
   }
   return r.json().catch(() => ({}));
+}
+
+/**
+ * A cuántos teléfonos llegaría. Devuelve null si el backend no lo soporta.
+ *
+ * Se pregunta ANTES de mandar porque son teléfonos de vigilantes reales: que
+ * nadie los haga sonar sin saber cuántos son.
+ */
+export async function cuantosDispositivos(api) {
+  try {
+    const r = await fetch(`${api}/notificaciones/mapa/`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
 }

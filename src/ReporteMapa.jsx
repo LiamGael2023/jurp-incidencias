@@ -14,7 +14,7 @@ import {
 } from 'react-icons/fa';
 import {
   componerReporte, enviarPorWhatsApp, descargarBlob, notificarApp, aBlob,
-  normalizarTelefono,
+  normalizarTelefono, cuantosDispositivos,
 } from './reporteMapa';
 
 const Portal = ({ children }) => createPortal(children, document.body);
@@ -27,6 +27,9 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
     () => localStorage.getItem('jurp_wa_destino') || '');
   const [vista, setVista] = useState(null);        // dataURL de la previsualización
   const [peso, setPeso] = useState(0);            // bytes del JPEG que se enviará
+  const [destinos, setDestinos] = useState(null); // {dispositivos, usuarios}
+  const [confirmando, setConfirmando] = useState(false);
+  const [conEnlace, setConEnlace] = useState(false);
   const [enviando, setEnviando] = useState('');
   const [aviso, setAviso] = useState(null);        // { tipo, texto }
   const mapaRef = useRef(null);                    // canvas del mapa, sin estampar
@@ -51,6 +54,14 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
     })();
     return () => { vivo = false; };
   }, [abierto, generar]);
+
+  // A cuántos teléfonos llegaría. Se pregunta al abrir, no al pulsar: el
+  // número tiene que estar DELANTE antes de decidir, no después.
+  useEffect(() => {
+    if (!abierto) return;
+    setConfirmando(false);
+    cuantosDispositivos(api).then(setDestinos);
+  }, [abierto, api]);
 
   // La previsualización se recompone al cambiar la nota, pero sin repetir la
   // captura: se redibuja sobre el canvas ya tomado.
@@ -84,6 +95,28 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
     setEnviando('wa'); setAviso(null);
     try {
       if (telefono.trim()) localStorage.setItem('jurp_wa_destino', telefono.trim());
+
+      // Con enlace: la imagen se sube y el mensaje lleva su URL. WhatsApp le
+      // arma la vista previa y no hay que pegar nada. Se sube con
+      // solo_publicar para NO hacer sonar los teléfonos de los vigilantes:
+      // mandar una foto por WhatsApp no es motivo para despertarlos.
+      if (conEnlace) {
+        const sub = await notificarApp(await blobFinal(), {
+          api, origen: 'whatsapp', solo: true,
+          titulo: 'Monitoreo', cuerpo: nota.trim(),
+          token: localStorage.getItem('userToken'),
+        });
+        const { numero } = normalizarTelefono(telefono.trim());
+        const texto = textoMensaje() + '\n\n' + sub.url;
+        window.open(numero
+          ? `https://web.whatsapp.com/send?phone=${numero}&text=${encodeURIComponent(texto)}`
+          : 'https://web.whatsapp.com/', '_blank', 'noopener');
+        setAviso({ tipo: 'ok', texto: numero
+          ? 'WhatsApp Web se abrió con el mensaje y el enlace de la imagen. No hay que pegar nada.'
+          : 'WhatsApp Web se abrió. Elige el chat; el enlace de la imagen va en el texto.' });
+        return;
+      }
+
       // Se le pasa la FUNCION, no la imagen ya hecha: el portapapeles hay que
       // pedirlo en el mismo instante del clic, no cuando la imagen esté lista.
       const r = await enviarPorWhatsApp(blobFinal, textoMensaje(), telefono.trim());
@@ -102,19 +135,35 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
   };
 
   const irApp = async () => {
+    // Son teléfonos de vigilantes reales. Se pregunta una vez, con el número
+    // delante, antes de hacerlos sonar.
+    if (!confirmando && (destinos?.dispositivos || 0) > 0) {
+      setConfirmando(true); setAviso(null);
+      return;
+    }
+    setConfirmando(false);
     setEnviando('app'); setAviso(null);
     try {
       const blob = await blobFinal();
-      await notificarApp(blob, {
+      const r = await notificarApp(blob, {
         api,
         titulo: contexto?.nivel?.texto
           ? `Monitoreo · ${contexto.nivel.texto}` : 'Aviso del monitoreo',
         cuerpo: nota.trim() || 'Nueva captura del monitoreo GIS',
         token: localStorage.getItem('userToken'),
       });
-      setAviso({ tipo: 'ok', texto: 'Notificación enviada a la app.' });
+      setAviso({ tipo: 'ok', texto:
+        `Notificación enviada a ${r.enviados} dispositivo(s).`
+        + (r.fallos ? ` ${r.fallos} fallaron.` : '')
+        + (r.tokens_retirados ? ` Se retiraron ${r.tokens_retirados} token(s) de teléfonos que desinstalaron la app.` : '')
+        + (r.aviso ? ` ${r.aviso}` : '') });
     } catch (e) {
-      if (e?.codigo === 'SIN_ENDPOINT') {
+      if (e?.codigo === 'SIN_PERMISO') {
+        setAviso({ tipo: 'error', texto:
+          'El servidor rechazó el envío por falta de permiso. La imagen NO se '
+          + 'envió. Hay que iniciar sesión, o definir NOTIF_MAPA_CLAVE en el '
+          + 'servidor.' });
+      } else if (e?.codigo === 'SIN_ENDPOINT') {
         setAviso({ tipo: 'error', texto:
           'El backend todavía no tiene el endpoint de notificaciones '
           + '(/notificaciones/mapa/). La imagen NO se envió. Mientras tanto '
@@ -257,7 +306,47 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
                     </div>
                   );
                 })()}
+
+                {/* El enlace evita el Ctrl+V, pero a cambio la imagen queda en
+                    una URL pública: quien tenga el enlace la ve, sin sesión.
+                    Eso se dice aquí, no en una ayuda que nadie abre. */}
+                <label style={{ display:'flex', gap:'8px', alignItems:'flex-start',
+                  marginTop:'11px', fontSize:'12.5px', color:'#475569', cursor:'pointer' }}>
+                  <input type="checkbox" checked={conEnlace}
+                    onChange={e => setConEnlace(e.target.checked)}
+                    style={{ marginTop:'2px' }} />
+                  <span>
+                    <b>Mandar la imagen como enlace</b> — no hay que pegar nada.
+                    <span style={{ display:'block', color:'#94a3b8', fontSize:'11.5px' }}>
+                      La imagen se sube al servidor y el mensaje lleva su dirección.
+                      Quien tenga el enlace puede verla sin iniciar sesión.
+                    </span>
+                  </span>
+                </label>
               </>
+            )}
+
+            {/* Antes de hacer sonar teléfonos de gente real, se pregunta una
+                vez con el número delante. */}
+            {confirmando && (
+              <div style={{ marginTop:'14px', borderRadius:'11px',
+                border:'2px solid #d97706', background:'#fffbeb', padding:'14px 16px' }}>
+                <div style={{ fontSize:'14px', fontWeight:800, color:'#92400e' }}>
+                  Esto hará sonar {destinos?.dispositivos} teléfono(s)
+                  {destinos?.usuarios ? ` de ${destinos.usuarios} usuario(s)` : ''}.
+                </div>
+                <div style={{ fontSize:'12px', color:'#92400e', margin:'4px 0 10px' }}>
+                  La notificación lleva la foto y tu nota. No se puede deshacer.
+                </div>
+                <div style={{ display:'flex', gap:'8px' }}>
+                  <button onClick={irApp} style={{ ...btnPri, background:'#d97706' }}>
+                    Sí, enviar
+                  </button>
+                  <button onClick={() => setConfirmando(false)} style={btnSec}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
             )}
 
             {/* El «pégala con Ctrl+V» no puede ir como una línea más de aviso:
@@ -315,7 +404,8 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
             </button>
             <button onClick={irApp} disabled={ocupado}
               style={{ ...btnSec, color:'#1463A5', borderColor:'#bfdbfe' }}>
-              {enviando === 'app' ? <FaSpinner className="icon-spin" /> : <FaBell />} Notificar a la app
+              {enviando === 'app' ? <FaSpinner className="icon-spin" /> : <FaBell />}
+              {' '}Notificar a la app{destinos?.dispositivos ? ` (${destinos.dispositivos})` : ''}
             </button>
             <button onClick={irWhatsApp} disabled={ocupado}
               style={{ ...btnPri, background:'#25D366' }}>
