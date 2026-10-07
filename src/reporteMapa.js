@@ -1,0 +1,324 @@
+// ═══════════════════════════════════════════════════════════════════════════
+//  reporteMapa — componer la imagen del mapa y mandarla
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// POR QUE NO BASTA LA CAPTURA QUE YA HABIA. `useCapturaMapa` fotografía el
+// mapa y nada más, a propósito: deja fuera paneles y cabecera para que no
+// tapen lo que se quiere enseñar. Eso está bien para guardar la imagen, pero
+// mal para mandarla: quien la recibe en WhatsApp ve puntos de colores sin
+// saber de cuándo son, qué significa el rojo, ni cuántas estaciones hay.
+//
+// Así que la foto se compone: la captura del mapa en medio, y encima y debajo
+// una banda con la hora, el nivel de alerta, el conteo de estaciones, la
+// leyenda de lluvia y la nota. Todo dibujado sobre el canvas, no como HTML
+// alrededor, porque lo que viaja por WhatsApp es un PNG y nada más.
+//
+// SOBRE WHATSAPP, QUE ES LO QUE MAS CONFUNDE. No existe forma de adjuntar una
+// imagen a un chat desde un enlace wa.me: ese enlace solo lleva texto. Hay
+// tres caminos reales y cada uno sirve en un sitio distinto:
+//
+//   1. navigator.share con archivos — en móvil abre la hoja de compartir del
+//      sistema y WhatsApp sale ahí. Es el camino bueno y el que se intenta
+//      primero.
+//   2. En escritorio eso casi nunca existe. Entonces se copia la imagen al
+//      portapapeles y se abre WhatsApp Web con el texto ya puesto: el usuario
+//      pega con Ctrl+V. Se le dice, no se le deja adivinar.
+//   3. Si ninguna de las dos, se descarga el PNG y se avisa.
+//
+// Mandar el mensaje DESDE el servidor sin abrir WhatsApp es otra cosa: exige
+// la API Cloud de WhatsApp Business, cuenta de Meta verificada y plantillas
+// aprobadas. Es trámite, no código, y no se finge aquí.
+
+// ───────────────────────────────────────────────────────────────────────────
+//  Dibujo sobre canvas
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Parte un texto en líneas que caben en `ancho`. */
+function enLineas(ctx, texto, ancho) {
+  const fuera = [];
+  for (const parrafo of String(texto || '').split('\n')) {
+    if (!parrafo.trim()) { fuera.push(''); continue; }
+    let linea = '';
+    for (const palabra of parrafo.split(/\s+/)) {
+      const prueba = linea ? linea + ' ' + palabra : palabra;
+      if (ctx.measureText(prueba).width > ancho && linea) {
+        fuera.push(linea);
+        linea = palabra;
+      } else {
+        linea = prueba;
+      }
+    }
+    if (linea) fuera.push(linea);
+  }
+  return fuera;
+}
+
+function rectRedondo(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/**
+ * Compone la imagen final: banda superior, mapa, banda inferior.
+ *
+ * `mapa` es el canvas que devuelve html2canvas. Se escribe en píxeles de ese
+ * canvas, que viene a escala 2, así que las medidas van en una unidad `u`
+ * derivada de su ancho — si mañana se captura a otra escala, el estampado
+ * sigue proporcionado en vez de salir diminuto o gigante.
+ */
+export function componerReporte(mapa, ctx0) {
+  const {
+    titulo = 'Monitoreo GIS — Junta de Riego Presurizado',
+    subtitulo = 'NEXHYDRO · PLUVIRA',
+    nivel = null,          // { texto, color }
+    nota = '',
+    autor = '',
+    conteos = null,        // { pluviometros, davis, innova, sinDatos }
+    maximo = null,         // { nombre, mm }
+    leyenda = [],          // [{ etiqueta, color, texto }]
+  } = ctx0 || {};
+
+  const W = mapa.width;
+  const u = W / 1000;                       // unidad proporcional al ancho
+  const px = (n) => Math.round(n * u);
+  const margen = px(26);
+  const anchoUtil = W - margen * 2;
+
+  // ── medir el alto antes de crear el lienzo ───────────────────────────────
+  const medidor = document.createElement('canvas').getContext('2d');
+  medidor.font = `${px(19)}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+  const lineasNota = nota.trim() ? enLineas(medidor, nota.trim(), anchoUtil - px(24)) : [];
+
+  const altoCab = px(96);
+  const altoLeyenda = leyenda.length ? px(52) : 0;
+  const altoNota = lineasNota.length
+    ? px(18) + px(24) + lineasNota.length * px(27) + px(18)
+    : 0;
+  const altoPie = px(14) + altoLeyenda + altoNota + px(44);
+
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = altoCab + mapa.height + altoPie;
+  const c = cv.getContext('2d');
+
+  const TINTA = '#0b2545';
+  const SUAVE = '#64748b';
+
+  // ── fondo ────────────────────────────────────────────────────────────────
+  c.fillStyle = '#ffffff';
+  c.fillRect(0, 0, cv.width, cv.height);
+
+  // ── cabecera ─────────────────────────────────────────────────────────────
+  c.fillStyle = TINTA;
+  c.fillRect(0, 0, W, altoCab);
+
+  c.textBaseline = 'alphabetic';
+  c.fillStyle = '#ffffff';
+  c.font = `700 ${px(26)}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+  c.fillText(titulo, margen, px(40));
+
+  c.fillStyle = 'rgba(255,255,255,.72)';
+  c.font = `${px(18)}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+  c.fillText(subtitulo, margen, px(68));
+
+  // fecha y hora, a la derecha
+  const sello = new Date().toLocaleString('es-PE', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+  c.textAlign = 'right';
+  c.fillStyle = 'rgba(255,255,255,.92)';
+  c.font = `600 ${px(19)}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+  c.fillText(sello, W - margen, px(68));
+
+  // chip de nivel de alerta
+  if (nivel && nivel.texto) {
+    c.font = `700 ${px(18)}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+    const t = String(nivel.texto).toUpperCase();
+    const ancho = c.measureText(t).width + px(26);
+    const x = W - margen - ancho;
+    c.textAlign = 'left';
+    c.fillStyle = nivel.color || '#f59f0a';
+    rectRedondo(c, x, px(16), ancho, px(30), px(15));
+    c.fill();
+    // El texto oscuro o claro según el fondo: el amarillo oficial no sostiene
+    // blanco y el rojo oficial no sostiene oscuro.
+    c.fillStyle = contrasta(nivel.color || '#f59f0a');
+    c.fillText(t, x + px(13), px(37));
+  }
+  c.textAlign = 'left';
+
+  // ── el mapa ──────────────────────────────────────────────────────────────
+  c.drawImage(mapa, 0, altoCab);
+  c.strokeStyle = 'rgba(11,37,69,.18)';
+  c.lineWidth = Math.max(1, px(1.5));
+  c.strokeRect(0.5, altoCab + 0.5, W - 1, mapa.height - 1);
+
+  // ── pie ──────────────────────────────────────────────────────────────────
+  let y = altoCab + mapa.height + px(32);
+
+  if (leyenda.length) {
+    c.font = `600 ${px(17)}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+    let x = margen;
+    for (const it of leyenda) {
+      const r = px(9);
+      c.fillStyle = it.color;
+      c.beginPath(); c.arc(x + r, y - px(6), r, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = 'rgba(11,37,69,.35)'; c.lineWidth = Math.max(1, px(1));
+      c.beginPath(); c.arc(x + r, y - px(6), r, 0, Math.PI * 2); c.stroke();
+      c.fillStyle = TINTA;
+      c.fillText(it.etiqueta, x + r * 2 + px(8), y);
+      x += r * 2 + px(8) + c.measureText(it.etiqueta).width + px(26);
+    }
+    y += px(34);
+  }
+
+  // conteos y máximo, en una línea
+  const trozos = [];
+  if (conteos) {
+    const p = [];
+    if (conteos.pluviometros) p.push(`${conteos.pluviometros} pluviómetros`);
+    if (conteos.davis) p.push(`${conteos.davis} Davis`);
+    if (conteos.innova) p.push(`${conteos.innova} Innova`);
+    if (p.length) trozos.push(p.join(' · '));
+    if (conteos.sinDatos) trozos.push(`${conteos.sinDatos} sin datos`);
+  }
+  if (maximo && maximo.nombre) {
+    trozos.push(`máx. ${Number(maximo.mm || 0).toFixed(1)} mm en ${maximo.nombre}`);
+  }
+  if (trozos.length) {
+    c.fillStyle = SUAVE;
+    c.font = `${px(17)}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+    c.fillText(trozos.join('   ·   '), margen, y);
+    y += px(26);
+  }
+
+  // la nota
+  if (lineasNota.length) {
+    const alto = px(24) + lineasNota.length * px(27) + px(14);
+    c.fillStyle = '#f1f5f9';
+    rectRedondo(c, margen, y - px(6), anchoUtil, alto, px(8));
+    c.fill();
+    c.fillStyle = '#1463A5';
+    c.fillRect(margen, y - px(6), px(4), alto);
+
+    c.fillStyle = TINTA;
+    c.font = `${px(19)}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+    let ty = y + px(22);
+    for (const l of lineasNota) { c.fillText(l, margen + px(16), ty); ty += px(27); }
+    y += alto + px(8);
+  }
+
+  if (autor) {
+    c.fillStyle = SUAVE;
+    c.font = `${px(15)}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+    c.fillText(`Enviado por ${autor}`, margen, y + px(14));
+  }
+
+  return cv;
+}
+
+/** Texto oscuro o blanco según la luminancia del fondo. */
+function contrasta(hex) {
+  const h = String(hex).replace('#', '');
+  if (h.length < 6) return '#0b2545';
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  const f = (v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const L = 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  return L > 0.42 ? '#0b2545' : '#ffffff';
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+//  Envíos
+// ───────────────────────────────────────────────────────────────────────────
+
+const nombreArchivo = () =>
+  `mapa_jurp_${new Date().toISOString().slice(0, 16).replace(/[:T-]/g, '')}.png`;
+
+/**
+ * Manda por WhatsApp. Devuelve cómo se hizo, para poder decirlo.
+ *
+ * Los tres caminos están explicados arriba. El orden importa: primero el
+ * nativo, que es el único que adjunta la imagen solo.
+ */
+export async function enviarPorWhatsApp(blob, texto, telefono) {
+  const file = new File([blob], nombreArchivo(), { type: 'image/png' });
+
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], text: texto, title: 'Mapa JURP' });
+      return { via: 'nativo' };
+    } catch (e) {
+      // AbortError = el usuario cerró la hoja de compartir. No es un fallo.
+      if (e && e.name === 'AbortError') return { via: 'cancelado' };
+      // Cualquier otro fallo cae a los siguientes caminos.
+    }
+  }
+
+  // Escritorio: imagen al portapapeles + WhatsApp Web con el texto puesto.
+  let copiada = false;
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      copiada = true;
+    }
+  } catch { copiada = false; }
+
+  const url = telefono
+    ? `https://wa.me/${String(telefono).replace(/\D/g, '')}?text=${encodeURIComponent(texto)}`
+    : `https://wa.me/?text=${encodeURIComponent(texto)}`;
+  window.open(url, '_blank', 'noopener');
+
+  if (copiada) return { via: 'portapapeles' };
+
+  descargarBlob(blob);
+  return { via: 'descarga' };
+}
+
+export function descargarBlob(blob) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nombreArchivo();
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/**
+ * Notificación push a la app.
+ *
+ * Si el backend todavía no tiene el endpoint, lo DICE. Un botón que se queda
+ * callado tras un 404 es peor que uno que no está: el operario cree que el
+ * aviso salió y nadie lo recibe.
+ */
+export async function notificarApp(blob, { api, titulo, cuerpo, token }) {
+  const fd = new FormData();
+  fd.append('imagen', new File([blob], nombreArchivo(), { type: 'image/png' }));
+  fd.append('titulo', titulo || 'Aviso del monitoreo');
+  fd.append('cuerpo', cuerpo || '');
+  fd.append('origen', 'monitoreo_gis');
+
+  const r = await fetch(`${api}/notificaciones/mapa/`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Token ${token}` } : {},
+    body: fd,
+  });
+
+  if (r.status === 404) {
+    const e = new Error('SIN_ENDPOINT');
+    e.codigo = 'SIN_ENDPOINT';
+    throw e;
+  }
+  if (!r.ok) {
+    let detalle = '';
+    try { detalle = (await r.text()).slice(0, 180); } catch { detalle = ''; }
+    throw new Error(`El servidor respondió ${r.status}. ${detalle}`);
+  }
+  return r.json().catch(() => ({}));
+}

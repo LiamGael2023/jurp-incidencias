@@ -11,7 +11,8 @@ import RailGIS from './RailGIS';
 import JSZip from 'jszip';
 import { kml as kmlAGeoJSON } from '@tmcw/togeojson';
 import ReactApexChart from 'react-apexcharts';
-import { FaFileUpload, FaTrash, FaCrosshairs, FaSave, FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint, FaFilePdf, FaFileExcel, FaDownload, FaRulerCombined, FaDrawPolygon, FaEraser, FaCamera, FaShareAlt, FaPlus, FaMinus, FaSignOutAlt, FaChevronUp, FaChevronDown } from 'react-icons/fa';
+import { FaFileUpload, FaTrash, FaCrosshairs, FaSave, FaCloudShowersHeavy, FaExclamationTriangle, FaLocationArrow, FaCheck, FaTimes, FaChevronLeft, FaChevronRight, FaGlobe, FaSyncAlt, FaSearch, FaChartBar, FaFilter, FaLayerGroup, FaTint, FaFilePdf, FaFileExcel, FaDownload, FaRulerCombined, FaDrawPolygon, FaEraser, FaCamera, FaShareAlt, FaPlus, FaMinus, FaSignOutAlt, FaChevronUp, FaChevronDown, FaPaperPlane } from 'react-icons/fa';
+import { ModalReporteMapa } from './ReporteMapa';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
@@ -337,6 +338,24 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const mapRef = useRef(null);
   const contenedorRef = useRef(null);
   const { ocupado: capturando, descargar, compartir } = useCapturaMapa(contenedorRef, { base: mapaBase, cambiarBase: setMapaBase });
+
+  // ── Enviar el mapa (foto + nota → WhatsApp o notificación) ──────────────
+  // Se reutiliza el MISMO contenedor que la captura: la foto que se manda es
+  // exactamente la que se ve, sin paneles encima.
+  const [modalEnviar, setModalEnviar] = useState(false);
+  const generarCaptura = useCallback(async () => {
+    const { default: html2canvas } = await import('html2canvas');
+    const nodo = contenedorRef.current;
+    if (!nodo) throw new Error('No hay mapa que fotografiar');
+    return html2canvas(nodo, {
+      useCORS: true, allowTaint: false, backgroundColor: null, scale: 2,
+      ignoreElements: (el) => (
+        el.classList?.contains('jurp-no-capture') ||
+        el.classList?.contains('leaflet-control-zoom') ||
+        el.classList?.contains('leaflet-control-scale')
+      ),
+    });
+  }, []);
 
   // ── Stats ─────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -1582,6 +1601,8 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         <div className="gis-tool-sep" />
         <button className="gis-tool" title="Capturar mapa" onClick={descargar} disabled={capturando}><FaCamera /></button>
         <button className="gis-tool" title="Compartir captura" onClick={compartir} disabled={capturando}><FaShareAlt /></button>
+        <button className="gis-tool" title="Enviar el mapa con una nota (WhatsApp o app)"
+          onClick={() => setModalEnviar(true)} disabled={capturando}><FaPaperPlane /></button>
         <div className="gis-tool-sep" />
         <button className="gis-tool" title="Acercar" onClick={() => mapRef.current?.zoomIn()}><FaPlus /></button>
         <button className="gis-tool" title="Alejar" onClick={() => mapRef.current?.zoomOut()}><FaMinus /></button>
@@ -2208,6 +2229,39 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           </div>
         </div>
       )}
+
+      {/* ══════════════ ENVIAR EL MAPA ══════════════
+          El contexto viaja estampado en la propia imagen: quien la recibe en
+          WhatsApp no tiene la pantalla delante, así que sin hora, nivel y
+          leyenda estaría viendo puntos de colores sin significado. */}
+      <ModalReporteMapa
+        abierto={modalEnviar}
+        onCerrar={() => setModalEnviar(false)}
+        generar={generarCaptura}
+        api="/vigapi/mobile/operations"
+        autor={localStorage.getItem('userName') || ''}
+        contexto={{
+          titulo: 'Monitoreo GIS — Junta de Riego Presurizado',
+          subtitulo: 'NEXHYDRO · PLUVIRA',
+          nivel: { texto: nivelAlerta.texto, color: nivelAlerta.color },
+          conteos: {
+            pluviometros: lluviasAPI.filter(l => l.tipo !== 'davis' && l.tipo !== 'innova').length,
+            davis: lluviasAPI.filter(l => l.tipo === 'davis').length,
+            innova: lluviasAPI.filter(l => l.tipo === 'innova').length,
+            sinDatos: sinDatosN,
+          },
+          maximo: estacionMax ? { nombre: estacionMax.name, mm: lluviaMax } : null,
+          // La leyenda sale de los MISMOS umbrales que pintan el mapa. Si
+          // saliera de una lista aparte, el día que alguien cambie un umbral
+          // la imagen enviada mentiría y nadie se enteraría.
+          leyenda: [
+            { etiqueta: 'Sin lluvia', color: '#ffffff' },
+            ...UMBRALES_LLUVIA.map(u => ({
+              etiqueta: `${u.desde}+ mm`, color: u.fill,
+            })),
+          ],
+        }}
+      />
     </div>
   );
 }
