@@ -10,11 +10,11 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   FaWhatsapp, FaBell, FaDownload, FaTimes, FaSpinner, FaExclamationTriangle,
-  FaCheckCircle, FaCopy, FaPaste,
+  FaCheckCircle, FaCopy, FaPaste, FaShareAlt,
 } from 'react-icons/fa';
 import {
   componerReporte, enviarPorWhatsApp, descargarBlob, notificarApp, aBlob,
-  normalizarTelefono, cuantosDispositivos,
+  normalizarTelefono, cuantosDispositivos, compartirNativo,
 } from './reporteMapa';
 
 const Portal = ({ children }) => createPortal(children, document.body);
@@ -30,6 +30,8 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
   const [destinos, setDestinos] = useState(null); // {dispositivos, usuarios}
   const [confirmando, setConfirmando] = useState(false);
   const [conEnlace, setConEnlace] = useState(false);
+  // ¿Existe la hoja de compartir? Se mira una vez, no en cada pintado.
+  const puedeCompartir = typeof navigator !== 'undefined' && !!navigator.canShare;
   const [enviando, setEnviando] = useState('');
   const [aviso, setAviso] = useState(null);        // { tipo, texto }
   const mapaRef = useRef(null);                    // canvas del mapa, sin estampar
@@ -167,6 +169,23 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
           'El backend todavía no tiene el endpoint de notificaciones '
           + '(/notificaciones/mapa/). La imagen NO se envió. Mientras tanto '
           + 'puedes mandarla por WhatsApp o descargarla.' });
+      } else {
+        setAviso({ tipo: 'error', texto: e?.message || String(e) });
+      }
+    } finally { setEnviando(''); }
+  };
+
+  const irCompartir = async () => {
+    setEnviando('sh'); setAviso(null);
+    try {
+      const r = await compartirNativo(blobFinal);
+      if (r.via === 'nativo') setAviso({ tipo: 'ok', texto:
+        'Compartido. La imagen va adjunta, no hay que pegar nada.' });
+    } catch (e) {
+      if (e?.codigo === 'SIN_COMPARTIR') {
+        setAviso({ tipo: 'aviso', texto:
+          'Este navegador no ofrece la hoja de compartir del sistema. '
+          + 'Usa WhatsApp, que abre WhatsApp Web con la imagen copiada.' });
       } else {
         setAviso({ tipo: 'error', texto: e?.message || String(e) });
       }
@@ -401,6 +420,16 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
             <button onClick={copiarImagen} disabled={ocupado} style={btnSec}>
               {enviando === 'cp' ? <FaSpinner className="icon-spin" /> : <FaCopy />} Copiar
             </button>
+            {/* La hoja del sistema, en cualquier dispositivo. Es el único
+                camino que INCRUSTA la imagen en el chat sin pegar nada —en el
+                móvil y también en la PC, si WhatsApp está instalado—, así que
+                no tiene sentido escondérselo a nadie. */}
+            {puedeCompartir && (
+              <button onClick={irCompartir} disabled={ocupado} style={btnSec}
+                title="Abre la hoja de compartir del sistema con la imagen adjunta">
+                {enviando === 'sh' ? <FaSpinner className="icon-spin" /> : <FaShareAlt />} Compartir
+              </button>
+            )}
             <button onClick={irApp} disabled={ocupado}
               style={{ ...btnSec, color:'#1463A5', borderColor:'#bfdbfe' }}>
               {enviando === 'app' ? <FaSpinner className="icon-spin" /> : <FaBell />}

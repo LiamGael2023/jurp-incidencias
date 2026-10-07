@@ -319,6 +319,36 @@ export function normalizarTelefono(crudo) {
  * página intermedia de «Continuar al chat» con un botón de descarga; un paso
  * más y una invitación a instalar algo que no hace falta.
  */
+/**
+ * La hoja de compartir del sistema, en el dispositivo que sea.
+ *
+ * Es el ÚNICO camino que incrusta la imagen en el chat sin que nadie pegue
+ * nada, y funciona igual en el móvil y en el escritorio. La diferencia no
+ * está en el sistema operativo sino en si WhatsApp está INSTALADO: Windows
+ * lista WhatsApp en la hoja con un «Instalar» al lado cuando no lo está, y
+ * entonces no es un destino de verdad y la foto no tiene dónde ir.
+ *
+ * Por eso esto se ofrece siempre y no solo en móvil. Antes lo limité al
+ * móvil al ver la hoja de Windows sin WhatsApp, y eso fue quitarle al usuario
+ * la única opción que hace exactamente lo que quiere.
+ */
+export async function compartirNativo(hacer) {
+  const blob = await hacer('image/jpeg');
+  const file = new File([blob], nombreArchivo(blob.type), { type: blob.type });
+  if (!navigator.canShare || !navigator.canShare({ files: [file] })) {
+    const e = new Error('SIN_COMPARTIR');
+    e.codigo = 'SIN_COMPARTIR';
+    throw e;
+  }
+  try {
+    await navigator.share({ files: [file], title: 'Mapa JURP' });
+    return { via: 'nativo' };
+  } catch (e) {
+    if (e && e.name === 'AbortError') return { via: 'cancelado' };
+    throw e;
+  }
+}
+
 export async function enviarPorWhatsApp(hacer, texto, telefono, opciones = {}) {
   const { forzarWeb = false } = opciones;
 
