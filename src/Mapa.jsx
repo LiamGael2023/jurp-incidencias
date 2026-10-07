@@ -2246,6 +2246,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         onCerrar={() => setModalEnviar(false)}
         generar={generarCaptura}
         api="/vigapi/mobile/operations"
+        apiPluvira="/api"
         autor={localStorage.getItem('userName') || ''}
         contexto={{
           titulo: 'Monitoreo GIS — Junta de Riego Presurizado',

@@ -14,12 +14,12 @@ import {
 } from 'react-icons/fa';
 import {
   componerReporte, enviarPorWhatsApp, descargarBlob, notificarApp, aBlob,
-  normalizarTelefono, cuantosDispositivos, compartirNativo,
+  normalizarTelefono, aQuienLlega, notificarPluvira, compartirNativo,
 } from './reporteMapa';
 
 const Portal = ({ children }) => createPortal(children, document.body);
 
-export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, autor }) {
+export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, apiPluvira, autor }) {
   const [paso, setPaso] = useState('generando');   // generando | listo | error
   const [error, setError] = useState('');
   const [nota, setNota] = useState('');
@@ -30,16 +30,9 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
   const [destinos, setDestinos] = useState(null); // {dispositivos, usuarios}
   const [confirmando, setConfirmando] = useState(false);
   const [conEnlace, setConEnlace] = useState(false);
-  // La clave de notificaciones NO viaja en el bundle.
-  //
-  // De todos los endpoints de operations este es el unico que puede hacer
-  // dano -hace sonar catorce telefonos de vigilantes-, asi que una clave
-  // compilada en el JavaScript, que lee cualquiera que abra el codigo fuente,
-  // seria ponerla justo donde mas estorba. Se escribe una vez por navegador y
-  // se queda aqui, en el equipo de quien si tiene que poder avisar.
-  const [clave, setClave] = useState(
-    () => localStorage.getItem('jurp_notif_clave') || '');
-  const [pidiendoClave, setPidiendoClave] = useState(false);
+  // Ya no hace falta clave: el aviso va al servidor de PLUVIRA, donde el
+  // token de la sesión sí sirve para escribir. La clave compartida era un
+  // parche por estar llamando al servidor de vigilancia, que es de otra app.
   // ¿Existe la hoja de compartir? Se mira una vez, no en cada pintado.
   const puedeCompartir = typeof navigator !== 'undefined' && !!navigator.canShare;
   const [enviando, setEnviando] = useState('');
@@ -72,8 +65,8 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
   useEffect(() => {
     if (!abierto) return;
     setConfirmando(false);
-    cuantosDispositivos(api).then(setDestinos);
-  }, [abierto, api]);
+    aQuienLlega(apiPluvira, localStorage.getItem('userToken')).then(setDestinos);
+  }, [abierto, apiPluvira]);
 
   // La previsualización se recompone al cambiar la nota, pero sin repetir la
   // captura: se redibuja sobre el canvas ya tomado.
@@ -146,46 +139,40 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
   };
 
   const irApp = async () => {
-    // Son teléfonos de vigilantes reales. Se pregunta una vez, con el número
+    // Son teléfonos de gente real. Se pregunta una vez, con los grupos
     // delante, antes de hacerlos sonar.
-    if (!confirmando && (destinos?.dispositivos || 0) > 0) {
-      setConfirmando(true); setAviso(null);
-      return;
-    }
+    if (!confirmando) { setConfirmando(true); setAviso(null); return; }
     setConfirmando(false);
-    if (clave.trim()) localStorage.setItem('jurp_notif_clave', clave.trim());
     setEnviando('app'); setAviso(null);
     try {
-      const blob = await blobFinal();
-      const r = await notificarApp(blob, {
-        api,
+      // Dos pasos, y cada uno en su sitio: la imagen se publica en el
+      // servidor que ya sabe guardarla, y el aviso sale del servidor al que
+      // pertenecen esos teléfonos. Mezclarlos fue lo que hizo sonar los
+      // equivocados la primera vez.
+      const sub = await notificarApp(await blobFinal(), {
+        api, origen: 'monitoreo_gis', solo: true,
+        titulo: 'Monitoreo', cuerpo: nota.trim(),
+      });
+      const r = await notificarPluvira(apiPluvira, {
         titulo: contexto?.nivel?.texto
           ? `Monitoreo · ${contexto.nivel.texto}` : 'Aviso del monitoreo',
         cuerpo: nota.trim() || 'Nueva captura del monitoreo GIS',
-        clave: clave.trim(),
+        imagenUrl: sub.url,
+        token: localStorage.getItem('userToken'),
       });
+      const n = (r.enviados || []).length;
       setAviso({ tipo: 'ok', texto:
-        `Notificación enviada a ${r.enviados} dispositivo(s).`
-        + (r.fallos ? ` ${r.fallos} fallaron.` : '')
-        + (r.tokens_retirados ? ` Se retiraron ${r.tokens_retirados} token(s) de teléfonos que desinstalaron la app.` : '')
-        + (r.aviso ? ` ${r.aviso}` : '') });
+        `Aviso enviado a ${n} grupo(s): ${(r.enviados || []).join(', ')}.`
+        + (r.fallidos && r.fallidos.length
+          ? ` No llegó a: ${r.fallidos.map(f => f.grupo).join(', ')}.` : '') });
     } catch (e) {
-      if (e?.codigo === 'SIN_PERMISO') {
-        // Se abre el campo en vez de solo lamentarlo: el que esta delante
-        // probablemente TIENE la clave, y decirle «falta permiso» sin
-        // ofrecerle donde ponerla lo deja mirando un error.
-        setPidiendoClave(true);
-        setAviso({ tipo: 'aviso', texto: clave
-          ? 'El servidor no aceptó esa clave. La imagen NO se envió.'
-          : 'Este envío necesita la clave de notificaciones. La imagen NO se '
-            + 'envió. Escríbela abajo; se queda guardada en este equipo.' });
-      } else if (e?.codigo === 'SIN_ENDPOINT') {
+      if (e?.codigo === 'SIN_ENDPOINT') {
         setAviso({ tipo: 'error', texto:
-          'El backend todavía no tiene el endpoint de notificaciones '
-          + '(/notificaciones/mapa/). La imagen NO se envió. Mientras tanto '
-          + 'puedes mandarla por WhatsApp o descargarla.' });
+          'El servidor de PLUVIRA todavía no tiene el endpoint de avisos '
+          + '(v1/mobile/mapa-notify/). NO se envió nada.' });
       } else {
-        setAviso({ tipo: 'error', texto: e?.message || String(e) });
+        setAviso({ tipo: 'error', texto:
+          (e?.message || String(e)) + ' NO se envió nada.' });
       }
     } finally { setEnviando(''); }
   };
@@ -365,11 +352,11 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
               <div style={{ marginTop:'14px', borderRadius:'11px',
                 border:'2px solid #d97706', background:'#fffbeb', padding:'14px 16px' }}>
                 <div style={{ fontSize:'14px', fontWeight:800, color:'#92400e' }}>
-                  Esto hará sonar {destinos?.dispositivos} teléfono(s)
-                  {destinos?.usuarios ? ` de ${destinos.usuarios} usuario(s)` : ''}.
+                  Esto avisará a {(destinos?.grupos || []).length || 3} grupo(s) de la app
                 </div>
                 <div style={{ fontSize:'12px', color:'#92400e', margin:'4px 0 10px' }}>
-                  La notificación lleva la foto y tu nota. No se puede deshacer.
+                  {(destinos?.grupos || ['mobile_usuarios','mobile_supervisor','mobile_gerencia'])
+                    .join(' · ')}. La notificación lleva la foto y tu nota. No se puede deshacer.
                 </div>
                 <div style={{ display:'flex', gap:'8px' }}>
                   <button onClick={irApp} style={{ ...btnPri, background:'#d97706' }}>
@@ -378,26 +365,6 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
                   <button onClick={() => setConfirmando(false)} style={btnSec}>
                     Cancelar
                   </button>
-                </div>
-              </div>
-            )}
-
-            {(pidiendoClave || (confirmando && !clave)) && (
-              <div style={{ marginTop:'12px', border:'1px solid #cbd5e1',
-                borderRadius:'10px', padding:'12px 14px', background:'#fff' }}>
-                <label style={{ display:'block', fontSize:'12px', fontWeight:700,
-                  color:'#475569', marginBottom:'5px' }}>
-                  CLAVE DE NOTIFICACIONES
-                </label>
-                <input type="password" value={clave}
-                  onChange={e => setClave(e.target.value)}
-                  placeholder="la que está en NOTIF_MAPA_CLAVE del servidor"
-                  style={{ width:'100%', maxWidth:'360px', padding:'9px 12px',
-                    border:'1px solid #cbd5e1', borderRadius:'8px', fontSize:'13.5px',
-                    fontFamily:'inherit', boxSizing:'border-box' }} />
-                <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>
-                  Se guarda en este equipo y no se vuelve a pedir. No viaja en el
-                  código de la web: por eso hay que escribirla una vez.
                 </div>
               </div>
             )}
@@ -468,7 +435,7 @@ export function ModalReporteMapa({ abierto, onCerrar, generar, contexto, api, au
             <button onClick={irApp} disabled={ocupado}
               style={{ ...btnSec, color:'#1463A5', borderColor:'#bfdbfe' }}>
               {enviando === 'app' ? <FaSpinner className="icon-spin" /> : <FaBell />}
-              {' '}Notificar a la app{destinos?.dispositivos ? ` (${destinos.dispositivos})` : ''}
+              {' '}Notificar a la app{destinos?.grupos ? ` (${destinos.grupos.length})` : ''}
             </button>
             <button onClick={irWhatsApp} disabled={ocupado}
               style={{ ...btnPri, background:'#25D366' }}>

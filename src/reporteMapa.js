@@ -476,17 +476,54 @@ export async function notificarApp(blob, { api, titulo, cuerpo, clave, origen, s
 }
 
 /**
- * A cuántos teléfonos llegaría. Devuelve null si el backend no lo soporta.
+ * A quién llegaría el aviso. Devuelve null si el backend no lo soporta.
  *
- * Se pregunta ANTES de mandar porque son teléfonos de vigilantes reales: que
- * nadie los haga sonar sin saber cuántos son.
+ * Se pregunta ANTES de mandar: son teléfonos de gente real y el número tiene
+ * que estar delante al decidir, no después.
  */
-export async function cuantosDispositivos(api) {
+export async function aQuienLlega(apiPluvira, token) {
   try {
-    const r = await fetch(`${api}/notificaciones/mapa/`);
+    const r = await fetch(`${apiPluvira}/v1/mobile/mapa-notify/`, {
+      headers: token ? { Authorization: `Token ${token}` } : {},
+    });
     if (!r.ok) return null;
     return await r.json();
   } catch {
     return null;
   }
+}
+
+/**
+ * Avisa a los teléfonos de PLUVIRA.
+ *
+ * Va al servidor de PLUVIRA, no al de vigilancia, y esa es toda la historia
+ * de por qué el primer intento acabó sonando en los teléfonos equivocados.
+ * Cada app tiene sus propios destinatarios: los tokens de un lado no sirven
+ * en el otro, ni siquiera son del mismo proyecto de Firebase.
+ *
+ * Aquí el token de la sesión SÍ vale para escribir —es su servidor de
+ * origen—, así que no hace falta ninguna clave compartida.
+ */
+export async function notificarPluvira(apiPluvira, { titulo, cuerpo, imagenUrl, token }) {
+  const r = await fetch(`${apiPluvira}/v1/mobile/mapa-notify/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Token ${token}` } : {}),
+    },
+    body: JSON.stringify({ titulo, cuerpo, imagen_url: imagenUrl || '' }),
+  });
+  if (r.status === 404) {
+    const e = new Error('SIN_ENDPOINT');
+    e.codigo = 'SIN_ENDPOINT';
+    throw e;
+  }
+  let d = {};
+  try { d = await r.json(); } catch { d = {}; }
+  if (!r.ok || d.ok === false) {
+    const e = new Error(d.detail || `El servidor respondió ${r.status}.`);
+    e.detalle = d;
+    throw e;
+  }
+  return d;
 }
