@@ -455,7 +455,10 @@ export default function Actividades() {
       {editando && (
         <Portal>
           <div onClick={() => !guardando && setEditando(null)} style={fondo}>
-            <div onClick={e => e.stopPropagation()} style={dialogo('620px')}>
+            {/* Ancho porque ahora lleva la tabla de partidas: con 620 px la
+                columna del parcial se salía del diálogo y había que
+                descubrirla arrastrando. */}
+            <div onClick={e => e.stopPropagation()} style={dialogo('880px')}>
               <div style={cabecera}>
                 <div>
                   <div style={{ fontSize:'16px', fontWeight:700, color:'#0b2545' }}>
@@ -535,9 +538,6 @@ export default function Actividades() {
                   const puestas = (editando.partidas || []).map(String);
                   const porId = new Map(partidasPro.map(p => [String(p.id), p]));
                   const elegidas = puestas.map(i => porId.get(i)).filter(Boolean);
-                  const total = elegidas.reduce(
-                    (s, p) => s + (parseFloat(p.metrado) || 0) * (parseFloat(p.precio) || 0), 0);
-
                   // Al elegir la partida se agrega y la escalera vuelve
                   // arriba, lista para la siguiente. El paso de «agregar» no
                   // decidía nada: la lista de abajo ya es la confirmación.
@@ -574,40 +574,12 @@ export default function Actividades() {
                         compacto />
 
                       {elegidas.length > 0 && (
-                        <div style={{ marginTop:'12px', borderTop:'1px solid #f1f5f9',
-                          paddingTop:'10px' }}>
-                          {elegidas.map(p => (
-                            <div key={p.id} style={{ display:'flex', gap:'9px',
-                              alignItems:'baseline', padding:'5px 0',
-                              fontSize:'12px', borderBottom:'1px solid #f8fafc' }}>
-                              <span style={{ fontFamily:'monospace', fontSize:'11px',
-                                color:'#94a3b8', flexShrink:0 }}>{p.codigo}</span>
-                              <span style={{ flex:1, color:'#1e293b', minWidth:0 }}>
-                                {p.descripcion}
-                                <span style={{ color:'#94a3b8' }}>
-                                  {' '}· {cant(p.metrado)} {p.unidad} × {soles(p.precio)}
-                                </span>
-                              </span>
-                              <span style={{ color:'#1463A5', fontWeight:700,
-                                whiteSpace:'nowrap', flexShrink:0 }}>
-                                {soles((parseFloat(p.metrado) || 0) * (parseFloat(p.precio) || 0))}
-                              </span>
-                              <button type="button" onClick={() => quitar(p.id)}
-                                title="Quitar" style={{ background:'transparent',
-                                  border:'none', cursor:'pointer', color:'#dc2626',
-                                  padding:'0 2px', lineHeight:1, flexShrink:0 }}>
-                                <FaTimes size={11} />
-                              </button>
-                            </div>
-                          ))}
-                          <div style={{ display:'flex', justifyContent:'space-between',
-                            paddingTop:'8px', fontSize:'12.5px', color:'#0b2545',
-                            fontWeight:700 }}>
-                            <span>{elegidas.length} partida(s)</span>
-                            <span>{soles(total)}</span>
-                          </div>
+                        <div style={{ marginTop:'13px', borderTop:'1px solid #f1f5f9',
+                          paddingTop:'11px', overflowX:'auto' }}>
+                          <TablaPartidas filas={elegidas} onQuitar={quitar} />
                         </div>
                       )}
+
                     </div>
                   );
                 })()}
@@ -652,7 +624,7 @@ export default function Actividades() {
       {detalle && (
         <Portal>
           <div onClick={() => setDetalle(null)} style={fondo}>
-            <div onClick={e => e.stopPropagation()} style={dialogo('760px')}>
+            <div onClick={e => e.stopPropagation()} style={dialogo('880px')}>
               <div style={cabecera}>
                 <div>
                   <div style={{ fontSize:'16px', fontWeight:700, color:'#0b2545' }}>
@@ -715,22 +687,14 @@ export default function Actividades() {
                       marginBottom:'8px' }}>
                       Partidas que ejecuta
                     </div>
-                    {detalle.partidas_detalle.map(p => (
-                      <div key={p.id} style={{ display:'flex', gap:'9px',
-                        alignItems:'baseline', padding:'4px 0', fontSize:'12px',
-                        borderBottom:'1px solid #f8fafc' }}>
-                        <span style={{ fontFamily:'monospace', fontSize:'11px',
-                          color:'#94a3b8', flexShrink:0 }}>{p.codigo}</span>
-                        <span style={{ flex:1, color:'#1e293b', minWidth:0 }}>
-                          {p.descripcion}
-                          <span style={{ color:'#94a3b8' }}>
-                            {' '}· {cant(p.metrado)} {p.unidad} × {soles(p.precio)}
-                          </span>
-                        </span>
-                        <span style={{ color:'#1463A5', fontWeight:700,
-                          whiteSpace:'nowrap' }}>{soles(p.importe)}</span>
-                      </div>
-                    ))}
+                    <div style={{ fontSize:'11.5px', color:'#94a3b8',
+                      marginBottom:'9px', lineHeight:1.5 }}>
+                      El ejecutado y el saldo son de <b>toda la obra</b>: si otra
+                      actividad ya gastó parte de la partida, aquí queda menos.
+                    </div>
+                    <div style={{ overflowX:'auto' }}>
+                      <TablaPartidas filas={detalle.partidas_detalle} />
+                    </div>
                   </div>
                 ) : (
                   <div style={aviso('#fffbeb', '#fde68a', '#92400e')}>
@@ -808,6 +772,124 @@ export default function Actividades() {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+/**
+ * Las partidas de una actividad, con metrado, ejecutado y saldo.
+ *
+ * Tiene la forma de la tabla de «Actividades realizadas» del parte diario a
+ * propósito: es el mismo gesto —una línea por tarea, con su metrado— y
+ * cambiar de forma entre las dos pantallas obligaría a reaprenderlo.
+ *
+ * LOS TRES NÚMEROS VAN JUNTOS. El presupuestado solo dice lo que había; el
+ * ejecutado solo dice lo que se hizo; el saldo es el único que contesta a la
+ * pregunta que de verdad se hace delante de la obra, que es cuánto queda.
+ *
+ * EL SALDO ES DE LA OBRA, no de esta actividad. Si otra ya excavó 100 de los
+ * 173, aquí quedan 73 aunque ésta no haya tocado ni uno. Un saldo «propio»
+ * invitaría a pasarse del presupuesto entre varias actividades sin que
+ * ninguna lo notara.
+ *
+ * Se pasa `onQuitar` solo en el formulario. En la ficha no hay nada que
+ * quitar, y la columna de la X no se dibuja.
+ */
+function TablaPartidas({ filas, onQuitar }) {
+  const n = (v) => parseFloat(v) || 0;
+  const tot = filas.reduce((s, p) => ({
+    importe: s.importe + (p.importe != null ? n(p.importe) : n(p.metrado) * n(p.precio)),
+    valorizado: s.valorizado + (p.valorizado != null
+      ? n(p.valorizado) : n(p.ejecutado) * n(p.precio)),
+  }), { importe: 0, valorizado: 0 });
+
+  return (
+    <table style={{ width:'100%', minWidth:'560px', borderCollapse:'collapse',
+      fontSize:'12px' }}>
+      <thead>
+        <tr style={{ background:'#f8fafc', color:'#64748b', fontSize:'10px',
+          textTransform:'uppercase', letterSpacing:'.03em' }}>
+          {['Código', 'Partida', 'Und', 'Metrado', 'Ejecutado', 'Saldo',
+            'Parcial'].map((h, i) => (
+            <th key={i} style={{ textAlign: i >= 3 ? 'right' : 'left',
+              padding:'6px 8px', fontWeight:700, whiteSpace:'nowrap' }}>{h}</th>
+          ))}
+          {onQuitar && <th style={{ width:'26px' }} />}
+        </tr>
+      </thead>
+      <tbody>
+        {filas.map(p => {
+          const metrado = n(p.metrado);
+          const eje = n(p.ejecutado);
+          const saldo = p.saldo != null ? n(p.saldo) : metrado - eje;
+          // Pasarse del metrado presupuestado no se esconde: en rojo, porque
+          // o se midió mal o hay que ampliar la partida, y las dos cosas hay
+          // que mirarlas antes de valorizar.
+          const pasado = saldo < 0;
+          return (
+            <tr key={p.id} style={{ borderTop:'1px solid #f1f5f9' }}>
+              <td style={{ padding:'6px 8px', fontFamily:'monospace',
+                fontSize:'10.5px', color:'#94a3b8', whiteSpace:'nowrap' }}>
+                {p.codigo}</td>
+              <td style={{ padding:'6px 8px', color:'#1e293b' }}>
+                {p.descripcion}
+                <div style={{ fontSize:'10.5px', color:'#94a3b8' }}>
+                  {soles(p.precio)} / {p.unidad}
+                </div>
+              </td>
+              <td style={{ padding:'6px 8px', color:'#64748b' }}>{p.unidad}</td>
+              <td style={{ padding:'6px 8px', textAlign:'right',
+                color:'#1e293b', whiteSpace:'nowrap' }}>{cant(metrado)}</td>
+              <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:600,
+                color: eje ? '#059669' : '#cbd5e1', whiteSpace:'nowrap' }}>
+                {cant(eje)}</td>
+              <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:700,
+                color: pasado ? '#dc2626' : '#1e293b', whiteSpace:'nowrap' }}>
+                {cant(saldo)}
+                {metrado > 0 && (
+                  <div style={{ fontSize:'10px', fontWeight:400,
+                    color: pasado ? '#dc2626' : '#94a3b8' }}>
+                    {(eje / metrado * 100).toFixed(1)}% hecho
+                  </div>
+                )}
+              </td>
+              <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:700,
+                color:'#1463A5', whiteSpace:'nowrap' }}>
+                {soles(p.importe != null ? p.importe : metrado * n(p.precio))}
+                {eje > 0 && (
+                  <div style={{ fontSize:'10px', fontWeight:400, color:'#059669' }}>
+                    {soles(p.valorizado != null ? p.valorizado : eje * n(p.precio))}
+                    {' '}valorizado
+                  </div>
+                )}
+              </td>
+              {onQuitar && (
+                <td style={{ padding:'6px 4px', textAlign:'right' }}>
+                  <button type="button" onClick={() => onQuitar(p.id)} title="Quitar"
+                    style={{ background:'transparent', border:'none',
+                      cursor:'pointer', color:'#dc2626', padding:0, lineHeight:1 }}>
+                    <FaTimes size={11} />
+                  </button>
+                </td>
+              )}
+            </tr>
+          );
+        })}
+      </tbody>
+      <tfoot>
+        <tr style={{ borderTop:'2px solid #e2e8f0', fontWeight:700,
+          color:'#0b2545' }}>
+          <td colSpan={3} style={{ padding:'8px' }}>
+            {filas.length} partida(s)</td>
+          <td colSpan={3} style={{ padding:'8px', textAlign:'right',
+            fontSize:'11px', color:'#64748b', fontWeight:400 }}>
+            {tot.valorizado > 0 && <>valorizado {soles(tot.valorizado)}</>}
+          </td>
+          <td style={{ padding:'8px', textAlign:'right', whiteSpace:'nowrap' }}>
+            {soles(tot.importe)}</td>
+          {onQuitar && <td />}
+        </tr>
+      </tfoot>
+    </table>
+  );
+}
+
 const Campo = ({ etiqueta, obligatorio, ancho, children }) => (
   <div style={{ flex: ancho || '1 1 100%', marginBottom:'11px' }}>
     <label style={{ display:'block', fontSize:'11px', fontWeight:700, color:'#475569',

@@ -35,8 +35,9 @@ QUE CAMBIA.
                                sigue pudiendo guardar
 
   views_actividades_obra.py
-    + el serializer devuelve 'partidas' (ids), 'partidas_detalle' y
-      'presupuestado' (suma de metrado x precio de sus partidas)
+    + el serializer devuelve 'partidas' (ids), 'presupuestado' (suma de
+      metrado x precio) y 'partidas_detalle': cada partida con su metrado
+      presupuestado, lo ejecutado hasta hoy, el saldo y el % de avance
     + POST y PATCH aceptan {"partidas": [id, id, ...]}
     + se comprueba que todas sean del MISMO proyecto de la actividad: colgar
       una partida de otra obra daria un avance que suma dos presupuestos
@@ -157,18 +158,52 @@ METODOS_NUEVO = '''    def get_partes(self, obj):
         return obj.partes.count()
 
     def get_partidas_detalle(self, obj):
-        return [
-            {
+        """Cada partida con lo presupuestado, lo hecho y lo que queda.
+
+        EL EJECUTADO ES DE TODA LA OBRA, no solo de esta actividad. El saldo
+        de una partida no depende de quien se lo haya ido gastando: si otra
+        actividad ya excavo 100 de los 173, aqui quedan 73 aunque esta no
+        haya tocado ni uno. Ensenar un saldo "propio" invitaria a pasarse del
+        presupuesto entre varias actividades sin que ninguna lo notara.
+
+        Solo suma el metrado imputado en la MISMA unidad que la partida. Lo
+        imputado en otra no se suma -daria un avance falso- pero tampoco se
+        esconde: va en la cuenta de avance, que ya lo avisa.
+        """
+        from .models import DailyPartActivity
+
+        partidas = list(obj.partidas.all().order_by("codigo"))
+        if not partidas:
+            return []
+
+        hecho = {}
+        filas = (DailyPartActivity.objects
+                 .filter(partida_id__in=[p.id for p in partidas])
+                 .values("partida_id", "metrado_unidad")
+                 .annotate(suma=Sum("metrado")))
+        for f in filas:
+            hecho.setdefault(f["partida_id"], {})[
+                _normaliza(f["metrado_unidad"])] = float(f["suma"] or 0)
+
+        salida = []
+        for p in partidas:
+            total = float(p.metrado or 0)
+            eje = hecho.get(p.id, {}).get(_normaliza(p.unidad), 0.0)
+            precio = float(p.precio or 0)
+            salida.append({
                 "id": p.id,
                 "codigo": p.codigo,
                 "descripcion": p.descripcion,
                 "unidad": p.unidad,
-                "metrado": float(p.metrado or 0),
-                "precio": float(p.precio or 0),
-                "importe": round(float(p.metrado or 0) * float(p.precio or 0), 2),
-            }
-            for p in obj.partidas.all().order_by("codigo")
-        ]
+                "metrado": total,
+                "precio": precio,
+                "importe": round(total * precio, 2),
+                "ejecutado": round(eje, 4),
+                "saldo": round(total - eje, 4),
+                "avance": round(eje / total * 100, 2) if total else None,
+                "valorizado": round(eje * precio, 2),
+            })
+        return salida
 
     def get_presupuestado(self, obj):
         """Lo que esta actividad tiene que hacer, al precio del presupuesto.
@@ -181,6 +216,10 @@ METODOS_NUEVO = '''    def get_partes(self, obj):
             total += float(m or 0) * float(pr or 0)
         return round(total, 2)
 '''
+
+# ── Sum, para el ejecutado ─────────────────────────────────────────────────
+IMP_ANCLA = "from django.db.models import Count, Q\n"
+IMP_NUEVO = "from django.db.models import Count, Q, Sum\n"
 
 # ── el alta ────────────────────────────────────────────────────────────────
 POST_ANCLA = """    ser = ActividadObraSerializer(data=datos)
@@ -237,7 +276,8 @@ def _partidas_de_otro(ids, obra):
 
 def parche_vista(texto):
     faltan = []
-    for nombre, ancla in (("la cabecera del serializer", SER_ANCLA),
+    for nombre, ancla in (("el import de django.db.models", IMP_ANCLA),
+                          ("la cabecera del serializer", SER_ANCLA),
                           ("la lista de campos", CAMPOS_ANCLA),
                           ("get_partes", METODOS_ANCLA),
                           ("_normaliza", AYUDA_ANCLA),
@@ -248,7 +288,8 @@ def parche_vista(texto):
     if faltan:
         return None, faltan
 
-    t = texto.replace(SER_ANCLA, SER_NUEVO, 1)
+    t = texto.replace(IMP_ANCLA, IMP_NUEVO, 1)
+    t = t.replace(SER_ANCLA, SER_NUEVO, 1)
     t = t.replace(CAMPOS_ANCLA, CAMPOS_NUEVO, 1)
     t = t.replace(METODOS_ANCLA, METODOS_NUEVO, 1)
     t = t.replace(AYUDA_ANCLA, AYUDA_NUEVO, 1)
@@ -316,8 +357,9 @@ def principal():
     print("      related_name='actividades', blank=True")
     print("")
     print("views_actividades_obra.py")
-    print("    + el serializer devuelve partidas, partidas_detalle y")
-    print("      presupuestado")
+    print("    + el serializer devuelve partidas, presupuestado y")
+    print("      partidas_detalle, con metrado, ejecutado, saldo y avance")
+    print("      de cada una")
     print("    + POST y PATCH aceptan {\"partidas\": [id, ...]}")
     print("    + se rechazan las partidas de otro proyecto")
     print("")
