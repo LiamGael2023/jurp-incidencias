@@ -62,3 +62,24 @@ const zoom10k = zoomParaEscala({ escala: 10000, lat: LAT, anchoPx: ANCHO_MM * PX
 ok(zoom10k < 17, '1:10.000 no', zoom10k.toFixed(2));
 
 window.__r = r;
+
+// ── La capa base y la escala tienen que hablarse ──────────────────────────
+import { CAPAS_BASE, puedeExportar, alternativaExportable } from '../../src/capasBase';
+
+const zoomDe = (e) => zoomParaEscala({ escala: e, lat: LAT,
+  anchoPx: ANCHO_MM * PX_MM, anchoMm: ANCHO_MM });
+
+// El aviso se dispara por la ESCALA, no por el maxNativeZoom declarado: ese
+// es una promesa global y sobre el valle los proveedores se quedan antes.
+const ofrece = (e, capa) => e <= 5000 && puedeExportar(capa);
+
+ok(!ofrece(10000, 'esri'), 'a 1:10.000 con ESRI no se ofrece cambiar');
+ok(ofrece(5000, 'esri'), 'a 1:5.000 sí, que es donde empieza a quedarse corto');
+ok(ofrece(2000, 'esri') && ofrece(1000, 'esri'), 'y más cerca también');
+ok(!ofrece(1000, 'satelite'), 'pero estando ya en Google no se ofrece Google');
+
+ok(puedeExportar('esri') && !puedeExportar('satelite'),
+   'ESRI exporta y Google no: ese es el precio de la foto');
+ok(alternativaExportable('satelite') === 'esri',
+   'y la vuelta desde Google lleva a ESRI, del mismo grupo',
+   alternativaExportable('satelite'));

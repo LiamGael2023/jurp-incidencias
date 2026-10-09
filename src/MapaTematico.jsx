@@ -930,16 +930,26 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
             </select>
           </label>
 
-          {/* A escalas muy cerradas el satélite ya no tiene foto y la tesela
-              se amplía: la lámina sale a la escala que dice, pero borrosa. Se
-              avisa porque en pantalla pequeña no se nota y en el A1 impreso
-              sí. */}
-          {zoom != null && zoom > (capaBase(base).maxNativeZoom ?? 20) && (
+          {/* A escalas cerradas el satélite se queda sin foto, y el aviso
+              se dispara por la ESCALA y no por el maxNativeZoom declarado.
+
+              El declarado es una promesa global: Esri dice llegar a z19 y
+              sobre el valle se queda antes —devuelve teselas grises con «Map
+              data not yet available»—. No se puede saber desde aquí dónde se
+              queda cada proveedor en cada zona, así que el aviso no afirma
+              que vaya a fallar: dice qué hacer SI falla. Prometer un límite
+              que no se ha medido es peor que no prometer ninguno.
+
+              De 1:5.000 para abajo es donde empieza a pasar en esta obra. */}
+          {escala <= 5000 && puedeExportar(base) && (
             <div className="lam-aviso">
-              <FaExclamationTriangle /> A 1:{escala.toLocaleString('es-PE')} la foto de
-              «{capaBase(base).etiqueta}» se amplía más allá de lo que tiene el satélite
-              ({(zoom - (capaBase(base).maxNativeZoom ?? 20)).toFixed(1)} niveles de más):
-              la escala será la de verdad, pero la imagen saldrá borrosa al imprimir.
+              <FaExclamationTriangle /> A esta escala «{capaBase(base).etiqueta}» puede
+              quedarse sin foto sobre el valle y salir gris o borrosa. Google Satélite
+              —la capa de PLUVIRA— llega más abajo, pero con ella el <b>PDF sale sin
+              fondo</b>: su servidor no autoriza leer las teselas.
+              <button onClick={() => setBase('satelite')}>
+                <FaLayerGroup /> Ver con Google Satélite
+              </button>
             </div>
           )}
 
@@ -1017,8 +1027,15 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
           </label>
           {!puedeExportar(base) && (
             <div className="lam-aviso lam-aviso-ojo">
-              <FaExclamationTriangle /> Con «{capaBase(base).etiqueta}» la lámina saldrá
-              sin mapa de fondo: ese servidor no autoriza la lectura de sus teselas.
+              <FaExclamationTriangle /> Con «{capaBase(base).etiqueta}» la lámina se ve en
+              pantalla pero el <b>PDF saldrá sin mapa de fondo</b>: ese servidor no
+              autoriza la lectura de sus teselas.
+              {/* La vuelta, a un clic. Avisar sin decir cómo salir obliga a
+                  buscar el selector y a saber cuál de las capas sí exporta. */}
+              <button onClick={() => setBase(alternativaExportable(base))}>
+                <FaLayerGroup /> Cambiar a «{capaBase(alternativaExportable(base)).etiqueta}»,
+                que sí exporta
+              </button>
             </div>
           )}
 
