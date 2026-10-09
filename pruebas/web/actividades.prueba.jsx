@@ -9,10 +9,13 @@ const PROYECTOS = [{ id: 1, codigo: 'Obras10_6', nombre: 'TRATAMIENTO TOMA 10.6'
 const ACTS = [{ id: 11, obra: 'Obras10_6', proyecto: 'TRATAMIENTO TOMA 10.6',
   codigo: 'ACT-0001', nombre: 'Excavacion de la caja de derivacion',
   estado: 'ejecucion', partes: 1, avance: { valorizado: 400, metrado_otra_unidad: 0 },
-  presupuestado: 1366.19, partidas: [20], partidas_detalle: [
+  presupuestado: 1366.19, partidas: [20, 21], partidas_detalle: [
     { id: 20, codigo: '01.02.04.01.01', descripcion: 'Excavacion manual', unidad: 'm3',
       metrado: 173.54, precio: 6.72, importe: 1166.19, ejecutado: 40, saldo: 133.54,
-      avance: 23.05, valorizado: 268.8 }],
+      avance: 23.05, valorizado: 268.8 },
+    { id: 21, codigo: '01.02.04.01.02', descripcion: 'Refine', unidad: 'm2',
+      metrado: 50, precio: 4, importe: 200, ejecutado: 0, saldo: 50,
+      avance: 0, valorizado: 0 }],
   ubicacion_text: 'Prog 0+120', responsable: 'J. Perez' }];
 // costeo que cuelga de la ACTIVIDAD 11, no de ningun incidente
 const PERS = [{ id: 1, actividad_obra: 11, incident_report: null, date: '2026-10-01',
@@ -26,7 +29,7 @@ const MAQ = [{ id: 4, actividad_obra: 11, incident_report: null,
   start_horometer: '100', end_horometer: '106', horas_efectivas: '6',
   unit_price: '188.80', equipment_name: 'EXCAVADORA', brand_name: 'CAT',
   model_plate: 'XYZ-111', maquina: 9, activities: 'EXCAVACION DE MATERIAL',
-  actividades: [], cerrado: false }];
+  actividades: [], cerrado: true }];
 
 const j = (d) => new Response(JSON.stringify(d),
   { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -47,7 +50,10 @@ window.fetch = async (url, opc) => {
   }
   if (opc && opc.method === 'POST') return j({ id: 100 });
   if (u.includes('/proyectos/')) return j(PROYECTOS);
+  // Sin ?obra= se responde VACIO a proposito: si la pantalla pide asi es
+  // que no sabe de que obra es, y eso es un fallo que debe verse.
   if (u.includes('/partidas/?obra=')) return j({ partidas: PARTIDAS });
+  if (u.includes('/partidas/')) return j({ partidas: [] });
   if (u.includes('/resumen/')) return j({ total: 1, por_estado: { ejecucion: 1 }, valorizado: 400, partes: 1 });
   if (u.includes('/actividades-obra/')) return j(ACTS);
   if (u.includes('incident-personnels')) return j(PERS);

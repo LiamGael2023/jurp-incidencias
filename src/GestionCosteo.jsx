@@ -100,6 +100,13 @@ export default function GestionCosteo({
   const [actEditando, setActEditando] = useState(null);     // índice, o null = nueva
   const [modalActividad, setModalActividad] = useState(false);
   const [partidas, setPartidas] = useState([]);             // presupuesto de obra
+  // Por defecto solo se ofrecen las partidas que la actividad declara que
+  // ejecuta. Si la actividad dice que hace tres, enseñar las 83 del
+  // presupuesto son ochenta ocasiones de equivocarse. Se puede abrir a todas
+  // con el check, porque a veces en obra aparece algo que no estaba previsto
+  // y bloquearlo en el formulario acaba en que se imputa a cualquier cosa
+  // con tal de poder guardar el parte.
+  const [todasLasPartidas, setTodasLasPartidas] = useState(false);
   const [modalAvance, setModalAvance] = useState(false);
   const [casRuta, setCasRuta] = useState([]);
   const [filtroAvance, setFiltroAvance] = useState('todas');
@@ -144,7 +151,12 @@ export default function GestionCosteo({
 
   useEffect(() => { cargarActividades(); }, []);
 
-  useEffect(() => { cargarPartidas(); }, []);
+  // Al cambiar de sujeto, no al montar: el presupuesto que hay que traer es
+  // el de SU obra, y al montar todavia no hay sujeto. Pedirlo antes traia
+  // una lista vacia y el selector de partidas no se dibujaba, sin decir por
+  // que.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { cargarPartidas(); }, [sujeto && sujeto.obra]);
 
   useEffect(() => { cargarCargos(); }, []);
 
@@ -287,7 +299,12 @@ export default function GestionCosteo({
   };
   const cargarPartidas = async () => {
     try {
-      const r = await fetch(`${API_OPS}/partidas/`);
+      // Del proyecto del sujeto si lo trae. Pedirlas todas y filtrar en el
+      // navegador funcionaba con un presupuesto; con cinco obras cargadas
+      // se baja el presupuesto entero de la empresa para elegir una partida.
+      const q = sujeto && sujeto.obra
+        ? `?obra=${encodeURIComponent(sujeto.obra)}` : '';
+      const r = await fetch(`${API_OPS}/partidas/${q}`);
       if (!r.ok) return;
       const d = await r.json();
       setPartidas(Array.isArray(d) ? d : (d.partidas || []));
@@ -579,6 +596,14 @@ export default function GestionCosteo({
   // Cerrar y reabrir los hace quien llama, que es el unico que sabe lo que
   // significan. Aqui solo se recarga despues, para que la pantalla refleje
   // lo que acaba de pasar sin que el de fuera tenga que acordarse.
+  // Las que se pueden elegir en el parte. El presupuesto entero sigue
+  // estando en `partidas`: el tablero de avance lo necesita.
+  const idsDelSujeto = (sujeto && sujeto.partidas) || [];
+  const acotaPartidas = idsDelSujeto.length > 0 && !todasLasPartidas;
+  const partidasElegibles = acotaPartidas
+    ? partidas.filter(p => idsDelSujeto.map(String).includes(String(p.id)))
+    : partidas;
+
   const cerrar = async () => {
     if (!sujeto || !onCerrarSujeto) return;
     await onCerrarSujeto(sujeto);
@@ -603,7 +628,7 @@ export default function GestionCosteo({
       : (nuevoRecurso.hmInicio !== '' && nuevoRecurso.hmInicio != null ? String(nuevoRecurso.hmInicio) : '');
     // Hereda la zona del parte para no volver a escribirla en cada línea.
     setActForm({ ...estadoInicialActividad, zonaTrabajo: nuevoRecurso.zonaTrabajo || '', hmInicio: previo });
-    setCasRuta(bajarSolo(partidas, []));
+    setCasRuta(bajarSolo(partidasElegibles, []));
     setActEditando(null);
     setModalActividad(true);
   };
@@ -2529,7 +2554,10 @@ export default function GestionCosteo({
                      pasa arriba, donde solo hay un presupuesto: se ve el
                      camino completo sin tener que abrir dos combos que no
                      deciden nada. */}
-                {partidas.length > 0 && (() => {
+                {partidasElegibles.length > 0 && (() => {
+                  // Dentro de este bloque, «partidas» son las elegibles. El
+                  // presupuesto completo no pinta nada aquí.
+                  const partidas = partidasElegibles;
                   const norm = (u) => (u || '').toString().trim().toLowerCase()
                     .replace('³', '3').replace('²', '2');
                   const mv = calcMetradoDe(actForm);
@@ -2578,6 +2606,28 @@ export default function GestionCosteo({
                       <div style={{ fontSize:'12.5px', fontWeight:700, color:'#334155', marginBottom:'8px' }}>
                         Partida del presupuesto <small style={{ color:'#94a3b8', fontWeight:400 }}>· opcional</small>
                       </div>
+
+                      {/* El check se enseña solo cuando hay algo que acotar.
+                          En una incidencia no hay partidas declaradas, asi
+                          que ni aparece. */}
+                      {idsDelSujeto.length > 0 && (
+                        <div style={{ marginBottom:'10px', fontSize:'11.5px',
+                          color:'#475569', display:'flex', alignItems:'center',
+                          gap:'7px', flexWrap:'wrap' }}>
+                          <label style={{ display:'flex', alignItems:'center',
+                            gap:'6px', cursor:'pointer' }}>
+                            <input type="checkbox" checked={todasLasPartidas}
+                              onChange={e => { setTodasLasPartidas(e.target.checked);
+                                setCasRuta([]); }} />
+                            Ver todas las del presupuesto
+                          </label>
+                          <span style={{ color:'#94a3b8' }}>
+                            {todasLasPartidas
+                              ? `${partidas.length} partidas · esta actividad declara ${idsDelSujeto.length}`
+                              : `Solo las ${idsDelSujeto.length} que esta actividad ejecuta`}
+                          </span>
+                        </div>
+                      )}
 
                       {peldanos.map(({ i, ops, valor }) => (
                         <div key={i} style={{ marginBottom:'8px' }}>
