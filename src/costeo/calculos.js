@@ -161,6 +161,25 @@ export const resumenReduccion = (lista) => (lista || [])
   .map(a => `${textoActividad(a)}: ${(a.obsReduccion || '').trim()}`)
   .join(' · ');
 
+/**
+ * Las horas que se cobran de un parte tal como viene del backend.
+ *
+ * Tres fuentes, por orden: la cabecera si la trae, la suma de sus
+ * actividades si las tiene, y el tramo de horometro si no hay ni una cosa ni
+ * la otra. Los partes antiguos no llevaban actividades, asi que el tercer
+ * caso no es defensivo: es como estan guardados cientos de ellos.
+ */
+export const horasCobradas = (i) => {
+  if (i.horas_efectivas != null && i.horas_efectivas !== '') return round4(i.horas_efectivas);
+  if (i.actividades && i.actividades.length) {
+    return round4(i.actividades.reduce((t, a) => {
+      if (a.horas_efectivas != null && a.horas_efectivas !== '') return t + (parseFloat(a.horas_efectivas) || 0);
+      return t + Math.max(0, (parseFloat(a.end_horometer) || 0) - (parseFloat(a.start_horometer) || 0));
+    }, 0));
+  }
+  return round4(Math.max(0, (parseFloat(i.end_horometer) || 0) - (parseFloat(i.start_horometer) || 0)));
+};
+
 export const horasDeLista = (lista) => round4((lista || []).reduce((t, a) => t + heDeActividad(a), 0));
 
 export const tramoDeLista = (lista) => round4((lista || []).reduce((t, a) => t + horasDeActividad(a), 0));

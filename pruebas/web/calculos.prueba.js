@@ -66,4 +66,17 @@ ok(C.CATEGORIAS.length === 3, 'tres categorías', C.CATEGORIAS.map(c => c.key).j
 ok(!!C.IMG_METRADO['EXCAVACION DE MATERIAL'], 'las imágenes de referencia siguen');
 
 window.__r = r;
-document.title = r.every(x => x.ok) ? 'TODO BIEN' : 'FALLAN';
+
+
+// horasCobradas: tres fuentes, por orden
+ok(C.horasCobradas({ horas_efectivas: '7.5' }) === 7.5,
+   'horasCobradas usa la cabecera si la trae', C.horasCobradas({ horas_efectivas: '7.5' }));
+const conActs = { actividades: [
+  { horas_efectivas: '3' },
+  { start_horometer: '100', end_horometer: '104' } ] };
+ok(C.horasCobradas(conActs) === 7, 'si no, suma las actividades (3 + 4)',
+   C.horasCobradas(conActs));
+ok(C.horasCobradas({ start_horometer: '10', end_horometer: '18' }) === 8,
+   'y si no hay ni una cosa ni otra, el tramo (partes antiguos)',
+   C.horasCobradas({ start_horometer: '10', end_horometer: '18' }));
+window.__r = r;

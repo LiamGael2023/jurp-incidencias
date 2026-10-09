@@ -21,11 +21,13 @@ import {
   calcMetradoDe, correlativoMas, detalleMaquinaDeParte, estadoInicialActividad,
   estadoInicialRecurso, fechaCorta, fechaDe, fmtCant,
   fmtNum, formulaMetrado, generarCorrelativo, getFechaHoy,
-  hayReduccionEn, heDeActividad, horasDeActividad, horasDeLista,
+  hayReduccionEn, heDeActividad, horasCobradas, horasDeActividad,
+  horasDeLista,
   muertasDeActividad, muertasDeLista, normalizar, rangoHorometro,
   resumenActividades, resumenReduccion, round2, round4,
   textoActividad, tramoDeLista, txtEstadoInc,
 } from './costeo/calculos';
+import { imgToBase64 } from './costeo/imagen';
 // ── Imágenes de referencia metrado por actividad ─────────────────────────────
 
 // Los modales se cuelgan del <body>, no del árbol de la página.
@@ -837,16 +839,6 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   // Horas que se cobran de un parte ya guardado: manda horas_efectivas (es lo
   // que se costeó); si no está, la suma de los tramos de sus actividades; y
   // como último recurso el rango de la cabecera, para los partes antiguos.
-  const horasCobradas = (i) => {
-    if (i.horas_efectivas != null && i.horas_efectivas !== '') return round4(i.horas_efectivas);
-    if (i.actividades && i.actividades.length) {
-      return round4(i.actividades.reduce((t, a) => {
-        if (a.horas_efectivas != null && a.horas_efectivas !== '') return t + (parseFloat(a.horas_efectivas) || 0);
-        return t + Math.max(0, (parseFloat(a.end_horometer) || 0) - (parseFloat(a.start_horometer) || 0));
-      }, 0));
-    }
-    return round4(Math.max(0, (parseFloat(i.end_horometer) || 0) - (parseFloat(i.start_horometer) || 0)));
-  };
 
   // Horas de una actividad: su propio tramo de horometro.
   // Horas efectivas de una actividad: lo que de verdad se cobra. Vacío = todo
@@ -1526,19 +1518,6 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     .filter(r => r.tipo === tipo)
     .reduce((s, r) => s + r.totalSum, 0));
 
-  const imgToBase64 = (src) => new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      canvas.getContext('2d').drawImage(img, 0, 0);
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
 
   const exportarPDF = async () => {
     if (!incidenteActivo) return;
