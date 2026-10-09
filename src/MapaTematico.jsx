@@ -38,10 +38,23 @@ import './MapaTematico.css';
  * y el rango de progresivas. Así la misma lámina sale igual mañana y la del
  * tramo vecino encaja al lado.
  *
- * LA CAPA BASE ES OTRA. Los visores abren con Google porque es lo que la
- * Junta usa y lo que se sabe que carga. Esta pantalla abre con una capa
- * exportable, porque aquí la foto no es un extra: es el producto. Con Google
- * la lámina saldría sin fondo (ver capasBase.jsx).
+ * LA CAPA BASE ABRE EN GOOGLE, igual que los visores, y eso tiene un precio
+ * que conviene entender antes de cambiarlo de vuelta.
+ *
+ * Esta pantalla abría con una capa exportable —ESRI—, porque aquí la foto no
+ * es un extra: es el producto, y Google no autoriza leer sus teselas, así que
+ * el PDF sale sin fondo (ver capasBase.jsx). Pero a las escalas con las que
+ * se trabaja esta obra, de 1:5 000 para abajo, ESRI se queda sin imagen sobre
+ * el valle y devuelve teselas grises. Una lámina exportable sin foto no sirve
+ * para nada, y una con foto que no se puede exportar al menos se ve.
+ *
+ * O SEA QUE HOY NO SE PUEDE TENER LAS DOS COSAS a 1:1 000: la única capa que
+ * deja leer sus teselas no tiene imagen ahí. La salida de verdad sería servir
+ * las teselas desde el propio backend con sus cabeceras —como ya se hace con
+ * las APIs en vercel.json—, no elegir mejor la capa.
+ *
+ * Mientras tanto el selector avisa en los dos sentidos y el cambio es de un
+ * clic, para que nadie descubra el problema con el PDF ya generado.
  */
 
 // ── Papel ──────────────────────────────────────────────────────────────────
@@ -426,8 +439,9 @@ const guardar = (llave, v) => { try { localStorage.setItem(llave, JSON.stringify
 function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, RailGIS }) {
   const inv = useInventario();
 
-  // La capa base arranca en una exportable: aquí la captura es el producto.
-  const [base, setBase] = useState(() => alternativaExportable(CAPA_POR_DEFECTO));
+  // Google, la misma que PLUVIRA. Ver más arriba por qué no se abre con una
+  // capa exportable, que es lo que haría falta para el PDF.
+  const [base, setBase] = useState(CAPA_POR_DEFECTO);
   const [escala, setEscala] = useState(ESCALA_POR_DEFECTO);
 
   const [filtros, setFiltros] = useState({});   // clave de nivel → valor elegido
