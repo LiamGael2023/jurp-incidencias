@@ -95,6 +95,9 @@ export default function Actividades() {
   // que la de una incidencia: lo único que cambia es de qué cuelgan las
   // líneas, y eso lo dice campoVinculo.
   const [gestionando, setGestionando] = useState(null);
+  // Avisos que NO son errores: lo que acaba de pasar y conviene saber, como
+  // qué máquinas quedaron libres al terminar.
+  const [aviso, setAviso] = useState('');
 
   // ── carga ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -205,23 +208,44 @@ export default function Actividades() {
     } finally { setGuardando(false); }
   };
 
-  // Terminar una actividad es lo que en una incidencia es cerrarla: se
-  // bloquea el costeo. Aquí no hace falta una tabla aparte de "cerradas"
-  // porque la actividad ya tiene estado, y dos marcas de lo mismo acaban
-  // discrepando.
+  // Terminar una actividad es lo que en una incidencia es cerrarla, y hace
+  // las tres cosas: cierra sus partes, libera sus máquinas y bloquea el
+  // costeo. Por eso es un POST a su endpoint y no un PATCH al estado: un
+  // PATCH dejaría las máquinas ocupadas en una actividad ya terminada, y el
+  // que las busca no tendría forma de saber por qué.
+  //
+  // No hay tabla aparte de "terminadas": la actividad ya tiene estado, y dos
+  // marcas de lo mismo acaban discrepando.
   const terminarActividad = async (act) => {
-    const r = await fetch(`${API}/actividades-obra/${act.id}/`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estado: 'terminada' }) });
-    if (r.ok) { setGestionando(g => g && { ...g, estado: 'terminada' }); cargar(); }
-    else setError('No se pudo terminar la actividad (HTTP ' + r.status + ').');
+    try {
+      const r = await fetch(`${API}/actividades-obra/${act.id}/cerrar-partes/`,
+        { method: 'POST' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      setGestionando(g => g && { ...g, estado: 'terminada' });
+      cargar();
+      if (d.maquinas_liberadas && d.maquinas_liberadas.length) {
+        setError('');
+        setAviso(`Se cerraron ${d.cerrados} parte(s) y quedaron libres: `
+          + d.maquinas_liberadas.join(', ') + '.');
+      }
+    } catch (e) {
+      setError('No se pudo terminar la actividad. ' + (e.message || e));
+    }
   };
+  // Reanudar NO reabre los partes, igual que reabrir una incidencia: un
+  // parte cerrado ya liberó su máquina y puede haberla cogido otro.
   const reanudarActividad = async (act) => {
-    const r = await fetch(`${API}/actividades-obra/${act.id}/`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estado: 'ejecucion' }) });
-    if (r.ok) { setGestionando(g => g && { ...g, estado: 'ejecucion' }); cargar(); }
-    else setError('No se pudo reanudar la actividad (HTTP ' + r.status + ').');
+    try {
+      const r = await fetch(`${API}/actividades-obra/${act.id}/reabrir/`,
+        { method: 'POST' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      setGestionando(g => g && { ...g, estado: 'ejecucion' });
+      cargar();
+      setAviso('Actividad reanudada. Los partes ya cerrados siguen cerrados.');
+    } catch (e) {
+      setError('No se pudo reanudar la actividad. ' + (e.message || e));
+    }
   };
 
   const borrar = async (act, confirmar) => {
@@ -302,8 +326,34 @@ export default function Actividades() {
 
       <div className="tbl-page-body">
 
+        {aviso && (
+          <div style={recuadro('#f0fdf4', '#bbf7d0', '#15803d')}>
+            <FaCheckCircle style={{ marginTop:'2px', flexShrink:0 }} />
+            <span style={{ flex:1 }}>{aviso}</span>
+            <button onClick={() => setAviso('')} style={{ background:'none',
+              border:'none', cursor:'pointer', color:'#15803d', padding:0 }}>
+              <FaTimes size={12} />
+            </button>
+          </div>
+        )}
+
+        {/* Lo que acaba de pasar y conviene saber, como qué máquinas
+            quedaron libres al terminar. No es un error, así que no va en
+            rojo: mezclarlos enseña a ignorar los dos. */}
+        {aviso && (
+          <div style={recuadro('#f0fdf4', '#bbf7d0', '#15803d')}>
+            <FaCheckCircle style={{ marginTop:'2px', flexShrink:0 }} />
+            <span style={{ flex:1 }}>{aviso}</span>
+            <button onClick={() => setAviso('')} title="Cerrar"
+              style={{ background:'none', border:'none', cursor:'pointer',
+                color:'#15803d', padding:0, lineHeight:1 }}>
+              <FaTimes size={12} />
+            </button>
+          </div>
+        )}
+
         {error && (
-          <div style={aviso('#fef2f2', '#fecaca', '#b91c1c')}>
+          <div style={recuadro('#fef2f2', '#fecaca', '#b91c1c')}>
             <FaExclamationTriangle style={{ marginTop:'2px', flexShrink:0 }} />
             <span>{error}</span>
           </div>
@@ -325,7 +375,7 @@ export default function Actividades() {
 
         {/* Metrado que no se pudo contar: va arriba, no escondido al final */}
         {conDescuadre > 0 && (
-          <div style={aviso('#fef2f2', '#fecaca', '#b91c1c')}>
+          <div style={recuadro('#fef2f2', '#fecaca', '#b91c1c')}>
             <FaExclamationTriangle style={{ marginTop:'2px', flexShrink:0 }} />
             <span>
               <b>{conDescuadre} actividad(es)</b> tienen metrado imputado en una unidad
@@ -613,7 +663,7 @@ export default function Actividades() {
                 })()}
 
                 {partidasPro.length === 0 && (
-                  <div style={aviso('#fffbeb', '#fde68a', '#92400e')}>
+                  <div style={recuadro('#fffbeb', '#fde68a', '#92400e')}>
                     <FaExclamationTriangle style={{ marginTop:'2px', flexShrink:0 }} />
                     <span>
                       Este proyecto no tiene presupuesto cargado, así que no hay
@@ -662,12 +712,7 @@ export default function Actividades() {
           bloqueado: gestionando.estado === 'terminada',
           textoCerrado: 'Actividad terminada',
           textoCerrar: 'Terminar actividad',
-          // Dice lo que hace de verdad. Terminar una actividad bloquea su
-          // costeo, pero -a diferencia de cerrar una incidencia- todavia NO
-          // cierra sus partes ni libera las maquinas: eso necesita un
-          // endpoint propio que aun no existe. Prometerlo aqui dejaria
-          // maquinas ocupadas que nadie sabria por que no se pueden asignar.
-          tituloCerrar: 'Bloquea el costeo de esta actividad',
+          tituloCerrar: 'Cierra los partes, libera las máquinas y bloquea el costeo',
         }}
         campoVinculo="actividad_obra"
         onCerrar={() => setGestionando(null)}
@@ -753,7 +798,7 @@ export default function Actividades() {
                     </div>
                   </div>
                 ) : (
-                  <div style={aviso('#fffbeb', '#fde68a', '#92400e')}>
+                  <div style={recuadro('#fffbeb', '#fde68a', '#92400e')}>
                     <FaExclamationTriangle style={{ marginTop:'2px', flexShrink:0 }} />
                     <span>
                       Esta actividad no tiene partidas asignadas, así que no hay
@@ -764,7 +809,7 @@ export default function Actividades() {
                 )}
 
                 {(detalle.avance?.metrado_otra_unidad || 0) > 0 && (
-                  <div style={aviso('#fef2f2', '#fecaca', '#b91c1c')}>
+                  <div style={recuadro('#fef2f2', '#fecaca', '#b91c1c')}>
                     <FaExclamationTriangle style={{ marginTop:'2px', flexShrink:0 }} />
                     <span>
                       <b>{detalle.avance.metrado_otra_unidad}</b> de metrado imputado en una
@@ -775,7 +820,7 @@ export default function Actividades() {
                 )}
 
                 {detalle.partes === 0 && (
-                  <div style={aviso('#fffbeb', '#fde68a', '#92400e')}>
+                  <div style={recuadro('#fffbeb', '#fde68a', '#92400e')}>
                     <FaExclamationTriangle style={{ marginTop:'2px', flexShrink:0 }} />
                     <span>
                       Esta actividad no tiene partes diarios todavía, así que su avance es
@@ -979,7 +1024,7 @@ const ctrl = (extra = {}) => ({
   ...extra,
 });
 
-const aviso = (fondo, borde, color) => ({
+const recuadro = (fondo, borde, color) => ({
   background:fondo, border:`1px solid ${borde}`, borderRadius:'9px',
   padding:'11px 14px', fontSize:'12.5px', color, marginBottom:'14px',
   display:'flex', gap:'9px', alignItems:'flex-start', lineHeight:1.6,

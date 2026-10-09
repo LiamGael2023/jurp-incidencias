@@ -24,7 +24,7 @@ cn.close()
 django.setup()
 from app.models import (Proyecto, Partida, ActividadObra,
     DailyPartHeavyEquipment, IncidentPersonnel, IncidentMaterial,
-    DailyPartActivity)
+    DailyPartActivity, ModeloEquipo)
 
 from django.core.management import call_command
 call_command('migrate', run_syncdb=True, verbosity=0)
@@ -47,7 +47,22 @@ import importlib.util
 import os as _os
 MOCK = _os.environ.get('VISTA') or _os.path.join(
     _os.path.dirname(_os.path.abspath(__file__)), 'views_actividades_obra.py')
-fuente = open(MOCK, encoding='utf-8').read().replace('from .models import', 'from app.models import')
+fuente = (open(MOCK, encoding='utf-8').read()
+          .replace('from .models import', 'from app.models import')
+          .replace('from .views import', 'from app.views import'))
+# La vista nueva hace `from .views import _liberar_maquina_de_parte`, asi
+# que hay que ofrecerle un app.views con esa funcion.
+_v = types.ModuleType('app.views')
+def _liberar_maquina_de_parte(parte):
+    m = ModeloEquipo.objects.filter(pk=parte.maquina_id).first()
+    if m and m.estado != 0:
+        m.estado = 0
+        m.save(update_fields=['estado'])
+        return m
+    return None
+_v._liberar_maquina_de_parte = _liberar_maquina_de_parte
+sys.modules['app.views'] = _v
+
 mod = types.ModuleType('app.vistas'); mod.__package__ = 'app'
 exec(compile(fuente, MOCK, 'exec'), mod.__dict__)
 
@@ -56,6 +71,8 @@ rutas = types.ModuleType('rutas')
 rutas.urlpatterns = [
     path('act/', mod.actividades_obra),
     path('act/resumen/', mod.actividades_obra_resumen),
+    path('act/<int:pk>/cerrar-partes/', mod.terminar_actividad),
+    path('act/<int:pk>/reabrir/', mod.reanudar_actividad),
 ]
 sys.modules['rutas'] = rutas
 
@@ -248,6 +265,49 @@ d = c.get('/act/?proyecto=%d' % a.id).data
 f3 = [x for x in d if x['id'] == act5.id][0]
 ok(f3['partidas_detalle'][0]['avance'] is None, 'avance None, no division por cero',
    f3['partidas_detalle'][0]['avance'])
+
+
+print('\n== TERMINAR CIERRA LOS PARTES Y LIBERA LAS MAQUINAS ==')
+maq = ModeloEquipo.objects.create(codigo='EX02', estado=1)
+maq2 = ModeloEquipo.objects.create(codigo='EX03', estado=1)
+act6 = ActividadObra.objects.create(obra='Obras10_6', proyecto_ref=a,
+                                    nombre='Para terminar', codigo='ACT-9100')
+p_abierto = DailyPartHeavyEquipment.objects.create(actividad_obra=act6, maquina=maq,
+                                                   cerrado=False)
+p_cerrado = DailyPartHeavyEquipment.objects.create(actividad_obra=act6, maquina=maq2,
+                                                   cerrado=True)
+r = c.post('/act/%d/cerrar-partes/' % act6.id)
+ok(r.status_code == 200, 'termina', r.status_code)
+ok(r.data['cerrados'] == 1, 'cierra solo el parte que estaba abierto', r.data['cerrados'])
+ok(r.data['maquinas_liberadas'] == ['EX02'], 'y libera su maquina',
+   r.data['maquinas_liberadas'])
+p_abierto.refresh_from_db(); maq.refresh_from_db(); maq2.refresh_from_db()
+ok(p_abierto.cerrado is True, 'el parte queda cerrado')
+ok(p_abierto.fecha_cierre is not None, 'con fecha de cierre')
+ok(maq.estado == 0, 'la maquina del parte abierto queda disponible', maq.estado)
+ok(maq2.estado == 1, 'la del parte que YA estaba cerrado no se toca', maq2.estado)
+act6.refresh_from_db()
+ok(act6.estado == 'terminada', 'y la actividad queda terminada', act6.estado)
+
+print('\n== TERMINAR DOS VECES NO HACE NADA ==')
+maq.estado = 1; maq.save()
+r = c.post('/act/%d/cerrar-partes/' % act6.id)
+ok(r.data['cerrados'] == 0, 'no cierra nada que ya este cerrado', r.data['cerrados'])
+ok(r.data['maquinas_liberadas'] == [], 'ni libera dos veces',
+   r.data['maquinas_liberadas'])
+maq.refresh_from_db()
+ok(maq.estado == 1, 'la maquina que alguien reclamo despues sigue ocupada', maq.estado)
+
+print('\n== REANUDAR NO REABRE LOS PARTES ==')
+r = c.post('/act/%d/reabrir/' % act6.id)
+ok(r.status_code == 200, 'reanuda', r.status_code)
+act6.refresh_from_db(); p_abierto.refresh_from_db()
+ok(act6.estado == 'ejecucion', 'vuelve a ejecucion', act6.estado)
+ok(p_abierto.cerrado is True, 'pero el parte sigue cerrado: su maquina ya es de otro')
+
+print('\n== UNA ACTIVIDAD QUE NO EXISTE ==')
+ok(c.post('/act/99999/cerrar-partes/').status_code == 404, 'terminar da 404')
+ok(c.post('/act/99999/reabrir/').status_code == 404, 'reabrir da 404')
 
 print('\n' + ('>>> %d FALLAN' % fallos if fallos else '>>> TODO BIEN') + '\n')
 sys.exit(1 if fallos else 0)

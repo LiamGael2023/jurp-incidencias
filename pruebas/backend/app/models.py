@@ -22,6 +22,13 @@ class Partida(M.Model):
     class Meta: app_label = 'app'
 
 class ActividadObra(M.Model):
+    # Las constantes del modelo de verdad. Sin ellas la vista casca con un
+    # AttributeError que no tiene nada que ver con lo que se esta probando:
+    # el mock tiene que igualar, no parecerse.
+    EN_EJECUCION = "ejecucion"
+    TERMINADA = "terminada"
+    SUSPENDIDA = "suspendida"
+
     obra = M.CharField(max_length=120, db_index=True)
     proyecto = M.CharField(max_length=300, blank=True, default='')
     proyecto_ref = M.ForeignKey(Proyecto, null=True, blank=True,
@@ -41,10 +48,19 @@ class ActividadObra(M.Model):
         ordering = ['-created_at']
 
 # lo que la vista importa y aqui no hace falta de verdad
+class ModeloEquipo(M.Model):
+    codigo = M.CharField(max_length=30)
+    estado = M.IntegerField(default=0)   # 0 = disponible
+    activo = M.BooleanField(default=True)
+    class Meta: app_label = 'app'
+
 class DailyPartHeavyEquipment(M.Model):
     actividad_obra = M.ForeignKey(ActividadObra, null=True, blank=True,
                                   on_delete=M.SET_NULL, related_name='partes')
     fecha = M.DateField(null=True, blank=True)
+    maquina = M.ForeignKey(ModeloEquipo, null=True, blank=True, on_delete=M.SET_NULL)
+    cerrado = M.BooleanField(default=False)
+    fecha_cierre = M.DateTimeField(null=True, blank=True)
     class Meta: app_label = 'app'
 class IncidentPersonnel(M.Model):
     class Meta: app_label = 'app'

@@ -39,17 +39,20 @@ console.log('\n== TERMINAR LA ACTIVIDAD ==');
 ok(t.includes('Terminar actividad'), 'el botón dice «Terminar actividad», no «Cerrar incidencia»');
 ok(!t.includes('Cerrar incidencia'), 'y no habla de incidencias');
 await pag.locator('button', { hasText: 'Terminar actividad' }).click();
-await pag.waitForTimeout(900);
-const pts = await pag.evaluate(() => window.__patches);
-ok(pts.length >= 1, 'manda el PATCH', JSON.stringify(pts[0] || {}).slice(0, 110));
-if (pts.length) {
-  ok(pts[0].url.includes('/actividades-obra/11/'), 'a la actividad', pts[0].url.split('operations')[1]);
-  ok(pts[0].body.estado === 'terminada', 'con estado terminada', pts[0].body.estado);
-}
-await pag.waitForTimeout(400);
+await pag.waitForTimeout(1000);
+const pts = await pag.evaluate(() => window.__posts || []);
+ok(pts.length >= 1, 'hace el POST', pts[0] || '(ninguno)');
+ok(pts.some(u => u.includes('/actividades-obra/11/cerrar-partes/')),
+   'al endpoint que cierra los partes, no un PATCH al estado',
+   (pts[0] || '').split('operations')[1]);
+const pch = await pag.evaluate(() => window.__patches || []);
+ok(pch.length === 0, 'y NO manda ya un PATCH', JSON.stringify(pch).slice(0, 80));
+await pag.waitForTimeout(500);
 const t2 = await pag.locator('body').innerText();
-ok(t2.includes('Actividad terminada'), 'y la pantalla queda marcada como terminada');
+ok(t2.includes('Actividad terminada'), 'la pantalla queda marcada como terminada');
 ok(t2.includes('Reabrir'), 'con el botón de reabrir');
+ok(/EX02, CG01/.test(t2), 'y dice qué máquinas quedaron libres',
+   (t2.match(/[^\n]*libres[^\n]*/) || [''])[0]);
 
 console.log('\n== CONSOLA ==');
 const graves = err.filter(e => !/favicon|ResizeObserver|ERR_TUNNEL|fonts.googleapis/.test(e));

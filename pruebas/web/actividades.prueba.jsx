@@ -36,6 +36,15 @@ window.fetch = async (url, opc) => {
   if (opc && opc.method === 'PATCH') {
     window.__patches.push({ url: u, body: JSON.parse(opc.body) }); return j({ ok: true });
   }
+  if (opc && opc.method === 'POST' && u.includes('/cerrar-partes/')) {
+    window.__posts = (window.__posts || []).concat([u]);
+    return j({ detail: 'ok', cerrados: 2, maquinas_liberadas: ['EX02', 'CG01'],
+      estado: 'terminada' });
+  }
+  if (opc && opc.method === 'POST' && u.includes('/reabrir/')) {
+    window.__posts = (window.__posts || []).concat([u]);
+    return j({ detail: 'ok', estado: 'ejecucion' });
+  }
   if (opc && opc.method === 'POST') return j({ id: 100 });
   if (u.includes('/proyectos/')) return j(PROYECTOS);
   if (u.includes('/partidas/?obra=')) return j({ partidas: PARTIDAS });
