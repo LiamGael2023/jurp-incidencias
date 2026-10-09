@@ -30,8 +30,10 @@ import {
   FaPlus, FaSyncAlt, FaSearch, FaTimes, FaExclamationTriangle, FaHardHat,
   FaCheckCircle, FaPauseCircle, FaPlayCircle, FaTrash, FaEdit, FaClipboardList,
   FaCubes, FaMapMarkerAlt, FaUserTie, FaCalendarAlt, FaSpinner, FaListOl,
+  FaFileInvoice,
 } from 'react-icons/fa';
 import EscaleraPartida from './SelectorPartida';
+import GestionCosteo from './GestionCosteo';
 import { bajarSolo } from './arbolPartidas';
 
 const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
@@ -89,6 +91,10 @@ export default function Actividades() {
   const [guardando, setGuardando] = useState(false);
   const [detalle, setDetalle] = useState(null);
   const [borrando, setBorrando] = useState(null);
+  // La actividad cuya gestión de costeo está abierta. Es la misma pantalla
+  // que la de una incidencia: lo único que cambia es de qué cuelgan las
+  // líneas, y eso lo dice campoVinculo.
+  const [gestionando, setGestionando] = useState(null);
 
   // ── carga ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -197,6 +203,25 @@ export default function Actividades() {
     } catch (e) {
       setError(e.message || String(e));
     } finally { setGuardando(false); }
+  };
+
+  // Terminar una actividad es lo que en una incidencia es cerrarla: se
+  // bloquea el costeo. Aquí no hace falta una tabla aparte de "cerradas"
+  // porque la actividad ya tiene estado, y dos marcas de lo mismo acaban
+  // discrepando.
+  const terminarActividad = async (act) => {
+    const r = await fetch(`${API}/actividades-obra/${act.id}/`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: 'terminada' }) });
+    if (r.ok) { setGestionando(g => g && { ...g, estado: 'terminada' }); cargar(); }
+    else setError('No se pudo terminar la actividad (HTTP ' + r.status + ').');
+  };
+  const reanudarActividad = async (act) => {
+    const r = await fetch(`${API}/actividades-obra/${act.id}/`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: 'ejecucion' }) });
+    if (r.ok) { setGestionando(g => g && { ...g, estado: 'ejecucion' }); cargar(); }
+    else setError('No se pudo reanudar la actividad (HTTP ' + r.status + ').');
   };
 
   const borrar = async (act, confirmar) => {
@@ -427,6 +452,9 @@ export default function Actividades() {
                         </td>
                         <td style={{ padding:'10px 12px', textAlign:'right',
                           whiteSpace:'nowrap' }}>
+                          <button onClick={e => { e.stopPropagation(); setGestionando(a); }}
+                            title="Costeo y partes diarios"
+                            style={{ ...btnIco, color:'#059669' }}><FaFileInvoice size={12} /></button>
                           <button onClick={e => { e.stopPropagation();
                             setCamino(bajarSolo(partidasPro, []));
                             setEditando({ ...a, partidas: (a.partidas || []).map(String) }); }}
@@ -620,6 +648,29 @@ export default function Actividades() {
         </Portal>
       )}
 
+      {/* ── La gestión de costeo: la misma pantalla que la de incidencias ─
+          Una actividad terminada se bloquea igual que una incidencia
+          cerrada: el estado ya lo dice, no hace falta otra marca. */}
+      <GestionCosteo
+        abierto={!!gestionando}
+        sujeto={gestionando && {
+          ...gestionando,
+          titulo: gestionando.codigo || `ACT-${gestionando.id}`,
+          subtitulo: gestionando.nombre,
+          detalle: [gestionando.proyecto, gestionando.ubicacion_text]
+            .filter(Boolean).join(' · '),
+          bloqueado: gestionando.estado === 'terminada',
+          textoCerrado: 'Actividad terminada',
+          textoCerrar: 'Terminar actividad',
+          tituloCerrar: 'Cierra los partes, libera las máquinas y bloquea el costeo',
+        }}
+        campoVinculo="actividad_obra"
+        onCerrar={() => setGestionando(null)}
+        onCambio={cargar}
+        onCerrarSujeto={terminarActividad}
+        onReabrir={reanudarActividad}
+      />
+
       {/* ── Modal: ficha ───────────────────────────────────────────────── */}
       {detalle && (
         <Portal>
@@ -733,7 +784,11 @@ export default function Actividades() {
               <div style={pie}>
                 <button onClick={() => { setEditando({ ...detalle }); setDetalle(null); }}
                   style={btnSec}><FaEdit /> Editar</button>
-                <button onClick={() => setDetalle(null)} style={btnPri}>Cerrar</button>
+                <button onClick={() => { setGestionando(detalle); setDetalle(null); }}
+                  style={{ ...btnPri, background:'#059669' }}>
+                  <FaFileInvoice /> Costeo y partes
+                </button>
+                <button onClick={() => setDetalle(null)} style={btnSec}>Cerrar</button>
               </div>
             </div>
           </div>

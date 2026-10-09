@@ -1,0 +1,55 @@
+import { createRoot } from 'react-dom/client';
+import Actividades from '../../src/Actividades';
+import '../../src/Incidentes.css';
+import PARTIDAS from './partidas.json';
+
+const PROYECTOS = [{ id: 1, codigo: 'Obras10_6', nombre: 'TRATAMIENTO TOMA 10.6',
+  partidas: 83, costo_directo: '1007949.21', suma_partidas: 1007949.21,
+  actividades: 1, estado: 'activo' }];
+const ACTS = [{ id: 11, obra: 'Obras10_6', proyecto: 'TRATAMIENTO TOMA 10.6',
+  codigo: 'ACT-0001', nombre: 'Excavacion de la caja de derivacion',
+  estado: 'ejecucion', partes: 1, avance: { valorizado: 400, metrado_otra_unidad: 0 },
+  presupuestado: 1366.19, partidas: [20], partidas_detalle: [
+    { id: 20, codigo: '01.02.04.01.01', descripcion: 'Excavacion manual', unidad: 'm3',
+      metrado: 173.54, precio: 6.72, importe: 1166.19, ejecutado: 40, saldo: 133.54,
+      avance: 23.05, valorizado: 268.8 }],
+  ubicacion_text: 'Prog 0+120', responsable: 'J. Perez' }];
+// costeo que cuelga de la ACTIVIDAD 11, no de ningun incidente
+const PERS = [{ id: 1, actividad_obra: 11, incident_report: null, date: '2026-10-01',
+  description: 'OPERARIO', quantity_hours: '8', unit_price: '25', num_personas: 1,
+  horas_normales: 8, horas_extras: 0, origin: 'JURP' }];
+const MAT = [{ id: 2, actividad_obra: 11, incident_report: null, date: '2026-10-02',
+  description: 'CEMENTO', quantity: '10', unit_price: '32', unit: 'bls' }];
+const MAQ = [{ id: 4, actividad_obra: 11, incident_report: null,
+  part_number: 'PD-0300-20261009', date: '2026-10-04', shift: 'Día',
+  work_zone_text: 'Prog 0+120', provider: 'PECH', operator: 'J. RAMIREZ',
+  start_horometer: '100', end_horometer: '106', horas_efectivas: '6',
+  unit_price: '188.80', equipment_name: 'EXCAVADORA', brand_name: 'CAT',
+  model_plate: 'XYZ-111', maquina: 9, activities: 'EXCAVACION DE MATERIAL',
+  actividades: [], cerrado: false }];
+
+const j = (d) => new Response(JSON.stringify(d),
+  { status: 200, headers: { 'Content-Type': 'application/json' } });
+window.__patches = [];
+window.fetch = async (url, opc) => {
+  const u = String(url);
+  if (opc && opc.method === 'PATCH') {
+    window.__patches.push({ url: u, body: JSON.parse(opc.body) }); return j({ ok: true });
+  }
+  if (opc && opc.method === 'POST') return j({ id: 100 });
+  if (u.includes('/proyectos/')) return j(PROYECTOS);
+  if (u.includes('/partidas/?obra=')) return j({ partidas: PARTIDAS });
+  if (u.includes('/resumen/')) return j({ total: 1, por_estado: { ejecucion: 1 }, valorizado: 400, partes: 1 });
+  if (u.includes('/actividades-obra/')) return j(ACTS);
+  if (u.includes('incident-personnels')) return j(PERS);
+  if (u.includes('incident-materials')) return j(MAT);
+  if (u.includes('daily-part-heavy-equipments/siguiente-correlativo')) return j({ siguiente: 'PD-0301-20261009' });
+  if (u.includes('daily-part-heavy-equipments')) return j(MAQ);
+  if (u.includes('/modelos/')) return j([{ id: 9, codigo: 'EX02', placa: 'XYZ-111',
+    modelo: 'CAT 320', marca_nombre: 'CAT', equipo_nombre: 'EXCAVADORA', estado: 0,
+    precio_hora: '188.80' }]);
+  if (u.includes('/cargos/')) return j([{ id: 1, nombre: 'OPERARIO', activo: true }]);
+  if (u.includes('/actividades/')) return j([{ id: 1, nombre: 'EXCAVACION DE MATERIAL', activo: true }]);
+  return j([]);
+};
+createRoot(document.getElementById('r')).render(<Actividades />);
