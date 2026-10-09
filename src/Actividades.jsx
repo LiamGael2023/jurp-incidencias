@@ -29,8 +29,10 @@ import { createPortal } from 'react-dom';
 import {
   FaPlus, FaSyncAlt, FaSearch, FaTimes, FaExclamationTriangle, FaHardHat,
   FaCheckCircle, FaPauseCircle, FaPlayCircle, FaTrash, FaEdit, FaClipboardList,
-  FaCubes, FaMapMarkerAlt, FaUserTie, FaCalendarAlt, FaSpinner,
+  FaCubes, FaMapMarkerAlt, FaUserTie, FaCalendarAlt, FaSpinner, FaListOl,
 } from 'react-icons/fa';
+import EscaleraPartida from './SelectorPartida';
+import { bajarSolo } from './arbolPartidas';
 
 const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
@@ -38,6 +40,9 @@ const Portal = ({ children }) => createPortal(children, document.body);
 
 const soles = (n) => 'S/ ' + (parseFloat(n) || 0).toLocaleString('es-PE',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const cant = (n) => (parseFloat(n) || 0).toLocaleString('es-PE',
+  { maximumFractionDigits: 4 });
 
 const dia = (iso) => {
   if (!iso) return '—';
@@ -60,6 +65,7 @@ const estadoDe = (e) => ESTADOS[e] || ESTADOS.ejecucion;
 
 const VACIA = {
   proyecto_id: null, obra: '', nombre: '', descripcion: '', ubicacion_text: '',
+  partidas: [],
   responsable: '', estado: 'ejecucion', fecha_inicio: '', fecha_fin: '',
 };
 
@@ -72,6 +78,12 @@ export default function Actividades() {
   const [error, setError] = useState('');
   const [filtro, setFiltro] = useState('todas');
   const [busca, setBusca] = useState('');
+
+  // El presupuesto del proyecto, para el selector en escalera. Se trae una
+  // vez por proyecto y se filtra en memoria: bajar por el árbol son muchos
+  // clics y ninguno merece una ida al servidor.
+  const [partidasPro, setPartidasPro] = useState([]);
+  const [camino, setCamino] = useState([]);
 
   const [editando, setEditando] = useState(null);   // objeto o null
   const [guardando, setGuardando] = useState(false);
@@ -124,6 +136,24 @@ export default function Actividades() {
 
   useEffect(() => { if (pro) cargar(); }, [pro, cargar]);
 
+  // Si el endpoint no estuviera, la lista queda vacía y el bloque de
+  // partidas no se dibuja: vale más un formulario sin partidas que un
+  // formulario que revienta entero.
+  useEffect(() => {
+    if (!pro) { setPartidasPro([]); return; }
+    let vivo = true;
+    (async () => {
+      try {
+        const r = await fetch(
+          `${API}/partidas/?obra=${encodeURIComponent(pro.codigo)}`);
+        if (!r.ok) return;
+        const d = await r.json();
+        if (vivo) setPartidasPro(Array.isArray(d) ? d : (d.partidas || []));
+      } catch { /* sin partidas se sigue */ }
+    })();
+    return () => { vivo = false; };
+  }, [pro]);
+
   // ── derivados ─────────────────────────────────────────────────────────
   const visibles = useMemo(() => {
     const t = busca.trim().toLowerCase();
@@ -153,7 +183,11 @@ export default function Actividades() {
           body: JSON.stringify({ ...editando,
             // La clave y el texto, por lo mismo que en las consultas.
             proyecto_id: editando.proyecto_id || (pro && pro.id),
-            obra: editando.obra || (pro && pro.codigo) }) });
+            obra: editando.obra || (pro && pro.codigo),
+            // El backend espera ids. Van siempre, también vacío: así quitar
+            // la última partida se guarda de verdad.
+            partidas: (editando.partidas || []).map(x => parseInt(x, 10))
+              .filter(x => !isNaN(x)) }) });
       if (!r.ok) {
         let d = {}; try { d = await r.json(); } catch { d = {}; }
         throw new Error(d.detail || JSON.stringify(d).slice(0, 160));
@@ -232,8 +266,9 @@ export default function Actividades() {
           <button onClick={cargar} disabled={cargando} style={btnSec}>
             <FaSyncAlt size={11} className={cargando ? 'icon-spin' : ''} /> Actualizar
           </button>
-          <button onClick={() => setEditando({ ...VACIA,
-              proyecto_id: pro && pro.id, obra: pro && pro.codigo })}
+          <button onClick={() => { setCamino(bajarSolo(partidasPro, []));
+              setEditando({ ...VACIA, proyecto_id: pro && pro.id,
+                obra: pro && pro.codigo }); }}
             disabled={!pro} style={btnPri}>
             <FaPlus size={11} /> Nueva actividad
           </button>
@@ -361,10 +396,26 @@ export default function Actividades() {
                         <td style={{ padding:'10px 12px', textAlign:'right',
                           color: a.partes ? '#1e293b' : '#cbd5e1', fontWeight:600 }}>
                           {a.partes}</td>
-                        <td style={{ padding:'10px 12px', textAlign:'right', fontWeight:700,
-                          color: a.avance?.valorizado ? '#1463A5' : '#cbd5e1',
+                        {/* Los dos números, no solo el de arriba. S/ 80
+                            valorizados no dicen nada; S/ 80 de S/ 200 sí. */}
+                        <td style={{ padding:'10px 12px', textAlign:'right',
                           whiteSpace:'nowrap' }}>
-                          {soles(a.avance?.valorizado)}</td>
+                          <div style={{ fontWeight:700,
+                            color: a.avance?.valorizado ? '#1463A5' : '#cbd5e1' }}>
+                            {soles(a.avance?.valorizado)}
+                          </div>
+                          {a.presupuestado > 0 ? (
+                            <div style={{ fontSize:'10.5px', color:'#94a3b8',
+                              marginTop:'1px' }}>
+                              de {soles(a.presupuestado)} ·{' '}
+                              {((a.avance?.valorizado || 0) / a.presupuestado * 100)
+                                .toFixed(1)}%
+                            </div>
+                          ) : (
+                            <div style={{ fontSize:'10.5px', color:'#d97706',
+                              marginTop:'1px' }}>sin partidas</div>
+                          )}
+                        </td>
                         <td style={{ padding:'10px 12px' }}>
                           <span style={{ display:'inline-flex', alignItems:'center',
                             gap:'5px', fontSize:'11.5px', fontWeight:700,
@@ -376,7 +427,9 @@ export default function Actividades() {
                         </td>
                         <td style={{ padding:'10px 12px', textAlign:'right',
                           whiteSpace:'nowrap' }}>
-                          <button onClick={e => { e.stopPropagation(); setEditando({ ...a }); }}
+                          <button onClick={e => { e.stopPropagation();
+                            setCamino(bajarSolo(partidasPro, []));
+                            setEditando({ ...a, partidas: (a.partidas || []).map(String) }); }}
                             title="Editar" style={btnIco}><FaEdit size={13} /></button>
                           <button onClick={e => { e.stopPropagation(); borrar(a, false); }}
                             title="Eliminar" style={{ ...btnIco, color:'#dc2626' }}>
@@ -468,6 +521,109 @@ export default function Actividades() {
                   </Campo>
                 </div>
 
+                {/* ── Partidas del presupuesto ────────────────────────────
+                    Es lo que esta actividad va a ejecutar. No es un adorno:
+                    sin partidas no hay contra qué medir -solo se sabría lo
+                    que lleva hecho, no si va al 10% o al 90%- y el que llene
+                    el parte tendrá que elegir entre las 83 del presupuesto
+                    entero en vez de entre las tres que tocan.
+
+                    Se puede guardar sin ninguna. Obligarlas acabaría en que
+                    se elige cualquiera con tal de poder guardar, que es peor
+                    que no tener ninguna. */}
+                {partidasPro.length > 0 && (() => {
+                  const puestas = (editando.partidas || []).map(String);
+                  const porId = new Map(partidasPro.map(p => [String(p.id), p]));
+                  const elegidas = puestas.map(i => porId.get(i)).filter(Boolean);
+                  const total = elegidas.reduce(
+                    (s, p) => s + (parseFloat(p.metrado) || 0) * (parseFloat(p.precio) || 0), 0);
+
+                  // Al elegir la partida se agrega y la escalera vuelve
+                  // arriba, lista para la siguiente. El paso de «agregar» no
+                  // decidía nada: la lista de abajo ya es la confirmación.
+                  const agregar = (id) => {
+                    if (!id || puestas.includes(String(id))) return;
+                    setEditando({ ...editando, partidas: puestas.concat([String(id)]) });
+                    setCamino(bajarSolo(partidasPro, []));
+                  };
+                  const quitar = (id) => setEditando({ ...editando,
+                    partidas: puestas.filter(x => x !== String(id)) });
+
+                  return (
+                    <div style={{ background:'#fff', border:'1px solid #e2e8f0',
+                      borderRadius:'9px', padding:'13px 14px', marginBottom:'13px' }}>
+                      <div style={{ fontSize:'11px', fontWeight:700, color:'#475569',
+                        textTransform:'uppercase', letterSpacing:'.03em',
+                        marginBottom:'3px', display:'flex', alignItems:'center',
+                        gap:'7px' }}>
+                        <FaListOl size={11} color="#1463A5" /> Partidas que ejecuta
+                      </div>
+                      <div style={{ fontSize:'11.5px', color:'#94a3b8',
+                        marginBottom:'10px', lineHeight:1.5 }}>
+                        Baja por el árbol del presupuesto. Al elegir la partida se
+                        añade abajo y puedes seguir con la siguiente.
+                      </div>
+
+                      <EscaleraPartida
+                        partidas={partidasPro}
+                        camino={camino}
+                        onCamino={setCamino}
+                        valor=""
+                        onElegir={agregar}
+                        ocultar={puestas}
+                        compacto />
+
+                      {elegidas.length > 0 && (
+                        <div style={{ marginTop:'12px', borderTop:'1px solid #f1f5f9',
+                          paddingTop:'10px' }}>
+                          {elegidas.map(p => (
+                            <div key={p.id} style={{ display:'flex', gap:'9px',
+                              alignItems:'baseline', padding:'5px 0',
+                              fontSize:'12px', borderBottom:'1px solid #f8fafc' }}>
+                              <span style={{ fontFamily:'monospace', fontSize:'11px',
+                                color:'#94a3b8', flexShrink:0 }}>{p.codigo}</span>
+                              <span style={{ flex:1, color:'#1e293b', minWidth:0 }}>
+                                {p.descripcion}
+                                <span style={{ color:'#94a3b8' }}>
+                                  {' '}· {cant(p.metrado)} {p.unidad} × {soles(p.precio)}
+                                </span>
+                              </span>
+                              <span style={{ color:'#1463A5', fontWeight:700,
+                                whiteSpace:'nowrap', flexShrink:0 }}>
+                                {soles((parseFloat(p.metrado) || 0) * (parseFloat(p.precio) || 0))}
+                              </span>
+                              <button type="button" onClick={() => quitar(p.id)}
+                                title="Quitar" style={{ background:'transparent',
+                                  border:'none', cursor:'pointer', color:'#dc2626',
+                                  padding:'0 2px', lineHeight:1, flexShrink:0 }}>
+                                <FaTimes size={11} />
+                              </button>
+                            </div>
+                          ))}
+                          <div style={{ display:'flex', justifyContent:'space-between',
+                            paddingTop:'8px', fontSize:'12.5px', color:'#0b2545',
+                            fontWeight:700 }}>
+                            <span>{elegidas.length} partida(s)</span>
+                            <span>{soles(total)}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {partidasPro.length === 0 && (
+                  <div style={aviso('#fffbeb', '#fde68a', '#92400e')}>
+                    <FaExclamationTriangle style={{ marginTop:'2px', flexShrink:0 }} />
+                    <span>
+                      Este proyecto no tiene presupuesto cargado, así que no hay
+                      partidas que elegir. La actividad se guarda igual, pero su
+                      avance será siempre cero hasta que importes el Excel desde
+                      Proyectos.
+                    </span>
+                  </div>
+                )}
+
                 {/* Las fechas son REALES, no programadas, y conviene decirlo:
                     si alguien las lee como previstas, cualquier informe que
                     compare contra ellas dirá cosas que nadie midió. */}
@@ -540,7 +696,52 @@ export default function Actividades() {
                     valor={soles(detalle.avance?.valorizado)}
                     pie="al precio del presupuesto"
                     color="#059669" icono={<FaCubes size={10} />} />
+                  <Tarjeta titulo="Presupuestado"
+                    valor={soles(detalle.presupuestado)}
+                    pie={detalle.presupuestado > 0
+                      ? `${((detalle.avance?.valorizado || 0)
+                          / detalle.presupuestado * 100).toFixed(1)}% ejecutado`
+                      : 'no tiene partidas asignadas'}
+                    color="#1463A5" icono={<FaListOl size={10} />} />
                 </div>
+
+                {/* Las partidas que ejecuta. Si no tiene, se dice: es la
+                    razón por la que su avance va a salir siempre en cero. */}
+                {(detalle.partidas_detalle || []).length > 0 ? (
+                  <div style={{ background:'#fff', border:'1px solid #e2e8f0',
+                    borderRadius:'9px', padding:'12px 14px', marginBottom:'14px' }}>
+                    <div style={{ fontSize:'11px', fontWeight:700, color:'#475569',
+                      textTransform:'uppercase', letterSpacing:'.03em',
+                      marginBottom:'8px' }}>
+                      Partidas que ejecuta
+                    </div>
+                    {detalle.partidas_detalle.map(p => (
+                      <div key={p.id} style={{ display:'flex', gap:'9px',
+                        alignItems:'baseline', padding:'4px 0', fontSize:'12px',
+                        borderBottom:'1px solid #f8fafc' }}>
+                        <span style={{ fontFamily:'monospace', fontSize:'11px',
+                          color:'#94a3b8', flexShrink:0 }}>{p.codigo}</span>
+                        <span style={{ flex:1, color:'#1e293b', minWidth:0 }}>
+                          {p.descripcion}
+                          <span style={{ color:'#94a3b8' }}>
+                            {' '}· {cant(p.metrado)} {p.unidad} × {soles(p.precio)}
+                          </span>
+                        </span>
+                        <span style={{ color:'#1463A5', fontWeight:700,
+                          whiteSpace:'nowrap' }}>{soles(p.importe)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={aviso('#fffbeb', '#fde68a', '#92400e')}>
+                    <FaExclamationTriangle style={{ marginTop:'2px', flexShrink:0 }} />
+                    <span>
+                      Esta actividad no tiene partidas asignadas, así que no hay
+                      contra qué medir su avance. Edítala y elígelas del
+                      presupuesto.
+                    </span>
+                  </div>
+                )}
 
                 {(detalle.avance?.metrado_otra_unidad || 0) > 0 && (
                   <div style={aviso('#fef2f2', '#fecaca', '#b91c1c')}>

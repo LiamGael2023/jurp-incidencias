@@ -14,6 +14,7 @@ import logo from './assets/jurp.png';
 import refAltura from './assets/ref_altura.png';
 import refAncho from './assets/ref_ancho.png';
 import MantenedorEquipos from './MantenedorEquipos';
+import { rutaDe, cuelgaDe, bajarSolo } from './arbolPartidas';
 // ── Imágenes de referencia metrado por actividad ─────────────────────────────
 import imgExcavacion from './assets/metrado/excavacion.png';
 import imgCarguio from './assets/metrado/carguio.png';
@@ -257,39 +258,9 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   };
   useEffect(() => { cargarPartidas(); }, []);
 
-  // La ruta viaja como texto JSON. Si viniera rota, se trata como vacia:
-  // la partida seguira siendo elegible desde su nivel, y es preferible a
-  // que el formulario entero reviente por una fila mal cargada.
-  const rutaDe = (p) => {
-    if (!p) return [];
-    if (Array.isArray(p.ruta)) return p.ruta;
-    try { const x = JSON.parse(p.ruta || '[]'); return Array.isArray(x) ? x : []; }
-    catch (e) { return []; }
-  };
-  const cuelgaDe = (p, camino) => {
-    const r = rutaDe(p);
-    return camino.every((c, i) => r[i] && r[i][0] === c);
-  };
-  // Baja sola mientras el nivel tenga UN solo hijo y ninguna partida termine
-  // ahí. Si alguna termina, la decisión es del operario y no mía.
-  //
-  // Arriba del todo esto importa: hay un solo presupuesto y una sola partida
-  // de control, así que sin esto habría que abrir dos combos de una opción
-  // antes de llegar al primero que decide algo.
-  const bajarSolo = (lista, camino) => {
-    let cam = camino.slice();
-    for (;;) {
-      const base = lista.filter(p => cuelgaDe(p, cam));
-      const sig = [];
-      base.forEach(p => {
-        const n = rutaDe(p)[cam.length];
-        if (n && !sig.some(o => o[0] === n[0])) sig.push(n);
-      });
-      const terminan = base.some(p => rutaDe(p).length === cam.length);
-      if (sig.length === 1 && !terminan) cam = cam.concat([sig[0][0]]);
-      else return cam;
-    }
-  };
+  // rutaDe, cuelgaDe y bajarSolo viven en arbolPartidas.js: la actividad de
+  // obra baja por el mismo árbol y dos copias acabarían bajando distinto el
+  // día que alguien arregle una y no la otra.
 
   // Catálogo de cargos de mano de obra (persistido en el backend).
   const cargarCargos = async () => {
