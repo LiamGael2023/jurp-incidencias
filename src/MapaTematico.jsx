@@ -26,9 +26,13 @@ import './MapaTematico.css';
  * cambia las reglas respecto de los otros mapas.
  *
  * LA ESCALA MANDA. En los visores el zoom es libre y la escala es el
- * resultado. Aquí es al revés: la lámina es 1:10 000 y punto, así que el zoom
- * se calcula a partir de la escala y queda bloqueado. Si se pudiera acercar,
- * la lámina diría 1:10 000 y no lo sería, que es peor que no rotular nada.
+ * resultado. Aquí es al revés: se elige la escala y el zoom se calcula a
+ * partir de ella y queda bloqueado. Si se pudiera acercar con la rueda, la
+ * lámina diría 1:10 000 y no lo sería, que es peor que no rotular nada.
+ *
+ * La escala SE ELIGE, pero de un catálogo. Entre 1:1 000 y 1:25 000, que son
+ * los números que se rotulan en obra; cuanto más cerca, menos terreno entra
+ * en el papel, y eso decide cuántas láminas hacen falta.
  *
  * EL ENCUADRE SALE DE LOS DATOS, no de dónde quedó la vista: el canal o tramo
  * y el rango de progresivas. Así la misma lámina sale igual mañana y la del
@@ -54,7 +58,15 @@ const MAPA_MM = {
 };
 const mm = (v) => v * PX_MM;
 
-const ESCALA = 10000;
+// Las escalas que se pueden rotular. Son las de catalogo: nadie pone
+// 1:7.300 en una lamina, y la barra grafica y la cuadricula se calculan para
+// numeros redondos.
+//
+// Cuanto mas cerca, menos terreno entra: a 1:10.000 una lamina abarca 8,2 km
+// de largo; a 1:1.000, 821 m. Por eso el cuadro de abajo dice cuantas
+// laminas harian falta, que es el numero con el que se elige la escala.
+const ESCALAS_LAMINA = [1000, 2000, 2500, 5000, 10000, 20000, 25000];
+const ESCALA_POR_DEFECTO = 10000;
 
 // ── Progresivas ────────────────────────────────────────────────────────────
 // Vienen como "43+750.37". Es un formato de obra, no un número: hay que
@@ -208,7 +220,7 @@ function extremos(puntos) {
  * Fija la vista al centro pedido y al zoom que exige la escala.
  *
  * El zoom se bloquea con min = max: cualquier gesto que lo moviera rompería
- * el 1:10 000 que la lámina declara. Mover el encuadre sí se permite, porque
+ * la escala que la lámina declara. Mover el encuadre sí se permite, porque
  * eso no cambia la escala.
  */
 function EncuadreFijo({ centro, zoom, onMover }) {
@@ -223,8 +235,14 @@ function EncuadreFijo({ centro, zoom, onMover }) {
 
   useEffect(() => {
     if (!centro || zoom == null) return;
-    map.setMinZoom(zoom); map.setMaxZoom(zoom);
+    // Se abre el candado ANTES de mover y se vuelve a cerrar después. Con
+    // min = max puestos al zoom viejo, pedir uno nuevo lo clava en el viejo:
+    // al cambiar de escala la lámina rotulaba 1:2 000 y seguía dibujada a
+    // 1:10 000, que es exactamente la mentira que este bloqueo existe para
+    // evitar.
+    map.setMinZoom(0); map.setMaxZoom(24);
     map.setView(centro, zoom, { animate: false });
+    map.setMinZoom(zoom); map.setMaxZoom(zoom);
     onMover?.();
   }, [centro?.[0], centro?.[1], zoom, map]);
 
@@ -410,6 +428,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
 
   // La capa base arranca en una exportable: aquí la captura es el producto.
   const [base, setBase] = useState(() => alternativaExportable(CAPA_POR_DEFECTO));
+  const [escala, setEscala] = useState(ESCALA_POR_DEFECTO);
 
   const [filtros, setFiltros] = useState({});   // clave de nivel → valor elegido
   const [desde, setDesde] = useState('');
@@ -545,8 +564,8 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
     if (!envolvente) return null;
     const anchoM = distanciaMetros([envolvente.sur, envolvente.oeste], [envolvente.sur, envolvente.este]);
     const altoM = distanciaMetros([envolvente.sur, envolvente.oeste], [envolvente.norte, envolvente.oeste]);
-    return { anchoM, altoM, ...cabeEnLamina({ escala: ESCALA, anchoMm: MAPA_MM.ancho, altoMm: MAPA_MM.alto, anchoMetros: anchoM, altoMetros: altoM }) };
-  }, [envolvente]);
+    return { anchoM, altoM, ...cabeEnLamina({ escala, anchoMm: MAPA_MM.ancho, altoMm: MAPA_MM.alto, anchoMetros: anchoM, altoMetros: altoM }) };
+  }, [envolvente, escala]);
 
   /**
    * La latitud con la que se calcula el zoom es la del encuadre dibujado, no
@@ -561,8 +580,8 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
    */
   const latCentro = centro ? centro[0] : -8.42;
   const zoom = useMemo(() => zoomParaEscala({
-    escala: ESCALA, lat: latCentro, anchoPx: mm(MAPA_MM.ancho), anchoMm: MAPA_MM.ancho,
-  }), [latCentro]);
+    escala, lat: latCentro, anchoPx: mm(MAPA_MM.ancho), anchoMm: MAPA_MM.ancho,
+  }), [latCentro, escala]);
 
   const encuadrar = useCallback(() => {
     if (!envolvente) return;
@@ -580,7 +599,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
   }, []);
 
   const zonaLamina = limites ? zonaDe((limites.este + limites.oeste) / 2) : 17;
-  const barra = barraEscala(ESCALA, 60);
+  const barra = barraEscala(escala, 60);
   const lamina = numeroLamina({ anio: new Date().getFullYear(), subSector, correlativo });
 
   // Las capas encendidas, en el orden del catálogo, para la leyenda.
@@ -652,7 +671,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
    */
   const marcasPK = useMemo(() => {
     if (!limites || descargando) return [];
-    const anchoM = terrenoDeLamina(ESCALA, MAPA_MM.ancho);
+    const anchoM = terrenoDeLamina(escala, MAPA_MM.ancho);
     const paso = [100, 250, 500, 1000, 2000, 5000].find(p => anchoM / p <= 10) || 5000;
     const salida = [];
 
@@ -841,7 +860,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
         <div className="lam-panel-cuerpo">
           <h2>Lámina temática</h2>
           <p className="lam-ayuda">
-            Escala fija <b>1:{ESCALA.toLocaleString('es-PE')}</b>. El encuadre sale de lo que
+            Escala fija <b>1:{escala.toLocaleString('es-PE')}</b>. El encuadre sale de lo que
             elijas abajo, no de dónde quede la vista, y el zoom está bloqueado para que la
             escala rotulada sea la de verdad.
           </p>
@@ -890,9 +909,37 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
                   ? <> Lo elegido mide {(medida.anchoM / 1000).toFixed(2)} km y <b>entra</b> en la lámina.</>
                   : <> Lo elegido mide {(medida.anchoM / 1000).toFixed(2)} km y en una lámina
                       entran {(medida.capAncho / 1000).toFixed(2)} km: <b>sobran {Math.round(medida.sobraAncho)} m</b>.
-                      Recorta el rango o genera varias láminas.</>
+                      {' '}Harían falta <b>{Math.ceil(medida.anchoM / medida.capAncho)} láminas</b>
+                      {' '}a esta escala. Recorta el rango, abre la escala o genera varias.</>
               )}
               {envolvente && <div className="lam-medida-n">{envolvente.n} estructuras en el encuadre</div>}
+            </div>
+          )}
+
+          {/* La escala va junto al encuadre porque son la misma decisión:
+              cuánto terreno entra en el papel. */}
+          <label>Escala de la lámina
+            <select value={escala}
+              onChange={e => setEscala(Number(e.target.value))}>
+              {ESCALAS_LAMINA.map(v => (
+                <option key={v} value={v}>
+                  1:{v.toLocaleString('es-PE')}
+                  {' — '}{(terrenoDeLamina(v, MAPA_MM.ancho) / 1000).toFixed(2)} km por lámina
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/* A escalas muy cerradas el satélite ya no tiene foto y la tesela
+              se amplía: la lámina sale a la escala que dice, pero borrosa. Se
+              avisa porque en pantalla pequeña no se nota y en el A1 impreso
+              sí. */}
+          {zoom != null && zoom > (capaBase(base).maxNativeZoom ?? 20) && (
+            <div className="lam-aviso">
+              <FaExclamationTriangle /> A 1:{escala.toLocaleString('es-PE')} la foto de
+              «{capaBase(base).etiqueta}» se amplía más allá de lo que tiene el satélite
+              ({(zoom - (capaBase(base).maxNativeZoom ?? 20)).toFixed(1)} niveles de más):
+              la escala será la de verdad, pero la imagen saldrá borrosa al imprimir.
             </div>
           )}
 
@@ -1089,7 +1136,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
 
             <div className="lam-caja lam-escala">
               <div className="lam-caja-tit">ESCALA GRÁFICA</div>
-              <div className="lam-escala-num">1:{ESCALA.toLocaleString('es-PE')}</div>
+              <div className="lam-escala-num">1:{escala.toLocaleString('es-PE')}</div>
               {barra && (
                 <>
                   <div className="lam-barra" style={{ width: mm(barra.anchoMm) }}>
@@ -1152,7 +1199,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
                   <div><b>PROYECCIÓN</b> UTM Zona {zonaLamina} S</div>
                   <div><b>FUENTE :</b> {fuente}</div>
                 </div>
-                <div><b>ESCALA :</b><div className="grande">1:{ESCALA.toLocaleString('es-PE')}</div></div>
+                <div><b>ESCALA :</b><div className="grande">1:{escala.toLocaleString('es-PE')}</div></div>
                 <div>
                   <div><b>FECHA :</b> {new Date().toLocaleDateString('es-PE')}</div>
                   <div><b>REVISIÓN :</b> {revision}</div>
