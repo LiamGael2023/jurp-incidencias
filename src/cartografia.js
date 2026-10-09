@@ -389,7 +389,7 @@ export function cabeEnLamina({ escala, anchoMm, altoMm, anchoMetros, altoMetros 
 
 /** Redondea la escala a un valor de catálogo: nadie rotula 1:73.418. */
 const ESCALAS = [
-  500, 1000, 2000, 2500, 5000, 7500, 10000, 15000, 20000, 25000,
+  200, 250, 500, 1000, 2000, 2500, 5000, 7500, 10000, 15000, 20000, 25000,
   50000, 75000, 100000, 150000, 200000, 250000, 500000, 1000000,
 ];
 export const escalaRedonda = (e) =>
@@ -399,9 +399,16 @@ export const escalaRedonda = (e) =>
  * Paso de la cuadrícula: el intervalo redondo que deja entre 3 y 7 líneas.
  *
  * Menos de tres y no se lee como cuadrícula; más de siete y tapa el mapa.
+ *
+ * LOS PASOS CORTOS SON PARA LAS LÁMINAS DE DETALLE. La tabla empezaba en 100
+ * m, que a 1:200 —donde el papel abarca 164 × 92 m— daba una vertical y NI UNA
+ * horizontal: una cuadrícula sin cuadros. Con 25 m salen seis y tres, que es
+ * lo que esta función existe para conseguir. No se rotula nada por debajo del
+ * metro porque el UTM se rotula entero.
  */
 export function pasoCuadricula(extensionMetros) {
-  const PASOS = [100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000];
+  const PASOS = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000,
+    25000, 50000, 100000, 250000];
   return PASOS.find(p => extensionMetros / p <= 7) || PASOS[PASOS.length - 1];
 }
 

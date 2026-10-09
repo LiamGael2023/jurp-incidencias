@@ -76,9 +76,19 @@ const mm = (v) => v * PX_MM;
 // numeros redondos.
 //
 // Cuanto mas cerca, menos terreno entra: a 1:10.000 una lamina abarca 8,2 km
-// de largo; a 1:1.000, 821 m. Por eso el cuadro de abajo dice cuantas
-// laminas harian falta, que es el numero con el que se elige la escala.
-const ESCALAS_LAMINA = [1000, 2000, 2500, 5000, 10000, 20000, 25000];
+// de largo; a 1:1.000, 821 m; a 1:200, 164 m. Por eso el cuadro de abajo dice
+// cuantas laminas harian falta, que es el numero con el que se elige.
+//
+// VAN AGRUPADAS POR PARA QUE SIRVEN, no en una lista corrida. Diez escalas
+// seguidas obligan a traducir mentalmente cada numero a metros antes de
+// elegir; el grupo ya dice de que lamina se esta hablando. El orden dentro de
+// cada grupo es de mas cerca a mas lejos, que es como se lee una escala.
+const GRUPOS_ESCALA = [
+  { titulo: 'Detalle — una estructura, un empalme', escalas: [200, 500] },
+  { titulo: 'Obra — un tramo de canal', escalas: [1000, 2000, 2500] },
+  { titulo: 'Conjunto — el sector o el valle', escalas: [5000, 10000, 20000, 25000] },
+];
+const ESCALAS_LAMINA = GRUPOS_ESCALA.flatMap(g => g.escalas);
 const ESCALA_POR_DEFECTO = 10000;
 
 // ── Progresivas ────────────────────────────────────────────────────────────
@@ -247,14 +257,21 @@ function EncuadreFijo({ centro, zoom, onMover }) {
   useEffect(() => { onMover?.(); }, [map]);
 
   useEffect(() => {
-    if (!centro || zoom == null) return;
+    if (zoom == null) return;
+    // SIN CENTRO SE USA EL QUE HAY. Antes esta línea era `if (!centro) return`
+    // y el zoom solo se aplicaba al pulsar «Encuadrar»: quien cambiaba la
+    // escala antes de encuadrar veía el membrete rotular 1:200 sobre un mapa
+    // todavía dibujado a 1:10.000. Cambiar la escala es estirar o encoger
+    // alrededor de lo que se esté viendo; no necesita un encuadre nuevo.
+    const destino = centro || map.getCenter();
+
     // Se abre el candado ANTES de mover y se vuelve a cerrar después. Con
     // min = max puestos al zoom viejo, pedir uno nuevo lo clava en el viejo:
     // al cambiar de escala la lámina rotulaba 1:2 000 y seguía dibujada a
     // 1:10 000, que es exactamente la mentira que este bloqueo existe para
     // evitar.
     map.setMinZoom(0); map.setMaxZoom(24);
-    map.setView(centro, zoom, { animate: false });
+    map.setView(destino, zoom, { animate: false });
     map.setMinZoom(zoom); map.setMaxZoom(zoom);
     onMover?.();
   }, [centro?.[0], centro?.[1], zoom, map]);
@@ -597,6 +614,18 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
     escala, lat: latCentro, anchoPx: mm(MAPA_MM.ancho), anchoMm: MAPA_MM.ancho,
   }), [latCentro, escala]);
 
+  // Cuánto hay que estirar la última tesela con imagen de verdad. 1 es
+  // «ninguna»: el proveedor llega hasta donde se le está pidiendo.
+  //
+  // Se calcula con el zoom con el que se va a dibujar, no con una tabla de
+  // escalas: así vale para cualquier capa y no hay que tocar nada el día que
+  // una suba su maxNativeZoom.
+  const estirado = useMemo(() => {
+    const nativo = capaBase(base)?.maxNativeZoom;
+    if (zoom == null || nativo == null || zoom <= nativo) return 1;
+    return Math.pow(2, zoom - nativo);
+  }, [zoom, base]);
+
   const encuadrar = useCallback(() => {
     if (!envolvente) return;
     setCentro([(envolvente.norte + envolvente.sur) / 2, (envolvente.este + envolvente.oeste) / 2]);
@@ -935,35 +964,64 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
           <label>Escala de la lámina
             <select value={escala}
               onChange={e => setEscala(Number(e.target.value))}>
-              {ESCALAS_LAMINA.map(v => (
-                <option key={v} value={v}>
-                  1:{v.toLocaleString('es-PE')}
-                  {' — '}{(terrenoDeLamina(v, MAPA_MM.ancho) / 1000).toFixed(2)} km por lámina
-                </option>
+              {GRUPOS_ESCALA.map(g => (
+                <optgroup key={g.titulo} label={g.titulo}>
+                  {g.escalas.map(v => {
+                    // Por debajo del kilómetro el «0,16 km» no se lee: a esas
+                    // escalas lo que se mide son metros.
+                    const m = terrenoDeLamina(v, MAPA_MM.ancho);
+                    const cuanto = m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`;
+                    return (
+                      <option key={v} value={v}>
+                        1:{v.toLocaleString('es-PE')}{' — '}{cuanto} por lámina
+                      </option>
+                    );
+                  })}
+                </optgroup>
               ))}
             </select>
           </label>
 
-          {/* A escalas cerradas el satélite se queda sin foto, y el aviso
-              se dispara por la ESCALA y no por el maxNativeZoom declarado.
+          {/* UN SOLO AVISO sobre la foto, aunque haya dos motivos distintos
+              para darlo. Apilados salían los dos a la vez en las escalas
+              cerradas, que es justo donde más importa que se lea uno.
 
-              El declarado es una promesa global: Esri dice llegar a z19 y
-              sobre el valle se queda antes —devuelve teselas grises con «Map
-              data not yet available»—. No se puede saber desde aquí dónde se
-              queda cada proveedor en cada zona, así que el aviso no afirma
-              que vaya a fallar: dice qué hacer SI falla. Prometer un límite
-              que no se ha medido es peor que no prometer ninguno.
+              Los dos motivos:
 
-              De 1:5.000 para abajo es donde empieza a pasar en esta obra. */}
-          {escala <= 5000 && puedeExportar(base) && (
-            <div className="lam-aviso">
-              <FaExclamationTriangle /> A esta escala «{capaBase(base).etiqueta}» puede
-              quedarse sin foto sobre el valle y salir gris o borrosa. Google Satélite
-              —la capa de PLUVIRA— llega más abajo, pero con ella el <b>PDF sale sin
-              fondo</b>: su servidor no autoriza leer las teselas.
-              <button onClick={() => setBase('satelite')}>
-                <FaLayerGroup /> Ver con Google Satélite
-              </button>
+              a) ESTIRADO. Por encima del maxNativeZoom de la capa el proveedor
+                 ya no tiene tesela propia y el navegador amplía la última. Se
+                 CALCULA con el mismo zoom con el que se va a dibujar, así que
+                 el aviso puede decir cuánto y no «puede que».
+
+              b) SIN FOTO. El maxNativeZoom declarado es una promesa global:
+                 Esri dice llegar a z19 y sobre el valle se queda antes —teselas
+                 grises con «Map data not yet available»—. Eso no se sabe desde
+                 aquí, así que el aviso no afirma que vaya a fallar: dice qué
+                 hacer SI falla. Prometer un límite que no se ha medido es peor
+                 que no prometer ninguno.
+
+              Ninguno de los dos prohíbe nada: a 1:200 un fondo suave sigue
+              siendo un fondo, y lo que se dibuja encima es vectorial y sale
+              nítido a cualquier escala. */}
+          {(estirado > 1 || (escala <= 5000 && puedeExportar(base))) && (
+            <div className="lam-aviso lam-aviso-ojo">
+              <FaExclamationTriangle />
+              {estirado > 1
+                ? <> A 1:{escala.toLocaleString('es-PE')} se pide más detalle del que
+                  «{capaBase(base).etiqueta}» tiene: la foto se amplía
+                  ×{estirado.toFixed(1)} y sale suave. La escala es correcta, y lo que
+                  va encima —estructuras, cuadrícula y progresivas— sale nítido igual.</>
+                : <> A esta escala «{capaBase(base).etiqueta}» puede quedarse sin foto
+                  sobre el valle y salir gris. </>}
+              {puedeExportar(base) && (
+                <> Google Satélite —la capa de PLUVIRA— llega un paso más abajo, pero
+                  con ella el <b>PDF sale sin fondo</b>: su servidor no autoriza leer
+                  las teselas.
+                  <button onClick={() => setBase('satelite')}>
+                    <FaLayerGroup /> Ver con Google Satélite
+                  </button>
+                </>
+              )}
             </div>
           )}
 
@@ -1213,14 +1271,13 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
             </div>
 
             <div className="lam-membrete">
+              {/* Solo el logo. El nombre completo de la Junta iba repetido al
+                  lado y el logo YA lo lleva impreso: en el papel salía dos
+                  veces y se comía el alto del membrete, que es donde hace
+                  falta el sitio. */}
               <div className="lam-membrete-top">
-                <img src={logoJURP} alt="JURP" className="lam-logo" />
-                <div className="lam-entidad">
-                  JUNTA DE USUARIOS DE AGUA<br />
-                  DEL SECTOR HIDRÁULICO MENOR<br />
-                  RIEGO PRESURIZADO<br />
-                  MOCHE VIRÚ CHAO
-                </div>
+                <img src={logoJURP} alt="Junta de Riego Presurizado Moche Virú Chao"
+                  className="lam-logo" />
               </div>
               <div className="lam-fila"><b>PROYECTO :</b><span className="azul">{proyecto}</span></div>
               <div className="lam-fila"><b>MAPA :</b><span className="centrado">{titulo}</span></div>

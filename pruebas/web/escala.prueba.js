@@ -1,5 +1,5 @@
-import { zoomParaEscala, escalaDeZoom, terrenoDeLamina, cabeEnLamina, barraEscala }
-  from '../../src/cartografia';
+import { zoomParaEscala, escalaDeZoom, terrenoDeLamina, cabeEnLamina, barraEscala,
+  pasoCuadricula } from '../../src/cartografia';
 
 const r = [];
 const ok = (c, m, e) => r.push({ ok: !!c, m, e: e === undefined ? '' : String(e) });
@@ -9,7 +9,8 @@ const ANCHO_MM = 841 - 20;          // 821
 const ALTO_MM = 594 - 20 - 112;     // 462
 const PX_MM = 2;
 const LAT = -8.42;
-const ESCALAS = [1000, 2000, 2500, 5000, 10000, 20000, 25000];
+// El catálogo entero, incluidas las de detalle que pidió la Junta.
+const ESCALAS = [200, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000];
 
 // Lo que cabe en el papel a cada escala
 ok(Math.abs(terrenoDeLamina(10000, ANCHO_MM) - 8210) < 1,
@@ -83,3 +84,60 @@ ok(puedeExportar('esri') && !puedeExportar('satelite'),
 ok(alternativaExportable('satelite') === 'esri',
    'y la vuelta desde Google lleva a ESRI, del mismo grupo',
    alternativaExportable('satelite'));
+
+// ── Las escalas de detalle: 1:200 y 1:500 ────────────────────────────────
+// Las pidió la Junta para ver una estructura o un empalme. Se comprueban
+// aparte porque son las que rompen los supuestos del resto de la pantalla.
+
+ok(Math.abs(terrenoDeLamina(200, ANCHO_MM) - 164.2) < 0.5,
+   '1:200 → 164 m de lámina: una estructura y su entorno',
+   terrenoDeLamina(200, ANCHO_MM).toFixed(1));
+ok(Math.abs(terrenoDeLamina(500, ANCHO_MM) - 410.5) < 0.5,
+   '1:500 → 410 m', terrenoDeLamina(500, ANCHO_MM).toFixed(1));
+
+// LA CUADRÍCULA ES LO QUE SE ROMPÍA. Con la tabla de pasos empezando en 100 m,
+// a 1:200 la lámina (164 × 92 m) daba una vertical y CERO horizontales.
+const lineas = (escala) => {
+  const ancho = terrenoDeLamina(escala, ANCHO_MM);
+  const alto = terrenoDeLamina(escala, ALTO_MM);
+  return { v: Math.floor(ancho / pasoCuadricula(ancho)),
+           h: Math.floor(alto / pasoCuadricula(alto)),
+           paso: pasoCuadricula(ancho) };
+};
+for (const e of ESCALAS) {
+  const l = lineas(e);
+  ok(l.v >= 3 && l.h >= 2,
+     `1:${e.toLocaleString('es-PE')}: cuadrícula legible (paso ${l.paso} m)`,
+     `${l.v} verticales × ${l.h} horizontales`);
+}
+ok(pasoCuadricula(164.2) === 25, 'a 1:200 el paso baja a 25 m', pasoCuadricula(164.2));
+// Los pasos cortos nuevos NO deben tocar las láminas de siempre: para que uno
+// de 5/10/25/50 m salga elegido, la lámina tiene que medir menos de 350 m.
+ok(pasoCuadricula(8210) === 2500 && pasoCuadricula(4105) === 1000
+   && pasoCuadricula(821) === 250 && pasoCuadricula(20525) === 5000,
+   'y de 1:1.000 para arriba el paso es el mismo de antes',
+   [821, 4105, 8210, 20525].map(x => `${x}m→${pasoCuadricula(x)}`).join(' '));
+
+// La barra gráfica tiene que seguir dando números redondos, no 3,28 m.
+for (const e of [200, 500]) {
+  const b = barraEscala(e, 60);
+  ok(b.total > 0 && Number.isInteger(b.total) && b.anchoMm > 10,
+     `barra a 1:${e}: ${b.total} ${b.unidad} en ${b.anchoMm.toFixed(0)} mm`);
+}
+
+// El zoom que piden, contra lo que las capas tienen de verdad.
+const ESTIRA = (e, capa) => {
+  const z = zoomDe(e), n = CAPAS_BASE[capa].maxNativeZoom;
+  return z <= n ? 1 : Math.pow(2, z - n);
+};
+ok(zoomDe(200) < CAPAS_BASE.satelite.maxZoom,
+   '1:200 cabe en el maxZoom de Google: la lámina se puede dibujar',
+   `zoom ${zoomDe(200).toFixed(2)} < ${CAPAS_BASE.satelite.maxZoom}`);
+ok(ESTIRA(500, 'satelite') === 1,
+   'a 1:500 Google todavía tiene tesela propia: foto nítida');
+ok(ESTIRA(200, 'satelite') > 1 && ESTIRA(200, 'satelite') < 2,
+   'a 1:200 ya no, y se amplía menos del doble — suave, no ilegible',
+   '×' + ESTIRA(200, 'satelite').toFixed(2));
+ok(ESTIRA(200, 'esri') > ESTIRA(200, 'satelite'),
+   'ESRI se queda un paso antes que Google, por eso se ofrece el cambio',
+   `esri ×${ESTIRA(200, 'esri').toFixed(2)} vs google ×${ESTIRA(200, 'satelite').toFixed(2)}`);

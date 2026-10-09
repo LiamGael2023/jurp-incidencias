@@ -175,10 +175,13 @@
 .lam-prof .c { font-size: 6.5px; color: #666; }
 
 .lam-membrete { padding: 4px 6px; display: flex; flex-direction: column; }
-.lam-membrete-top { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #111;
-  padding-bottom: 4px; margin-bottom: 4px; }
-.lam-logo { height: 26px; object-fit: contain; }
-.lam-entidad { font-size: 8.5px; font-weight: 700; color: #1d4ed8; line-height: 1.25; }
+/* Solo el logo, centrado. Sin el bloque de texto al lado el `flex-start`
+   dejaba el logo pegado al borde izquierdo con un hueco raro a la derecha. */
+.lam-membrete-top { display: flex; align-items: center; justify-content: center;
+  border-bottom: 1px solid #111; padding-bottom: 5px; margin-bottom: 4px; }
+/* Sube de 26 a 42 px: el sitio que ocupaba el texto se lo queda el logo, que
+   es el que ahora tiene que leerse a un metro del papel. */
+.lam-logo { height: 42px; max-width: 100%; object-fit: contain; }
 .lam-fila { display: flex; gap: 6px; font-size: 7.5px; border-bottom: 1px solid #ddd;
   padding: 3px 0; align-items: flex-start; }
 .lam-fila b { flex: 0 0 48px; }
