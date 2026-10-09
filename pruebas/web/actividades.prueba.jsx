@@ -58,23 +58,38 @@ window.fetch = async (url, opc) => {
   if (opc && opc.method === 'PATCH') {
     window.__patches.push({ url: u, body: JSON.parse(opc.body) }); return j({ ok: true });
   }
+  // El servidor de verdad CAMBIA el estado al terminar. El mock tiene que
+  // hacerlo tambien: la pantalla se refresca desde el servidor, asi que un
+  // mock que no cambia nada la deja como estaba y parece un fallo.
   if (opc && opc.method === 'POST' && u.includes('/cerrar-partes/')) {
     window.__posts = (window.__posts || []).concat([u]);
+    window.__estado = 'terminada';
     return j({ detail: 'ok', cerrados: 2, maquinas_liberadas: ['EX02', 'CG01'],
       estado: 'terminada' });
   }
   if (opc && opc.method === 'POST' && u.includes('/reabrir/')) {
     window.__posts = (window.__posts || []).concat([u]);
+    window.__estado = 'ejecucion';
     return j({ detail: 'ok', estado: 'ejecucion' });
   }
-  if (opc && opc.method === 'POST') return j({ id: 100 });
+  if (opc && opc.method === 'POST') { window.__guardado = true; return j({ id: 100 }); }
   if (u.includes('/proyectos/')) return j(PROYECTOS);
   // Sin ?obra= se responde VACIO a proposito: si la pantalla pide asi es
   // que no sabe de que obra es, y eso es un fallo que debe verse.
   if (u.includes('/partidas/?obra=')) return j({ partidas: PARTIDAS });
   if (u.includes('/partidas/')) return j({ partidas: [] });
   if (u.includes('/resumen/')) return j({ total: 1, por_estado: { ejecucion: 1 }, valorizado: 400, partes: 1 });
-  if (u.includes('/actividades-obra/')) return j(ACTS);
+  // Tras guardar, el servidor devuelve otro valorizado: es lo que hace
+  // visible si la lista se refresca sola o se queda con lo viejo.
+  if (u.includes('/actividades-obra/')) {
+    const base = window.__guardado
+      ? ACTS.map(a => ({ ...a, partes: 2,
+          avance: { valorizado: 999.99, metrado_otra_unidad: 0 } }))
+      : ACTS;
+    return j(window.__estado
+      ? base.map(a => ({ ...a, estado: window.__estado }))
+      : base);
+  }
   if (u.includes('incident-personnels')) return j(PERS);
   if (u.includes('incident-materials')) return j(MAT);
   if (u.includes('daily-part-heavy-equipments/siguiente-correlativo')) return j({ siguiente: 'PD-0301-20261009' });

@@ -127,8 +127,14 @@ export default function Actividades() {
         throw new Error('El backend todavía no tiene el módulo de actividades.');
       }
       if (!rl.ok) throw new Error('HTTP ' + rl.status);
-      setLista(await rl.json());
+      const nuevas = await rl.json();
+      setLista(nuevas);
       setResumen(rr.ok ? await rr.json() : null);
+      // La ficha abierta es una COPIA de la fila, de cuando se abrió. Si no
+      // se refresca aquí, se queda enseñando los números de antes mientras
+      // la tabla de detrás ya tiene los nuevos, y uno de los dos miente.
+      setDetalle(d => (d ? nuevas.find(x => x.id === d.id) || d : d));
+      setGestionando(g => (g ? nuevas.find(x => x.id === g.id) || g : g));
     } catch (e) {
       setLista([]); setError(e.message || String(e));
     } finally { setCargando(false); }

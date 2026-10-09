@@ -169,6 +169,29 @@ ok(/Se quitó la partida 01\.02\.01\.90/.test(tc), 'la suelta y dice por qué',
 ok(/está en m3 y esto mide en m²/.test(tc) || /m3.*m²/.test(tc),
    'nombrando las dos unidades', (tc.match(/Se quitó[^\n]*/) || [''])[0]);
 
+console.log('\n== AL CERRAR, LA LISTA SE REFRESCA SOLA ==');
+await pag.goto('http://localhost:5199/pruebas/web/actividades.html',
+  { waitUntil: 'networkidle' });
+await pag.waitForTimeout(900);
+const antes = await pag.locator('body').innerText();
+ok(/S\/ 400\.00/.test(antes), 'la lista parte de 400',
+   (antes.match(/S\/ [\d,.]+/g) || []).slice(0, 2).join(', '));
+
+await pag.locator('button[title="Costeo y partes diarios"]').first().click();
+await pag.waitForTimeout(1300);
+// algo que escriba en el servidor
+await pag.evaluate(async () => {
+  await fetch('/x/incident-materials/', { method: 'POST', body: new FormData() });
+});
+await pag.waitForTimeout(300);
+await pag.locator('button', { hasText: /^\s*Cerrar\s*$/ }).last().click();
+await pag.waitForTimeout(1200);
+const despues = await pag.locator('body').innerText();
+ok(/999\.99/.test(despues),
+   'al cerrar, la lista ya trae lo nuevo sin tocar «Actualizar»',
+   (despues.match(/S\/ [\d,.]+/g) || []).slice(0, 3).join(', '));
+ok(/\b2\b/.test(despues), 'y el número de partes también');
+
 console.log('\n== CONSOLA ==');
 const graves = err.filter(e => !/favicon|ResizeObserver|ERR_TUNNEL|fonts.googleapis/.test(e));
 ok(graves.length === 0, 'sin errores', graves.slice(0, 3).join(' | '));

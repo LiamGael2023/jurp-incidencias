@@ -596,6 +596,16 @@ export default function GestionCosteo({
   // Cerrar y reabrir los hace quien llama, que es el unico que sabe lo que
   // significan. Aqui solo se recarga despues, para que la pantalla refleje
   // lo que acaba de pasar sin que el de fuera tenga que acordarse.
+  // Cerrar avisa siempre al de fuera para que se refresque. Podria llevar la
+  // cuenta de si hubo cambios y avisar solo entonces, pero cada sitio donde
+  // se escribe tendria que acordarse de marcarlo, y el que se olvide deja la
+  // lista mintiendo hasta que alguien le da a Actualizar. Una peticion de
+  // mas al cerrar sale mas barata que eso.
+  const cerrarPantalla = () => {
+    if (onCambio) onCambio();
+    onCerrar();
+  };
+
   const cerrar = async () => {
     if (!sujeto || !onCerrarSujeto) return;
     await onCerrarSujeto(sujeto);
@@ -1481,7 +1491,8 @@ export default function GestionCosteo({
         }
       }
       Swal.fire({ icon: 'success', title: 'Éxito', text: 'Se guardó correctamente', confirmButtonColor: '#206bc4' });
-      setRecursos([]); onCerrar(); 
+      setRecursos([]);
+      cerrarPantalla();
     } catch (error) {
       console.error(error);
       Swal.fire({ icon: 'error', title: 'Error al guardar', text: error.message || 'Hubo un error al guardar en la base de datos.' });
@@ -1519,7 +1530,7 @@ export default function GestionCosteo({
             <div className="tbl-modal-content">
               <div className="tbl-modal-header">
                 <h5 className="tbl-modal-title">Gestión · {titulo}</h5>
-                <button className="tbl-btn-close" onClick={onCerrar}><FaTimes/></button>
+                <button className="tbl-btn-close" onClick={cerrarPantalla}><FaTimes/></button>
               </div>
               <div className="tbl-modal-body">
                 <div className="tbl-alert tbl-alert-info">
@@ -1752,7 +1763,7 @@ export default function GestionCosteo({
                   ) : null}
 
                   {/* Cerrar (última) */}
-                  <button className="tbl-btn tbl-btn-link" onClick={onCerrar}>Cerrar</button>
+                  <button className="tbl-btn tbl-btn-link" onClick={cerrarPantalla}>Cerrar</button>
                 </div>
               </div>
             </div>
