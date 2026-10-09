@@ -148,12 +148,15 @@ export default function GestionCosteo({
 
   useEffect(() => { cargarActividades(); }, []);
 
-  // Al cambiar de sujeto, no al montar: el presupuesto que hay que traer es
-  // el de SU obra, y al montar todavia no hay sujeto. Pedirlo antes traia
-  // una lista vacia y el selector de partidas no se dibujaba, sin decir por
-  // que.
+  // Solo con la pantalla abierta, que es cuando ya hay sujeto. El montaje
+  // ocurre con sujeto=null y pedia /partidas/ a secas: el presupuesto de
+  // TODAS las obras, para tirarlo un instante despues y volver a pedir el
+  // del proyecto. Se veia en la pestana de red, no en pantalla.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { cargarPartidas(); }, [sujeto && sujeto.obra]);
+  useEffect(() => {
+    if (!abierto) return;
+    cargarPartidas();
+  }, [abierto, sujeto && sujeto.obra]);
 
   useEffect(() => { cargarCargos(); }, []);
 
@@ -2615,24 +2618,46 @@ export default function GestionCosteo({
                   const ETQ = ['Presupuesto', 'Partida de control', 'Estructura', 'Capítulo', 'Subcapítulo'];
                   return (
                     <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'12px', marginBottom:'15px' }}>
+                      {/* Con el proyecto delante no hay duda de que
+                          presupuesto son estas partidas. Hacia falta: el
+                          rotulo de la raiz lo escribe el Excel y puede no
+                          parecerse al nombre del proyecto. */}
                       <div style={{ fontSize:'12.5px', fontWeight:700, color:'#334155', marginBottom:'8px' }}>
-                        Partida del presupuesto <small style={{ color:'#94a3b8', fontWeight:400 }}>· opcional</small>
+                        Partida del presupuesto
+                        {sujeto && sujeto.obra && (
+                          <span style={{ color:'#1463A5' }}> de {sujeto.obra}</span>
+                        )}
+                        <small style={{ color:'#94a3b8', fontWeight:400 }}> · opcional</small>
                       </div>
 
-                      {peldanos.map(({ i, ops, valor }) => (
-                        <div key={i} style={{ marginBottom:'8px' }}>
-                          <label className="tbl-form-label">
-                            {i + 1} · {ETQ[i] || `Nivel ${i + 1}`}
-                          </label>
-                          <select className="tbl-form-select" value={valor}
-                            onChange={e => elegirNivel(i, e.target.value)}>
-                            <option value="">— Elegir —</option>
-                            {ops.map(([c, d]) => (
-                              <option key={c} value={c}>{c} · {d}</option>
-                            ))}
-                          </select>
-                        </div>
-                      ))}
+                      {/* Un nivel con UNA sola opcion ya venia elegido solo:
+                          dibujarlo como combo lo hace parecer una decision
+                          que se pudo tomar mal. Va como texto, que es lo que
+                          es: el camino por el que se baja. */}
+                      {peldanos.map(({ i, ops, valor }) => {
+                        const decide = ops.length > 1 || !valor;
+                        const puesto = ops.find(o => o[0] === valor);
+                        return decide ? (
+                          <div key={i} style={{ marginBottom:'8px' }}>
+                            <label className="tbl-form-label">
+                              {i + 1} · {ETQ[i] || `Nivel ${i + 1}`}
+                            </label>
+                            <select className="tbl-form-select" value={valor}
+                              onChange={e => elegirNivel(i, e.target.value)}>
+                              <option value="">— Elegir —</option>
+                              {ops.map(([c, d]) => (
+                                <option key={c} value={c}>{c} · {d}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <div key={i} style={{ fontSize:'11.5px', color:'#94a3b8',
+                            padding:'1px 0 3px', display:'flex', gap:'6px' }}>
+                            <span style={{ fontFamily:'monospace' }}>{valor}</span>
+                            <span>{puesto ? puesto[1] : ''}</span>
+                          </div>
+                        );
+                      })}
 
                       {hojas.length > 0 && (
                         <div style={{ marginBottom:'4px' }}>

@@ -96,6 +96,13 @@ await pag.waitForTimeout(1000);
 await pag.locator('button').filter({ hasText: /Agregar actividad/i }).first().click();
 await pag.waitForTimeout(1000);
 
+const pedidas = await pag.evaluate(() => window.__urls || []);
+const dePartidas = pedidas.filter(u => u.includes('/partidas/'));
+ok(dePartidas.length > 0, 'pide el presupuesto', dePartidas[0]);
+ok(dePartidas.every(u => u.includes('obra=Obras10_6')),
+   'y SOLO el del proyecto de turno, nunca el de todas las obras',
+   dePartidas.map(u => u.split('/partidas/')[1]).join(' | '));
+
 const selects = () => pag.locator('select.tbl-form-select');
 const porOpcion = async (txt) => {
   for (const s of await selects().all()) {
@@ -125,6 +132,22 @@ ok(glb && glb.dis, 'y la de glb también', glb && glb.t.slice(-24));
 const tl = await pag.locator('body').innerText();
 ok(/solo las que miden en m/i.test(tl), 'y la etiqueta dice la regla antes',
    (tl.match(/solo las que miden[^\n]*/i) || [''])[0]);
+ok(/Partida del presupuesto de Obras10_6/.test(tl),
+   'el bloque dice de qué proyecto son las partidas',
+   (tl.match(/Partida del presupuesto[^\n]*/) || [''])[0]);
+// los niveles de una sola opcion ya no son combos
+// Solo los combos de la escalera: los que ofrecen codigos de partida.
+let escalones = 0;
+for (const s of await pag.locator('select.tbl-form-select').all()) {
+  const o = await s.locator('option').allInnerTexts();
+  if (o.some(x => /^\d\d(\.\d\d)* · /.test(x.trim()))) escalones++;
+}
+ok(escalones === 2, 'solo quedan los dos niveles que de verdad deciden',
+   escalones + ' combos de escalera');
+ok(/01\.02\s+ESTRUCTURAS DE TRATAMIENTO/.test(tl.replace(/\s+/g, ' ')) ||
+   /01\.02 ESTRUCTURAS/.test(tl.replace(/\s+/g, ' ')),
+   'pero el camino se sigue viendo como texto',
+   (tl.match(/01\.02[^\n]*/) || [''])[0]);
 await pag.screenshot({ path: DIR + '/unidades.png' });
 
 console.log('\n== AL ELEGIRLA, LA UNIDAD SE FIJA ==');

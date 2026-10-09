@@ -51,8 +51,10 @@ const MAQ = [{ id: 4, actividad_obra: 11, incident_report: null,
 const j = (d) => new Response(JSON.stringify(d),
   { status: 200, headers: { 'Content-Type': 'application/json' } });
 window.__patches = [];
+window.__urls = [];
 window.fetch = async (url, opc) => {
   const u = String(url);
+  window.__urls.push(u);
   if (opc && opc.method === 'PATCH') {
     window.__patches.push({ url: u, body: JSON.parse(opc.body) }); return j({ ok: true });
   }
