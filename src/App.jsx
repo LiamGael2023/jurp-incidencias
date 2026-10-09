@@ -11,6 +11,7 @@ import './MaquinariaGIS.css';
 import Incidentes from './Incidentes';
 import AvanceObra from './AvanceObra';
 import Actividades from './Actividades';
+import Proyectos from './Proyectos';
 import Estadisticas from './Estadisticas';
 import Vigilancia from './Vigilancia';
 import Reportes from './Reportes';
@@ -19,7 +20,7 @@ import Partes from './Partes';
 import MapaInventario from './MapaInventario';
 import ReportesInventario from './ReportesInventario';
 import MapaTematico from './MapaTematico';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat } from 'react-icons/fa';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
 const URL_HYDROMETRIX = 'http://sistema.jriegopresurizado.org.pe/';
@@ -39,8 +40,11 @@ const MENU = [
   { clave: 'partes',       titulo: 'Partes Diarios', icono: <FaClipboardList />, apps: ['pluvira'] },
   // Va justo después de Partes Diarios porque se alimenta de ellos: el metrado
   // que se imputa en el parte es lo que esta pantalla valoriza.
-  // Actividades va ANTES del avance: primero se registra el trabajo, luego se
-  // mira cuanto se lleva. El orden del menu cuenta la secuencia de uso.
+  // El orden del menú cuenta la secuencia de uso, y aquí la secuencia no es
+  // opcional: se crea el PROYECTO, se le importa el presupuesto, y solo
+  // entonces hay partidas que las ACTIVIDADES puedan imputar. Por eso
+  // Proyectos va primero y Avance de Obra al final.
+  { clave: 'proyectos',    titulo: 'Proyectos',      icono: <FaFolderOpen />,    apps: ['pluvira'] },
   { clave: 'actividades',  titulo: 'Actividades',    icono: <FaHardHat />,       apps: ['pluvira'] },
   { clave: 'obra',         titulo: 'Avance de Obra', icono: <FaChartLine />,     apps: ['pluvira'] },
   // Inventario: rótulo de sección y sus dos vistas, al final del menú.
@@ -205,6 +209,15 @@ function App() {
       <div className="maq">
         <RailGIS {...propsRail} />
         <div className="maq-main"><Partes irAIncidente={irAIncidente} /></div>
+      </div>
+    );
+  }
+
+  if (vistaActual === 'proyectos') {
+    return (
+      <div className="maq">
+        <RailGIS {...propsRail} />
+        <div className="maq-main"><Proyectos /></div>
       </div>
     );
   }
