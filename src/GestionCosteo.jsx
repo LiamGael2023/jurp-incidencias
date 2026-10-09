@@ -45,7 +45,8 @@ import {
   estadoInicialRecurso, fechaCorta, fechaDe, fmtCant,
   fmtNum, formulaMetrado, generarCorrelativo, getFechaHoy,
   hayReduccionEn, heDeActividad, horasCobradas, horasDeActividad,
-  horasDeLista, muertasDeActividad, muertasDeLista, normalizar, rangoHorometro,
+  horasDeLista, muertasDeActividad, muertasDeLista, normaUnidad, normalizar,
+  rangoHorometro,
   resumenActividades, resumenReduccion, round2, round4,
   textoActividad, tramoDeLista,
 } from './costeo/calculos';
@@ -102,6 +103,9 @@ export default function GestionCosteo({
   const [partidas, setPartidas] = useState([]);             // presupuesto de obra
   const [modalAvance, setModalAvance] = useState(false);
   const [casRuta, setCasRuta] = useState([]);
+  // Por qué se soltó la partida al cambiar de actividad. Se dice una vez y
+  // se va: un aviso que se queda ahí deja de leerse.
+  const [avisoPartida, setAvisoPartida] = useState('');
   const [filtroAvance, setFiltroAvance] = useState('todas');
 
   // Cerrado significa cosas distintas en una incidencia y en una actividad,
@@ -602,6 +606,12 @@ export default function GestionCosteo({
 
   const horasMaquina = String(horasDeLista(actividades));
   const volCalc = calcMetradoDe(actForm);
+  // La unidad de la partida elegida en la linea que se esta editando. Si hay
+  // partida, ella manda: el metrado se imputa a ELLA, y dejar elegir otra
+  // unidad solo sirve para que no sume y nadie sepa por que.
+  const partidaDeLaLinea = partidas.find(
+    x => String(x.id) === String(actForm.partidaId));
+  const unidadDePartida = partidaDeLaLinea ? partidaDeLaLinea.unidad : '';
   const volumenMetrado = round4(volCalc.val);
   const esActividadOtros = actForm.actividad === 'OTROS';
   const tieneMetradoActividad = IMG_METRADO[actForm.actividad] !== undefined || esActividadOtros;
@@ -2497,13 +2507,29 @@ export default function GestionCosteo({
                     <label className="tbl-form-label">Actividad realizada <span style={{color:'red'}}>*</span></label>
                     <select className="tbl-form-select" value={actForm.actividad} onChange={e => {
                         const v = e.target.value;
+                        // Cambiar de actividad cambia en qué se mide. Si la
+                        // partida ya elegida medía en otra cosa, se suelta y
+                        // se dice: dejarla puesta la volvería a dejar sin
+                        // sumar, que es justo lo que se quiere evitar.
+                        const base = { ...actForm, actividad: v };
+                        const nueva = calcMetradoDe({ ...base, calcularMetrado: true });
+                        if (partidaDeLaLinea && nueva.unit
+                            && normaUnidad(partidaDeLaLinea.unidad) !== normaUnidad(nueva.unit)) {
+                          base.partidaId = '';
+                          base.partidaCodigo = '';
+                          base.partidaDescripcion = '';
+                          setAvisoPartida(`Se quitó la partida ${partidaDeLaLinea.codigo}: `
+                            + `está en ${partidaDeLaLinea.unidad} y esto mide en ${nueva.unit}.`);
+                        } else {
+                          setAvisoPartida('');
+                        }
                         if (v === 'OTROS') {
                           // OTROS: sin fórmula ni medidas de campo, solo metrado manual.
-                          setActForm({ ...actForm, actividad: v, calcularMetrado: false,
+                          setActForm({ ...base, calcularMetrado: false,
                             longitud: '', altura: '', anchoSup: '', anchoInf: '', anchoBase: '', corona: '',
                             talud: '', hPromedio: '', nViajes: '', volTolva: '', fe: '1.25' });
                         } else {
-                          setActForm({ ...actForm, actividad: v, actividadOtros: '' });
+                          setActForm({ ...base, actividadOtros: '' });
                         }
                       }}>
                       <option value="">— Seleccionar actividad —</option>
@@ -2540,8 +2566,7 @@ export default function GestionCosteo({
                      camino completo sin tener que abrir dos combos que no
                      deciden nada. */}
                 {partidas.length > 0 && (() => {
-                  const norm = (u) => (u || '').toString().trim().toLowerCase()
-                    .replace('³', '3').replace('²', '2');
+                  const norm = normaUnidad;
                   const mv = calcMetradoDe(actForm);
                   const uAct = norm(mv.unit || actForm.unidadMetrado);
                   const sel = partidas.find(p => String(p.id) === String(actForm.partidaId));
@@ -2571,7 +2596,12 @@ export default function GestionCosteo({
                       // Copiados a propósito: si mañana se recarga el
                       // presupuesto, este parte sigue diciendo a qué se cargó.
                       partidaCodigo: p ? p.codigo : '',
-                      partidaDescripcion: p ? p.descripcion : '' });
+                      partidaDescripcion: p ? p.descripcion : '',
+                      // La unidad la manda la PARTIDA, que es a quien se le
+                      // imputa. Antes la ponía la actividad y se podían
+                      // teclear 1000 m³ contra una partida en glb: se
+                      // guardaba, avisaba en amarillo, y no sumaba nunca.
+                      unidadMetrado: p ? normaUnidad(p.unidad) : actForm.unidadMetrado });
                   };
 
                   // Al elegir un nivel se corta lo que había debajo y se
@@ -2608,15 +2638,25 @@ export default function GestionCosteo({
                         <div style={{ marginBottom:'4px' }}>
                           <label className="tbl-form-label">
                             {peldanos.length + 1} · Partida
+                            {uAct && (
+                              <small style={{ color:'#94a3b8', fontWeight:400 }}>
+                                {' '}· solo las que miden en {mv.unit || actForm.unidadMetrado}
+                              </small>
+                            )}
                           </label>
                           <select className="tbl-form-select" value={actForm.partidaId}
                             onChange={e => ponerPartida(e.target.value)}>
                             <option value="">— Elegir —</option>
-                            {hojas.map(p => (
-                              <option key={p.id} value={p.id}>
-                                {p.codigo} · {p.descripcion} ({p.unidad})
-                              </option>
-                            ))}
+                            {hojas.map(p => {
+                              const suya = norm(p.unidad);
+                              const vale = !uAct || suya === uAct;
+                              return (
+                                <option key={p.id} value={p.id} disabled={!vale}>
+                                  {p.codigo} · {p.descripcion} ({p.unidad})
+                                  {vale ? '' : ` — en ${p.unidad}, no se puede`}
+                                </option>
+                              );
+                            })}
                           </select>
                         </div>
                       )}
@@ -2629,18 +2669,26 @@ export default function GestionCosteo({
                             Saldo: <b>{fmtCant(sel.saldo ?? 0)} {sel.unidad}</b>
                           </span>
                         </div>
+                      ) : avisoPartida ? (
+                        <div style={{ marginTop:'8px', fontSize:'11.5px', color:'#b45309',
+                          background:'#fffbeb', border:'1px solid #fde68a',
+                          borderRadius:'6px', padding:'7px 9px' }}>
+                          {avisoPartida} Elige otra.
+                        </div>
                       ) : (
                         <div style={{ marginTop:'8px', fontSize:'11px', color:'#94a3b8' }}>
                           Sin partida: la actividad se guarda igual, pero su metrado no entra en el avance.
                         </div>
                       )}
+                      {/* Ya no deberia poder pasar: las que no cuadran salen
+                          deshabilitadas. Se queda por si una partida vieja
+                          quedo apuntada antes de esta regla, o si alguien
+                          cambia la actividad despues de elegirla. */}
                       {choca && (
-                        /* Se avisa, no se bloquea: bloquear en campo acaba en
-                           que apuntan cualquier cosa con tal de poder guardar. */
-                        <div style={{ marginTop:'8px', fontSize:'11.5px', color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'6px', padding:'7px 9px' }}>
-                          Esta actividad mide en <b>{mv.unit || actForm.unidadMetrado}</b> y la partida
-                          está en <b>{sel.unidad}</b>. Se guardará igual, pero ese metrado no sumará
-                          al avance de la partida.
+                        <div style={{ marginTop:'8px', fontSize:'11.5px', color:'#b91c1c', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'6px', padding:'7px 9px' }}>
+                          Esta línea mide en <b>{mv.unit || actForm.unidadMetrado}</b> y la partida
+                          está en <b>{sel.unidad}</b>. Ese metrado <b>no sumará</b> al avance.
+                          Elige otra partida o cambia la actividad.
                         </div>
                       )}
                     </div>
@@ -2693,11 +2741,25 @@ export default function GestionCosteo({
                               value={actForm.metradoManual}
                               onChange={e => setActForm({ ...actForm, metradoManual: e.target.value })}
                               style={{ width:'130px', textAlign:'right', fontWeight:700, color:'#1463A5' }} />
-                            <select className="tbl-form-select" value={actForm.unidadMetrado}
-                              onChange={e => setActForm({ ...actForm, unidadMetrado: e.target.value })}
-                              style={{ width:'80px' }}>
-                              {UNIDADES_METRADO.map(u => <option key={u} value={u}>{UNIDADES_METRADO_TXT[u]}</option>)}
-                            </select>
+                            {/* Con partida elegida la unidad es la suya y no
+                                hay nada que escoger: se imputa a ESA partida.
+                                Ademas hay partidas en «und», «mes» o «kg» que
+                                no estan en el combo, y sin esto no se les
+                                podria imputar nada. */}
+                            {unidadDePartida ? (
+                              <span style={{ width:'80px', padding:'7px 0',
+                                fontSize:'13px', fontWeight:700, color:'#475569',
+                                textAlign:'center' }}
+                                title="La unidad la pone la partida elegida">
+                                {unidadDePartida}
+                              </span>
+                            ) : (
+                              <select className="tbl-form-select" value={actForm.unidadMetrado}
+                                onChange={e => setActForm({ ...actForm, unidadMetrado: e.target.value })}
+                                style={{ width:'80px' }}>
+                                {UNIDADES_METRADO.map(u => <option key={u} value={u}>{UNIDADES_METRADO_TXT[u]}</option>)}
+                              </select>
+                            )}
                           </div>
                         </>
                       )}

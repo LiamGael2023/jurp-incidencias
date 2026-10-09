@@ -74,6 +74,20 @@ export const estadoInicialRecurso = {
   calcularMetrado: false, metradoManual: '', unidadMetrado: 'm3'
 };
 
+/**
+ * La unidad de una partida, con la ortografia del selector de metrado.
+ *
+ * El presupuesto escribe m³ y m², y el selector guarda m3 y m2. Comparar sin
+ * igualar primero daba que «m³» y «m3» eran unidades distintas, y el metrado
+ * no sumaba al avance sin que nada lo explicara.
+ *
+ * Devuelve la unidad tal cual si no es una de las cuatro que el selector
+ * conoce: una partida en «und» o en «mes» existe y hay que poder imputarle,
+ * aunque no haya opcion para ella en el combo.
+ */
+export const normaUnidad = (u) => (u || '').toString().trim().toLowerCase()
+  .replace('\u00b3', '3').replace('\u00b2', '2');
+
 export const UNIDADES_METRADO = ['m', 'm2', 'm3', 'glb'];
 
 export const UNIDADES_METRADO_TXT = { m: 'm', m2: 'm²', m3: 'm³', glb: 'glb' };

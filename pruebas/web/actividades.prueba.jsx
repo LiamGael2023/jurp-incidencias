@@ -1,7 +1,26 @@
 import { createRoot } from 'react-dom/client';
 import Actividades from '../../src/Actividades';
 import '../../src/Incidentes.css';
-import PARTIDAS from './partidas.json';
+import PARTIDAS_BASE from './partidas.json';
+// Tres partidas de la misma rama con unidades distintas: es lo que hace
+// visible si el selector deja elegir una que no cuadra.
+const PARTIDAS = PARTIDAS_BASE.concat([
+  { id: 9001, obra: 'Obras10_6', codigo: '01.02.01.90', descripcion: 'Prueba en m3',
+    unidad: 'm3', metrado: 100, precio: 10, ejecutado: 0, saldo: 100, avance: 0,
+    otras_unidades: {}, activo: true,
+    ruta: JSON.stringify([['01','RAIZ'],['01.02','ESTRUCTURAS DE TRATAMIENTO'],
+      ['01.02.01','TRABAJOS PRELIMINARES']]) },
+  { id: 9002, obra: 'Obras10_6', codigo: '01.02.01.91', descripcion: 'Prueba en m2',
+    unidad: 'm2', metrado: 50, precio: 4, ejecutado: 0, saldo: 50, avance: 0,
+    otras_unidades: {}, activo: true,
+    ruta: JSON.stringify([['01','RAIZ'],['01.02','ESTRUCTURAS DE TRATAMIENTO'],
+      ['01.02.01','TRABAJOS PRELIMINARES']]) },
+  { id: 9003, obra: 'Obras10_6', codigo: '01.02.01.92', descripcion: 'Prueba en glb',
+    unidad: 'glb', metrado: 1, precio: 5000, ejecutado: 0, saldo: 1, avance: 0,
+    otras_unidades: {}, activo: true,
+    ruta: JSON.stringify([['01','RAIZ'],['01.02','ESTRUCTURAS DE TRATAMIENTO'],
+      ['01.02.01','TRABAJOS PRELIMINARES']]) },
+]);
 
 const PROYECTOS = [{ id: 1, codigo: 'Obras10_6', nombre: 'TRATAMIENTO TOMA 10.6',
   partidas: 83, costo_directo: '1007949.21', suma_partidas: 1007949.21,
