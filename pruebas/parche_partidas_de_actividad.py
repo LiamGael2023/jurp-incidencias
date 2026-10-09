@@ -30,7 +30,10 @@ numero que nadie puso.
 QUE CAMBIA.
 
   models.py
-    + ActividadObra.partidas   M2M a Partida, related_name='actividades'
+    + ActividadObra.partidas   M2M a Partida
+                               related_name='actividades_obra' (el otro,
+                               'actividades', ya lo usa
+                               DailyPartActivity.partida)
                                blank=True: una actividad sin partidas se
                                sigue pudiendo guardar
 
@@ -83,8 +86,13 @@ CAMPO = '''
 {0}# Se guarda solo el vinculo, no un metrado programado por actividad: el
 {0}# Excel programa por partida y repartirlo entre actividades seria un
 {0}# numero inventado contra el que luego se compararia el avance.
+{0}#
+{0}# related_name='actividades_obra' y no 'actividades': ese ya lo usa
+{0}# DailyPartActivity.partida, y Django lo rechaza con fields.E304.
+{0}# Se descubrio aplicandolo en el servidor porque el mock de la prueba
+{0}# no llevaba ese related_name. El mock ya lo lleva.
 {0}partidas = models.ManyToManyField(
-{0}    "Partida", blank=True, related_name="actividades",
+{0}    "Partida", blank=True, related_name="actividades_obra",
 {0}    verbose_name="Partidas del presupuesto")
 '''
 
@@ -113,6 +121,12 @@ def parche_modelo(texto):
 
     if re.search(r"^\s*partidas\s*=\s*models\.ManyToManyField", cuerpo, re.M):
         return None, "ActividadObra ya tiene el campo partidas"
+
+    # Un related_name repetido no se nota al escribir el fichero: se nota al
+    # migrar, con un fields.E304 y la app entera sin arrancar. Mejor aqui.
+    if re.search(r'related_name\s*=\s*["\']actividades_obra["\']', texto):
+        return None, ("ya hay un related_name='actividades_obra' en models.py; "
+                      "elige otro antes de aplicar o Django rechazara la app")
 
     # Se cuelga detras de fecha_fin, que es el ultimo campo de datos antes de
     # created_at y de Meta.
@@ -354,7 +368,7 @@ def principal():
 
     print("models.py")
     print("    + ActividadObra.partidas  -> M2M a Partida")
-    print("      related_name='actividades', blank=True")
+    print("      related_name='actividades_obra', blank=True")
     print("")
     print("views_actividades_obra.py")
     print("    + el serializer devuelve partidas, presupuestado y")
