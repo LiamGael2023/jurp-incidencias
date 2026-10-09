@@ -8,10 +8,16 @@
 // porque estaba presupuestada. Meter las dos en la misma pantalla obligaría a
 // dejar medio formulario vacío en cada caso.
 //
-// EL PROYECTO NO TIENE CATÁLOGO PROPIO. Sale de las obras que tienen
-// presupuesto cargado (/partidas/obras/), que es la única fuente que existe.
-// Un segundo catálogo de proyectos sería una segunda verdad sobre lo mismo, y
-// el día que no coincidieran nadie sabría cuál mirar.
+// EL PROYECTO SE ELIGE ARRIBA, y sale de la pantalla de Proyectos, que es
+// donde se crea. Aquí no se puede crear uno: una actividad sin presupuesto
+// detrás no tiene partidas que imputar ni avance que medir, así que el orden
+// -proyecto, presupuesto, actividades- no es una recomendación.
+//
+// SE MANDAN LAS DOS COSAS, la clave del proyecto y su código de obra. El
+// backend nuevo filtra por la clave; el viejo ignora la clave y filtra por el
+// texto. Las dos dan el mismo conjunto, así que esta pantalla funciona igual
+// antes y después de desplegar el parche, y eso evita la media hora en que
+// una de las dos partes está puesta y la otra no.
 //
 // EL VALORIZADO que se muestra es metrado imputado × precio de la partida: lo
 // que se le cobra al cliente. NO es lo que cuesta mover la máquina, que es
@@ -53,13 +59,13 @@ const ESTADOS = {
 const estadoDe = (e) => ESTADOS[e] || ESTADOS.ejecucion;
 
 const VACIA = {
-  obra: '', nombre: '', descripcion: '', ubicacion_text: '',
+  proyecto_id: null, obra: '', nombre: '', descripcion: '', ubicacion_text: '',
   responsable: '', estado: 'ejecucion', fecha_inicio: '', fecha_fin: '',
 };
 
 export default function Actividades() {
-  const [obras, setObras] = useState([]);
-  const [obra, setObra] = useState('');
+  const [proyectos, setProyectos] = useState([]);
+  const [proId, setProId] = useState('');
   const [lista, setLista] = useState([]);
   const [resumen, setResumen] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -76,22 +82,31 @@ export default function Actividades() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${API}/partidas/obras/`);
+        const r = await fetch(`${API}/proyectos/`);
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const j = await r.json();
         const l = Array.isArray(j) ? j : [];
-        setObras(l);
-        if (l.length) setObra(o => o || l[0].obra);
+        setProyectos(l);
+        // Se abre en el primero que tenga presupuesto: abrir en uno vacío
+        // enseñaría una pantalla en blanco que parece un fallo.
+        const util = l.find(p => p.partidas > 0) || l[0];
+        if (util) setProId(i => i || String(util.id));
       } catch (e) {
-        setError('No se pudo leer la lista de obras. ' + e.message);
+        setError('No se pudo leer la lista de proyectos. ' + e.message);
       }
     })();
   }, []);
 
+  const pro = useMemo(
+    () => proyectos.find(p => String(p.id) === String(proId)) || null,
+    [proyectos, proId]);
+
   const cargar = useCallback(async () => {
     setCargando(true); setError('');
     try {
-      const q = obra ? `?obra=${encodeURIComponent(obra)}` : '';
+      // Las dos: la clave para el backend nuevo, el texto para el viejo.
+      const q = pro
+        ? `?proyecto=${pro.id}&obra=${encodeURIComponent(pro.codigo)}` : '';
       const [rl, rr] = await Promise.all([
         fetch(`${API}/actividades-obra/${q}`),
         fetch(`${API}/actividades-obra/resumen/${q}`),
@@ -105,9 +120,9 @@ export default function Actividades() {
     } catch (e) {
       setLista([]); setError(e.message || String(e));
     } finally { setCargando(false); }
-  }, [obra]);
+  }, [pro]);
 
-  useEffect(() => { if (obra) cargar(); }, [obra, cargar]);
+  useEffect(() => { if (pro) cargar(); }, [pro, cargar]);
 
   // ── derivados ─────────────────────────────────────────────────────────
   const visibles = useMemo(() => {
@@ -135,7 +150,10 @@ export default function Actividades() {
         nueva ? `${API}/actividades-obra/` : `${API}/actividades-obra/${editando.id}/`,
         { method: nueva ? 'POST' : 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...editando, obra: editando.obra || obra }) });
+          body: JSON.stringify({ ...editando,
+            // La clave y el texto, por lo mismo que en las consultas.
+            proyecto_id: editando.proyecto_id || (pro && pro.id),
+            obra: editando.obra || (pro && pro.codigo) }) });
       if (!r.ok) {
         let d = {}; try { d = await r.json(); } catch { d = {}; }
         throw new Error(d.detail || JSON.stringify(d).slice(0, 160));
@@ -193,26 +211,30 @@ export default function Actividades() {
             <FaHardHat color="#1463A5" /> Actividades
           </h2>
           <div style={{ fontSize:'12.5px', color:'#64748b', marginTop:'3px' }}>
-            {obras.find(o => o.obra === obra)?.proyecto
+            {(pro && pro.nombre)
               || 'Trabajo programado, con sus partes diarios y su avance contra el presupuesto.'}
           </div>
         </div>
         <div style={{ display:'flex', gap:'9px', alignItems:'flex-end', flexWrap:'wrap' }}>
           <label style={{ fontSize:'11px', fontWeight:700, color:'#64748b' }}>
-            <div style={{ marginBottom:'4px' }}>OBRA</div>
-            <select value={obra} onChange={e => setObra(e.target.value)}
-              style={ctrl({ minWidth:'190px' })}>
-              {obras.length === 0 && <option value="">— sin presupuesto cargado —</option>}
-              {obras.map(o => (
-                <option key={o.obra} value={o.obra}>{o.obra} ({o.partidas})</option>
+            <div style={{ marginBottom:'4px' }}>PROYECTO</div>
+            <select value={proId} onChange={e => setProId(e.target.value)}
+              style={ctrl({ minWidth:'240px', maxWidth:'340px' })}>
+              {proyectos.length === 0 && <option value="">— todavía no hay proyectos —</option>}
+              {proyectos.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.codigo} — {p.nombre}
+                  {p.partidas ? ` (${p.partidas} partidas)` : ' (sin presupuesto)'}
+                </option>
               ))}
             </select>
           </label>
           <button onClick={cargar} disabled={cargando} style={btnSec}>
             <FaSyncAlt size={11} className={cargando ? 'icon-spin' : ''} /> Actualizar
           </button>
-          <button onClick={() => setEditando({ ...VACIA, obra })} disabled={!obra}
-            style={btnPri}>
+          <button onClick={() => setEditando({ ...VACIA,
+              proyecto_id: pro && pro.id, obra: pro && pro.codigo })}
+            disabled={!pro} style={btnPri}>
             <FaPlus size={11} /> Nueva actividad
           </button>
         </div>
@@ -288,7 +310,7 @@ export default function Actividades() {
             <div style={{ padding:'44px 24px', textAlign:'center', color:'#64748b',
               fontSize:'13px', lineHeight:1.6 }}>
               {lista.length === 0
-                ? <>No hay actividades en esta obra todavía.<br />
+                ? <>No hay actividades en este proyecto todavía.<br />
                     <span style={{ color:'#94a3b8' }}>
                       Crea la primera con «Nueva actividad». Después le cuelgas los partes
                       diarios y el avance sale solo.</span></>
@@ -389,7 +411,8 @@ export default function Actividades() {
                   <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
                     {editando.id
                       ? editando.codigo
-                      : `En ${editando.obra || obra}. El código se asigna solo.`}
+                      : `En ${editando.obra || (pro && pro.codigo) || '—'}. `
+                        + 'El código se asigna solo.'}
                   </div>
                 </div>
                 <button onClick={() => setEditando(null)} style={btnCerrar}><FaTimes /></button>
