@@ -662,7 +662,12 @@ export default function Actividades() {
           bloqueado: gestionando.estado === 'terminada',
           textoCerrado: 'Actividad terminada',
           textoCerrar: 'Terminar actividad',
-          tituloCerrar: 'Cierra los partes, libera las máquinas y bloquea el costeo',
+          // Dice lo que hace de verdad. Terminar una actividad bloquea su
+          // costeo, pero -a diferencia de cerrar una incidencia- todavia NO
+          // cierra sus partes ni libera las maquinas: eso necesita un
+          // endpoint propio que aun no existe. Prometerlo aqui dejaria
+          // maquinas ocupadas que nadie sabria por que no se pueden asignar.
+          tituloCerrar: 'Bloquea el costeo de esta actividad',
         }}
         campoVinculo="actividad_obra"
         onCerrar={() => setGestionando(null)}
