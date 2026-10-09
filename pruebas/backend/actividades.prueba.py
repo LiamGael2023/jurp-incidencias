@@ -309,5 +309,39 @@ print('\n== UNA ACTIVIDAD QUE NO EXISTE ==')
 ok(c.post('/act/99999/cerrar-partes/').status_code == 404, 'terminar da 404')
 ok(c.post('/act/99999/reabrir/').status_code == 404, 'reabrir da 404')
 
+
+print('\n== UNA SOLA PARTIDA ==')
+# El caso que fallaba: la lista de un elemento se aplanaba a un numero suelto
+# y el alta respondia "tienen que venir como ids" habiendo mandado ids. Con
+# dos o mas nunca paso, y por eso no se veia.
+r = c.post('/act/', {'proyecto_id': a.id, 'nombre': 'Con una sola',
+                     'partidas': [p1.id]}, format='json')
+ok(r.status_code == 201, 'se crea con UNA partida', 
+   r.status_code if r.status_code == 201 else r.data)
+if r.status_code == 201:
+    una = ActividadObra.objects.get(pk=r.data['id'])
+    ok(list(una.partidas.values_list('id', flat=True)) == [p1.id],
+       'y queda enganchada', list(una.partidas.values_list('codigo', flat=True)))
+    ok(abs(r.data['presupuestado'] - round(173.54 * 6.72, 2)) < 0.01,
+       'con su presupuestado', r.data['presupuestado'])
+
+print('\n== SIN NINGUNA PARTIDA ==')
+r = c.post('/act/', {'proyecto_id': a.id, 'nombre': 'Sin ninguna',
+                     'partidas': []}, format='json')
+ok(r.status_code == 201, 'tambien se crea', r.status_code)
+ok(r.data.get('presupuestado') == 0, 'con presupuestado 0', r.data.get('presupuestado'))
+
+print('\n== Y LOS CAMPOS NORMALES SIGUEN APLANANDOSE ==')
+# Un formulario manda cada campo como lista de uno. Si se dejara de aplanar,
+# el nombre llegaria como ['x'] y se guardaria con corchetes.
+r = c.post('/act/', {'proyecto_id': str(a.id), 'nombre': 'Desde formulario',
+                     'ubicacion_text': 'Prog 1+000'})
+ok(r.status_code == 201, 'alta por formulario', r.status_code)
+if r.status_code == 201:
+    f = ActividadObra.objects.get(pk=r.data['id'])
+    ok(f.nombre == 'Desde formulario', 'el nombre llega limpio, sin corchetes',
+       repr(f.nombre))
+    ok(f.ubicacion_text == 'Prog 1+000', 'y la zona tambien', repr(f.ubicacion_text))
+
 print('\n' + ('>>> %d FALLAN' % fallos if fallos else '>>> TODO BIEN') + '\n')
 sys.exit(1 if fallos else 0)

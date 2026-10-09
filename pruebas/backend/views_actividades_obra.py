@@ -187,6 +187,14 @@ def actividades_obra(request):
 
     datos = dict(request.data)
     for k, v in list(datos.items()):
+        # 'partidas' es una lista de verdad, no un campo de formulario que
+        # llega envuelto. Aplanarla cuando trae UNA sola la convertia en un
+        # numero suelto, y la comprobacion de abajo petaba con un TypeError
+        # que salia por pantalla como "tienen que venir como ids" - correcto
+        # y completamente inutil, porque el que lo leia habia mandado ids.
+        # Con dos o mas no pasaba, que es lo que lo hacia dificil de ver.
+        if k == "partidas":
+            continue
         if isinstance(v, list) and len(v) == 1:
             datos[k] = v[0]
 
