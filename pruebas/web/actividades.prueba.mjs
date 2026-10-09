@@ -54,43 +54,36 @@ ok(t2.includes('Reabrir'), 'con el botón de reabrir');
 ok(/EX02, CG01/.test(t2), 'y dice qué máquinas quedaron libres',
    (t2.match(/[^\n]*libres[^\n]*/) || [''])[0]);
 
-console.log('\n== EL PARTE SOLO OFRECE SUS PARTIDAS ==');
+console.log('\n== LA FICHA ENSENA LO QUE IMPUTARON LOS PARTES ==');
 await pag.goto('http://localhost:5199/pruebas/web/actividades.html',
   { waitUntil: 'networkidle' });
 await pag.waitForTimeout(900);
-await pag.locator('button[title="Costeo y partes diarios"]').first().click();
-await pag.waitForTimeout(1400);
-// abrir el parte diario de la maquina y de ahi una actividad del parte
-await pag.locator('button', { hasText: 'Parte Diario' }).first().click();
-await pag.waitForTimeout(800);
-await pag.locator('button', { hasText: 'Agregar actividad' }).first().click();
-await pag.waitForTimeout(800);
-const tp = await pag.locator('body').innerText();
-ok(/Solo las 2 que esta actividad ejecuta/i.test(tp),
-   'dice que solo ofrece las de la actividad',
-   (tp.match(/Solo las[^\n]*/) || [''])[0]);
-// El ultimo combo es el de las partidas. No se busca por codigo: cuales
-// sean depende del mock, y lo que importa es CUANTAS se ofrecen.
-const combos = await pag.locator('select.tbl-form-select').all();
-const hojas = combos[combos.length - 1];
-const ops = await hojas.locator('option').allInnerTexts();
-const n = ops.filter(x => !/Elegir/.test(x)).length;
-ok(n === 2, 'el combo ofrece 2 partidas, no las 83 del presupuesto',
-   ops.map(x => x.split(' ·')[0]).join(', '));
-// y la escalera bajo sola hasta donde habia que decidir
-ok(combos.length >= 5, 'y bajo sola por los niveles de una sola opcion',
-   combos.length + ' combos');
-
-console.log('\n== PERO SE PUEDE ABRIR A TODAS ==');
-await pag.locator('input[type=checkbox]').filter({ hasNot: pag.locator('[disabled]') })
-  .last().check().catch(async () => {
-    await pag.getByText('Ver todas las del presupuesto').click();
-  });
+await pag.locator('td', { hasText: 'Excavacion de la caja' }).first().click();
 await pag.waitForTimeout(700);
-const tp2 = await pag.locator('body').innerText();
-ok(/83 partidas · esta actividad declara 2/.test(tp2),
-   'y entonces dice cuantas hay y cuantas declara',
-   (tp2.match(/\d+ partidas · [^\n]*/) || [''])[0]);
+const tf = await pag.locator('body').innerText();
+ok(/Esta actividad/i.test(tf) && /toda la obra/i.test(tf),
+   'separa lo de la actividad de lo de la obra');
+ok(/Imputado/i.test(tf) && /Valorizado/i.test(tf), 'con sus dos columnas');
+ok(tf.includes('01.02.04.01.01'), 'la partida tocada');
+ok(/Partidas tocadas/i.test(tf), 'la tarjeta cuenta las tocadas');
+ok(!/Presupuestado/i.test(tf), 'y ya no hay «presupuestado» inventado',
+   (tf.match(/Presupuestado[^\n]*/) || [''])[0]);
+ok(/73\.54/.test(tf), 'el saldo es el de la obra', (tf.match(/73[^\n]*/)||[''])[0]);
+await pag.screenshot({ path: DIR + '/ficha-partes.png' });
+
+console.log('\n== Y EL FORMULARIO YA NO PIDE PARTIDAS ==');
+await pag.keyboard.press('Escape');
+await pag.goto('http://localhost:5199/pruebas/web/actividades.html',
+  { waitUntil: 'networkidle' });
+await pag.waitForTimeout(800);
+await pag.locator('button', { hasText: 'Nueva actividad' }).click();
+await pag.waitForTimeout(600);
+const tn = await pag.locator('body').innerText();
+ok(!/partidas que ejecuta/i.test(tn),
+   'no hay bloque de declaración en el alta',
+   (tn.match(/[^\n]*ejecuta[^\n]*/) || [''])[0]);
+ok(/ACTIVIDAD/.test(tn) && /ZONA/.test(tn), 'pero el formulario sigue entero');
+await pag.screenshot({ path: DIR + '/alta-simple.png' });
 
 console.log('\n== CONSOLA ==');
 const graves = err.filter(e => !/favicon|ResizeObserver|ERR_TUNNEL|fonts.googleapis/.test(e));

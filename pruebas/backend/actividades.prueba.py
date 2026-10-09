@@ -145,7 +145,9 @@ ok(r.status_code == 200 and r.data == [], 'devuelve vacio, no un error',
    r.status_code)
 
 
-print('\n== PARTIDAS DE LA ACTIVIDAD ==')
+print('\n== EL M2M SIGUE GUARDANDO, PERO YA NO SE ENSENA ==')
+# El campo se queda por si manana se quiere volver a declarar lo previsto y
+# compararlo con lo tocado. Hoy no alimenta nada de lo que sale por pantalla.
 p1 = Partida.objects.create(obra='Obras10_6', proyecto_ref=a, codigo='01.02.04.01.01',
     descripcion='Excavacion manual', unidad='m3', metrado=173.54, precio=6.72)
 p2 = Partida.objects.create(obra='Obras10_6', proyecto_ref=a, codigo='01.02.04.01.02',
@@ -155,19 +157,14 @@ ajena = Partida.objects.create(obra='TOMA-11', proyecto_ref=b, codigo='01.01',
 
 r = c.post('/act/', {'proyecto_id': a.id, 'nombre': 'Excavar la caja',
                      'partidas': [p1.id, p2.id]}, format='json')
-ok(r.status_code == 201, 'creada con partidas', r.status_code)
+ok(r.status_code == 201, 'se sigue aceptando', r.status_code)
 act3 = ActividadObra.objects.get(pk=r.data['id'])
 ok(set(act3.partidas.values_list('id', flat=True)) == {p1.id, p2.id},
-   'las dos quedaron enganchadas',
-   list(act3.partidas.values_list('codigo', flat=True)))
-esperado = round(173.54 * 6.72 + 50 * 4, 2)
-ok(abs(r.data['presupuestado'] - esperado) < 0.01, 'presupuestado = suma metrado x precio',
-   '%s vs %s' % (r.data['presupuestado'], esperado))
-det = r.data['partidas_detalle']
-ok(len(det) == 2 and det[0]['codigo'] == '01.02.04.01.01', 'detalle ordenado por codigo',
-   [d['codigo'] for d in det])
-ok(det[0]['unidad'] == 'm3' and abs(det[0]['importe'] - 1166.19) < 0.01,
-   'el detalle trae unidad e importe', det[0])
+   'y se guarda', list(act3.partidas.values_list('codigo', flat=True)))
+ok(r.data['partidas_detalle'] == [],
+   'pero el detalle NO sale de ahi: sin partes, no hay partidas',
+   r.data['partidas_detalle'])
+ok(r.data['presupuestado'] == 0, 'ni presupuestado', r.data['presupuestado'])
 
 print('\n== PARTIDA DE OTRO PROYECTO ==')
 r = c.post('/act/', {'proyecto_id': a.id, 'nombre': 'Mezcla',
@@ -214,57 +211,8 @@ d = c.get('/act/?proyecto=%d' % a.id).data
 fila = [x for x in d if x['id'] == act3.id][0]
 ok(abs(fila['avance']['valorizado'] - 80.0) < 0.01, '20 m2 x 4 = 80',
    fila['avance'])
-ok(abs(fila['presupuestado'] - 200.0) < 0.01, 'contra 200 presupuestados',
+ok(fila['presupuestado'] == 0, 'sin denominador propio: la partida se reparte',
    fila['presupuestado'])
-
-
-print('\n== EJECUTADO Y SALDO POR PARTIDA ==')
-# p1: 173.54 m3 a 6.72. Dos partes imputan 40 y 60 m3 -> 100 hechos, 73.54 de saldo
-act4 = ActividadObra.objects.create(obra='Obras10_6', proyecto_ref=a, nombre='Excavar',
-                                    codigo='ACT-9001')
-act4.partidas.set([p1.id, p2.id])
-pa = DailyPartHeavyEquipment.objects.create(actividad_obra=act4)
-DailyPartActivity.objects.create(parte=pa, partida=p1, metrado=40, metrado_unidad='m3')
-DailyPartActivity.objects.create(parte=pa, partida=p1, metrado=60, metrado_unidad='m3')
-# una linea en OTRA unidad: no debe sumar
-DailyPartActivity.objects.create(parte=pa, partida=p1, metrado=999, metrado_unidad='m2')
-
-d = c.get('/act/?proyecto=%d' % a.id).data
-fila = [x for x in d if x['id'] == act4.id][0]
-det = {x['codigo']: x for x in fila['partidas_detalle']}
-e1 = det['01.02.04.01.01']
-ok(abs(e1['ejecutado'] - 100) < 0.001, 'ejecutado suma las dos lineas', e1['ejecutado'])
-ok(abs(e1['saldo'] - 73.54) < 0.001, 'saldo = 173.54 - 100', e1['saldo'])
-ok(abs(e1['avance'] - 100 / 173.54 * 100) < 0.02, 'avance %', e1['avance'])
-ok(abs(e1['valorizado'] - 672.0) < 0.01, 'valorizado 100 x 6.72', e1['valorizado'])
-ok(abs(e1['importe'] - 1166.19) < 0.01, 'importe presupuestado intacto', e1['importe'])
-# p2 ya llevaba 20 m2 imputados por el parte de la prueba anterior: el
-# ejecutado es de la OBRA, asi que esta actividad tambien los ve.
-e2 = det['01.02.04.01.02']
-ok(abs(e2['ejecutado'] - 20) < 0.001 and abs(e2['saldo'] - 30) < 0.001,
-   'arrastra lo que ya habia imputado otra actividad', (e2['ejecutado'], e2['saldo']))
-
-print('\n== EL SALDO ES DE LA OBRA, NO DE LA ACTIVIDAD ==')
-otra = ActividadObra.objects.create(obra='Obras10_6', proyecto_ref=a,
-                                    nombre='Otra que no toco nada', codigo='ACT-9002')
-otra.partidas.set([p1.id])
-d = c.get('/act/?proyecto=%d' % a.id).data
-f2 = [x for x in d if x['id'] == otra.id][0]
-o1 = f2['partidas_detalle'][0]
-ok(abs(o1['ejecutado'] - 100) < 0.001,
-   'otra actividad ve lo mismo ejecutado', o1['ejecutado'])
-ok(abs(o1['saldo'] - 73.54) < 0.001, 'y el mismo saldo', o1['saldo'])
-
-print('\n== PARTIDA CON METRADO 0 ==')
-cero = Partida.objects.create(obra='Obras10_6', proyecto_ref=a, codigo='99.99',
-    descripcion='Sin metrado', unidad='glb', metrado=0, precio=10)
-act5 = ActividadObra.objects.create(obra='Obras10_6', proyecto_ref=a, nombre='X',
-                                    codigo='ACT-9003')
-act5.partidas.set([cero.id])
-d = c.get('/act/?proyecto=%d' % a.id).data
-f3 = [x for x in d if x['id'] == act5.id][0]
-ok(f3['partidas_detalle'][0]['avance'] is None, 'avance None, no division por cero',
-   f3['partidas_detalle'][0]['avance'])
 
 
 print('\n== TERMINAR CIERRA LOS PARTES Y LIBERA LAS MAQUINAS ==')
@@ -322,8 +270,8 @@ if r.status_code == 201:
     una = ActividadObra.objects.get(pk=r.data['id'])
     ok(list(una.partidas.values_list('id', flat=True)) == [p1.id],
        'y queda enganchada', list(una.partidas.values_list('codigo', flat=True)))
-    ok(abs(r.data['presupuestado'] - round(173.54 * 6.72, 2)) < 0.01,
-       'con su presupuestado', r.data['presupuestado'])
+    ok(r.data['presupuestado'] == 0,
+       'y presupuestado 0: no sale del M2M', r.data['presupuestado'])
 
 print('\n== SIN NINGUNA PARTIDA ==')
 r = c.post('/act/', {'proyecto_id': a.id, 'nombre': 'Sin ninguna',
@@ -342,6 +290,69 @@ if r.status_code == 201:
     ok(f.nombre == 'Desde formulario', 'el nombre llega limpio, sin corchetes',
        repr(f.nombre))
     ok(f.ubicacion_text == 'Prog 1+000', 'y la zona tambien', repr(f.ubicacion_text))
+
+
+print('\n== LAS PARTIDAS SALEN DE LOS PARTES ==')
+pA = Partida.objects.create(obra='Obras10_6', proyecto_ref=a, codigo='01.02.04.01.01',
+    descripcion='Excavacion manual', unidad='m3', metrado=173.54, precio=6.72)
+pB = Partida.objects.create(obra='Obras10_6', proyecto_ref=a, codigo='01.02.04.01.02',
+    descripcion='Refine', unidad='m2', metrado=50, precio=4)
+
+mia = ActividadObra.objects.create(obra='Obras10_6', proyecto_ref=a,
+                                   nombre='La que imputa', codigo='ACT-9200')
+otra = ActividadObra.objects.create(obra='Obras10_6', proyecto_ref=a,
+                                    nombre='Otra actividad', codigo='ACT-9201')
+parte_mio = DailyPartHeavyEquipment.objects.create(actividad_obra=mia)
+parte_otro = DailyPartHeavyEquipment.objects.create(actividad_obra=otra)
+# esta actividad imputa 40 m3 a pA, en dos lineas
+DailyPartActivity.objects.create(parte=parte_mio, partida=pA, metrado=25, metrado_unidad='m3')
+DailyPartActivity.objects.create(parte=parte_mio, partida=pA, metrado=15, metrado_unidad='m3')
+# y 999 en OTRA unidad, que no debe contar
+DailyPartActivity.objects.create(parte=parte_mio, partida=pA, metrado=999, metrado_unidad='m2')
+# otra actividad imputa 60 m3 a la MISMA partida
+DailyPartActivity.objects.create(parte=parte_otro, partida=pA, metrado=60, metrado_unidad='m3')
+# y nadie toca pB
+
+d = c.get('/act/?proyecto=%d' % a.id).data
+fila = [x for x in d if x['id'] == mia.id][0]
+det = fila['partidas_detalle']
+ok(len(det) == 1, 'solo sale la partida que ESTA actividad toco', len(det))
+x = det[0]
+ok(x['codigo'] == '01.02.04.01.01', 'y es la correcta', x['codigo'])
+ok(abs(x['imputado'] - 40) < 0.001, 'imputado por esta actividad: 25 + 15', x['imputado'])
+ok(abs(x['valorizado'] - 268.8) < 0.01, 'valorizado 40 x 6.72', x['valorizado'])
+ok(abs(x['ejecutado'] - 100) < 0.001, 'ejecutado de TODA la obra: 40 + 60', x['ejecutado'])
+ok(abs(x['saldo'] - 73.54) < 0.001, 'saldo de la obra: 173.54 - 100', x['saldo'])
+ok(abs(x['metrado'] - 173.54) < 0.001, 'y el metrado presupuestado', x['metrado'])
+ok(fila['presupuestado'] == 0, 'presupuestado 0: no hay denominador propio',
+   fila['presupuestado'])
+
+print('\n== LO IMPUTADO EN OTRA UNIDAD NO SE CUELA ==')
+ok(abs(x['imputado'] - 40) < 0.001, 'los 999 m2 no suman a una partida en m3',
+   x['imputado'])
+
+print('\n== LA OTRA ACTIVIDAD VE SU PARTE Y EL MISMO SALDO ==')
+f2 = [x for x in d if x['id'] == otra.id][0]
+y = f2['partidas_detalle'][0]
+ok(abs(y['imputado'] - 60) < 0.001, 'ella imputo 60', y['imputado'])
+ok(abs(y['saldo'] - 73.54) < 0.001, 'y ve el mismo saldo de obra', y['saldo'])
+
+print('\n== UNA ACTIVIDAD SIN PARTES ==')
+sola = ActividadObra.objects.create(obra='Obras10_6', proyecto_ref=a,
+                                    nombre='Sin partes', codigo='ACT-9202')
+d = c.get('/act/?proyecto=%d' % a.id).data
+f3 = [x for x in d if x['id'] == sola.id][0]
+ok(f3['partidas_detalle'] == [], 'no trae partidas', f3['partidas_detalle'])
+ok(f3['presupuestado'] == 0, 'ni presupuestado')
+
+print('\n== UN PARTE SIN PARTIDA IMPUTADA ==')
+vacia = ActividadObra.objects.create(obra='Obras10_6', proyecto_ref=a,
+                                     nombre='Parte sin partida', codigo='ACT-9203')
+pv = DailyPartHeavyEquipment.objects.create(actividad_obra=vacia)
+DailyPartActivity.objects.create(parte=pv, partida=None, metrado=10, metrado_unidad='m3')
+d = c.get('/act/?proyecto=%d' % a.id).data
+f4 = [x for x in d if x['id'] == vacia.id][0]
+ok(f4['partidas_detalle'] == [], 'no inventa una partida', f4['partidas_detalle'])
 
 print('\n' + ('>>> %d FALLAN' % fallos if fallos else '>>> TODO BIEN') + '\n')
 sys.exit(1 if fallos else 0)

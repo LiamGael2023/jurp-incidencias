@@ -32,9 +32,7 @@ import {
   FaCubes, FaMapMarkerAlt, FaUserTie, FaCalendarAlt, FaSpinner, FaListOl,
   FaFileInvoice,
 } from 'react-icons/fa';
-import EscaleraPartida from './SelectorPartida';
 import GestionCosteo from './GestionCosteo';
-import { bajarSolo } from './arbolPartidas';
 
 const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
@@ -67,7 +65,6 @@ const estadoDe = (e) => ESTADOS[e] || ESTADOS.ejecucion;
 
 const VACIA = {
   proyecto_id: null, obra: '', nombre: '', descripcion: '', ubicacion_text: '',
-  partidas: [],
   responsable: '', estado: 'ejecucion', fecha_inicio: '', fecha_fin: '',
 };
 
@@ -80,12 +77,6 @@ export default function Actividades() {
   const [error, setError] = useState('');
   const [filtro, setFiltro] = useState('todas');
   const [busca, setBusca] = useState('');
-
-  // El presupuesto del proyecto, para el selector en escalera. Se trae una
-  // vez por proyecto y se filtra en memoria: bajar por el árbol son muchos
-  // clics y ninguno merece una ida al servidor.
-  const [partidasPro, setPartidasPro] = useState([]);
-  const [camino, setCamino] = useState([]);
 
   const [editando, setEditando] = useState(null);   // objeto o null
   const [guardando, setGuardando] = useState(false);
@@ -145,24 +136,6 @@ export default function Actividades() {
 
   useEffect(() => { if (pro) cargar(); }, [pro, cargar]);
 
-  // Si el endpoint no estuviera, la lista queda vacía y el bloque de
-  // partidas no se dibuja: vale más un formulario sin partidas que un
-  // formulario que revienta entero.
-  useEffect(() => {
-    if (!pro) { setPartidasPro([]); return; }
-    let vivo = true;
-    (async () => {
-      try {
-        const r = await fetch(
-          `${API}/partidas/?obra=${encodeURIComponent(pro.codigo)}`);
-        if (!r.ok) return;
-        const d = await r.json();
-        if (vivo) setPartidasPro(Array.isArray(d) ? d : (d.partidas || []));
-      } catch { /* sin partidas se sigue */ }
-    })();
-    return () => { vivo = false; };
-  }, [pro]);
-
   // ── derivados ─────────────────────────────────────────────────────────
   const visibles = useMemo(() => {
     const t = busca.trim().toLowerCase();
@@ -192,11 +165,7 @@ export default function Actividades() {
           body: JSON.stringify({ ...editando,
             // La clave y el texto, por lo mismo que en las consultas.
             proyecto_id: editando.proyecto_id || (pro && pro.id),
-            obra: editando.obra || (pro && pro.codigo),
-            // El backend espera ids. Van siempre, también vacío: así quitar
-            // la última partida se guarda de verdad.
-            partidas: (editando.partidas || []).map(x => parseInt(x, 10))
-              .filter(x => !isNaN(x)) }) });
+            obra: editando.obra || (pro && pro.codigo) }) });
       if (!r.ok) {
         let d = {}; try { d = await r.json(); } catch { d = {}; }
         throw new Error(d.detail || JSON.stringify(d).slice(0, 160));
@@ -315,9 +284,8 @@ export default function Actividades() {
           <button onClick={cargar} disabled={cargando} style={btnSec}>
             <FaSyncAlt size={11} className={cargando ? 'icon-spin' : ''} /> Actualizar
           </button>
-          <button onClick={() => { setCamino(bajarSolo(partidasPro, []));
-              setEditando({ ...VACIA, proyecto_id: pro && pro.id,
-                obra: pro && pro.codigo }); }}
+          <button onClick={() => setEditando({ ...VACIA,
+              proyecto_id: pro && pro.id, obra: pro && pro.codigo })}
             disabled={!pro} style={btnPri}>
             <FaPlus size={11} /> Nueva actividad
           </button>
@@ -471,24 +439,22 @@ export default function Actividades() {
                         <td style={{ padding:'10px 12px', textAlign:'right',
                           color: a.partes ? '#1e293b' : '#cbd5e1', fontWeight:600 }}>
                           {a.partes}</td>
-                        {/* Los dos números, no solo el de arriba. S/ 80
-                            valorizados no dicen nada; S/ 80 de S/ 200 sí. */}
+                        {/* Solo lo valorizado. No hay porcentaje porque no
+                            hay denominador: una partida se reparte entre
+                            varias actividades y ninguna sabe cuánto le toca.
+                            Un % inventado parecería bueno sin significar
+                            nada. */}
                         <td style={{ padding:'10px 12px', textAlign:'right',
                           whiteSpace:'nowrap' }}>
                           <div style={{ fontWeight:700,
                             color: a.avance?.valorizado ? '#1463A5' : '#cbd5e1' }}>
                             {soles(a.avance?.valorizado)}
                           </div>
-                          {a.presupuestado > 0 ? (
+                          {(a.partidas_detalle || []).length > 0 && (
                             <div style={{ fontSize:'10.5px', color:'#94a3b8',
                               marginTop:'1px' }}>
-                              de {soles(a.presupuestado)} ·{' '}
-                              {((a.avance?.valorizado || 0) / a.presupuestado * 100)
-                                .toFixed(1)}%
+                              en {a.partidas_detalle.length} partida(s)
                             </div>
-                          ) : (
-                            <div style={{ fontSize:'10.5px', color:'#d97706',
-                              marginTop:'1px' }}>sin partidas</div>
                           )}
                         </td>
                         <td style={{ padding:'10px 12px' }}>
@@ -506,8 +472,7 @@ export default function Actividades() {
                             title="Costeo y partes diarios"
                             style={{ ...btnIco, color:'#059669' }}><FaFileInvoice size={12} /></button>
                           <button onClick={e => { e.stopPropagation();
-                            setCamino(bajarSolo(partidasPro, []));
-                            setEditando({ ...a, partidas: (a.partidas || []).map(String) }); }}
+                            setEditando({ ...a }); }}
                             title="Editar" style={btnIco}><FaEdit size={13} /></button>
                           <button onClick={e => { e.stopPropagation(); borrar(a, false); }}
                             title="Eliminar" style={{ ...btnIco, color:'#dc2626' }}>
@@ -601,78 +566,6 @@ export default function Actividades() {
                     </select>
                   </Campo>
                 </div>
-
-                {/* ── Partidas del presupuesto ────────────────────────────
-                    Es lo que esta actividad va a ejecutar. No es un adorno:
-                    sin partidas no hay contra qué medir -solo se sabría lo
-                    que lleva hecho, no si va al 10% o al 90%- y el que llene
-                    el parte tendrá que elegir entre las 83 del presupuesto
-                    entero en vez de entre las tres que tocan.
-
-                    Se puede guardar sin ninguna. Obligarlas acabaría en que
-                    se elige cualquiera con tal de poder guardar, que es peor
-                    que no tener ninguna. */}
-                {partidasPro.length > 0 && (() => {
-                  const puestas = (editando.partidas || []).map(String);
-                  const porId = new Map(partidasPro.map(p => [String(p.id), p]));
-                  const elegidas = puestas.map(i => porId.get(i)).filter(Boolean);
-                  // Al elegir la partida se agrega y la escalera vuelve
-                  // arriba, lista para la siguiente. El paso de «agregar» no
-                  // decidía nada: la lista de abajo ya es la confirmación.
-                  const agregar = (id) => {
-                    if (!id || puestas.includes(String(id))) return;
-                    setEditando({ ...editando, partidas: puestas.concat([String(id)]) });
-                    setCamino(bajarSolo(partidasPro, []));
-                  };
-                  const quitar = (id) => setEditando({ ...editando,
-                    partidas: puestas.filter(x => x !== String(id)) });
-
-                  return (
-                    <div style={{ background:'#fff', border:'1px solid #e2e8f0',
-                      borderRadius:'9px', padding:'13px 14px', marginBottom:'13px' }}>
-                      <div style={{ fontSize:'11px', fontWeight:700, color:'#475569',
-                        textTransform:'uppercase', letterSpacing:'.03em',
-                        marginBottom:'3px', display:'flex', alignItems:'center',
-                        gap:'7px' }}>
-                        <FaListOl size={11} color="#1463A5" /> Partidas que ejecuta
-                      </div>
-                      <div style={{ fontSize:'11.5px', color:'#94a3b8',
-                        marginBottom:'10px', lineHeight:1.5 }}>
-                        Baja por el árbol del presupuesto. Al elegir la partida se
-                        añade abajo y puedes seguir con la siguiente.
-                      </div>
-
-                      <EscaleraPartida
-                        partidas={partidasPro}
-                        camino={camino}
-                        onCamino={setCamino}
-                        valor=""
-                        onElegir={agregar}
-                        ocultar={puestas}
-                        compacto />
-
-                      {elegidas.length > 0 && (
-                        <div style={{ marginTop:'13px', borderTop:'1px solid #f1f5f9',
-                          paddingTop:'11px', overflowX:'auto' }}>
-                          <TablaPartidas filas={elegidas} onQuitar={quitar} />
-                        </div>
-                      )}
-
-                    </div>
-                  );
-                })()}
-
-                {partidasPro.length === 0 && (
-                  <div style={recuadro('#fffbeb', '#fde68a', '#92400e')}>
-                    <FaExclamationTriangle style={{ marginTop:'2px', flexShrink:0 }} />
-                    <span>
-                      Este proyecto no tiene presupuesto cargado, así que no hay
-                      partidas que elegir. La actividad se guarda igual, pero su
-                      avance será siempre cero hasta que importes el Excel desde
-                      Proyectos.
-                    </span>
-                  </div>
-                )}
 
                 {/* Las fechas son REALES, no programadas, y conviene decirlo:
                     si alguien las lee como previstas, cualquier informe que
@@ -769,12 +662,9 @@ export default function Actividades() {
                     valor={soles(detalle.avance?.valorizado)}
                     pie="al precio del presupuesto"
                     color="#059669" icono={<FaCubes size={10} />} />
-                  <Tarjeta titulo="Presupuestado"
-                    valor={soles(detalle.presupuestado)}
-                    pie={detalle.presupuestado > 0
-                      ? `${((detalle.avance?.valorizado || 0)
-                          / detalle.presupuestado * 100).toFixed(1)}% ejecutado`
-                      : 'no tiene partidas asignadas'}
+                  <Tarjeta titulo="Partidas tocadas"
+                    valor={(detalle.partidas_detalle || []).length}
+                    pie="de lo que imputaron sus partes"
                     color="#1463A5" icono={<FaListOl size={10} />} />
                 </div>
 
@@ -786,12 +676,15 @@ export default function Actividades() {
                     <div style={{ fontSize:'11px', fontWeight:700, color:'#475569',
                       textTransform:'uppercase', letterSpacing:'.03em',
                       marginBottom:'8px' }}>
-                      Partidas que ejecuta
+                      Partidas en las que imputó metrado
                     </div>
                     <div style={{ fontSize:'11.5px', color:'#94a3b8',
                       marginBottom:'9px', lineHeight:1.5 }}>
-                      El ejecutado y el saldo son de <b>toda la obra</b>: si otra
-                      actividad ya gastó parte de la partida, aquí queda menos.
+                      Salen de lo que imputaron sus partes diarios; la actividad no
+                      las declara de antemano. <b>Imputado</b> es de esta actividad;
+                      <b> ejecutado</b> y <b>saldo</b> son de la partida en{' '}
+                      <b>toda la obra</b>: si otra actividad ya gastó parte, aquí
+                      queda menos.
                     </div>
                     <div style={{ overflowX:'auto' }}>
                       <TablaPartidas filas={detalle.partidas_detalle} />
@@ -801,9 +694,10 @@ export default function Actividades() {
                   <div style={recuadro('#fffbeb', '#fde68a', '#92400e')}>
                     <FaExclamationTriangle style={{ marginTop:'2px', flexShrink:0 }} />
                     <span>
-                      Esta actividad no tiene partidas asignadas, así que no hay
-                      contra qué medir su avance. Edítala y elígelas del
-                      presupuesto.
+                      Esta actividad todavía no ha imputado metrado a ninguna
+                      partida. Las partidas salen de sus partes diarios: créale
+                      uno desde <b>Costeo y partes</b> y elige la partida en cada
+                      línea.
                     </span>
                   </div>
                 )}
@@ -878,51 +772,60 @@ export default function Actividades() {
 
 // ───────────────────────────────────────────────────────────────────────────
 /**
- * Las partidas de una actividad, con metrado, ejecutado y saldo.
+ * Las partidas que una actividad ha tocado, segun sus partes diarios.
  *
- * Tiene la forma de la tabla de «Actividades realizadas» del parte diario a
- * propósito: es el mismo gesto —una línea por tarea, con su metrado— y
- * cambiar de forma entre las dos pantallas obligaría a reaprenderlo.
+ * Tiene la forma de la tabla de «Actividades realizadas» del parte: es el
+ * mismo gesto —una línea por partida, con su metrado— y cambiar de forma
+ * entre las dos pantallas obligaría a reaprenderlo.
  *
- * LOS TRES NÚMEROS VAN JUNTOS. El presupuestado solo dice lo que había; el
- * ejecutado solo dice lo que se hizo; el saldo es el único que contesta a la
- * pregunta que de verdad se hace delante de la obra, que es cuánto queda.
+ * CADA FILA MEZCLA DOS COSAS Y POR ESO VAN SEPARADAS. «Imputado» y su
+ * valorizado son de ESTA actividad. «Metrado», «ejecutado» y «saldo» son de
+ * la partida en TODA la obra: el saldo no depende de quién se lo haya ido
+ * gastando, y enseñar uno propio invitaría a pasarse del presupuesto entre
+ * varias actividades sin que ninguna lo notara.
  *
- * EL SALDO ES DE LA OBRA, no de esta actividad. Si otra ya excavó 100 de los
- * 173, aquí quedan 73 aunque ésta no haya tocado ni uno. Un saldo «propio»
- * invitaría a pasarse del presupuesto entre varias actividades sin que
- * ninguna lo notara.
- *
- * Se pasa `onQuitar` solo en el formulario. En la ficha no hay nada que
- * quitar, y la columna de la X no se dibuja.
+ * No hay porcentaje de avance de la actividad porque no hay denominador: una
+ * partida se reparte entre varias y ninguna sabe cuánto le toca.
  */
-function TablaPartidas({ filas, onQuitar }) {
+function TablaPartidas({ filas }) {
   const n = (v) => parseFloat(v) || 0;
-  const tot = filas.reduce((s, p) => ({
-    importe: s.importe + (p.importe != null ? n(p.importe) : n(p.metrado) * n(p.precio)),
-    valorizado: s.valorizado + (p.valorizado != null
-      ? n(p.valorizado) : n(p.ejecutado) * n(p.precio)),
-  }), { importe: 0, valorizado: 0 });
+  const tot = filas.reduce((s, p) => s + n(p.valorizado), 0);
 
   return (
-    <table style={{ width:'100%', minWidth:'560px', borderCollapse:'collapse',
+    <table style={{ width:'100%', minWidth:'640px', borderCollapse:'collapse',
       fontSize:'12px' }}>
       <thead>
         <tr style={{ background:'#f8fafc', color:'#64748b', fontSize:'10px',
           textTransform:'uppercase', letterSpacing:'.03em' }}>
-          {['Código', 'Partida', 'Und', 'Metrado', 'Ejecutado', 'Saldo',
-            'Parcial'].map((h, i) => (
-            <th key={i} style={{ textAlign: i >= 3 ? 'right' : 'left',
-              padding:'6px 8px', fontWeight:700, whiteSpace:'nowrap' }}>{h}</th>
-          ))}
-          {onQuitar && <th style={{ width:'26px' }} />}
+          <th style={{ textAlign:'left', padding:'6px 8px', fontWeight:700,
+            whiteSpace:'nowrap' }}>Código</th>
+          <th style={{ textAlign:'left', padding:'6px 8px', fontWeight:700 }}>
+            Partida</th>
+          <th colSpan={2} style={{ textAlign:'right', padding:'6px 8px',
+            fontWeight:700, borderLeft:'2px solid #e2e8f0', color:'#1463A5' }}>
+            Esta actividad</th>
+          <th colSpan={3} style={{ textAlign:'right', padding:'6px 8px',
+            fontWeight:700, borderLeft:'2px solid #e2e8f0' }}>
+            La partida en toda la obra</th>
+        </tr>
+        <tr style={{ background:'#f8fafc', color:'#94a3b8', fontSize:'10px' }}>
+          <th colSpan={2} />
+          <th style={{ textAlign:'right', padding:'0 8px 6px', fontWeight:400,
+            borderLeft:'2px solid #e2e8f0' }}>Imputado</th>
+          <th style={{ textAlign:'right', padding:'0 8px 6px', fontWeight:400 }}>
+            Valorizado</th>
+          <th style={{ textAlign:'right', padding:'0 8px 6px', fontWeight:400,
+            borderLeft:'2px solid #e2e8f0' }}>Metrado</th>
+          <th style={{ textAlign:'right', padding:'0 8px 6px', fontWeight:400 }}>
+            Ejecutado</th>
+          <th style={{ textAlign:'right', padding:'0 8px 6px', fontWeight:400 }}>
+            Saldo</th>
         </tr>
       </thead>
       <tbody>
         {filas.map(p => {
           const metrado = n(p.metrado);
-          const eje = n(p.ejecutado);
-          const saldo = p.saldo != null ? n(p.saldo) : metrado - eje;
+          const saldo = n(p.saldo);
           // Pasarse del metrado presupuestado no se esconde: en rojo, porque
           // o se midió mal o hay que ampliar la partida, y las dos cosas hay
           // que mirarlas antes de valorizar.
@@ -938,41 +841,29 @@ function TablaPartidas({ filas, onQuitar }) {
                   {soles(p.precio)} / {p.unidad}
                 </div>
               </td>
-              <td style={{ padding:'6px 8px', color:'#64748b' }}>{p.unidad}</td>
-              <td style={{ padding:'6px 8px', textAlign:'right',
-                color:'#1e293b', whiteSpace:'nowrap' }}>{cant(metrado)}</td>
-              <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:600,
-                color: eje ? '#059669' : '#cbd5e1', whiteSpace:'nowrap' }}>
-                {cant(eje)}</td>
+              <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:700,
+                color:'#1463A5', whiteSpace:'nowrap',
+                borderLeft:'2px solid #e2e8f0' }}>
+                {cant(p.imputado)} <span style={{ fontWeight:400,
+                  color:'#94a3b8', fontSize:'10.5px' }}>{p.unidad}</span></td>
+              <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:700,
+                color:'#059669', whiteSpace:'nowrap' }}>
+                {soles(p.valorizado)}</td>
+              <td style={{ padding:'6px 8px', textAlign:'right', color:'#64748b',
+                whiteSpace:'nowrap', borderLeft:'2px solid #e2e8f0' }}>
+                {cant(metrado)}</td>
+              <td style={{ padding:'6px 8px', textAlign:'right', color:'#64748b',
+                whiteSpace:'nowrap' }}>{cant(p.ejecutado)}</td>
               <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:700,
                 color: pasado ? '#dc2626' : '#1e293b', whiteSpace:'nowrap' }}>
                 {cant(saldo)}
                 {metrado > 0 && (
                   <div style={{ fontSize:'10px', fontWeight:400,
                     color: pasado ? '#dc2626' : '#94a3b8' }}>
-                    {(eje / metrado * 100).toFixed(1)}% hecho
+                    {(n(p.ejecutado) / metrado * 100).toFixed(1)}% hecho
                   </div>
                 )}
               </td>
-              <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:700,
-                color:'#1463A5', whiteSpace:'nowrap' }}>
-                {soles(p.importe != null ? p.importe : metrado * n(p.precio))}
-                {eje > 0 && (
-                  <div style={{ fontSize:'10px', fontWeight:400, color:'#059669' }}>
-                    {soles(p.valorizado != null ? p.valorizado : eje * n(p.precio))}
-                    {' '}valorizado
-                  </div>
-                )}
-              </td>
-              {onQuitar && (
-                <td style={{ padding:'6px 4px', textAlign:'right' }}>
-                  <button type="button" onClick={() => onQuitar(p.id)} title="Quitar"
-                    style={{ background:'transparent', border:'none',
-                      cursor:'pointer', color:'#dc2626', padding:0, lineHeight:1 }}>
-                    <FaTimes size={11} />
-                  </button>
-                </td>
-              )}
             </tr>
           );
         })}
@@ -982,13 +873,11 @@ function TablaPartidas({ filas, onQuitar }) {
           color:'#0b2545' }}>
           <td colSpan={3} style={{ padding:'8px' }}>
             {filas.length} partida(s)</td>
+          <td style={{ padding:'8px', textAlign:'right', whiteSpace:'nowrap',
+            color:'#059669' }}>{soles(tot)}</td>
           <td colSpan={3} style={{ padding:'8px', textAlign:'right',
-            fontSize:'11px', color:'#64748b', fontWeight:400 }}>
-            {tot.valorizado > 0 && <>valorizado {soles(tot.valorizado)}</>}
-          </td>
-          <td style={{ padding:'8px', textAlign:'right', whiteSpace:'nowrap' }}>
-            {soles(tot.importe)}</td>
-          {onQuitar && <td />}
+            fontSize:'10.5px', color:'#94a3b8', fontWeight:400 }}>
+            el saldo es de la obra</td>
         </tr>
       </tfoot>
     </table>

@@ -43,64 +43,86 @@ class ActividadObraSerializer(serializers.ModelSerializer):
         return obj.partes.count()
 
     def get_partidas_detalle(self, obj):
-        """Cada partida con lo presupuestado, lo hecho y lo que queda.
+        """Las partidas a las que ESTA actividad ha imputado metrado.
 
-        EL EJECUTADO ES DE TODA LA OBRA, no solo de esta actividad. El saldo
-        de una partida no depende de quien se lo haya ido gastando: si otra
-        actividad ya excavo 100 de los 173, aqui quedan 73 aunque esta no
-        haya tocado ni uno. Ensenar un saldo "propio" invitaria a pasarse del
-        presupuesto entre varias actividades sin que ninguna lo notara.
+        No sale de una declaracion sino de los partes: una actividad no sabe
+        de antemano todo lo que va a tocar, y obligarla a decirlo al crearla
+        acaba en declaraciones que no se parecen a lo que se hizo.
 
-        Solo suma el metrado imputado en la MISMA unidad que la partida. Lo
+        Cada fila mezcla dos cosas a proposito y por eso van con nombres
+        distintos: 'imputado' y 'valorizado' son de esta actividad, mientras
+        que 'metrado', 'ejecutado' y 'saldo' son de la partida en TODA la
+        obra. El saldo de una partida no depende de quien se lo haya ido
+        gastando, y ensenar uno "propio" invitaria a pasarse del presupuesto
+        entre varias actividades sin que ninguna lo notara.
+
+        Solo cuenta el metrado imputado en la MISMA unidad que la partida. Lo
         imputado en otra no se suma -daria un avance falso- pero tampoco se
         esconde: va en la cuenta de avance, que ya lo avisa.
         """
         from .models import DailyPartActivity
 
-        partidas = list(obj.partidas.all().order_by("codigo"))
-        if not partidas:
+        partes = list(obj.partes.values_list("id", flat=True))
+        if not partes:
             return []
 
-        hecho = {}
-        filas = (DailyPartActivity.objects
-                 .filter(partida_id__in=[p.id for p in partidas])
-                 .values("partida_id", "metrado_unidad")
-                 .annotate(suma=Sum("metrado")))
-        for f in filas:
-            hecho.setdefault(f["partida_id"], {})[
+        # Lo que imputo ESTA actividad, por partida y unidad.
+        mio = {}
+        for f in (DailyPartActivity.objects
+                  .filter(parte_id__in=partes, partida__isnull=False)
+                  .values("partida_id", "metrado_unidad")
+                  .annotate(suma=Sum("metrado"))):
+            mio.setdefault(f["partida_id"], {})[
+                _normaliza(f["metrado_unidad"])] = float(f["suma"] or 0)
+
+        if not mio:
+            return []
+
+        # Lo que lleva cada una de esas partidas en toda la obra.
+        de_la_obra = {}
+        for f in (DailyPartActivity.objects
+                  .filter(partida_id__in=list(mio.keys()))
+                  .values("partida_id", "metrado_unidad")
+                  .annotate(suma=Sum("metrado"))):
+            de_la_obra.setdefault(f["partida_id"], {})[
                 _normaliza(f["metrado_unidad"])] = float(f["suma"] or 0)
 
         salida = []
-        for p in partidas:
+        for p in Partida.objects.filter(id__in=list(mio.keys())).order_by("codigo"):
+            u = _normaliza(p.unidad)
             total = float(p.metrado or 0)
-            eje = hecho.get(p.id, {}).get(_normaliza(p.unidad), 0.0)
             precio = float(p.precio or 0)
+            imputado = mio.get(p.id, {}).get(u, 0.0)
+            eje = de_la_obra.get(p.id, {}).get(u, 0.0)
             salida.append({
                 "id": p.id,
                 "codigo": p.codigo,
                 "descripcion": p.descripcion,
                 "unidad": p.unidad,
-                "metrado": total,
                 "precio": precio,
+                # de esta actividad
+                "imputado": round(imputado, 4),
+                "valorizado": round(imputado * precio, 2),
+                # de la partida en toda la obra
+                "metrado": total,
                 "importe": round(total * precio, 2),
                 "ejecutado": round(eje, 4),
                 "saldo": round(total - eje, 4),
                 "avance": round(eje / total * 100, 2) if total else None,
-                "valorizado": round(eje * precio, 2),
             })
         return salida
 
     def get_presupuestado(self, obj):
-        """Lo que esta actividad tiene que hacer, al precio del presupuesto.
+        """Siempre 0: una actividad no tiene presupuesto propio.
 
-        Es el denominador del avance. Sin esto solo se sabe lo que lleva
-        hecho, que no dice si va al 10% o al 90%.
+        La actividad ya no declara sus partidas, asi que no hay denominador
+        contra el que medir SU avance: una partida se reparte entre varias
+        actividades y ninguna sabe cuanto le toca. Inventar uno daria
+        porcentajes que parecen buenos y no significan nada.
+
+        Se deja el campo, devolviendo 0, para no romper a quien lo lea.
         """
-        total = 0.0
-        for m, pr in obj.partidas.all().values_list("metrado", "precio"):
-            total += float(m or 0) * float(pr or 0)
-        return round(total, 2)
-
+        return 0
     def get_avance(self, obj):
         """Lo valorizado por esta actividad, al precio del presupuesto.
 

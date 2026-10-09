@@ -9,13 +9,11 @@ const PROYECTOS = [{ id: 1, codigo: 'Obras10_6', nombre: 'TRATAMIENTO TOMA 10.6'
 const ACTS = [{ id: 11, obra: 'Obras10_6', proyecto: 'TRATAMIENTO TOMA 10.6',
   codigo: 'ACT-0001', nombre: 'Excavacion de la caja de derivacion',
   estado: 'ejecucion', partes: 1, avance: { valorizado: 400, metrado_otra_unidad: 0 },
-  presupuestado: 1366.19, partidas: [20, 21], partidas_detalle: [
+  // Sale de lo que imputaron sus partes, no de una declaracion.
+  presupuestado: 0, partidas: [], partidas_detalle: [
     { id: 20, codigo: '01.02.04.01.01', descripcion: 'Excavacion manual', unidad: 'm3',
-      metrado: 173.54, precio: 6.72, importe: 1166.19, ejecutado: 40, saldo: 133.54,
-      avance: 23.05, valorizado: 268.8 },
-    { id: 21, codigo: '01.02.04.01.02', descripcion: 'Refine', unidad: 'm2',
-      metrado: 50, precio: 4, importe: 200, ejecutado: 0, saldo: 50,
-      avance: 0, valorizado: 0 }],
+      precio: 6.72, imputado: 40, valorizado: 268.8,
+      metrado: 173.54, importe: 1166.19, ejecutado: 100, saldo: 73.54, avance: 57.62 }],
   ubicacion_text: 'Prog 0+120', responsable: 'J. Perez' }];
 // costeo que cuelga de la ACTIVIDAD 11, no de ningun incidente
 const PERS = [{ id: 1, actividad_obra: 11, incident_report: null, date: '2026-10-01',
