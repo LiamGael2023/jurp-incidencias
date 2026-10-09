@@ -79,8 +79,14 @@ window.fetch = async (url, opc) => {
   if (u.includes('/partidas/?obra=')) return j({ partidas: PARTIDAS });
   if (u.includes('/partidas/')) return j({ partidas: [] });
   if (u.includes('/resumen/')) return j({ total: 1, por_estado: { ejecucion: 1 }, valorizado: 400, partes: 1 });
-  // Tras guardar, el servidor devuelve otro valorizado: es lo que hace
-  // visible si la lista se refresca sola o se queda con lo viejo.
+  // El detalle de UNA actividad trae numeros mas frescos que la lista: es
+  // lo que hace visible si la ficha se los pide o se queda con la fila.
+  if (/\/actividades-obra\/\d+\/$/.test(u)) {
+    window.__pidioDetalle = (window.__pidioDetalle || 0) + 1;
+    return j({ ...ACTS[0], partes: 7,
+      avance: { valorizado: 1234.56, metrado_otra_unidad: 0 },
+      estado: window.__estado || ACTS[0].estado });
+  }
   if (u.includes('/actividades-obra/')) {
     const base = window.__guardado
       ? ACTS.map(a => ({ ...a, partes: 2,

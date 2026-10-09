@@ -192,6 +192,31 @@ ok(/999\.99/.test(despues),
    (despues.match(/S\/ [\d,.]+/g) || []).slice(0, 3).join(', '));
 ok(/\b2\b/.test(despues), 'y el número de partes también');
 
+console.log('\n== LA FICHA SE TRAE LO SUYO, NO LA FILA ==');
+await pag.goto('http://localhost:5199/pruebas/web/actividades.html',
+  { waitUntil: 'networkidle' });
+await pag.waitForTimeout(900);
+await pag.locator('td', { hasText: 'Excavacion de la caja' }).first().click();
+await pag.waitForTimeout(900);
+const tfi = await pag.locator('body').innerText();
+ok((await pag.evaluate(() => window.__pidioDetalle || 0)) > 0,
+   'pide la actividad al servidor al abrir la ficha');
+ok(/1,234\.56/.test(tfi), 'y enseña lo fresco, no lo que traía la fila',
+   (tfi.match(/S\/ [\d,.]+/g) || []).slice(0, 3).join(', '));
+ok(/\b7\b/.test(tfi), 'incluido el número de partes');
+
+console.log('\n== Y AL VOLVER DEL COSTEO SE REABRE ==');
+await pag.locator('button', { hasText: 'Costeo y partes' }).click();
+await pag.waitForTimeout(1200);
+ok(/Gesti.n . ACT-0001/.test(await pag.locator('body').innerText()),
+   'se abre el costeo');
+await pag.locator('button', { hasText: /^\s*Cerrar\s*$/ }).last().click();
+await pag.waitForTimeout(1200);
+const tv = await pag.locator('body').innerText();
+ok(/PARTIDAS TOCADAS/i.test(tv), 'al cerrarlo se vuelve a la ficha, no a la lista');
+ok(/1,234\.56/.test(tv), 'y con los números al día',
+   (tv.match(/S\/ [\d,.]+/g) || []).slice(0, 3).join(', '));
+
 console.log('\n== CONSOLA ==');
 const graves = err.filter(e => !/favicon|ResizeObserver|ERR_TUNNEL|fonts.googleapis/.test(e));
 ok(graves.length === 0, 'sin errores', graves.slice(0, 3).join(' | '));

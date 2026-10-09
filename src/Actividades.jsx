@@ -89,6 +89,8 @@ export default function Actividades() {
   // Avisos que NO son errores: lo que acaba de pasar y conviene saber, como
   // qué máquinas quedaron libres al terminar.
   const [aviso, setAviso] = useState('');
+  // Si la gestión se abrió desde la ficha, al cerrarla se vuelve a ella.
+  const [volverAFicha, setVolverAFicha] = useState(false);
 
   // ── carga ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -130,10 +132,12 @@ export default function Actividades() {
       const nuevas = await rl.json();
       setLista(nuevas);
       setResumen(rr.ok ? await rr.json() : null);
-      // La ficha abierta es una COPIA de la fila, de cuando se abrió. Si no
-      // se refresca aquí, se queda enseñando los números de antes mientras
-      // la tabla de detrás ya tiene los nuevos, y uno de los dos miente.
-      setDetalle(d => (d ? nuevas.find(x => x.id === d.id) || d : d));
+      // La gestión abierta se sincroniza: su estado decide si está
+      // bloqueada, y no tiene forma propia de enterarse.
+      //
+      // La FICHA no se toca aquí a propósito. Se trae su copia del servidor
+      // al abrirse, que llega más fresca que la lista; pisarla con la fila
+      // la devolvía a los números viejos justo después de refrescarla.
       setGestionando(g => (g ? nuevas.find(x => x.id === g.id) || g : g));
     } catch (e) {
       setLista([]); setError(e.message || String(e));
@@ -221,6 +225,22 @@ export default function Actividades() {
     } catch (e) {
       setError('No se pudo reanudar la actividad. ' + (e.message || e));
     }
+  };
+
+  // Abrir la ficha trae la actividad del servidor, no la fila de la tabla.
+  // La fila es una foto de la última vez que se cargó la lista: si entre
+  // medias se guardó un parte -desde aquí o desde otra pestaña- enseñaría
+  // los números de antes sin que nada lo delatara. Se pinta ya con lo que
+  // hay y se corrige al llegar, que es mejor que una pantalla en blanco.
+  const abrirFicha = async (act) => {
+    setDetalle(act);
+    try {
+      const r = await fetch(`${API}/actividades-obra/${act.id}/`);
+      if (!r.ok) return;
+      const fresca = await r.json();
+      setDetalle(d => (d && d.id === fresca.id ? fresca : d));
+      setLista(l => l.map(x => (x.id === fresca.id ? fresca : x)));
+    } catch { /* se queda la de la lista, que es mejor que nada */ }
   };
 
   const borrar = async (act, confirmar) => {
@@ -419,7 +439,7 @@ export default function Actividades() {
                     const est = estadoDe(a.estado);
                     const descuadre = (a.avance?.metrado_otra_unidad || 0) > 0;
                     return (
-                      <tr key={a.id} onClick={() => setDetalle(a)}
+                      <tr key={a.id} onClick={() => abrirFicha(a)}
                         style={{ borderTop:'1px solid #f1f5f9', cursor:'pointer' }}
                         onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                         onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
@@ -614,7 +634,12 @@ export default function Actividades() {
           tituloCerrar: 'Cierra los partes, libera las máquinas y bloquea el costeo',
         }}
         campoVinculo="actividad_obra"
-        onCerrar={() => setGestionando(null)}
+        onCerrar={() => {
+          const vuelve = volverAFicha ? gestionando : null;
+          setVolverAFicha(false);
+          setGestionando(null);
+          if (vuelve) abrirFicha(vuelve);
+        }}
         onCambio={cargar}
         onCerrarSujeto={terminarActividad}
         onReabrir={reanudarActividad}
@@ -734,7 +759,12 @@ export default function Actividades() {
               <div style={pie}>
                 <button onClick={() => { setEditando({ ...detalle }); setDetalle(null); }}
                   style={btnSec}><FaEdit /> Editar</button>
-                <button onClick={() => { setGestionando(detalle); setDetalle(null); }}
+                {/* Se recuerda de dónde se vino para volver aquí al cerrar
+                    el costeo, con los números ya nuevos. Soltar al usuario
+                    en la lista después de guardar le obliga a buscar otra
+                    vez la actividad que estaba mirando. */}
+                <button onClick={() => { setVolverAFicha(true);
+                    setGestionando(detalle); setDetalle(null); }}
                   style={{ ...btnPri, background:'#059669' }}>
                   <FaFileInvoice /> Costeo y partes
                 </button>
