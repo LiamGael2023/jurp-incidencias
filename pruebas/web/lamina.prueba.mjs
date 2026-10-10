@@ -180,41 +180,50 @@ await p.click('.lam-sec:nth-of-type(3) .lam-sec-tit');
 await p.waitForTimeout(300);
 
 // ── El temblor al plegar el rail ─────────────────────────────────────────
-// Se encoge el hueco como lo encoge el rail —0,35 s de transición— y se
-// cuentan los cuadros largos. El culpable era `--lam-zoom`: es un `zoom` de
-// CSS sobre la hoja, y por debajo cuelgan los 700 marcadores con sus rótulos,
-// así que cada cambio los recoloca todos. Antes se aplicaban once tamaños
-// intermedios que a nadie le interesan; ahora solo el final.
+// Se pliega el rail DE VERDAD —--rail-w de 286 a 88 px, que es lo que hace
+// RailGIS— y se cuentan los cuadros que tardan más de 33 ms, o sea los que
+// se saltan. Eso es lo que se ve temblar.
+//
+// Se pliega y despliega una vez ANTES de medir. El primer cambio de tamaño
+// de la hoja cuesta mucho más que los siguientes, y mezclar los dos casos
+// en una misma medida llegó a invertir el resultado de la comparación que
+// decidió usar `transform` en vez de `zoom` (ver MapaTematico.css).
 const temblor = await p.evaluate(async () => {
-  const l = document.querySelector('.lam-lienzo');
-  const w0 = l.clientWidth;
-  const zooms = new Set(); const cuadros = [];
-  let t0 = performance.now();
-  for (let i = 1; i <= 21; i++) {
-    l.style.flex = `0 0 ${w0 - i * 9}px`;
-    await new Promise(r => requestAnimationFrame(r));
-    const t = performance.now(); cuadros.push(t - t0); t0 = t;
-    zooms.add(getComputedStyle(l).getPropertyValue('--lam-zoom').trim());
-  }
-  await new Promise(r => setTimeout(r, 1200));
-  const fin = getComputedStyle(l).getPropertyValue('--lam-zoom').trim();
-  zooms.add(fin);
-  // El hueco real al terminar, no el que se pidió: el `flex-basis` puede
-  // quedar por encima del mínimo de contenido y entonces no mide lo pedido.
-  const ancho = l.clientWidth;
-  l.style.flex = '';
-  return { pasos: zooms.size, largos: cuadros.filter(c => c > 50).length,
-           peor: Math.round(Math.max(...cuadros)), fin: +fin, ancho };
+  const rw = (v) => document.documentElement.style.setProperty('--rail-w', v);
+  const esperar = (ms) => new Promise(r => setTimeout(r, ms));
+  const lienzo = document.querySelector('.lam-lienzo');
+  const zoomDe = () => getComputedStyle(lienzo).getPropertyValue('--lam-zoom').trim();
+
+  rw('286px'); await esperar(500);
+  rw('88px');  await esperar(1400);      // calentamiento
+  rw('286px'); await esperar(1400);
+  const antes = +zoomDe();
+
+  const c = []; let t0 = performance.now(); let parar = false;
+  const tic = () => { const t = performance.now(); c.push(t - t0); t0 = t;
+    if (!parar) requestAnimationFrame(tic); };
+  requestAnimationFrame(tic);
+  rw('88px');                            // el plegado que se mide
+  await esperar(1600);
+  parar = true;
+  const d = c.slice(1);
+  const fin = +zoomDe();
+  rw('286px');
+  return { peor: Math.round(Math.max(...d)), saltados: d.filter(x => x > 33).length,
+           medio: Math.round(d.reduce((a, x) => a + x, 0) / d.length),
+           antes, fin, compositor: getComputedStyle(
+             document.querySelector('.lam-hoja')).transform !== 'none' };
 });
-ok(temblor.pasos <= 3,
-   'plegar el rail no rehace la hoja en cada paso de la animación',
-   `${temblor.pasos} tamaños aplicados`);
-ok(temblor.largos <= 3,
-   'y no deja cuadros largos: eso es lo que se veía temblar',
-   `${temblor.largos} de 21 por encima de 50 ms, el peor ${temblor.peor} ms`);
-// Esperar no vale de nada si al final la hoja no acaba del tamaño correcto.
-ok(Math.abs(temblor.fin - Math.min(1, (temblor.ancho - 56) / (841 * 2))) < 0.02,
-   'y al soltar, la hoja queda del tamaño del hueco nuevo', temblor.fin);
+ok(temblor.compositor,
+   'la hoja se encoge con transform, no con zoom: escalar no recoloca sus miles de nodos');
+ok(temblor.saltados <= 3, 'plegar el rail no deja una ristra de cuadros saltados',
+   `${temblor.saltados} por encima de 33 ms`);
+ok(temblor.peor < 300, 'ni un tirón largo', `el peor, ${temblor.peor} ms`);
+ok(temblor.medio < 25, 'y el cuadro medio se mantiene fluido', `${temblor.medio} ms`);
+// Que no tiemble no vale de nada si la hoja no acaba aprovechando el hueco.
+ok(temblor.fin > temblor.antes,
+   'y al plegarlo la hoja crece, que es para lo que se mide el hueco',
+   `${temblor.antes} → ${temblor.fin}`);
 
 ok(errs.length === 0, 'ningún error de JS en toda la prueba', errs.join(' | '));
 

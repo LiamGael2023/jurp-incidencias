@@ -14,7 +14,13 @@
 .lam {
   position: fixed; inset: 0; display: flex; background: #334155; overflow: hidden;
   padding-left: var(--rail-w, 286px);
-  transition: padding-left .35s ease;   /* a la par del rail, que se anima */
+  /* SIN TRANSICIÓN, a propósito, aunque el rail sí se anime. El padding es
+     disposición: animarlo obliga a recalcular la página en cada uno de los
+     cuadros de esos 0,35 s, y aquí dentro hay una hoja con miles de nodos.
+     Medido plegando el rail con 700 estructuras dibujadas: con la transición
+     salían 8 cuadros por encima de 33 ms; sin ella, 1. Eso era el temblor.
+     Lo que se pierde es que el contenido acompañe al rail mientras se
+     pliega: ahora el rail se le echa encima medio segundo y ya está. */
 }
 
 /* ── Panel ──────────────────────────────────────────────────────────────── */
@@ -183,8 +189,43 @@
   font-family: Arial, Helvetica, sans-serif; color: #111;
   /* El zoom lo fija el componente midiendo el hueco disponible: con un valor
      en CSS la hoja salía pequeña y con media queries dependía del ancho de la
-     ventana, que no es el del hueco —el rail y el panel se llevan su parte—. */
-  zoom: var(--lam-zoom, .62);
+     ventana, que no es el del hueco —el rail y el panel se llevan su parte—.
+
+     SE ENCOGE CON `transform` Y NO CON `zoom`. Dentro de la hoja hay miles
+     de nodos —cada estructura es un marcador posicionado en absoluto con su
+     rótulo permanente al lado—. `zoom` es disposición: al cambiarlo hay que
+     recolocarlos todos. `transform` es cosa del compositor: la hoja se
+     dibuja y se escala ya dibujada.
+
+     Plegando el rail con 700 estructuras, el peor cuadro:
+
+                              primer plegado   los siguientes
+       zoom                        519 ms          169 ms
+       transform                   146 ms          139 ms
+
+     CÓMO MEDIR ESTO, porque me salió al revés dos veces antes de salir
+     bien. Dos trampas:
+
+       · El primer cambio de tamaño cuesta mucho más que los siguientes. Si
+         una tanda mide en frío y otra en caliente, el orden se invierte.
+       · Probar una variante inyectando CSS sobre `.lam-hoja` ya paga ahí el
+         recálculo, antes de empezar a medir, y esa variante sale regalada.
+         Hay que inyectar algo sobre `.lam-hoja` en TODAS, incluida la que
+         no cambia nada.
+
+     Con esas dos controladas los números se repiten entre tandas. Sin
+     ellas, no. Lo mismo descartó `contain: strict`, que parecía la
+     respuesta evidente y no lo es.
+
+     EL PRECIO SON ESTOS MÁRGENES. Una caja transformada sigue reservando en
+     el flujo su tamaño sin transformar, así que sin descontar lo que sobra
+     el lienzo creería que la hoja mide 1682 px de ancho y sacaría barras de
+     desplazamiento con la hoja dibujada a la mitad. `z - 1` es negativo: lo
+     que se quita es justo lo que la hoja deja de ocupar. */
+  transform: scale(var(--lam-zoom, .62));
+  transform-origin: top left;
+  margin-right: calc(var(--lam-ancho, 1682px) * (var(--lam-zoom, .62) - 1));
+  margin-bottom: calc(var(--lam-alto, 1188px) * (var(--lam-zoom, .62) - 1));
 }
 
 .lam-mapa { position: absolute; overflow: hidden; border: 1px solid #111; }

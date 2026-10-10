@@ -1017,7 +1017,16 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
         || n.classList?.contains('leaflet-popup'),
       onclone: (doc) => {
         const hoja = doc.querySelector('.lam-hoja');
-        if (hoja) { hoja.style.zoom = '1'; hoja.style.boxShadow = 'none'; }
+        if (hoja) {
+          // La hoja se captura a tamaño natural. En pantalla la encoge un
+          // `transform` y unos márgenes negativos descuentan lo que deja de
+          // ocupar (ver MapaTematico.css); aquí se deshacen los dos. Dejar
+          // los márgenes recortaría la lámina por la derecha y por abajo.
+          hoja.style.transform = 'none';
+          hoja.style.margin = '0';
+          hoja.style.zoom = '1';
+          hoja.style.boxShadow = 'none';
+        }
         const lienzo = doc.querySelector('.lam-lienzo');
         if (lienzo) { lienzo.style.padding = '0'; lienzo.style.overflow = 'visible'; }
       },
@@ -1348,8 +1357,16 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
 
       {/* ══════════════ LÁMINA ══════════════ */}
       <div className="lam-lienzo" ref={lienzoRef}>
+        {/* El tamaño va también como variables para que el CSS pueda
+            descontar con márgenes negativos lo que la hoja deja de ocupar al
+            encogerse: `transform` reduce lo que se ve pero no lo que la hoja
+            reserva en el flujo (ver MapaTematico.css). */}
         <div className="lam-hoja" ref={laminaRef}
-          style={{ width: mm(PAPEL.anchoMm), height: mm(PAPEL.altoMm) }}>
+          style={{
+            width: mm(PAPEL.anchoMm), height: mm(PAPEL.altoMm),
+            '--lam-ancho': `${mm(PAPEL.anchoMm)}px`,
+            '--lam-alto': `${mm(PAPEL.altoMm)}px`,
+          }}>
 
           {/* Mapa */}
           <div className="lam-mapa" style={{
