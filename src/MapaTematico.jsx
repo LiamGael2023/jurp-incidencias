@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import html2canvas from 'html2canvas';
 import {
   FaCrosshairs, FaDownload, FaFilePdf, FaSyncAlt, FaExclamationTriangle,
-  FaLayerGroup, FaChevronDown, FaChevronRight,
+  FaLayerGroup, FaChevronDown, FaChevronRight, FaSearch, FaTimes,
 } from 'react-icons/fa';
 import { TeselasBase, SelectorBase, capaBase, puedeExportar, alternativaExportable,
          CAPA_POR_DEFECTO } from './capasBase';
@@ -89,6 +89,11 @@ const GRUPOS_ESCALA = [
   { titulo: 'Conjunto — el sector o el valle', escalas: [5000, 10000, 20000, 25000] },
 ];
 const ESCALAS_LAMINA = GRUPOS_ESCALA.flatMap(g => g.escalas);
+
+// Código de capa → su nombre legible, para el buscador. Se arma una vez: el
+// catálogo de capas no cambia en caliente.
+const ETIQUETA_CAPA = Object.fromEntries(
+  TODAS_LAS_CAPAS.map(c => [c.codigo, c.label || c.codigo]));
 const ESCALA_POR_DEFECTO = 10000;
 
 // ── Progresivas ────────────────────────────────────────────────────────────
@@ -453,6 +458,85 @@ const leerGuardado = (llave, porDefecto) => {
 };
 const guardar = (llave, v) => { try { localStorage.setItem(llave, JSON.stringify(v)); } catch {} };
 
+/**
+ * Buscar una estructura y centrar la lámina en ella.
+ *
+ * EL ÍNDICE Y LAS COINCIDENCIAS SON LOS DEL VISOR —`inv.buscar`—, a
+ * propósito: dos buscadores parecidos pero distintos acaban encontrando cosas
+ * distintas con el mismo texto, y el que lo usa no tiene forma de saber por
+ * qué. Busca sin acentos ni mayúsculas sobre un índice ligero que se descarga
+ * aparte, así que encuentra también lo que está en capas apagadas.
+ *
+ * LO QUE NO SE REUTILIZA ES LA ACCIÓN. `inv.irA` del visor marca el activo
+ * como destacado, y de eso cuelga un efecto que hace `flyTo(..., 17)`: aquí
+ * eso saltaría el candado del zoom y dejaría el membrete rotulando una escala
+ * que ya no es la dibujada —justo lo que esta pantalla existe para impedir—.
+ *
+ * Así que aquí buscar NO acerca: mueve el centro y deja la escala como está.
+ * Encontrar una estructura es otra manera de encuadrar, no una manera de
+ * asomarse. Si hace falta verla más de cerca, para eso está la escala.
+ */
+function BuscadorLamina({ inv, onCentrar }) {
+  const [texto, setTexto] = useState('');
+  const [abierto, setAbierto] = useState(false);
+  // Desestructurado y no `inv.buscar` en las dependencias: con el acceso al
+  // campo dentro del array, el compilador de React no puede conservar la
+  // memoización y recalcula la lista en cada render.
+  const { buscar } = inv;
+  const resultados = useMemo(() => buscar(texto), [texto, buscar]);
+
+  const elegir = (r) => {
+    // La capa puede estar apagada: el índice la encuentra igual, pero en la
+    // lámina no se dibujaría. Encenderla dispara su descarga.
+    if (!inv.visibles[r.tipo]) inv.alternarCapa(r.tipo);
+    onCentrar(r.lat, r.lng);
+    setTexto(r.nombre || `${ETIQUETA_CAPA[r.tipo] || r.tipo} #${r.fid}`);
+    setAbierto(false);
+  };
+
+  const listo = inv.indice.length > 0;
+
+  return (
+    <div className="lam-buscador">
+      <FaSearch className="lam-buscador-ico" />
+      <input
+        value={texto}
+        disabled={!listo}
+        placeholder={listo
+          ? `Centrar en una estructura (${inv.indice.length.toLocaleString('es-PE')})…`
+          : 'Cargando el índice…'}
+        onChange={e => { setTexto(e.target.value); setAbierto(true); }}
+        onFocus={() => resultados.length && setAbierto(true)}
+      />
+      {texto && (
+        <button className="lam-buscador-x" title="Limpiar"
+          onClick={() => { setTexto(''); setAbierto(false); }}>
+          <FaTimes size={10} />
+        </button>
+      )}
+
+      {abierto && (
+        <div className="lam-buscador-lista">
+          {resultados.length === 0 && texto.trim().length >= 2 && (
+            <div className="lam-res-vacio">Sin coincidencias</div>
+          )}
+          {resultados.map(r => (
+            <button key={`${r.tipo}:${r.fid}`} onClick={() => elegir(r)}>
+              <span className="lam-res-nom">{r.nombre || `#${r.fid}`}</span>
+              <span className="lam-res-meta">
+                {ETIQUETA_CAPA[r.tipo] || r.tipo}
+                {r.canal && ` · ${r.canal}`}
+                {r.progresiva != null && r.progresiva !== '' && ` · ${r.progresiva}`}
+                {!inv.visibles[r.tipo] && <i> · se encenderá su capa</i>}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, RailGIS }) {
   const inv = useInventario();
 
@@ -631,6 +715,16 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
     setCentro([(envolvente.norte + envolvente.sur) / 2, (envolvente.este + envolvente.oeste) / 2]);
     setVersion(v => v + 1);
   }, [envolvente]);
+
+  // Centrar en un punto suelto: lo que hace el buscador. Es «Encuadrar» con
+  // un centro dado en vez de calculado, y por el mismo camino —el centro, no
+  // el mapa—, para que la escala siga siendo la elegida y no la que dejó el
+  // último movimiento.
+  const centrarEn = useCallback((lat, lng) => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    setCentro([lat, lng]);
+    setVersion(v => v + 1);
+  }, []);
 
   // Lo que la lámina rotula del encuadre real, no del pedido.
   const alMover = useCallback(() => {
@@ -922,6 +1016,12 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               <button onClick={inv.recargar}><FaSyncAlt /> Recargar</button>
             </div>
           )}
+
+          {/* Va ANTES de los selectores porque es el atajo: quien sabe cómo
+              se llama la estructura no tiene por qué saber de qué tramo
+              cuelga. Los selectores siguen abajo para el caso contrario —
+              recorrer una obra sin un nombre concreto en la cabeza. */}
+          <BuscadorLamina inv={inv} onCentrar={centrarEn} />
 
           {estructura.niveles.map(n => (
             <label key={n.clave}>{n.etiqueta}

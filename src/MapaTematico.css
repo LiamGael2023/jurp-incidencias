@@ -49,6 +49,46 @@
 .lam-panel textarea { resize: vertical; line-height: 1.45; }
 .lam-par { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
+/* ── Buscador de estructuras ──────────────────────────────────────────────
+   Los colores son los del panel —azules fríos—, no los del buscador del
+   visor, que es ámbar sobre azul marino. Es el mismo buscador por dentro
+   (mismo índice, mismas coincidencias) pero vive en otra pantalla, y una
+   caja ámbar aquí parecería un aviso. */
+.lam-buscador { position: relative; display: flex; align-items: center; margin-bottom: 14px; }
+.lam-buscador-ico { position: absolute; left: 9px; font-size: 11px;
+  color: #64748b; pointer-events: none; }
+.lam-buscador input {
+  display: block; width: 100%; margin: 0; padding: 7px 26px 7px 27px;
+  background: #1e293b; border: 1px solid #334155; border-radius: 6px;
+  color: #e2e8f0; font-size: 12.5px; font-family: inherit; text-transform: none;
+}
+.lam-buscador input:focus { border-color: #0ea5e9; outline: none; }
+.lam-buscador input::placeholder { color: #64748b; }
+.lam-buscador input:disabled { opacity: .55; }
+.lam-buscador-x { position: absolute; right: 7px; display: flex; padding: 3px;
+  background: none; border: none; color: #64748b; cursor: pointer; }
+.lam-buscador-x:hover { color: #e2e8f0; }
+
+/* El desplegable tapa lo de abajo en vez de empujarlo: si la lista moviera
+   los selectores de tramo, el panel entero daría un salto a cada letra. */
+.lam-buscador-lista {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
+  max-height: 260px; overflow-y: auto;
+  background: #0f172a; border: 1px solid #334155; border-radius: 7px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .55);
+}
+.lam-buscador-lista button {
+  display: block; width: 100%; text-align: left; padding: 7px 10px;
+  background: none; border: none; border-bottom: 1px solid #1e293b;
+  cursor: pointer; font-family: inherit;
+}
+.lam-buscador-lista button:last-child { border-bottom: none; }
+.lam-buscador-lista button:hover { background: #1e293b; }
+.lam-res-nom { display: block; font-size: 11.5px; font-weight: 700; color: #e2e8f0; }
+.lam-res-meta { display: block; font-size: 10px; color: #64748b; margin-top: 1px; }
+.lam-res-meta i { font-style: normal; color: #0ea5e9; }
+.lam-res-vacio { padding: 9px 10px; font-size: 11px; font-style: italic; color: #64748b; }
+
 .lam-medida {
   background: #1e293b; border-left: 3px solid #0ea5e9; border-radius: 0 6px 6px 0;
   padding: 9px 11px; margin: 4px 0 12px; font-size: 11.5px; line-height: 1.5;

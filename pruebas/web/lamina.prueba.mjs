@@ -78,6 +78,61 @@ for (const v of ESCALAS) {
      `${o.rot}: el mapa está dibujado a esa escala`, 'dibuja 1:' + o.real);
 }
 
+// ── El buscador de estructuras ───────────────────────────────────────────
+// Lo que de verdad se comprueba aquí es que buscar CENTRA y no ACERCA. En el
+// visor, elegir un resultado vuela a zoom 17; si esta pantalla reutilizara
+// aquella acción, el candado del zoom saltaría y el membrete quedaría
+// rotulando una escala que ya no es la dibujada.
+const ESC = '2500';
+await p.selectOption('.lam-panel select', ESC);
+await p.waitForTimeout(700);
+
+const centroDe = () => p.evaluate(() => {
+  const t = document.querySelector('.lam-estado').innerText.replace(/\s+/g, ' ');
+  const u = /UTM \S+ E (\d+) N (\d+)/.exec(t);
+  return { utm: u ? `${u[1]},${u[2]}` : null,
+           real: (/escala real 1:([\d.,]+)/.exec(t) || [])[1] };
+});
+const antes = await centroDe();
+
+const buscador = '.lam-buscador input';
+ok(await p.isEnabled(buscador), 'el buscador se habilita cuando llega el índice');
+
+// Sin tilde tiene que encontrar la que la lleva: es el índice del visor.
+await p.fill(buscador, 'chacarra');
+await p.waitForTimeout(400);
+const res = await p.evaluate(() => [...document.querySelectorAll('.lam-buscador-lista button')]
+  .map(b => b.innerText.replace(/\s+/g, ' ').trim()));
+ok(res.length === 1 && /Chacarr/.test(res[0]),
+   'busca sin acentos: «chacarra» encuentra «Canoa Chacarrá»', res.join(' | '));
+ok(/Canoas/.test(res[0]) && /45\+300/.test(res[0]),
+   'y el resultado dice de qué capa es y en qué progresiva', res[0]);
+
+// Dos que comparten prefijo: tienen que salir las dos, no la primera.
+await p.fill(buscador, 'toma 10');
+await p.waitForTimeout(400);
+ok(await p.evaluate(() => document.querySelectorAll('.lam-buscador-lista button').length) === 2,
+   '«toma 10» devuelve las dos tomas, no solo una');
+
+// Y por progresiva, que es otro de los campos del índice.
+await p.fill(buscador, '12+000');
+await p.waitForTimeout(400);
+ok(await p.evaluate(() => /Alcantarilla/.test(
+  document.querySelector('.lam-buscador-lista button')?.innerText || '')),
+   'también se busca por progresiva');
+
+// Elegir: centra en la estructura y NO cambia la escala.
+await p.click('.lam-buscador-lista button');
+await p.waitForTimeout(900);
+const despues = await centroDe();
+ok(despues.utm && despues.utm !== antes.utm,
+   'elegir un resultado mueve el encuadre', `${antes.utm} → ${despues.utm}`);
+ok(n(despues.real) === n(ESC),
+   'y la escala sigue siendo la elegida: buscar centra, no acerca',
+   `rotulada 1:${ESC}, dibujada 1:${despues.real}`);
+ok(await p.evaluate(() => document.querySelectorAll('.lam-buscador-lista').length === 0),
+   'la lista se cierra al elegir');
+
 ok(errs.length === 0, 'ningún error de JS en toda la prueba', errs.join(' | '));
 
 const mal = r.filter(x => !x).length;
