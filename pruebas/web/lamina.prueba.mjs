@@ -57,7 +57,7 @@ ok(mem.alto >= 35, 'el logo ocupa el sitio que dejó el texto', mem.alto + ' px'
 ok(!mem.desborda, 'y el membrete no se desborda por haberlo agrandado');
 
 // ── El selector ──────────────────────────────────────────────────────────
-const g = await p.evaluate(() => [...document.querySelectorAll('.lam-panel optgroup')]
+const g = await p.evaluate(() => [...document.querySelectorAll('.lam-escala optgroup')]
   .filter(x => /^1:/.test(x.children[0]?.textContent || ''))
   .map(x => ({ t: x.label, v: [...x.children].map(o => o.value) })));
 ok(g.length === 3, 'las escalas salen en tres grupos, no en una lista corrida', g.length);
@@ -67,7 +67,7 @@ ok(g.flatMap(x => x.v).join() === ESCALAS.join(),
 
 // ── Lo rotulado es lo dibujado ───────────────────────────────────────────
 for (const v of ESCALAS) {
-  await p.selectOption('.lam-panel select', v);
+  await p.selectOption('.lam-escala', v);
   await p.waitForTimeout(700);
   const o = await p.evaluate(() => {
     const m = document.querySelector('.lam-estado').innerText.replace(/\s+/g, ' ');
@@ -84,7 +84,7 @@ for (const v of ESCALAS) {
 // aquella acción, el candado del zoom saltaría y el membrete quedaría
 // rotulando una escala que ya no es la dibujada.
 const ESC = '2500';
-await p.selectOption('.lam-panel select', ESC);
+await p.selectOption('.lam-escala', ESC);
 await p.waitForTimeout(700);
 
 const centroDe = () => p.evaluate(() => {
@@ -132,6 +132,89 @@ ok(n(despues.real) === n(ESC),
    `rotulada 1:${ESC}, dibujada 1:${despues.real}`);
 ok(await p.evaluate(() => document.querySelectorAll('.lam-buscador-lista').length === 0),
    'la lista se cierra al elegir');
+
+// ── El panel cabe en una pantalla ────────────────────────────────────────
+// Medía 2.706 px de alto —dos pantallas y media— y había que recorrerlo
+// entero para llegar a exportar. Lo que lo hacía largo son los rótulos del
+// membrete y la lista de capas: se escriben una vez para toda la serie,
+// así que van plegados.
+const pan = await p.evaluate(() => {
+  const c = document.querySelector('.lam-panel-cuerpo');
+  const a = document.querySelector('.lam-acciones');
+  return { alto: c.scrollHeight, hueco: c.clientHeight,
+    secs: [...document.querySelectorAll('.lam-sec')].map(s => ({
+      nom: s.querySelector('.lam-sec-nom').textContent,
+      abierta: s.classList.contains('abierta'),
+      res: s.querySelector('.lam-sec-res')?.textContent || '',
+      oculto: s.querySelector('.lam-sec-cuerpo').hidden })),
+    exportarALaVista: a.getBoundingClientRect().bottom <= window.innerHeight + 1,
+    // El buscador NO va dentro de una sección: un atajo detrás de un
+    // desplegable deja de ser un atajo.
+    buscadorFuera: !document.querySelector('.lam-sec .lam-buscador') };
+});
+ok(pan.secs.length === 3, 'el panel se reparte en tres secciones',
+   pan.secs.map(s => s.nom).join(' · '));
+ok(pan.secs[0].abierta && !pan.secs[1].abierta && !pan.secs[2].abierta,
+   'abre solo la del encuadre, que es la que se toca en cada lámina');
+ok(pan.secs.slice(1).every(s => s.oculto && s.res),
+   'y las cerradas dicen qué llevan dentro sin abrirlas',
+   pan.secs.slice(1).map(s => s.res).join(' | '));
+ok(pan.buscadorFuera, 'el buscador queda fuera de las secciones');
+ok(pan.alto <= pan.hueco + 1, 'todo cabe sin desplazar',
+   `${pan.alto} px de contenido en ${pan.hueco} px de hueco`);
+ok(pan.exportarALaVista, 'y PNG/PDF se ven sin recorrer el panel');
+
+// Abrir una sección no debe esconder los botones: están fuera del scroll.
+await p.click('.lam-sec:nth-of-type(3) .lam-sec-tit');
+await p.waitForTimeout(300);
+const tras = await p.evaluate(() => {
+  const a = document.querySelector('.lam-acciones');
+  const s = document.querySelectorAll('.lam-sec')[2];
+  return { abierta: s.classList.contains('abierta'),
+           campos: s.querySelectorAll('input, textarea').length,
+           exportar: a.getBoundingClientRect().bottom <= window.innerHeight + 1 };
+});
+ok(tras.abierta && tras.campos > 5, 'desplegar los rótulos saca sus campos', tras.campos);
+ok(tras.exportar, 'y PNG/PDF siguen a la vista con la sección abierta');
+await p.click('.lam-sec:nth-of-type(3) .lam-sec-tit');
+await p.waitForTimeout(300);
+
+// ── El temblor al plegar el rail ─────────────────────────────────────────
+// Se encoge el hueco como lo encoge el rail —0,35 s de transición— y se
+// cuentan los cuadros largos. El culpable era `--lam-zoom`: es un `zoom` de
+// CSS sobre la hoja, y por debajo cuelgan los 700 marcadores con sus rótulos,
+// así que cada cambio los recoloca todos. Antes se aplicaban once tamaños
+// intermedios que a nadie le interesan; ahora solo el final.
+const temblor = await p.evaluate(async () => {
+  const l = document.querySelector('.lam-lienzo');
+  const w0 = l.clientWidth;
+  const zooms = new Set(); const cuadros = [];
+  let t0 = performance.now();
+  for (let i = 1; i <= 21; i++) {
+    l.style.flex = `0 0 ${w0 - i * 9}px`;
+    await new Promise(r => requestAnimationFrame(r));
+    const t = performance.now(); cuadros.push(t - t0); t0 = t;
+    zooms.add(getComputedStyle(l).getPropertyValue('--lam-zoom').trim());
+  }
+  await new Promise(r => setTimeout(r, 1200));
+  const fin = getComputedStyle(l).getPropertyValue('--lam-zoom').trim();
+  zooms.add(fin);
+  // El hueco real al terminar, no el que se pidió: el `flex-basis` puede
+  // quedar por encima del mínimo de contenido y entonces no mide lo pedido.
+  const ancho = l.clientWidth;
+  l.style.flex = '';
+  return { pasos: zooms.size, largos: cuadros.filter(c => c > 50).length,
+           peor: Math.round(Math.max(...cuadros)), fin: +fin, ancho };
+});
+ok(temblor.pasos <= 3,
+   'plegar el rail no rehace la hoja en cada paso de la animación',
+   `${temblor.pasos} tamaños aplicados`);
+ok(temblor.largos <= 3,
+   'y no deja cuadros largos: eso es lo que se veía temblar',
+   `${temblor.largos} de 21 por encima de 50 ms, el peor ${temblor.peor} ms`);
+// Esperar no vale de nada si al final la hoja no acaba del tamaño correcto.
+ok(Math.abs(temblor.fin - Math.min(1, (temblor.ancho - 56) / (841 * 2))) < 0.02,
+   'y al soltar, la hoja queda del tamaño del hueco nuevo', temblor.fin);
 
 ok(errs.length === 0, 'ningún error de JS en toda la prueba', errs.join(' | '));
 

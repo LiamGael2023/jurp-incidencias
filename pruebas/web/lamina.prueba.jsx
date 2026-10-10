@@ -32,6 +32,37 @@ const INDICE = [
     progresiva: '12+000', lat: -8.3100, lng: -78.6900 },
 ];
 
+/* UNA CAPA CON MUCHAS ESTRUCTURAS, porque con el inventario vacío media
+ * pantalla no se puede medir. Cada punto es un marcador posicionado en
+ * absoluto con su rótulo permanente al lado: lo que hace cara una lámina no
+ * es el mapa, son los miles de nodos que cuelgan de él. Setecientos es lo
+ * que trae una lámina del canal madre de verdad.
+ *
+ * Van repartidos por el encuadre de apertura para que entren en la lámina;
+ * si cayeran fuera, se recortarían y no se dibujaría ninguno. */
+const N = 700;
+const PUNTOS = {
+  type: 'FeatureCollection',
+  features: Array.from({ length: N }, (_, i) => ({
+    type: 'Feature',
+    // Con sector/tramo/canal el panel saca sus tres selectores y la caja de
+    // medida. Sin ellos sale el aviso de «no hay por qué agrupar» y media
+    // pantalla no existe: medir el panel así daría un panel que no es el que
+    // nadie ve.
+    properties: {
+      fid: 1000 + i, nombre: `Toma ${i}`, ambito: 'JURP',
+      sector: `Sector ${1 + (i % 3)}`,
+      tramo: `Tramo ${1 + (i % 7)}`,
+      nombre_canal: `Lateral ${1 + (i % 5)}`,
+      progresiva: `${Math.floor(i / 10)}+${String((i % 10) * 100).padStart(3, '0')}`,
+    },
+    geometry: { type: 'Point', coordinates: [
+      -78.7533 + ((i % 28) - 14) * 0.0016,
+      -8.4186 + (Math.floor(i / 28) - 12) * 0.0011,
+    ] },
+  })),
+};
+
 // El inventario no arranca sin sesión, y el índice del buscador solo se pide
 // cuando hay una campaña activa. Las dos cosas son de verdad en producción,
 // así que aquí se dan en vez de esquivarlas: probar el buscador con el
@@ -48,7 +79,10 @@ window.fetch = async (u) => {
       url.includes('/capas/indice/') ? INDICE
     : url.includes('/campanias/') && url.includes('/avance/') ? { detalle: [] }
     : url.includes('/campanias/') ? [CAMPANIA]
-    : url.includes('/capas/') ? []
+    // Las tomas traen los 700 puntos; el resto de capas, vacías. Una sola
+    // capa poblada basta y deja claro de dónde sale la carga.
+    : /\/capas\/tomas_l10\//.test(url) ? PUNTOS
+    : url.endsWith('/capas/') ? []
     : url.includes('/evaluaciones/') ? []
     : url.includes('/activos-nuevos/') ? []
     : { type: 'FeatureCollection', features: [] };

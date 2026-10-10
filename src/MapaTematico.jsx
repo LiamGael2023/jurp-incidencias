@@ -476,6 +476,34 @@ const guardar = (llave, v) => { try { localStorage.setItem(llave, JSON.stringify
  * Encontrar una estructura es otra manera de encuadrar, no una manera de
  * asomarse. Si hace falta verla más de cerca, para eso está la escala.
  */
+/**
+ * Una sección plegable del panel.
+ *
+ * El panel llegó a medir cuatro pantallas de alto y había que recorrerlo
+ * entero para llegar a los botones de exportar. La razón es que mezcla cosas
+ * de dos ritmos distintos: el encuadre se toca en cada lámina, mientras que
+ * el proyecto, las notas y los profesionales se escriben una vez y se quedan
+ * ahí para toda la serie. Lo de una vez va plegado.
+ *
+ * Las secciones NO desmontan su contenido al cerrarse —se ocultan— porque
+ * dentro hay campos de texto: desmontarlos perdería el cursor y la posición
+ * del desplazamiento cada vez que alguien plegara una sección por error.
+ */
+function Seccion({ titulo, resumen, icono, abierta, onAlternar, children }) {
+  return (
+    <section className={`lam-sec${abierta ? ' abierta' : ''}`}>
+      <button type="button" className="lam-sec-tit" onClick={onAlternar}
+        aria-expanded={abierta}>
+        {icono}
+        <span className="lam-sec-nom">{titulo}</span>
+        {!abierta && resumen && <span className="lam-sec-res">{resumen}</span>}
+        <FaChevronDown className="lam-sec-flecha" />
+      </button>
+      <div className="lam-sec-cuerpo" hidden={!abierta}>{children}</div>
+    </section>
+  );
+}
+
 function BuscadorLamina({ inv, onCentrar }) {
   const [texto, setTexto] = useState('');
   const [abierto, setAbierto] = useState(false);
@@ -554,6 +582,12 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
   const [limites, setLimites] = useState(null);
   const [ocupado, setOcupado] = useState(null);
   const [panel, setPanel] = useState(true);
+  // Qué secciones están desplegadas. Abre solo la del encuadre: es la única
+  // que se toca en cada lámina. Las otras dos se rellenan una vez para toda
+  // la serie, y teniéndolas abiertas el panel medía cuatro pantallas.
+  const [secciones, setSecciones] = useState({ encuadre: true, capas: false, rotulos: false });
+  const alternarSeccion = useCallback(
+    (k) => setSecciones(s => ({ ...s, [k]: !s[k] })), []);
 
   // Datos del membrete, que no cambian de una lámina a la siguiente.
   const [proyecto, setProyecto] = useState(() => leerGuardado('lamProyecto',
@@ -587,8 +621,9 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
   useEffect(() => {
     const caja = lienzoRef.current;
     if (!caja || typeof ResizeObserver === 'undefined') return;
+    let espera = null;
 
-    const ajustar = () => {
+    const aplicar = () => {
       // Dos decimales y un margen de 56 px, no 48: el ajuste se mide a sí
       // mismo. Si el zoom deja la hoja al borde justo del hueco, aparece la
       // barra de desplazamiento, el hueco encoge, el zoom baja, la barra se
@@ -606,10 +641,33 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
       requestAnimationFrame(() => mapRef.current?.invalidateSize({ animate: false }));
     };
 
-    ajustar();
+    /*
+     * EL AJUSTE ESPERA A QUE EL HUECO DEJE DE MOVERSE. Esto es lo que
+     * arregla el temblor al plegar el rail.
+     *
+     * `--lam-zoom` es un `zoom` de CSS sobre la hoja, y por debajo de él
+     * cuelga el mapa entero: con el inventario cargado, cada estructura es
+     * un marcador posicionado en absoluto con su rótulo permanente al lado
+     * —en una lámina del canal madre pasan de setecientos, o sea miles de
+     * nodos—. Cambiar el zoom obliga a recolocarlos todos.
+     *
+     * El rail se pliega con una transición de 0,35 s, así que el observador
+     * ve una veintena de anchos intermedios y antes se rehacía la hoja en
+     * cada uno. Ninguno de esos pasos interesa: el único ancho que importa
+     * es el final. Se hace una vez, cuando para.
+     *
+     * 180 ms es más que un cuadro y menos que la transición: no se dispara
+     * a mitad del plegado y no se nota como retraso al soltar.
+     */
+    const ajustar = () => {
+      clearTimeout(espera);
+      espera = setTimeout(aplicar, 180);
+    };
+
+    aplicar();                    // el primero, sin esperar: es el de entrada
     const ro = new ResizeObserver(ajustar);
     ro.observe(caja);
-    return () => ro.disconnect();
+    return () => { ro.disconnect(); clearTimeout(espera); };
   }, []);
 
   // Carga el inventario al entrar: sin él no hay sectores ni tramos que elegir.
@@ -727,11 +785,32 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
   }, []);
 
   // Lo que la lámina rotula del encuadre real, no del pedido.
+  // El encuadre anterior, para no rehacer la lámina cuando no ha cambiado.
+  const ultimoEncuadre = useRef(null);
+
   const alMover = useCallback(() => {
     const m = mapRef.current;
     if (!m) return;
     const b = m.getBounds();
-    setLimites({ norte: b.getNorth(), sur: b.getSouth(), este: b.getEast(), oeste: b.getWest() });
+    const n = { norte: b.getNorth(), sur: b.getSouth(),
+                este: b.getEast(), oeste: b.getWest() };
+
+    // UN «moveend» NO SIEMPRE ES UN MOVIMIENTO. Leaflet lo dispara también al
+    // avisarle de un cambio de tamaño, y vuelve bordes que difieren en la
+    // decimoquinta cifra. Sin este corte, cada uno de esos avisos rehacía los
+    // límites —objeto nuevo— y de ahí colgaba el recálculo de las
+    // estructuras, los rótulos, la leyenda y la cuadrícula: setecientas
+    // estructuras redibujadas para quedarse donde estaban.
+    //
+    // 1e-7 grados son unos 11 mm de terreno. A 1:200, el milímetro de papel
+    // son 200 mm de terreno, así que lo que este corte descarta no se podría
+    // dibujar ni en la lámina más cerrada del catálogo.
+    const p = ultimoEncuadre.current;
+    if (p && ['norte', 'sur', 'este', 'oeste']
+      .every(k => Math.abs(p[k] - n[k]) < 1e-7)) return;
+
+    ultimoEncuadre.current = n;
+    setLimites(n);
     setVersion(v => v + 1);
   }, []);
 
@@ -777,6 +856,11 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
    * encuadre. Es el error que conviene tener: de más en la leyenda, nunca de
    * menos.
    */
+  // Cuántas capas van encendidas, para el resumen de la sección plegada: si
+  // se cierra sin decir qué queda dentro, hay que abrirla para saberlo.
+  const capasEncendidas = useMemo(
+    () => TODAS_LAS_CAPAS.filter(c => inv.visibles[c.codigo]).length, [inv.visibles]);
+
   const leyenda = useMemo(() => GRUPOS_CAPAS
     .map(g => ({ titulo: g.titulo, capas: g.capas.filter(c => inv.visibles[c.codigo] && asomaEnLamina(c.codigo)) }))
     .filter(g => g.capas.length), [inv.visibles, asomaEnLamina]);
@@ -997,9 +1081,8 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
         <div className="lam-panel-cuerpo">
           <h2>Lámina temática</h2>
           <p className="lam-ayuda">
-            Escala fija <b>1:{escala.toLocaleString('es-PE')}</b>. El encuadre sale de lo que
-            elijas abajo, no de dónde quede la vista, y el zoom está bloqueado para que la
-            escala rotulada sea la de verdad.
+            Escala fija <b>1:{escala.toLocaleString('es-PE')}</b>, zoom bloqueado: lo
+            rotulado es lo dibujado.
           </p>
 
           {descargando && (
@@ -1017,11 +1100,14 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
             </div>
           )}
 
-          {/* Va ANTES de los selectores porque es el atajo: quien sabe cómo
-              se llama la estructura no tiene por qué saber de qué tramo
-              cuelga. Los selectores siguen abajo para el caso contrario —
-              recorrer una obra sin un nombre concreto en la cabeza. */}
+          {/* El buscador va FUERA de las secciones: es el atajo, y un atajo
+              detrás de un desplegable no es un atajo. */}
           <BuscadorLamina inv={inv} onCentrar={centrarEn} />
+
+          <Seccion titulo="Encuadre y escala" icono={<FaCrosshairs />}
+            abierta={secciones.encuadre}
+            onAlternar={() => alternarSeccion('encuadre')}
+            resumen={`1:${escala.toLocaleString('es-PE')}${giro ? ` · ${giro}°` : ''}`}>
 
           {estructura.niveles.map(n => (
             <label key={n.clave}>{n.etiqueta}
@@ -1062,7 +1148,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
           {/* La escala va junto al encuadre porque son la misma decisión:
               cuánto terreno entra en el papel. */}
           <label>Escala de la lámina
-            <select value={escala}
+            <select className="lam-escala" value={escala}
               onChange={e => setEscala(Number(e.target.value))}>
               {GRUPOS_ESCALA.map(g => (
                 <optgroup key={g.titulo} label={g.titulo}>
@@ -1147,7 +1233,54 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
             </div>
           </label>
 
-          <hr />
+          </Seccion>
+
+          <Seccion titulo="Capas y fondo" icono={<FaLayerGroup />}
+            abierta={secciones.capas}
+            onAlternar={() => alternarSeccion('capas')}
+            resumen={`${capaBase(base).etiqueta} · ${capasEncendidas} capas`}>
+
+          <label>Capa base
+            <SelectorBase base={base} onBase={setBase} className="lam-select" />
+          </label>
+          {!puedeExportar(base) && (
+            <div className="lam-aviso lam-aviso-ojo">
+              <FaExclamationTriangle /> Con «{capaBase(base).etiqueta}» la lámina se ve en
+              pantalla pero el <b>PDF saldrá sin mapa de fondo</b>: ese servidor no
+              autoriza la lectura de sus teselas.
+              {/* La vuelta, a un clic. Avisar sin decir cómo salir obliga a
+                  buscar el selector y a saber cuál de las capas sí exporta. */}
+              <button onClick={() => setBase(alternativaExportable(base))}>
+                <FaLayerGroup /> Cambiar a «{capaBase(alternativaExportable(base)).etiqueta}»,
+                que sí exporta
+              </button>
+            </div>
+          )}
+
+          <div className="lam-capas">
+            {GRUPOS_CAPAS.map(g => (
+              <div key={g.titulo} className="lam-capas-grupo">
+                <div className="lam-capas-tit">{g.titulo}</div>
+                {g.capas.map(c => (
+                  <label key={c.codigo} className="lam-capa">
+                    <input type="checkbox" checked={!!inv.visibles[c.codigo]}
+                      onChange={() => inv.alternarCapa(c.codigo)} />
+                    <i style={{ background: c.color }} />{c.label}
+                  </label>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          </Seccion>
+
+          {/* Todo esto se escribe una vez y vale para la serie entera: el
+              proyecto, las notas y los profesionales no cambian de una lámina
+              a la siguiente. Por eso va plegado. */}
+          <Seccion titulo="Rótulos de la lámina" icono={<FaFilePdf />}
+            abierta={secciones.rotulos}
+            onAlternar={() => alternarSeccion('rotulos')}
+            resumen={lamina}>
 
           <label>Mapa (título de la lámina)
             <input value={titulo} onChange={e => setTitulo(e.target.value)} />
@@ -1192,41 +1325,16 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
           </div>
           <div className="lam-lamina-num">Quedará como <b>{lamina}</b></div>
 
-          <hr />
+          </Seccion>
+        </div>
+        )}
 
-          <label>Capa base
-            <SelectorBase base={base} onBase={setBase} className="lam-select" />
-          </label>
-          {!puedeExportar(base) && (
-            <div className="lam-aviso lam-aviso-ojo">
-              <FaExclamationTriangle /> Con «{capaBase(base).etiqueta}» la lámina se ve en
-              pantalla pero el <b>PDF saldrá sin mapa de fondo</b>: ese servidor no
-              autoriza la lectura de sus teselas.
-              {/* La vuelta, a un clic. Avisar sin decir cómo salir obliga a
-                  buscar el selector y a saber cuál de las capas sí exporta. */}
-              <button onClick={() => setBase(alternativaExportable(base))}>
-                <FaLayerGroup /> Cambiar a «{capaBase(alternativaExportable(base)).etiqueta}»,
-                que sí exporta
-              </button>
-            </div>
-          )}
-
-          <div className="lam-capas">
-            <div className="lam-prof-tit"><FaLayerGroup /> Capas en la lámina</div>
-            {GRUPOS_CAPAS.map(g => (
-              <div key={g.titulo} className="lam-capas-grupo">
-                <div className="lam-capas-tit">{g.titulo}</div>
-                {g.capas.map(c => (
-                  <label key={c.codigo} className="lam-capa">
-                    <input type="checkbox" checked={!!inv.visibles[c.codigo]}
-                      onChange={() => inv.alternarCapa(c.codigo)} />
-                    <i style={{ background: c.color }} />{c.label}
-                  </label>
-                ))}
-              </div>
-            ))}
-          </div>
-
+        {/* FUERA DEL CUERPO QUE SE DESPLAZA, pegados abajo. Exportar es la
+            última acción de la pantalla y antes había que recorrer el panel
+            entero para llegar a ella; con las secciones plegadas el recorrido
+            es corto, pero plegar no es cosa de quien solo viene a sacar el
+            PDF. Con el panel cerrado no hay sitio y no se pintan. */}
+        {panel && (
           <div className="lam-acciones">
             <button className="lam-btn" onClick={descargarPNG} disabled={!!ocupado}>
               <FaDownload /> {ocupado === 'png' ? 'Generando…' : 'PNG'}
@@ -1235,7 +1343,6 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               <FaFilePdf /> {ocupado === 'pdf' ? 'Generando…' : 'PDF A1'}
             </button>
           </div>
-        </div>
         )}
       </aside>
 
