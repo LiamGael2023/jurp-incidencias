@@ -624,14 +624,30 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
     let espera = null;
 
     const aplicar = () => {
-      // Dos decimales y un margen de 56 px, no 48: el ajuste se mide a sí
-      // mismo. Si el zoom deja la hoja al borde justo del hueco, aparece la
-      // barra de desplazamiento, el hueco encoge, el zoom baja, la barra se
-      // va, el hueco crece… y el mapa tiembla. El margen evita rozar ese
-      // borde y el redondeo evita que un píxel de diferencia cuente como
-      // cambio.
-      const disponible = caja.clientWidth - 56;
-      const z = +Math.max(0.35, Math.min(1, disponible / mm(PAPEL.anchoMm))).toFixed(2);
+      /*
+       * SE MIDE EL HUECO EN LOS DOS SENTIDOS, no solo a lo ancho. Este
+       * ajuste se mide a sí mismo, y ahí está la trampa:
+       *
+       *   la hoja cabe a lo ancho pero se pasa de alto
+       *     → sale la barra de desplazamiento vertical
+       *       → la barra se come ~15 px de ancho
+       *         → el hueco encoge, el zoom baja, la hoja encoge
+       *           → ya no se pasa de alto, la barra se va
+       *             → el hueco crece… y vuelta a empezar.
+       *
+       * Eso es la barra que aparece y desaparece sola. Mirando solo el
+       * ancho el bucle es inevitable en cuanto la ventana queda en la
+       * proporción justa; mirando los dos, la hoja nunca se sale y la barra
+       * no llega a aparecer. El `scrollbar-gutter: stable` del CSS cierra
+       * la otra mitad: el hueco mide lo mismo haya barra o no.
+       *
+       * El margen de 8 px sobre el relleno evita rozar el borde, y los dos
+       * decimales evitan que un píxel de diferencia cuente como cambio.
+       */
+      const RELLENO = 48 + 8;                    // 24 px a cada lado, y aire
+      const porAncho = (caja.clientWidth - RELLENO) / mm(PAPEL.anchoMm);
+      const porAlto = (caja.clientHeight - RELLENO) / mm(PAPEL.altoMm);
+      const z = +Math.max(0.35, Math.min(1, porAncho, porAlto)).toFixed(2);
       if (z === zoomHoja.current) return;        // nada que hacer: se corta el bucle
       zoomHoja.current = z;
       caja.style.setProperty('--lam-zoom', String(z));

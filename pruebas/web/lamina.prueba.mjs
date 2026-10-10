@@ -225,6 +225,35 @@ ok(temblor.fin > temblor.antes,
    'y al plegarlo la hoja crece, que es para lo que se mide el hueco',
    `${temblor.antes} → ${temblor.fin}`);
 
+// ── La barra de desplazamiento que iba y venía ───────────────────────────
+// El tamaño de la hoja se calcula a partir del hueco, y el hueco cambia
+// cuando sale una barra. Midiendo solo el ancho, la hoja podía caber a lo
+// ancho y pasarse de alto: salía la barra vertical, se comía ~15 px de
+// ancho, la hoja encogía, ya no se pasaba de alto, la barra se iba… Se mide
+// a varios tamaños porque el fallo solo aparece en proporciones concretas:
+// 1920x900 se salía por TRES píxeles.
+const tamanos = [[1920, 900], [1920, 700], [1700, 700], [1700, 1100], [1500, 1000]];
+for (const [w, h] of tamanos) {
+  await p.setViewportSize({ width: w, height: h });
+  await p.waitForTimeout(700);
+  const leer = () => p.evaluate(() => {
+    const l = document.querySelector('.lam-lienzo');
+    return { z: getComputedStyle(l).getPropertyValue('--lam-zoom').trim(),
+             bx: l.scrollWidth - l.clientWidth, by: l.scrollHeight - l.clientHeight };
+  });
+  const a = await leer();
+  await p.waitForTimeout(1100);                 // ¿se mueve solo?
+  const d = await leer();
+  // Con el zoom en su suelo la hoja no cabe y la barra debe salir; lo que no
+  // puede es ir y venir sola.
+  const suelo = +d.z <= 0.351;
+  ok(a.z === d.z && (suelo || (d.bx <= 1 && d.by <= 1)),
+     `${w}x${h}: la hoja cabe entera y el tamaño no se mueve solo`,
+     `z ${a.z}${a.z === d.z ? '' : '→' + d.z}, sobra ${d.bx} x ${d.by}`);
+}
+await p.setViewportSize({ width: 1700, height: 1100 });
+await p.waitForTimeout(600);
+
 ok(errs.length === 0, 'ningún error de JS en toda la prueba', errs.join(' | '));
 
 const mal = r.filter(x => !x).length;

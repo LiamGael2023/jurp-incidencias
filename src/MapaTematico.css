@@ -182,6 +182,11 @@
 .lam-lienzo {
   flex: 1; overflow: auto; padding: 24px; display: flex; justify-content: center;
   align-items: flex-start;
+  /* El hueco mide lo mismo haya barra de desplazamiento o no. Sin esto, la
+     barra se come ~15 px de ancho justo cuando aparece, y como el tamaño de
+     la hoja se calcula a partir de ese ancho, el cálculo se persigue a sí
+     mismo: la barra sale, la hoja encoge, la barra se va, la hoja crece. */
+  scrollbar-gutter: stable;
 }
 .lam-hoja {
   position: relative; background: #fff; flex: none;
