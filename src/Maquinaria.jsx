@@ -74,6 +74,22 @@ const COL = {
   volumen: 5, horas: 6, combust: 7, proveedor: 8, total: 9,
 };
 
+/**
+ * El mismo orden, pero SIN la columna de incidencia.
+ *
+ * La pantalla y el PDF agrupan por incidencia: el código va una vez en la
+ * cabecera del grupo y no en cada fila, así que la columna sobra. El Excel
+ * no agrupa —ver por qué en exportarHistorialExcel— y usa COL.
+ */
+const COL_G = {
+  parte: 0, fecha: 1, estado: 2, actividad: 3,
+  volumen: 4, horas: 5, combust: 6, proveedor: 7, total: 8,
+};
+
+// Los partes que no cuelgan de ninguna incidencia: traslados, movilizaciones,
+// mantenimientos. No son un error ni un hueco, son su propio grupo.
+const SIN_INCIDENCIA = 'Sin incidencia';
+
 const codigoIncidencia = (p) => {
   if (!p || !p.incidente_id) return '—';
   const base = `INCIDENTE-${String(p.incidente_id).padStart(3, '0')}`;
@@ -262,6 +278,42 @@ export default function Maquinaria({ irAIncidente }) {
       total_combustible: suma(p => p.fuel_gallons),
     };
   }, [historial, filtroInc]);
+
+  /**
+   * Los partes repartidos por incidencia, con el subtotal de cada una.
+   *
+   * Es lo que se mira al valorizar: cuánto le toca a cada incidencia. Antes
+   * el código salía repetido en las diez filas de la misma incidencia y
+   * había que sumar a ojo para saber el subtotal; ahora el código va una vez
+   * y la suma viene hecha.
+   *
+   * EL ORDEN DE LOS GRUPOS ES EL DE SU PRIMER PARTE, no alfabético ni por
+   * importe: la lista viene de la más reciente a la más antigua, así que la
+   * incidencia en la que se está trabajando queda arriba, que es donde se
+   * la busca.
+   *
+   * Los partes sin incidencia —traslados, mantenimientos— van en su propio
+   * grupo al final. Son pocos y no se pueden perder: suman horas y soles
+   * igual que los demás.
+   */
+  const grupos = useMemo(() => {
+    if (!vista) return [];
+    const porCodigo = new Map();
+    for (const p of vista.partes) {
+      const cod = p.incidente_id ? codigoIncidencia(p) : SIN_INCIDENCIA;
+      if (!porCodigo.has(cod)) porCodigo.set(cod, { codigo: cod, partes: [] });
+      porCodigo.get(cod).partes.push(p);
+    }
+    const lista = [...porCodigo.values()].map(g => ({
+      ...g,
+      horas: g.partes.reduce((a, p) => a + (parseFloat(p.horas) || 0), 0),
+      combust: g.partes.reduce((a, p) => a + (parseFloat(p.fuel_gallons) || 0), 0),
+      costo: g.partes.reduce((a, p) => a + (parseFloat(p.costo) || 0), 0),
+    }));
+    // Los sueltos, al final, pase lo que pase con el orden de los demás.
+    return [...lista.filter(g => g.codigo !== SIN_INCIDENCIA),
+            ...lista.filter(g => g.codigo === SIN_INCIDENCIA)];
+  }, [vista]);
 
   // Abre el PDF del parte en un modal (igual que en Reportes / parte diario).
   const abrirPdfParte = async (parteId, nombre) => {
@@ -629,6 +681,21 @@ export default function Maquinaria({ irAIncidente }) {
     ? '_' + filtroInc.replace(/^INCIDENTE-/, 'INC-').replace(/-\d{8}$/, '')
     : '');
 
+  /*
+   * EL EXCEL NO AGRUPA, Y ES A PROPÓSITO.
+   *
+   * La pantalla y el PDF sí: son para leer, y ahí el código repetido diez
+   * veces estorba. Un Excel es otra cosa —se ordena, se filtra, se le hace
+   * una tabla dinámica—, y todo eso necesita que cada fila se baste a sí
+   * misma. Con el código solo en una cabecera de grupo, en cuanto alguien
+   * ordena por fecha las filas se van de su grupo y ya no hay manera de
+   * saber a qué incidencia pertenecía cada una.
+   *
+   * Así que aquí la columna N° INCIDENCIA va en TODAS las filas, que es lo
+   * que deja agrupar a quien reciba el archivo, por donde quiera y sin
+   * deshacer nada. Los subtotales por incidencia salen de una dinámica en
+   * dos clics; una fila de subtotal metida en medio de los datos, no.
+   */
   const exportarHistorialExcel = async () => {
     if (!vista || !detalle) return;
     const modo = await preguntarModoReporte();
@@ -797,47 +864,69 @@ export default function Maquinaria({ irAIncidente }) {
     doc.text(`Placa: ${maq.placa || '—'}`, 185, infoY);
     doc.text(`Origen: ${maq.origen === 'JURP' ? 'JURP (propia)' : 'Externa'}`, 185, infoY + 5);
 
-    const cuerpo = vista.partes.map(p => ([
-      codigoIncidencia(p),
-      p.part_number,
-      p.date || '—',
-      p.cerrado ? 'CERRADO' : 'ABIERTO',
-      p.activities || '—',
-      `${(parseFloat(p.metrado) || 0).toFixed(2)} ${uMet(p.metrado_unidad)}`,
-      `${(parseFloat(p.horas) || 0).toFixed(2)} HE`,
-      `${(parseFloat(p.fuel_gallons) || 0).toFixed(2)} Gls`,
-      p.provider || '—',
-      // TOTAL es la ultima columna: quitarla no corre ninguna otra.
-      ...(valorizado ? [`S/ ${(parseFloat(p.costo) || 0).toFixed(2)}`] : []),
-    ]));
+    /*
+     * El cuerpo va agrupado por incidencia, como en pantalla: una fila de
+     * cabecera con el código y el subtotal, y debajo sus partes. Es lo que
+     * se mira al valorizar, y sumar a ojo diez filas para saber cuánto le
+     * toca a una incidencia es justo lo que el reporte tiene que ahorrar.
+     *
+     * autoTable admite colSpan en el cuerpo, así que la cabecera del grupo
+     * es una fila normal con sus celdas unidas; no hace falta pintarla
+     * aparte ni calcular posiciones.
+     */
+    const azulGrupo = { fillColor: [239, 246, 255], textColor: [30, 64, 175],
+                        fontStyle: 'bold' };
+    const cuerpo = [];
+    for (const g of grupos) {
+      cuerpo.push([
+        { content: `${g.codigo}   ·   ${g.partes.length} parte(s)`,
+          colSpan: COL_G.volumen + 1, styles: azulGrupo },
+        { content: `${g.horas.toFixed(2)} HE`, styles: { ...azulGrupo, halign: 'right' } },
+        { content: `${g.combust.toFixed(2)} Gls`, styles: { ...azulGrupo, halign: 'right' } },
+        { content: '', styles: azulGrupo },
+        ...(valorizado ? [{ content: `S/ ${g.costo.toFixed(2)}`,
+                            styles: { ...azulGrupo, halign: 'right' } }] : []),
+      ]);
+      for (const p of g.partes) {
+        cuerpo.push([
+          p.part_number,
+          p.date || '—',
+          p.cerrado ? 'CERRADO' : 'ABIERTO',
+          p.activities || '—',
+          `${(parseFloat(p.metrado) || 0).toFixed(2)} ${uMet(p.metrado_unidad)}`,
+          `${(parseFloat(p.horas) || 0).toFixed(2)} HE`,
+          `${(parseFloat(p.fuel_gallons) || 0).toFixed(2)} Gls`,
+          p.provider || '—',
+          // TOTAL es la ultima columna: quitarla no corre ninguna otra.
+          ...(valorizado ? [`S/ ${(parseFloat(p.costo) || 0).toFixed(2)}`] : []),
+        ]);
+      }
+    }
 
     autoTable(doc, {
       startY: infoY + 11,
-      head: [['N° INCIDENCIA', 'N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'VOLUMEN', 'HORAS', 'COMBUST.', 'PROVEEDOR',
+      head: [['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'VOLUMEN', 'HORAS', 'COMBUST.', 'PROVEEDOR',
               ...(valorizado ? ['TOTAL'] : [])]],
       body: cuerpo,
       // El pie se arma por hueco y no a mano: contar comillas vacías es
       // justo lo que se descuadra al mover una columna.
       foot: [(() => {
-        const f = Array(valorizado ? 10 : 9).fill('');
-        f[0] = `TOTAL · ${vista.total_partes} parte(s)`;
-        f[COL.horas] = `${vista.total_horas.toFixed(2)} HE`;
-        f[COL.combust] = `${vista.total_combustible.toFixed(2)} Gls`;
-        if (valorizado) f[COL.total] = `S/ ${vista.total_costo.toFixed(2)}`;
+        const f = Array(valorizado ? 9 : 8).fill('');
+        f[0] = `TOTAL${grupos.length > 1 ? ` · ${grupos.length} incidencias` : ''}`
+             + ` · ${vista.total_partes} parte(s)`;
+        f[COL_G.horas] = `${vista.total_horas.toFixed(2)} HE`;
+        f[COL_G.combust] = `${vista.total_combustible.toFixed(2)} Gls`;
+        if (valorizado) f[COL_G.total] = `S/ ${vista.total_costo.toFixed(2)}`;
         return f;
       })()],
       styles: { fontSize: 7.5, cellPadding: 2 },
       headStyles: { fillColor: [20, 99, 165], textColor: 255, fontSize: 7.5, halign: 'center' },
       footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 7.5 },
       columnStyles: {
-        [COL.volumen]: { halign: 'right' },
-        [COL.horas]: { halign: 'right' },
-        [COL.combust]: { halign: 'right' },
-        ...(valorizado ? { [COL.total]: { halign: 'right' } } : {}),
-        // N° INCIDENCIA: la cabecera va centrada (headStyles lo centra todo) y
-        // el cuerpo se quedaba a la izquierda, así que la columna parecía
-        // descuadrada. Centrar el cuerpo la alinea con su propio título.
-        [COL.incidencia]: { halign: 'center' },
+        [COL_G.volumen]: { halign: 'right' },
+        [COL_G.horas]: { halign: 'right' },
+        [COL_G.combust]: { halign: 'right' },
+        ...(valorizado ? { [COL_G.total]: { halign: 'right' } } : {}),
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       margin: { left: 10, right: 10 },
@@ -1260,11 +1349,9 @@ export default function Maquinaria({ irAIncidente }) {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                       <thead>
                         <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
-                          {/* Primera, igual que en el PDF y en el Excel: es la
-                              misma columna y no tiene por qué leerse distinto
-                              según dónde se mire. */}
-                          <th style={{ textAlign: 'left', padding: '10px 10px', fontSize: '11px', color: '#475569', whiteSpace: 'nowrap' }}>N° INCIDENCIA</th>
-                          <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569', whiteSpace: 'nowrap' }}>N° PARTE</th>
+                          {/* Sin columna de incidencia: va en la cabecera de
+                              cada grupo, una vez, con su subtotal al lado. */}
+                          <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '11px', color: '#475569', whiteSpace: 'nowrap' }}>N° PARTE</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>FECHA</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>ESTADO</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>ACTIVIDAD</th>
@@ -1276,13 +1363,30 @@ export default function Maquinaria({ irAIncidente }) {
                           <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '11px', color: '#475569' }}>PDF</th>
                         </tr>
                       </thead>
-                      <tbody>
-                        {vista.partes.map(p => (
+                      {/* Un <tbody> por incidencia: su cabecera y sus partes
+                          viajan juntos, y así el navegador no parte un grupo
+                          entre dos páginas al imprimir. */}
+                      {grupos.map(g => (
+                      <tbody key={g.codigo}>
+                        <tr style={{ background: '#eff6ff', borderTop: '2px solid #bfdbfe', borderBottom: '1px solid #bfdbfe' }}>
+                          <td colSpan={COL_G.volumen + 1} style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontWeight: 800, color: '#1e40af', fontSize: '13px' }}>{g.codigo}</span>
+                            <span style={{ marginLeft: '10px', fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                              {g.partes.length} parte{g.partes.length !== 1 ? 's' : ''}
+                            </span>
+                          </td>
+                          {/* El subtotal cae bajo su propia columna. Puesto en
+                              una esquina habría que buscar a qué se refiere
+                              cada número. */}
+                          <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: 700, color: '#1e40af', fontSize: '12px', whiteSpace: 'nowrap' }}>{fmtNum(g.horas)} HE</td>
+                          <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: 700, color: '#1e40af', fontSize: '12px', whiteSpace: 'nowrap' }}>{fmtNum(g.combust)} Gls</td>
+                          <td style={{ padding: '9px 8px' }}></td>
+                          <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: 800, color: '#1e40af', fontSize: '13px', whiteSpace: 'nowrap' }}>S/ {fmtNum(g.costo)}</td>
+                          <td style={{ padding: '9px 14px' }}></td>
+                        </tr>
+                        {g.partes.map(p => (
                           <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', background: p.cerrado ? '#fff' : '#fffbeb' }}>
-                            {/* La incidencia, en azul y destacada: es la columna
-                                por la que se lee la tabla. */}
-                            <td style={{ padding: '11px 10px', fontWeight: 700, color: '#206bc4', whiteSpace: 'nowrap' }}>{codigoIncidencia(p)}</td>
-                            <td style={{ padding: '11px 8px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>{p.part_number}</td>
+                            <td style={{ padding: '11px 14px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>{p.part_number}</td>
                             <td style={{ padding: '11px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{p.date ? p.date.split('T')[0].split('-').reverse().join('/') : '—'}</td>
                             <td style={{ padding: '11px 8px' }}>
                               <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 9px', borderRadius: '4px', background: p.cerrado ? '#dcfce7' : '#fef3c7', color: p.cerrado ? '#15803d' : '#b45309', whiteSpace: 'nowrap' }}>
@@ -1304,12 +1408,14 @@ export default function Maquinaria({ irAIncidente }) {
                           </tr>
                         ))}
                       </tbody>
+                      ))}
                       <tfoot>
                         <tr style={{ background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
-                          {/* Cinco, no cuatro: la incidencia se puso delante y
-                              el rótulo del total tiene que cubrirla. */}
-                          <td colSpan="5" style={{ padding: '13px 14px', fontWeight: 700, color: '#334155' }}>TOTAL · {vista.total_partes} parte{vista.total_partes !== 1 ? 's' : ''}</td>
-                          <td style={{ padding: '13px 8px' }}></td>
+                          {/* Hasta VOLUMEN inclusive: es lo que hay antes de
+                              la primera columna que suma. */}
+                          <td colSpan={COL_G.volumen + 1} style={{ padding: '13px 14px', fontWeight: 700, color: '#334155' }}>
+                            TOTAL{grupos.length > 1 ? ` · ${grupos.length} incidencias` : ''} · {vista.total_partes} parte{vista.total_partes !== 1 ? 's' : ''}
+                          </td>
                           <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(vista.total_horas)} HE</td>
                           <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(vista.total_combustible)} Gls</td>
                           <td style={{ padding: '13px 8px' }}></td>
