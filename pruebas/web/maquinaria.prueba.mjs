@@ -21,6 +21,8 @@ const URL = 'http://localhost:5199/pruebas/web/maquinaria.html';
 const r = [];
 const ok = (c, m, e) => { r.push(!!c); console.log(`${c ? 'ok  ' : 'MAL '} ${m}${e ? `   [${e}]` : ''}`); };
 
+const COL_HORAS = 5;   // N° PARTE, FECHA, ESTADO, ACTIVIDAD, VOLUMEN
+
 const dir = mkdtempSync(join(tmpdir(), 'maq-'));
 const py = (codigo) => execFileSync('python3', ['-I', '-c', codigo], { encoding: 'utf-8' }).trim();
 
@@ -49,20 +51,25 @@ await p.waitForTimeout(1500);
 // Las filas de grupo y las de parte se distinguen por sus celdas: una fila
 // de parte tiene una por columna; la de grupo une las primeras.
 const leerTabla = () => p.evaluate(() => {
-  const th = [...document.querySelectorAll('table thead th')].map(t => t.innerText.trim());
   const ancho = (tr) => [...tr.children]
     .reduce((a, c) => a + (parseInt(c.getAttribute('colspan'), 10) || 1), 0);
+  // La cabecera tiene DOS pisos: arriba el título HORAS abarcando las tres
+  // columnas de horas, abajo los nombres. Los nombres son el piso de abajo.
+  const cab = [...document.querySelectorAll('table thead tr')];
+  const th = [...cab[cab.length - 1].children].map(t => t.innerText.trim());
+  const anchoPisos = cab.map(ancho);
   const grupos = [];
   let partes = 0, anchoParte = null;
   for (const tb of document.querySelectorAll('table tbody')) {
     for (const tr of tb.children) {
       if (tr.children.length < th.length) {
         const c = [...tr.children].map(x => x.innerText.replace(/\s+/g, ' ').trim());
-        grupos.push({ cab: c[0], horas: c[1], combust: c[2], costo: c[4], ancho: ancho(tr) });
+        grupos.push({ cab: c[0], program: c[1], muertas: c[2], horas: c[3],
+                      combust: c[4], costo: c[6], ancho: ancho(tr) });
       } else { partes++; anchoParte = anchoParte ?? ancho(tr); }
     }
   }
-  return { th, grupos, partes, anchoParte,
+  return { th, anchoPisos, grupos, partes, anchoParte,
            pieAncho: ancho(document.querySelector('table tfoot tr')),
            pieTxt: document.querySelector('table tfoot')?.innerText.replace(/\s+/g, ' ') || '' };
 });
@@ -75,6 +82,15 @@ ok(t0.th.length === t0.anchoParte && t0.th.length === t0.pieAncho
    && t0.th.length === t0.grupos[0].ancho,
    'cabecera, filas, cabeceras de grupo y pie suman las mismas columnas',
    `${t0.th.length} · ${t0.anchoParte} · ${t0.grupos[0].ancho} · ${t0.pieAncho}`);
+// Los dos pisos de la cabecera tienen que abarcar lo mismo. Al partir HORAS
+// en tres, el piso de arriba se quedó corto por una columna y salió un hueco
+// en blanco en la esquina; nada falla, solo se ve mal.
+ok(t0.anchoPisos.every(a => a === t0.th.length),
+   'y los dos pisos de la cabecera abarcan las mismas columnas',
+   t0.anchoPisos.join(' · '));
+ok(t0.th.slice(COL_HORAS, COL_HORAS + 3).join(' ') === 'PROGRAM. MUERTAS EFECT.',
+   'las horas van en tres columnas: programadas, muertas y efectivas',
+   t0.th.join(' · '));
 ok(t0.partes === ESPERADO.total.partes, 'están los 11 partes, repartidos', t0.partes);
 ok(t0.grupos.length === 4, 'en cuatro grupos: las tres incidencias y los sueltos',
    t0.grupos.map(g => g.cab.split(' ')[0]).join(' · '));
@@ -88,10 +104,40 @@ for (const [cod, esp] of Object.entries(ESPERADO)) {
   ok(g && g.cab.includes(`${esp.partes} parte`),
      `${cod}: su cabecera dice cuántos partes tiene`, g && g.cab);
   ok(g && g.horas.includes(esp.horas.toFixed(2)),
-     'y suma SUS horas, no las de la máquina entera', g && g.horas);
+     'y suma SUS horas efectivas, no las de la máquina entera', g && g.horas);
+  // La resta tiene que cuadrar a la vista: programadas − muertas = efectivas.
+  ok(g && g.program.includes(esp.program.toFixed(2)) && g.muertas.includes(esp.muertas.toFixed(2)),
+     `y enseña cómo se llegó: ${esp.program} − ${esp.muertas} = ${esp.horas}`,
+     g && `${g.program} − ${g.muertas} = ${g.horas}`);
   ok(g && g.costo.replace(/,/g, '').includes(esp.costo.toFixed(2)),
      'y su costo', g && g.costo);
 }
+// ── Un parte sin horómetro no es un parte con cero horas muertas ─────────
+// Cientos de partes antiguos se guardaron sin horómetro. Rellenar ahí un
+// cero afirmaría que no hubo horas muertas, que es una afirmación y no un
+// hueco; y en el Excel ese cero se sumaría al total.
+const huerfano = await p.evaluate(() => {
+  const th = [...document.querySelectorAll('table thead tr')].pop().children.length;
+  for (const tb of document.querySelectorAll('table tbody')) {
+    for (const tr of tb.children) {
+      if (tr.children.length === th && /PD-0011/.test(tr.innerText)) {
+        const c = [...tr.children].map(x => x.innerText.trim());
+        return { program: c[5], muertas: c[6], efect: c[7] };
+      }
+    }
+  }
+  return null;
+});
+ok(huerfano && huerfano.program === '—' && huerfano.muertas === '—',
+   'el parte sin horómetro deja programadas y muertas en blanco, no en cero',
+   huerfano && `${huerfano.program} · ${huerfano.muertas} · ${huerfano.efect}`);
+ok(huerfano && huerfano.efect.includes('1.00'),
+   'pero sus horas efectivas sí se saben y se cuentan', huerfano && huerfano.efect);
+// El total de programadas sale SOLO de los que tienen horómetro: 37, no 38.
+ok(/37\.00 HE/.test(t0.pieTxt) && /3\.00 HE/.test(t0.pieTxt) && /35\.00 HE/.test(t0.pieTxt),
+   'y el pie suma 37 − 3 = 35, sin contar al que no tiene horómetro',
+   t0.pieTxt.slice(0, 90));
+
 ok(/4 incidencias/.test(t0.pieTxt) && /11 parte/.test(t0.pieTxt),
    'y el pie dice cuántas incidencias y cuántos partes hay en total',
    t0.pieTxt.slice(0, 60));
@@ -154,7 +200,12 @@ i = next(n for n, f in enumerate(filas) if 'N° PARTE' in f and 'N° INCIDENCIA'
 cuerpo = [f for f in filas[i+1:] if f[0] and not str(f[0]).startswith('TOTAL')]
 tot = next(f for f in filas[i+1:] if f[0] and str(f[0]).startswith('TOTAL'))
 titulo = ' '.join(str(c) for f in filas[:4] for c in f if c)
-print(json.dumps({'filas': len(cuerpo), 'horas': tot[6], 'costo': tot[9],
+# Las columnas: 0 incidencia, 1 parte, 2 fecha, 3 estado, 4 actividad,
+# 5 volumen, 6 programadas, 7 muertas, 8 efectivas, 9 combust, 10 proveedor,
+# 11 total.
+print(json.dumps({'filas': len(cuerpo), 'horas': tot[8], 'costo': tot[11],
+                  'program': tot[6], 'muertas': tot[7],
+                  'sinHm': sum(1 for f in cuerpo if f[6] is None),
                   'cabecera': [str(c) for c in filas[i] if c],
                   'incs': sorted({str(f[0]) for f in cuerpo}), 'titulo': titulo,
                   'conCodigo': sum(1 for f in cuerpo if str(f[0]).startswith('INCIDENTE-'))}))
@@ -174,6 +225,10 @@ ok(xl.incs.length === 1 && xl.incs[0] === 'INCIDENTE-001-12062026',
    'todas de la misma incidencia', xl.incs.join(' '));
 ok(Math.abs(xl.horas - 20) < 0.01 && Math.abs(xl.costo - 1500) < 0.01,
    'y sus totales son los de lo filtrado', `${xl.horas} h · S/ ${xl.costo}`);
+ok(Math.abs(xl.program - 21) < 0.01 && Math.abs(xl.muertas - 1) < 0.01,
+   'y las tres horas cuadran en la hoja: 21 − 1 = 20',
+   `${xl.program} − ${xl.muertas} = ${xl.horas}`);
+ok(xl.sinHm === 0, 'en esta incidencia todos los partes traen horómetro', xl.sinHm);
 ok(xl.titulo.includes('INCIDENTE-001-12062026'),
    'el encabezado del archivo dice que es un recorte');
 

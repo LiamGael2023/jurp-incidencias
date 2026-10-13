@@ -71,7 +71,7 @@ const ESTADOS = {
  */
 const COL = {
   incidencia: 0, parte: 1, fecha: 2, estado: 3, actividad: 4,
-  volumen: 5, horas: 6, combust: 7, proveedor: 8, total: 9,
+  volumen: 5, program: 6, muertas: 7, efect: 8, combust: 9, proveedor: 10, total: 11,
 };
 
 /**
@@ -83,7 +83,37 @@ const COL = {
  */
 const COL_G = {
   parte: 0, fecha: 1, estado: 2, actividad: 3,
-  volumen: 4, horas: 5, combust: 6, proveedor: 7, total: 8,
+  volumen: 4, program: 5, muertas: 6, efect: 7, combust: 8, proveedor: 9, total: 10,
+};
+
+/**
+ * Las tres horas de un parte, y de dónde sale cada una.
+ *
+ * La columna enseñaba un solo número —lo que se cobra— sin decir cómo se
+ * llegó a él. Son tres cifras y una resta:
+ *
+ *   PROGRAMADAS   el tramo del horómetro: HM fin − HM inicio. Lo que la
+ *                 máquina estuvo encendida.
+ *   MUERTAS       lo que se descuenta: esperas, averías, lluvia. El motivo
+ *                 va en obs_reduccion, y el PDF del parte ya lo imprime.
+ *   EFECTIVAS     lo que se cobra. Programadas − muertas.
+ *
+ * NO SE INVENTA EL TRAMO CUANDO NO HAY HORÓMETRO. Los partes antiguos se
+ * guardaron sin él, y el endpoint del historial puede estar mandando solo el
+ * total. En ese caso programadas y muertas salen en blanco en vez de
+ * repetir las efectivas: una columna que copia a la de al lado haría creer
+ * que no hubo horas muertas, que es una afirmación, no un hueco.
+ */
+const horasDe = (p) => {
+  const ini = parseFloat(p.start_horometer), fin = parseFloat(p.end_horometer);
+  const tramo = (Number.isFinite(ini) && Number.isFinite(fin) && fin >= ini)
+    ? fin - ini : null;
+  // horas_efectivas si viene; si no, 'horas', que es lo que el historial
+  // mandaba de siempre y ya son las efectivas.
+  const bruto = parseFloat(p.horas_efectivas != null && p.horas_efectivas !== ''
+    ? p.horas_efectivas : p.horas);
+  const efect = Number.isFinite(bruto) ? bruto : 0;
+  return { tramo, efect, muertas: tramo == null ? null : Math.max(0, tramo - efect) };
 };
 
 // Los partes que no cuelgan de ninguna incidencia: traslados, movilizaciones,
@@ -268,6 +298,10 @@ export default function Maquinaria({ irAIncidente }) {
       ? historial.partes.filter(p => p.incidente_id && codigoIncidencia(p) === filtroInc)
       : historial.partes;
     const suma = (f) => partes.reduce((a, p) => a + (parseFloat(f(p)) || 0), 0);
+    // Programadas y muertas SOLO de los partes que traen horómetro: sumar un
+    // cero por cada parte que no lo tiene daría un total más bajo que la
+    // realidad y nadie podría saber por qué no cuadra con las efectivas.
+    const conHm = partes.filter(p => horasDe(p).tramo != null);
     return {
       partes,
       filtrando,
@@ -276,6 +310,9 @@ export default function Maquinaria({ irAIncidente }) {
       total_costo: filtrando ? suma(p => p.costo) : (parseFloat(historial.total_costo) || 0),
       // El combustible nunca vino del backend: siempre se sumó de las filas.
       total_combustible: suma(p => p.fuel_gallons),
+      conHorometro: conHm.length,
+      total_program: conHm.reduce((a, p) => a + horasDe(p).tramo, 0),
+      total_muertas: conHm.reduce((a, p) => a + horasDe(p).muertas, 0),
     };
   }, [historial, filtroInc]);
 
@@ -304,12 +341,18 @@ export default function Maquinaria({ irAIncidente }) {
       if (!porCodigo.has(cod)) porCodigo.set(cod, { codigo: cod, partes: [] });
       porCodigo.get(cod).partes.push(p);
     }
-    const lista = [...porCodigo.values()].map(g => ({
-      ...g,
-      horas: g.partes.reduce((a, p) => a + (parseFloat(p.horas) || 0), 0),
-      combust: g.partes.reduce((a, p) => a + (parseFloat(p.fuel_gallons) || 0), 0),
-      costo: g.partes.reduce((a, p) => a + (parseFloat(p.costo) || 0), 0),
-    }));
+    const lista = [...porCodigo.values()].map(g => {
+      const conHm = g.partes.filter(p => horasDe(p).tramo != null);
+      return {
+        ...g,
+        horas: g.partes.reduce((a, p) => a + horasDe(p).efect, 0),
+        program: conHm.reduce((a, p) => a + horasDe(p).tramo, 0),
+        muertas: conHm.reduce((a, p) => a + horasDe(p).muertas, 0),
+        conHorometro: conHm.length,
+        combust: g.partes.reduce((a, p) => a + (parseFloat(p.fuel_gallons) || 0), 0),
+        costo: g.partes.reduce((a, p) => a + (parseFloat(p.costo) || 0), 0),
+      };
+    });
     // Los sueltos, al final, pase lo que pase con el orden de los demás.
     return [...lista.filter(g => g.codigo !== SIN_INCIDENCIA),
             ...lista.filter(g => g.codigo === SIN_INCIDENCIA)];
@@ -711,7 +754,8 @@ export default function Maquinaria({ irAIncidente }) {
     // N° INCIDENCIA va primera: con el código completo (INCIDENTE-001-14082026)
     // son 22 caracteres, así que 24 lo deja entero con un respiro.
     ws.columns = [{ width: 24 }, { width: 20 }, { width: 12 }, { width: 11 }, { width: 26 },
-                  { width: 14 }, { width: 11 }, { width: 12 }, { width: 22 },
+                  { width: 14 }, { width: 12 }, { width: 11 }, { width: 11 },
+                  { width: 12 }, { width: 22 },
                   ...(valorizado ? [{ width: 14 }] : [])];
     const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1463A5' } };
     const grisClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9' } };
@@ -762,8 +806,10 @@ export default function Maquinaria({ irAIncidente }) {
     const hRow = 5 + datos.length + 1;
     // N° INCIDENCIA abre la tabla: es por donde se busca. TOTAL sigue siendo
     // la ÚLTIMA, así que quitarla no corre ninguna otra.
+    // Las horas van en tres: cómo se llegó a lo que se cobra.
     const cabeceras = ['N° INCIDENCIA', 'N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD',
-                       'VOLUMEN', 'HORAS', 'COMBUST.', 'PROVEEDOR',
+                       'VOLUMEN', 'H. PROGRAM.', 'H. MUERTAS', 'H. EFECTIVAS',
+                       'COMBUST.', 'PROVEEDOR',
                        ...(valorizado ? ['TOTAL S/'] : [])];
     cabeceras.forEach((h, i) => {
       const c = ws.getCell(hRow, i + 1);
@@ -782,7 +828,11 @@ export default function Maquinaria({ irAIncidente }) {
         p.cerrado ? 'CERRADO' : 'ABIERTO',
         p.activities || '—',
         `${(parseFloat(p.metrado) || 0).toFixed(2)} ${uMet(p.metrado_unidad)}`,
-        parseFloat(p.horas) || 0,
+        // Celda vacía y no cero cuando no hay horómetro: en una hoja, un cero
+        // se suma y un hueco no, y aquí sumarlo daría un total falso.
+        horasDe(p).tramo == null ? null : horasDe(p).tramo,
+        horasDe(p).muertas == null ? null : horasDe(p).muertas,
+        horasDe(p).efect,
         parseFloat(p.fuel_gallons) || 0,
         p.provider || '—',
         ...(valorizado ? [parseFloat(p.costo) || 0] : []),
@@ -790,8 +840,8 @@ export default function Maquinaria({ irAIncidente }) {
       // Por índice y no por posición a ojo: con la incidencia delante, todas
       // las demás se corrieron una, y un número suelto aquí descuadraría la
       // columna sin que nada fallara.
-      const DER = [COL.volumen, COL.horas, COL.combust, COL.total];
-      const NUM = [COL.horas, COL.combust, COL.total];
+      const DER = [COL.volumen, COL.program, COL.muertas, COL.efect, COL.combust, COL.total];
+      const NUM = [COL.program, COL.muertas, COL.efect, COL.combust, COL.total];
       fila.forEach((v, ci) => {
         const c = ws.getCell(r, ci + 1);
         c.value = v; c.border = borde; c.font = { size: 9 };
@@ -806,10 +856,15 @@ export default function Maquinaria({ irAIncidente }) {
     const tRow = hRow + 1 + vista.partes.length;
     ws.getCell(tRow, 1).value = `TOTAL · ${vista.total_partes} parte(s)`;
     ws.getCell(tRow, 1).font = { bold: true, size: 10 };
-    ws.getCell(tRow, COL.horas + 1).value = vista.total_horas;
+    if (vista.conHorometro) {
+      ws.getCell(tRow, COL.program + 1).value = vista.total_program;
+      ws.getCell(tRow, COL.muertas + 1).value = vista.total_muertas;
+    }
+    ws.getCell(tRow, COL.efect + 1).value = vista.total_horas;
     ws.getCell(tRow, COL.combust + 1).value = vista.total_combustible;
     if (valorizado) ws.getCell(tRow, COL.total + 1).value = vista.total_costo;
-    [COL.horas + 1, COL.combust + 1, ...(valorizado ? [COL.total + 1] : [])].forEach(ci => {
+    [COL.program + 1, COL.muertas + 1, COL.efect + 1, COL.combust + 1,
+     ...(valorizado ? [COL.total + 1] : [])].forEach(ci => {
       const c = ws.getCell(tRow, ci);
       c.font = { bold: true, size: 10 }; c.numFmt = '#,##0.00';
       c.alignment = { horizontal: 'right' };
@@ -881,6 +936,8 @@ export default function Maquinaria({ irAIncidente }) {
       cuerpo.push([
         { content: `${g.codigo}   ·   ${g.partes.length} parte(s)`,
           colSpan: COL_G.volumen + 1, styles: azulGrupo },
+        { content: g.conHorometro ? `${g.program.toFixed(2)}` : '—', styles: { ...azulGrupo, halign: 'right' } },
+        { content: g.conHorometro ? `${g.muertas.toFixed(2)}` : '—', styles: { ...azulGrupo, halign: 'right' } },
         { content: `${g.horas.toFixed(2)} HE`, styles: { ...azulGrupo, halign: 'right' } },
         { content: `${g.combust.toFixed(2)} Gls`, styles: { ...azulGrupo, halign: 'right' } },
         { content: '', styles: azulGrupo },
@@ -894,7 +951,9 @@ export default function Maquinaria({ irAIncidente }) {
           p.cerrado ? 'CERRADO' : 'ABIERTO',
           p.activities || '—',
           `${(parseFloat(p.metrado) || 0).toFixed(2)} ${uMet(p.metrado_unidad)}`,
-          `${(parseFloat(p.horas) || 0).toFixed(2)} HE`,
+          horasDe(p).tramo == null ? '—' : horasDe(p).tramo.toFixed(2),
+          horasDe(p).muertas == null ? '—' : horasDe(p).muertas.toFixed(2),
+          `${horasDe(p).efect.toFixed(2)} HE`,
           `${(parseFloat(p.fuel_gallons) || 0).toFixed(2)} Gls`,
           p.provider || '—',
           // TOTAL es la ultima columna: quitarla no corre ninguna otra.
@@ -905,16 +964,29 @@ export default function Maquinaria({ irAIncidente }) {
 
     autoTable(doc, {
       startY: infoY + 11,
-      head: [['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'VOLUMEN', 'HORAS', 'COMBUST.', 'PROVEEDOR',
-              ...(valorizado ? ['TOTAL'] : [])]],
+      // Dos pisos, como en pantalla: las tres horas cuelgan de un título
+      // común para que se lean como una sola cuenta y no como tres columnas
+      // sueltas entre VOLUMEN y COMBUST.
+      head: [
+        [{ content: '', colSpan: COL_G.volumen + 1, styles: { fillColor: [20, 99, 165] } },
+         { content: 'HORAS', colSpan: 3, styles: { halign: 'center' } },
+         { content: '', colSpan: valorizado ? 3 : 2, styles: { fillColor: [20, 99, 165] } }],
+        ['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'VOLUMEN',
+         'PROGRAM.', 'MUERTAS', 'EFECT.', 'COMBUST.', 'PROVEEDOR',
+         ...(valorizado ? ['TOTAL'] : [])],
+      ],
       body: cuerpo,
       // El pie se arma por hueco y no a mano: contar comillas vacías es
       // justo lo que se descuadra al mover una columna.
       foot: [(() => {
-        const f = Array(valorizado ? 9 : 8).fill('');
+        const f = Array(valorizado ? 11 : 10).fill('');
         f[0] = `TOTAL${grupos.length > 1 ? ` · ${grupos.length} incidencias` : ''}`
              + ` · ${vista.total_partes} parte(s)`;
-        f[COL_G.horas] = `${vista.total_horas.toFixed(2)} HE`;
+        if (vista.conHorometro) {
+          f[COL_G.program] = vista.total_program.toFixed(2);
+          f[COL_G.muertas] = vista.total_muertas.toFixed(2);
+        }
+        f[COL_G.efect] = `${vista.total_horas.toFixed(2)} HE`;
         f[COL_G.combust] = `${vista.total_combustible.toFixed(2)} Gls`;
         if (valorizado) f[COL_G.total] = `S/ ${vista.total_costo.toFixed(2)}`;
         return f;
@@ -924,7 +996,9 @@ export default function Maquinaria({ irAIncidente }) {
       footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 7.5 },
       columnStyles: {
         [COL_G.volumen]: { halign: 'right' },
-        [COL_G.horas]: { halign: 'right' },
+        [COL_G.program]: { halign: 'right' },
+        [COL_G.muertas]: { halign: 'right' },
+        [COL_G.efect]: { halign: 'right' },
         [COL_G.combust]: { halign: 'right' },
         ...(valorizado ? { [COL_G.total]: { halign: 'right' } } : {}),
       },
@@ -1348,6 +1422,17 @@ export default function Maquinaria({ irAIncidente }) {
                   <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                       <thead>
+                        {/* Dos pisos: las tres horas cuelgan de un mismo
+                            título. Sueltas, "PROGRAM." y "EFECT." al lado de
+                            VOLUMEN y COMBUST. no se leen como lo que son, las
+                            tres partes de una misma cuenta. */}
+                        <tr style={{ background: '#f1f5f9' }}>
+                          <th colSpan={COL_G.volumen + 1}></th>
+                          <th colSpan={3} style={{ textAlign: 'center', padding: '7px 8px 2px', fontSize: '10px', color: '#206bc4', fontWeight: 700, letterSpacing: '0.5px', borderBottom: '1px solid #cbd5e1' }}>HORAS</th>
+                          {/* Cuatro: COMBUST., PROVEEDOR, TOTAL y la del PDF,
+                              que no está en COL_G porque no se exporta. */}
+                          <th colSpan={4}></th>
+                        </tr>
                         <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
                           {/* Sin columna de incidencia: va en la cabecera de
                               cada grupo, una vez, con su subtotal al lado. */}
@@ -1356,7 +1441,9 @@ export default function Maquinaria({ irAIncidente }) {
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>ESTADO</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>ACTIVIDAD</th>
                           <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>VOLUMEN</th>
-                          <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>HORAS</th>
+                          <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }} title="Tramo del horómetro: HM fin − HM inicio">PROGRAM.</th>
+                          <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }} title="Lo que se descuenta: esperas, averías, lluvia">MUERTAS</th>
+                          <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }} title="Lo que se cobra: programadas − muertas">EFECT.</th>
                           <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>COMBUST.</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>PROVEEDOR</th>
                           <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>TOTAL</th>
@@ -1378,7 +1465,9 @@ export default function Maquinaria({ irAIncidente }) {
                           {/* El subtotal cae bajo su propia columna. Puesto en
                               una esquina habría que buscar a qué se refiere
                               cada número. */}
-                          <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: 700, color: '#1e40af', fontSize: '12px', whiteSpace: 'nowrap' }}>{fmtNum(g.horas)} HE</td>
+                          <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: 600, color: '#3b6fc4', fontSize: '12px', whiteSpace: 'nowrap' }}>{g.conHorometro ? `${fmtNum(g.program)} HE` : '—'}</td>
+                          <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: 600, color: g.muertas ? '#b45309' : '#94a3b8', fontSize: '12px', whiteSpace: 'nowrap' }}>{g.conHorometro ? `${fmtNum(g.muertas)} HE` : '—'}</td>
+                          <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: 800, color: '#1e40af', fontSize: '12px', whiteSpace: 'nowrap' }}>{fmtNum(g.horas)} HE</td>
                           <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: 700, color: '#1e40af', fontSize: '12px', whiteSpace: 'nowrap' }}>{fmtNum(g.combust)} Gls</td>
                           <td style={{ padding: '9px 8px' }}></td>
                           <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: 800, color: '#1e40af', fontSize: '13px', whiteSpace: 'nowrap' }}>S/ {fmtNum(g.costo)}</td>
@@ -1395,7 +1484,20 @@ export default function Maquinaria({ irAIncidente }) {
                             </td>
                             <td style={{ padding: '11px 8px', color: '#475569', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.activities || ''}>{p.activities || '—'}</td>
                             <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.metrado || 0)} {uMet(p.metrado_unidad)}</td>
-                            <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.horas)} HE</td>
+                            {(() => { const h = horasDe(p); return (<>
+                              {/* Sin horómetro no hay tramo, y entonces tampoco
+                                  muertas. Va una raya, no un cero: un cero
+                                  afirmaría que no las hubo. */}
+                              <td style={{ padding: '11px 8px', textAlign: 'right', color: '#64748b', whiteSpace: 'nowrap' }}>
+                                {h.tramo == null ? '—' : `${fmtNum(h.tramo)} HE`}
+                              </td>
+                              <td style={{ padding: '11px 8px', textAlign: 'right', whiteSpace: 'nowrap',
+                                color: h.muertas ? '#b45309' : '#94a3b8', fontWeight: h.muertas ? 700 : 400 }}
+                                title={p.obs_reduccion || ''}>
+                                {h.muertas == null ? '—' : `${fmtNum(h.muertas)} HE`}
+                              </td>
+                              <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(h.efect)} HE</td>
+                            </>); })()}
                             <td style={{ padding: '11px 8px', textAlign: 'right', color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.fuel_gallons || 0)} Gls</td>
                             <td style={{ padding: '11px 8px', color: '#475569', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.provider || ''}>{p.provider || '—'}</td>
                             <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 700, color: '#1463A5', whiteSpace: 'nowrap' }}>S/ {fmtNum(p.costo)}</td>
@@ -1416,7 +1518,9 @@ export default function Maquinaria({ irAIncidente }) {
                           <td colSpan={COL_G.volumen + 1} style={{ padding: '13px 14px', fontWeight: 700, color: '#334155' }}>
                             TOTAL{grupos.length > 1 ? ` · ${grupos.length} incidencias` : ''} · {vista.total_partes} parte{vista.total_partes !== 1 ? 's' : ''}
                           </td>
-                          <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(vista.total_horas)} HE</td>
+                          <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>{vista.conHorometro ? `${fmtNum(vista.total_program)} HE` : '—'}</td>
+                          <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: vista.total_muertas ? '#b45309' : '#94a3b8', whiteSpace: 'nowrap' }}>{vista.conHorometro ? `${fmtNum(vista.total_muertas)} HE` : '—'}</td>
+                          <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 800, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(vista.total_horas)} HE</td>
                           <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(vista.total_combustible)} Gls</td>
                           <td style={{ padding: '13px 8px' }}></td>
                           <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 800, fontSize: '15px', color: '#1463A5', whiteSpace: 'nowrap' }}>S/ {fmtNum(vista.total_costo)}</td>

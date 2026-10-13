@@ -39,6 +39,14 @@ for (const inc of INCS) {
       activities: 'ENROCADO',
       metrado: 10 + np, metrado_unidad: 'm3',
       horas: 2 + i,                 // 1ª: 2+3+4+5+6 = 20 ; 7ª: 2+3+4 = 9 ; 12ª: 2+3 = 5
+      // El horómetro, para que las horas se puedan descomponer. El primer
+      // parte de cada incidencia lleva una hora muerta y los demás ninguna:
+      // así se ve que la columna no copia a la de al lado, y que un cero
+      // sale distinto de un hueco.
+      start_horometer: 1000 + np * 10,
+      end_horometer: 1000 + np * 10 + (2 + i) + (i === 0 ? 1 : 0),
+      horas_efectivas: 2 + i,
+      obs_reduccion: i === 0 ? 'Espera de volquete' : '',
       fuel_gallons: 1,
       provider: 'PROYECTO ESPECIAL CHAVIMOCHIC',
       incidente_id: inc.id,
@@ -53,6 +61,10 @@ PARTES.push({
   id: np, part_number: `PD-${String(np).padStart(4, '0')}-20260930`,
   date: '2026-09-30', cerrado: false, activities: 'TRASLADO',
   metrado: 0, metrado_unidad: 'm3', horas: 1, fuel_gallons: 1,
+  // SIN horómetro, a propósito: así se guardaron cientos de partes
+  // antiguos, y la columna tiene que decir que no lo sabe en vez de
+  // inventarse que no hubo horas muertas.
+  start_horometer: null, end_horometer: null, horas_efectivas: null,
   provider: 'JURP', incidente_id: null, incidente_creado: null, costo: 50,
 });
 
@@ -69,11 +81,19 @@ const MAQUINA = {
   disponible: false, en_mantenimiento: true,
 };
 
+/* Horas esperadas. 'horas' son las efectivas; 'program' el tramo del
+ * horómetro, que lleva una hora muerta en el primer parte de cada grupo.
+ *
+ *   1ª: efectivas 20, muertas 1 → programadas 21
+ *   7ª: efectivas  9, muertas 1 → programadas 10
+ *  12ª: efectivas  5, muertas 1 → programadas  6
+ *   sueltos: 1 efectiva, SIN horómetro → programadas y muertas, en blanco
+ */
 window.__ESPERADO = {
-  total: { partes: 11, horas: 35, costo: 2450 },
-  'INCIDENTE-001-12062026': { partes: 5, horas: 20, costo: 1500 },
-  'INCIDENTE-007-03072026': { partes: 3, horas: 9, costo: 600 },
-  'INCIDENTE-012-21082026': { partes: 2, horas: 5, costo: 300 },
+  total: { partes: 11, horas: 35, costo: 2450, program: 37, muertas: 3 },
+  'INCIDENTE-001-12062026': { partes: 5, horas: 20, costo: 1500, program: 21, muertas: 1 },
+  'INCIDENTE-007-03072026': { partes: 3, horas: 9, costo: 600, program: 10, muertas: 1 },
+  'INCIDENTE-012-21082026': { partes: 2, horas: 5, costo: 300, program: 6, muertas: 1 },
 };
 
 window.fetch = async (u) => {
