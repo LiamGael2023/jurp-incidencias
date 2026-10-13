@@ -54,6 +54,26 @@ const ESTADOS = {
 //
 // Antes esta tabla mostraba p.incidente_codigo, que es el "Código de
 // Infraestructura" del backend -un 1, un 5- y no identifica a la incidencia.
+/**
+ * El orden de las columnas del historial, en un solo sitio.
+ *
+ * La tabla de la pantalla, el Excel y el PDF enseñan lo mismo, y cuando el
+ * orden estaba escrito tres veces moverlo significaba acertar con nueve
+ * índices sueltos repartidos por el archivo —alineaciones, formatos de
+ * número, huecos del pie—. Si uno se quedaba atrás, la columna salía
+ * descuadrada sin que nada fallara ni ninguna prueba se quejara.
+ *
+ * N° INCIDENCIA va primera porque es por donde se busca: lo primero que se
+ * quiere saber de un parte es a qué incidencia se carga.
+ *
+ * TOTAL es la última a propósito. El reporte "solo horas" la quita, y
+ * siendo la última eso no corre ninguna otra.
+ */
+const COL = {
+  incidencia: 0, parte: 1, fecha: 2, estado: 3, actividad: 4,
+  volumen: 5, horas: 6, combust: 7, proveedor: 8, total: 9,
+};
+
 const codigoIncidencia = (p) => {
   if (!p || !p.incidente_id) return '—';
   const base = `INCIDENTE-${String(p.incidente_id).padStart(3, '0')}`;
@@ -621,11 +641,10 @@ export default function Maquinaria({ irAIncidente }) {
     const maq = detalle;
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Historial de Partes');
-    // La 9ª es N° INCIDENCIA: con el código completo (INCIDENTE-001-14082026)
-    // son 22 caracteres, y con ancho 16 quedaba recortado por la columna de al
-    // lado. 24 lo deja entero con un respiro.
-    ws.columns = [{ width: 20 }, { width: 12 }, { width: 11 }, { width: 26 }, { width: 14 },
-                  { width: 11 }, { width: 12 }, { width: 22 }, { width: 24 },
+    // N° INCIDENCIA va primera: con el código completo (INCIDENTE-001-14082026)
+    // son 22 caracteres, así que 24 lo deja entero con un respiro.
+    ws.columns = [{ width: 24 }, { width: 20 }, { width: 12 }, { width: 11 }, { width: 26 },
+                  { width: 14 }, { width: 11 }, { width: 12 }, { width: 22 },
                   ...(valorizado ? [{ width: 14 }] : [])];
     const azul = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1463A5' } };
     const grisClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9' } };
@@ -674,8 +693,10 @@ export default function Maquinaria({ irAIncidente }) {
     });
 
     const hRow = 5 + datos.length + 1;
-    const cabeceras = ['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'VOLUMEN',
-                       'HORAS', 'COMBUST.', 'PROVEEDOR', 'N° INCIDENCIA',
+    // N° INCIDENCIA abre la tabla: es por donde se busca. TOTAL sigue siendo
+    // la ÚLTIMA, así que quitarla no corre ninguna otra.
+    const cabeceras = ['N° INCIDENCIA', 'N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD',
+                       'VOLUMEN', 'HORAS', 'COMBUST.', 'PROVEEDOR',
                        ...(valorizado ? ['TOTAL S/'] : [])];
     cabeceras.forEach((h, i) => {
       const c = ws.getCell(hRow, i + 1);
@@ -688,6 +709,7 @@ export default function Maquinaria({ irAIncidente }) {
     vista.partes.forEach((p, i) => {
       const r = hRow + 1 + i;
       const fila = [
+        codigoIncidencia(p),
         p.part_number,
         p.date || '—',
         p.cerrado ? 'CERRADO' : 'ABIERTO',
@@ -696,18 +718,20 @@ export default function Maquinaria({ irAIncidente }) {
         parseFloat(p.horas) || 0,
         parseFloat(p.fuel_gallons) || 0,
         p.provider || '—',
-        codigoIncidencia(p),
         ...(valorizado ? [parseFloat(p.costo) || 0] : []),
       ];
+      // Por índice y no por posición a ojo: con la incidencia delante, todas
+      // las demás se corrieron una, y un número suelto aquí descuadraría la
+      // columna sin que nada fallara.
+      const DER = [COL.volumen, COL.horas, COL.combust, COL.total];
+      const NUM = [COL.horas, COL.combust, COL.total];
       fila.forEach((v, ci) => {
         const c = ws.getCell(r, ci + 1);
         c.value = v; c.border = borde; c.font = { size: 9 };
-        if (ci >= 5 && ci !== 7 && ci !== 8) c.alignment = { horizontal: 'right' };
-        // N° INCIDENCIA centrado, como su cabecera. Antes se quedaba a la
-        // izquierda y la columna salía descuadrada respecto a su título.
-        if (ci === 8) c.alignment = { horizontal: 'center' };
-        if (ci === 9) c.numFmt = '#,##0.00';
-        if (ci === 5 || ci === 6) c.numFmt = '#,##0.00';
+        if (DER.includes(ci)) c.alignment = { horizontal: 'right' };
+        // N° INCIDENCIA centrada, como su cabecera.
+        if (ci === COL.incidencia) c.alignment = { horizontal: 'center' };
+        if (NUM.includes(ci)) c.numFmt = '#,##0.00';
       });
     });
 
@@ -715,10 +739,10 @@ export default function Maquinaria({ irAIncidente }) {
     const tRow = hRow + 1 + vista.partes.length;
     ws.getCell(tRow, 1).value = `TOTAL · ${vista.total_partes} parte(s)`;
     ws.getCell(tRow, 1).font = { bold: true, size: 10 };
-    ws.getCell(tRow, 6).value = vista.total_horas;
-    ws.getCell(tRow, 7).value = vista.total_combustible;
-    if (valorizado) ws.getCell(tRow, 10).value = vista.total_costo;
-    [6, 7, ...(valorizado ? [10] : [])].forEach(ci => {
+    ws.getCell(tRow, COL.horas + 1).value = vista.total_horas;
+    ws.getCell(tRow, COL.combust + 1).value = vista.total_combustible;
+    if (valorizado) ws.getCell(tRow, COL.total + 1).value = vista.total_costo;
+    [COL.horas + 1, COL.combust + 1, ...(valorizado ? [COL.total + 1] : [])].forEach(ci => {
       const c = ws.getCell(tRow, ci);
       c.font = { bold: true, size: 10 }; c.numFmt = '#,##0.00';
       c.alignment = { horizontal: 'right' };
@@ -774,6 +798,7 @@ export default function Maquinaria({ irAIncidente }) {
     doc.text(`Origen: ${maq.origen === 'JURP' ? 'JURP (propia)' : 'Externa'}`, 185, infoY + 5);
 
     const cuerpo = vista.partes.map(p => ([
+      codigoIncidencia(p),
       p.part_number,
       p.date || '—',
       p.cerrado ? 'CERRADO' : 'ABIERTO',
@@ -782,33 +807,37 @@ export default function Maquinaria({ irAIncidente }) {
       `${(parseFloat(p.horas) || 0).toFixed(2)} HE`,
       `${(parseFloat(p.fuel_gallons) || 0).toFixed(2)} Gls`,
       p.provider || '—',
-      codigoIncidencia(p),
       // TOTAL es la ultima columna: quitarla no corre ninguna otra.
       ...(valorizado ? [`S/ ${(parseFloat(p.costo) || 0).toFixed(2)}`] : []),
     ]));
 
     autoTable(doc, {
       startY: infoY + 11,
-      head: [['N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'VOLUMEN', 'HORAS', 'COMBUST.', 'PROVEEDOR', 'N° INCIDENCIA',
+      head: [['N° INCIDENCIA', 'N° PARTE', 'FECHA', 'ESTADO', 'ACTIVIDAD', 'VOLUMEN', 'HORAS', 'COMBUST.', 'PROVEEDOR',
               ...(valorizado ? ['TOTAL'] : [])]],
       body: cuerpo,
-      foot: [[
-        `TOTAL · ${vista.total_partes} parte(s)`, '', '', '', '',
-        `${vista.total_horas.toFixed(2)} HE`,
-        `${vista.total_combustible.toFixed(2)} Gls`,
-        '', '',
-        ...(valorizado ? [`S/ ${vista.total_costo.toFixed(2)}`] : []),
-      ]],
+      // El pie se arma por hueco y no a mano: contar comillas vacías es
+      // justo lo que se descuadra al mover una columna.
+      foot: [(() => {
+        const f = Array(valorizado ? 10 : 9).fill('');
+        f[0] = `TOTAL · ${vista.total_partes} parte(s)`;
+        f[COL.horas] = `${vista.total_horas.toFixed(2)} HE`;
+        f[COL.combust] = `${vista.total_combustible.toFixed(2)} Gls`;
+        if (valorizado) f[COL.total] = `S/ ${vista.total_costo.toFixed(2)}`;
+        return f;
+      })()],
       styles: { fontSize: 7.5, cellPadding: 2 },
       headStyles: { fillColor: [20, 99, 165], textColor: 255, fontSize: 7.5, halign: 'center' },
       footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 7.5 },
       columnStyles: {
-        4: { halign: 'right' }, 5: { halign: 'right' },
-        6: { halign: 'right' }, ...(valorizado ? { 9: { halign: 'right' } } : {}),
+        [COL.volumen]: { halign: 'right' },
+        [COL.horas]: { halign: 'right' },
+        [COL.combust]: { halign: 'right' },
+        ...(valorizado ? { [COL.total]: { halign: 'right' } } : {}),
         // N° INCIDENCIA: la cabecera va centrada (headStyles lo centra todo) y
         // el cuerpo se quedaba a la izquierda, así que la columna parecía
         // descuadrada. Centrar el cuerpo la alinea con su propio título.
-        8: { halign: 'center' },
+        [COL.incidencia]: { halign: 'center' },
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       margin: { left: 10, right: 10 },
@@ -1231,7 +1260,11 @@ export default function Maquinaria({ irAIncidente }) {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                       <thead>
                         <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
-                          <th style={{ textAlign: 'left', padding: '10px 10px', fontSize: '11px', color: '#475569', whiteSpace: 'nowrap' }}>N° PARTE</th>
+                          {/* Primera, igual que en el PDF y en el Excel: es la
+                              misma columna y no tiene por qué leerse distinto
+                              según dónde se mire. */}
+                          <th style={{ textAlign: 'left', padding: '10px 10px', fontSize: '11px', color: '#475569', whiteSpace: 'nowrap' }}>N° INCIDENCIA</th>
+                          <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569', whiteSpace: 'nowrap' }}>N° PARTE</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>FECHA</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>ESTADO</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>ACTIVIDAD</th>
@@ -1239,10 +1272,6 @@ export default function Maquinaria({ irAIncidente }) {
                           <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>HORAS</th>
                           <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>COMBUST.</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>PROVEEDOR</th>
-                          {/* Centrada, igual que en el PDF y en el Excel: es la
-                              misma columna y no tiene por qué leerse distinto
-                              según dónde se mire. */}
-                          <th style={{ textAlign: 'center', padding: '10px 8px', fontSize: '11px', color: '#475569', whiteSpace: 'nowrap' }}>N° INCIDENCIA</th>
                           <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '11px', color: '#475569' }}>TOTAL</th>
                           <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '11px', color: '#475569' }}>PDF</th>
                         </tr>
@@ -1250,7 +1279,10 @@ export default function Maquinaria({ irAIncidente }) {
                       <tbody>
                         {vista.partes.map(p => (
                           <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', background: p.cerrado ? '#fff' : '#fffbeb' }}>
-                            <td style={{ padding: '11px 10px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>{p.part_number}</td>
+                            {/* La incidencia, en azul y destacada: es la columna
+                                por la que se lee la tabla. */}
+                            <td style={{ padding: '11px 10px', fontWeight: 700, color: '#206bc4', whiteSpace: 'nowrap' }}>{codigoIncidencia(p)}</td>
+                            <td style={{ padding: '11px 8px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>{p.part_number}</td>
                             <td style={{ padding: '11px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{p.date ? p.date.split('T')[0].split('-').reverse().join('/') : '—'}</td>
                             <td style={{ padding: '11px 8px' }}>
                               <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 9px', borderRadius: '4px', background: p.cerrado ? '#dcfce7' : '#fef3c7', color: p.cerrado ? '#15803d' : '#b45309', whiteSpace: 'nowrap' }}>
@@ -1262,7 +1294,6 @@ export default function Maquinaria({ irAIncidente }) {
                             <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.horas)} HE</td>
                             <td style={{ padding: '11px 8px', textAlign: 'right', color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(p.fuel_gallons || 0)} Gls</td>
                             <td style={{ padding: '11px 8px', color: '#475569', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.provider || ''}>{p.provider || '—'}</td>
-                            <td style={{ padding: '11px 8px', textAlign: 'center', color: '#475569', whiteSpace: 'nowrap' }}>{codigoIncidencia(p)}</td>
                             <td style={{ padding: '11px 8px', textAlign: 'right', fontWeight: 700, color: '#1463A5', whiteSpace: 'nowrap' }}>S/ {fmtNum(p.costo)}</td>
                             <td style={{ padding: '11px 14px', textAlign: 'right' }}>
                               <button onClick={() => abrirPdfParte(p.id, p.part_number)} title="Ver PDF"
@@ -1275,11 +1306,12 @@ export default function Maquinaria({ irAIncidente }) {
                       </tbody>
                       <tfoot>
                         <tr style={{ background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
-                          <td colSpan="4" style={{ padding: '13px 14px', fontWeight: 700, color: '#334155' }}>TOTAL · {vista.total_partes} parte{vista.total_partes !== 1 ? 's' : ''}</td>
+                          {/* Cinco, no cuatro: la incidencia se puso delante y
+                              el rótulo del total tiene que cubrirla. */}
+                          <td colSpan="5" style={{ padding: '13px 14px', fontWeight: 700, color: '#334155' }}>TOTAL · {vista.total_partes} parte{vista.total_partes !== 1 ? 's' : ''}</td>
                           <td style={{ padding: '13px 8px' }}></td>
                           <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(vista.total_horas)} HE</td>
                           <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(vista.total_combustible)} Gls</td>
-                          <td style={{ padding: '13px 8px' }}></td>
                           <td style={{ padding: '13px 8px' }}></td>
                           <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 800, fontSize: '15px', color: '#1463A5', whiteSpace: 'nowrap' }}>S/ {fmtNum(vista.total_costo)}</td>
                           <td style={{ padding: '13px 14px' }}></td>

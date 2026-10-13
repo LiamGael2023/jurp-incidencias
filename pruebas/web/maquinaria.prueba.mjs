@@ -41,6 +41,25 @@ const ESPERADO = await p.evaluate(() => window.__ESPERADO);
 await p.getByText('EX01', { exact: false }).first().click();
 await p.waitForTimeout(1500);
 
+// ── El orden de las columnas ─────────────────────────────────────────────
+// N° INCIDENCIA va primera en los tres sitios: pantalla, Excel y PDF. Es la
+// misma columna y no tiene por qué leerse distinto según dónde se mire.
+const cols = await p.evaluate(() => {
+  const th = [...document.querySelectorAll('table thead th')].map(t => t.innerText.trim());
+  const td = [...document.querySelectorAll('table tbody tr')[0].children].length;
+  // Un pie que no suma las mismas columnas que la cabecera descuadra la
+  // tabla entera, y es justo lo que se rompe al mover una columna.
+  const pie = [...(document.querySelector('table tfoot tr')?.children || [])]
+    .reduce((a, c) => a + (parseInt(c.getAttribute('colspan'), 10) || 1), 0);
+  return { th, td, pie };
+});
+ok(cols.th[0] === 'N° INCIDENCIA', 'en pantalla, la primera columna es la incidencia',
+   cols.th.slice(0, 3).join(' · '));
+ok(cols.th[1] === 'N° PARTE', 'y el N° de parte queda detrás', cols.th[1]);
+ok(cols.th.length === cols.td && cols.th.length === cols.pie,
+   'cabecera, cuerpo y pie suman las mismas columnas',
+   `${cols.th.length} · ${cols.td} · ${cols.pie}`);
+
 const sel = 'select[title="Ver solo los partes de una incidencia"]';
 ok(await p.locator(sel).count() === 1, 'la ficha trae el selector de incidencia');
 
@@ -105,13 +124,16 @@ const xl = JSON.parse(py(`
 import json, openpyxl
 w = openpyxl.load_workbook(${JSON.stringify(x.ruta)}).active
 filas = [[c.value for c in f] for f in w.iter_rows()]
-i = next(n for n, f in enumerate(filas) if f and f[0] == 'N° PARTE')
+i = next(n for n, f in enumerate(filas) if 'N° PARTE' in f and 'N° INCIDENCIA' in f)
 cuerpo = [f for f in filas[i+1:] if f[0] and not str(f[0]).startswith('TOTAL')]
 tot = next(f for f in filas[i+1:] if f[0] and str(f[0]).startswith('TOTAL'))
 titulo = ' '.join(str(c) for f in filas[:4] for c in f if c)
-print(json.dumps({'filas': len(cuerpo), 'horas': tot[5], 'costo': tot[9],
-                  'incs': sorted({str(f[8]) for f in cuerpo}), 'titulo': titulo}))
+print(json.dumps({'filas': len(cuerpo), 'horas': tot[6], 'costo': tot[9],
+                  'cabecera': [str(c) for c in filas[i] if c],
+                  'incs': sorted({str(f[0]) for f in cuerpo}), 'titulo': titulo}))
 `));
+ok(xl.cabecera[0] === 'N° INCIDENCIA' && xl.cabecera[1] === 'N° PARTE',
+   'en el Excel la incidencia también abre la tabla', xl.cabecera.slice(0, 3).join(' · '));
 ok(xl.filas === 5, 'y lleva dentro 5 filas, las de esa incidencia', xl.filas);
 ok(xl.incs.length === 1 && xl.incs[0] === 'INCIDENTE-001-12062026',
    'todas de la misma incidencia', xl.incs.join(' '));
@@ -126,12 +148,19 @@ const pf = JSON.parse(py(`
 import json, re, pdfplumber
 with pdfplumber.open(${JSON.stringify(d.ruta)}) as doc:
     t = '\\n'.join(p.extract_text() or '' for p in doc.pages)
+cab = next((l for l in t.split('\\n') if 'N° PARTE' in l or 'PARTE' in l and 'INCIDENCIA' in l), '')
+fila = next((l for l in t.split('\\n') if re.search(r'PD-\\d{4}', l)), '')
 print(json.dumps({'incs': sorted(set(re.findall(r'INCIDENTE-\\d+-\\d+', t))),
+                  'cabIncPrimero': cab.find('INCIDENCIA') >= 0 and cab.find('INCIDENCIA') < cab.find('PARTE'),
+                  'filaIncPrimero': fila.find('INCIDENTE') >= 0 and fila.find('INCIDENTE') < fila.find('PD-'),
                   'partes': len(re.findall(r'PD-\\d{4}-\\d+', t)),
                   'total': bool(re.search(r'TOTAL . 5 parte', t)),
                   'horas': bool(re.search(r'20[.,]00 HE', t)),
                   'costo': bool(re.search(r'1,?500[.,]00', t))}))
 `));
+ok(pf.cabIncPrimero && pf.filaIncPrimero,
+   'en el PDF la incidencia va delante del N° de parte, cabecera y filas',
+   `cabecera ${pf.cabIncPrimero} · filas ${pf.filaIncPrimero}`);
 ok(pf.partes === 5, 'y lleva 5 partes, no los once', pf.partes);
 ok(pf.incs.length === 1, 'todos de la misma incidencia', pf.incs.join(' '));
 ok(pf.total && pf.horas && pf.costo,
