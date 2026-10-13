@@ -4,7 +4,7 @@
 //  incidente). Filtros por origen y estado. Al hacer clic en cualquier máquina
 //  se muestra su historial completo de partes diarios (abiertos y cerrados).
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import Swal from 'sweetalert2';
 import {
@@ -78,6 +78,8 @@ export default function Maquinaria({ irAIncidente }) {
   const PORPAGINA = 8;
   const [detalle, setDetalle] = useState(null);           // máquina seleccionada
   const [historial, setHistorial] = useState(null);       // { maquina, partes, totales }
+  // Código de incidencia por el que se filtra el historial; '' = todas.
+  const [filtroInc, setFiltroInc] = useState('');
   const [cargandoHist, setCargandoHist] = useState(false);
   const [pdfModal, setPdfModal] = useState(null);
   const [modalReporteFlota, setModalReporteFlota] = useState(false);
@@ -171,6 +173,10 @@ export default function Maquinaria({ irAIncidente }) {
   const abrirDetalle = async (m) => {
     setDetalle(m);
     setHistorial(null);
+    // El filtro es de la ficha que se cierra, no de la que se abre: la
+    // incidencia que se estaba mirando no tiene por qué existir en la
+    // máquina siguiente, y dejarlo puesto abriría una ficha en blanco.
+    setFiltroInc('');
     setCargandoHist(true);
     try {
       const r = await fetch(`${API_OPS}/modelos/${m.id}/partes/`);
@@ -183,6 +189,59 @@ export default function Maquinaria({ irAIncidente }) {
       Swal.fire('Error', 'Fallo de conexión al cargar el historial.', 'error');
     } finally { setCargandoHist(false); }
   };
+
+  /**
+   * Las incidencias que aparecen en el historial, para el selector.
+   *
+   * Salen de los propios partes y no de un listado aparte: así solo se
+   * ofrecen las que esta máquina tocó de verdad, y nunca hay una opción que
+   * al elegirla deje la tabla vacía. Van con su número de partes al lado,
+   * que es lo que permite elegir sin probar una por una.
+   *
+   * Ordenadas por cantidad: la incidencia donde más trabajó la máquina es
+   * casi siempre la que se viene a mirar.
+   */
+  const incidencias = useMemo(() => {
+    if (!historial?.partes) return [];
+    const cuenta = new Map();
+    for (const p of historial.partes) {
+      if (!p.incidente_id) continue;            // partes sin incidencia, fuera
+      const cod = codigoIncidencia(p);
+      cuenta.set(cod, (cuenta.get(cod) || 0) + 1);
+    }
+    return [...cuenta.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [historial]);
+
+  /**
+   * Lo que se está mirando: los partes y SUS totales.
+   *
+   * Todo cuelga de aquí —la tabla, las tres tarjetas de arriba, el pie y los
+   * dos archivos—, para que no pueda pasar que se filtre por una incidencia
+   * y las tarjetas sigan sumando las veintinueve. Un total que no cuadra con
+   * la lista que tiene debajo es peor que no poner total.
+   *
+   * SIN FILTRO SE USAN LOS TOTALES DEL BACKEND, que son los de siempre;
+   * filtrando se suman las filas que quedan. Así activar el filtro no cambia
+   * de paso las cifras que ya se venían viendo por si el backend redondea
+   * distinto que esta suma.
+   */
+  const vista = useMemo(() => {
+    if (!historial?.partes) return null;
+    const filtrando = !!filtroInc;
+    const partes = filtrando
+      ? historial.partes.filter(p => p.incidente_id && codigoIncidencia(p) === filtroInc)
+      : historial.partes;
+    const suma = (f) => partes.reduce((a, p) => a + (parseFloat(f(p)) || 0), 0);
+    return {
+      partes,
+      filtrando,
+      total_partes: filtrando ? partes.length : historial.total_partes,
+      total_horas: filtrando ? suma(p => p.horas) : (parseFloat(historial.total_horas) || 0),
+      total_costo: filtrando ? suma(p => p.costo) : (parseFloat(historial.total_costo) || 0),
+      // El combustible nunca vino del backend: siempre se sumó de las filas.
+      total_combustible: suma(p => p.fuel_gallons),
+    };
+  }, [historial, filtroInc]);
 
   // Abre el PDF del parte en un modal (igual que en Reportes / parte diario).
   const abrirPdfParte = async (parteId, nombre) => {
@@ -543,8 +602,15 @@ export default function Maquinaria({ irAIncidente }) {
     return isConfirmed ? 'valorizado' : (isDenied ? 'horas' : null);
   };
 
+  // Un sufijo para el nombre del archivo que diga de qué incidencia es.
+  // 'INCIDENTE-001-12062026' entero haría nombres kilométricos; con el
+  // número basta para distinguir dos descargas de la misma máquina.
+  const sufijoFiltro = () => (vista?.filtrando
+    ? '_' + filtroInc.replace(/^INCIDENTE-/, 'INC-').replace(/-\d{8}$/, '')
+    : '');
+
   const exportarHistorialExcel = async () => {
-    if (!historial || !detalle) return;
+    if (!vista || !detalle) return;
     const modo = await preguntarModoReporte();
     if (!modo) return;
     const valorizado = modo === 'valorizado';
@@ -579,7 +645,10 @@ export default function Maquinaria({ irAIncidente }) {
     ws.getCell('C1').font = { bold: true, color: { argb: 'FFFFFF' }, size: 12 };
     ws.getCell('C1').alignment = { vertical: 'middle' };
     ws.mergeCells(`C2:${ultLetra}2`);
-    ws.getCell('C2').value = `Historial de Partes Diarios · ${maq.codigo}`;
+    // El filtro va en el titulo del archivo: una vez descargado, nadie puede
+    // saber por la tabla que esto es un recorte y no el historial entero.
+    ws.getCell('C2').value = `Historial de Partes Diarios · ${maq.codigo}`
+      + (vista.filtrando ? ` · ${filtroInc}` : '');
     ws.getCell('C2').font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
     ws.getCell('C2').alignment = { vertical: 'middle' };
     ws.mergeCells(`C3:${ultLetra}3`);
@@ -616,7 +685,7 @@ export default function Maquinaria({ irAIncidente }) {
     });
     ws.getRow(hRow).height = 20;
 
-    historial.partes.forEach((p, i) => {
+    vista.partes.forEach((p, i) => {
       const r = hRow + 1 + i;
       const fila = [
         p.part_number,
@@ -643,12 +712,12 @@ export default function Maquinaria({ irAIncidente }) {
     });
 
     // Totales
-    const tRow = hRow + 1 + historial.partes.length;
-    ws.getCell(tRow, 1).value = `TOTAL · ${historial.total_partes} parte(s)`;
+    const tRow = hRow + 1 + vista.partes.length;
+    ws.getCell(tRow, 1).value = `TOTAL · ${vista.total_partes} parte(s)`;
     ws.getCell(tRow, 1).font = { bold: true, size: 10 };
-    ws.getCell(tRow, 6).value = parseFloat(historial.total_horas) || 0;
-    ws.getCell(tRow, 7).value = historial.partes.reduce((a, p) => a + (parseFloat(p.fuel_gallons) || 0), 0);
-    if (valorizado) ws.getCell(tRow, 10).value = parseFloat(historial.total_costo) || 0;
+    ws.getCell(tRow, 6).value = vista.total_horas;
+    ws.getCell(tRow, 7).value = vista.total_combustible;
+    if (valorizado) ws.getCell(tRow, 10).value = vista.total_costo;
     [6, 7, ...(valorizado ? [10] : [])].forEach(ci => {
       const c = ws.getCell(tRow, ci);
       c.font = { bold: true, size: 10 }; c.numFmt = '#,##0.00';
@@ -661,14 +730,14 @@ export default function Maquinaria({ irAIncidente }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Historial_${maq.codigo}${valorizado ? '' : '_solo-horas'}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.download = `Historial_${maq.codigo}${sufijoFiltro()}${valorizado ? '' : '_solo-horas'}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   // ── Exportar el historial de partes a PDF ───────────────────────────────
   const exportarHistorialPDF = async () => {
-    if (!historial || !detalle) return;
+    if (!vista || !detalle) return;
     const modo = await preguntarModoReporte();
     if (!modo) return;
     const valorizado = modo === 'valorizado';
@@ -686,7 +755,8 @@ export default function Maquinaria({ irAIncidente }) {
     doc.setFontSize(13); doc.setFont(undefined, 'bold');
     doc.text('JUNTA DE RIEGO PRESURIZADO', 32, 11);
     doc.setFontSize(10); doc.setFont(undefined, 'normal');
-    doc.text(`Historial de Partes Diarios · ${maq.codigo}${valorizado ? '' : ' · solo horas'}`, 32, 17);
+    doc.text(`Historial de Partes Diarios · ${maq.codigo}${valorizado ? '' : ' · solo horas'}`
+      + (vista.filtrando ? ` · ${filtroInc}` : ''), 32, 17);
     doc.setFontSize(8);
     doc.text(`Generado: ${new Date().toLocaleString('es-PE')}`, 32, 22);
 
@@ -703,7 +773,7 @@ export default function Maquinaria({ irAIncidente }) {
     doc.text(`Placa: ${maq.placa || '—'}`, 185, infoY);
     doc.text(`Origen: ${maq.origen === 'JURP' ? 'JURP (propia)' : 'Externa'}`, 185, infoY + 5);
 
-    const cuerpo = historial.partes.map(p => ([
+    const cuerpo = vista.partes.map(p => ([
       p.part_number,
       p.date || '—',
       p.cerrado ? 'CERRADO' : 'ABIERTO',
@@ -723,11 +793,11 @@ export default function Maquinaria({ irAIncidente }) {
               ...(valorizado ? ['TOTAL'] : [])]],
       body: cuerpo,
       foot: [[
-        `TOTAL · ${historial.total_partes} parte(s)`, '', '', '', '',
-        `${(parseFloat(historial.total_horas) || 0).toFixed(2)} HE`,
-        `${historial.partes.reduce((a, p) => a + (parseFloat(p.fuel_gallons) || 0), 0).toFixed(2)} Gls`,
+        `TOTAL · ${vista.total_partes} parte(s)`, '', '', '', '',
+        `${vista.total_horas.toFixed(2)} HE`,
+        `${vista.total_combustible.toFixed(2)} Gls`,
         '', '',
-        ...(valorizado ? [`S/ ${(parseFloat(historial.total_costo) || 0).toFixed(2)}`] : []),
+        ...(valorizado ? [`S/ ${vista.total_costo.toFixed(2)}`] : []),
       ]],
       styles: { fontSize: 7.5, cellPadding: 2 },
       headStyles: { fillColor: [20, 99, 165], textColor: 255, fontSize: 7.5, halign: 'center' },
@@ -744,7 +814,7 @@ export default function Maquinaria({ irAIncidente }) {
       margin: { left: 10, right: 10 },
     });
 
-    doc.save(`Historial_${maq.codigo}${valorizado ? '' : '_solo-horas'}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`Historial_${maq.codigo}${sufijoFiltro()}${valorizado ? '' : '_solo-horas'}_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   // Filtra por texto de búsqueda (código, equipo, marca, modelo, placa).
@@ -1075,20 +1145,31 @@ export default function Maquinaria({ irAIncidente }) {
                   <Campo label="Origen" valor={detalle.origen_texto} />
                 </div>
 
-                {/* Totales del historial */}
-                {historial && (
+                {/* Totales DE LO QUE SE ESTÁ MIRANDO, no del historial entero:
+                    con un filtro puesto, tres tarjetas que siguieran sumando
+                    los 29 partes dirían lo contrario que la tabla de abajo. */}
+                {vista && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '14px' }}>
                     <div style={{ background: '#eff6ff', borderRadius: '6px', padding: '8px 10px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>PARTES</div>
-                      <div style={{ fontSize: '18px', fontWeight: 700, color: '#206bc4' }}>{historial.total_partes}</div>
+                      <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>
+                        PARTES{vista.filtrando && <span style={{ color: '#206bc4' }}> · FILTRADO</span>}
+                      </div>
+                      <div style={{ fontSize: '18px', fontWeight: 700, color: '#206bc4' }}>
+                        {vista.total_partes}
+                        {vista.filtrando && (
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8' }}>
+                            {' '}de {historial.total_partes}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div style={{ background: '#fffbeb', borderRadius: '6px', padding: '8px 10px', textAlign: 'center' }}>
                       <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>HORAS</div>
-                      <div style={{ fontSize: '18px', fontWeight: 700, color: '#b45309' }}>{historial.total_horas}</div>
+                      <div style={{ fontSize: '18px', fontWeight: 700, color: '#b45309' }}>{fmtNum(vista.total_horas)}</div>
                     </div>
                     <div style={{ background: '#f0fdf4', borderRadius: '6px', padding: '8px 10px', textAlign: 'center' }}>
                       <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>COSTO</div>
-                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a' }}>S/ {fmtNum(historial.total_costo)}</div>
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#16a34a' }}>S/ {fmtNum(vista.total_costo)}</div>
                     </div>
                   </div>
                 )}
@@ -1098,8 +1179,28 @@ export default function Maquinaria({ irAIncidente }) {
                   <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <FaHistory size={11} /> Historial de partes diarios
                   </div>
-                  {historial && historial.partes && historial.partes.length > 0 && (
-                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                  {/* El selector va PEGADO a los botones de exportar porque lo
+                      que descargan es lo que él deja ver: si quedara arriba
+                      del todo, se bajaría a pulsar Excel sin recordar que hay
+                      un filtro puesto. Solo sale si hay más de una incidencia
+                      que elegir; con una sola, el filtro no filtra nada. */}
+                  {incidencias.length > 1 && (
+                    <select value={filtroInc} onChange={e => setFiltroInc(e.target.value)}
+                      title="Ver solo los partes de una incidencia"
+                      style={{ marginLeft: 'auto', maxWidth: '280px', padding: '6px 10px',
+                        borderRadius: '6px', fontSize: '12px', fontFamily: 'inherit',
+                        border: `1px solid ${filtroInc ? '#206bc4' : '#cbd5e1'}`,
+                        background: filtroInc ? '#eff6ff' : '#fff',
+                        color: filtroInc ? '#206bc4' : '#475569',
+                        fontWeight: filtroInc ? 700 : 400, cursor: 'pointer' }}>
+                      <option value="">Todas las incidencias ({historial.total_partes})</option>
+                      {incidencias.map(([cod, n]) => (
+                        <option key={cod} value={cod}>{cod} ({n})</option>
+                      ))}
+                    </select>
+                  )}
+                  {vista && vista.partes.length > 0 && (
+                    <div style={{ marginLeft: incidencias.length > 1 ? 0 : 'auto', display: 'flex', gap: '8px' }}>
                       <button onClick={exportarHistorialExcel} title="Descargar en Excel"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: '#dcfce7', color: '#15803d', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
                         <FaDownload size={11} /> Excel
@@ -1147,7 +1248,7 @@ export default function Maquinaria({ irAIncidente }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {historial.partes.map(p => (
+                        {vista.partes.map(p => (
                           <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', background: p.cerrado ? '#fff' : '#fffbeb' }}>
                             <td style={{ padding: '11px 10px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>{p.part_number}</td>
                             <td style={{ padding: '11px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{p.date ? p.date.split('T')[0].split('-').reverse().join('/') : '—'}</td>
@@ -1174,13 +1275,13 @@ export default function Maquinaria({ irAIncidente }) {
                       </tbody>
                       <tfoot>
                         <tr style={{ background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
-                          <td colSpan="4" style={{ padding: '13px 14px', fontWeight: 700, color: '#334155' }}>TOTAL · {historial.total_partes} parte{historial.total_partes !== 1 ? 's' : ''}</td>
+                          <td colSpan="4" style={{ padding: '13px 14px', fontWeight: 700, color: '#334155' }}>TOTAL · {vista.total_partes} parte{vista.total_partes !== 1 ? 's' : ''}</td>
                           <td style={{ padding: '13px 8px' }}></td>
-                          <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(historial.total_horas)} HE</td>
-                          <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(historial.partes.reduce((s, p) => s + (parseFloat(p.fuel_gallons) || 0), 0))} Gls</td>
+                          <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(vista.total_horas)} HE</td>
+                          <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{fmtNum(vista.total_combustible)} Gls</td>
                           <td style={{ padding: '13px 8px' }}></td>
                           <td style={{ padding: '13px 8px' }}></td>
-                          <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 800, fontSize: '15px', color: '#1463A5', whiteSpace: 'nowrap' }}>S/ {fmtNum(historial.total_costo)}</td>
+                          <td style={{ padding: '13px 8px', textAlign: 'right', fontWeight: 800, fontSize: '15px', color: '#1463A5', whiteSpace: 'nowrap' }}>S/ {fmtNum(vista.total_costo)}</td>
                           <td style={{ padding: '13px 14px' }}></td>
                         </tr>
                       </tfoot>
