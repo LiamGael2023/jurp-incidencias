@@ -55,6 +55,34 @@ for (const inc of INCS) {
     });
   }
 }
+/* UN GRUPO CON DECIMALES DE VERDAD, los de una captura real.
+ *
+ * Con horas enteras el horómetro resta limpio y no se ve el fallo que
+ * motivó esto: 1010.0 − 1000.3 da 9.700000000000045, y al quitarle las 9.70
+ * efectivas quedan 4.6e-14 horas muertas. Imprime «0.00 HE» pero no es cero,
+ * así que la celda salía resaltada en ámbar diciendo cero —y solo en algunas
+ * filas, según qué decimales tocaran—.
+ *
+ * Ninguno de estos cuatro partes tiene horas muertas: las tres columnas
+ * tienen que salir en gris, sin un solo resalte.
+ */
+const DECIMALES = [[1000.3, 1010.0, 9.7], [1010.0, 1015.7, 5.7],
+                   [1015.7, 1019.9, 4.2], [1019.9, 1029.4, 9.5]];
+INCS.push({ id: 3, creado: '2026-07-14T08:00:00Z', n: DECIMALES.length });
+for (const [ini, fin, he] of DECIMALES) {
+  np++;
+  PARTES.push({
+    id: np, part_number: `PD-${String(np).padStart(4, '0')}-20260921`,
+    date: `2026-09-${String(np).padStart(2, '0')}`, cerrado: true,
+    activities: 'DESCOLMATACION DE CAUCE',
+    metrado: 0, metrado_unidad: 'm3', horas: he,
+    start_horometer: ini, end_horometer: fin, horas_efectivas: he,
+    obs_reduccion: '', fuel_gallons: 0, provider: 'LIZANA GROUP S.A.C.',
+    incidente_id: 3, incidente_creado: '2026-07-14T08:00:00Z',
+    costo: 100,
+  });
+}
+
 // El parte huérfano: sin incidencia.
 np++;
 PARTES.push({
@@ -70,9 +98,11 @@ PARTES.push({
 
 const HISTORIAL = {
   partes: PARTES,
-  total_partes: PARTES.length,                                   // 11
-  total_horas: PARTES.reduce((a, p) => a + p.horas, 0),          // 35
-  total_costo: PARTES.reduce((a, p) => a + p.costo, 0),          // 2450
+  total_partes: PARTES.length,                                   // 15
+  // Redondeado como lo hace el backend: sumar 9.7 + 5.7 + … deja brizna,
+  // y aquí se simula un total que ya viene limpio.
+  total_horas: Math.round(PARTES.reduce((a, p) => a + p.horas, 0) * 100) / 100,  // 64.1
+  total_costo: PARTES.reduce((a, p) => a + p.costo, 0),          // 2850
 };
 
 const MAQUINA = {
@@ -90,10 +120,12 @@ const MAQUINA = {
  *   sueltos: 1 efectiva, SIN horómetro → programadas y muertas, en blanco
  */
 window.__ESPERADO = {
-  total: { partes: 11, horas: 35, costo: 2450, program: 37, muertas: 3 },
+  total: { partes: 15, horas: 64.1, costo: 2850, program: 66.1, muertas: 3 },
   'INCIDENTE-001-12062026': { partes: 5, horas: 20, costo: 1500, program: 21, muertas: 1 },
   'INCIDENTE-007-03072026': { partes: 3, horas: 9, costo: 600, program: 10, muertas: 1 },
   'INCIDENTE-012-21082026': { partes: 2, horas: 5, costo: 300, program: 6, muertas: 1 },
+  // El de los decimales: 9.7 + 5.7 + 4.2 + 9.5 = 29.1, y NI UNA hora muerta.
+  'INCIDENTE-003-14072026': { partes: 4, horas: 29.1, costo: 400, program: 29.1, muertas: 0 },
 };
 
 window.fetch = async (u) => {

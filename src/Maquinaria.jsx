@@ -87,6 +87,22 @@ const COL_G = {
 };
 
 /**
+ * Redondeo a los dos decimales que se imprimen.
+ *
+ * El horómetro se guarda con decimales y restarlo deja brizna: 1010.0 −
+ * 1000.3 da 9.700000000000045, y al quitarle las 9.70 efectivas quedan
+ * 4.6e-14 horas muertas. Eso NO es cero para JavaScript, así que la celda
+ * salía resaltada en ámbar mientras imprimía «0.00 HE» —y solo en algunas
+ * filas, según qué decimales tocaran, que es lo que lo hacía incomprensible
+ * desde fuera—.
+ *
+ * Redondear aquí hace que el número que se decide y el número que se lee
+ * sean el mismo. Un resalte que contradice a la cifra que tiene al lado es
+ * peor que no resaltar nada: obliga a desconfiar de las dos.
+ */
+const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
+
+/**
  * Las tres horas de un parte, y de dónde sale cada una.
  *
  * La columna enseñaba un solo número —lo que se cobra— sin decir cómo se
@@ -107,18 +123,19 @@ const COL_G = {
 const horasDe = (p) => {
   const ini = parseFloat(p.start_horometer), fin = parseFloat(p.end_horometer);
   const tramo = (Number.isFinite(ini) && Number.isFinite(fin) && fin >= ini)
-    ? fin - ini : null;
+    ? round2(fin - ini) : null;
   // horas_efectivas si viene; si no, 'horas', que es lo que el historial
   // mandaba de siempre y ya son las efectivas.
   const bruto = parseFloat(p.horas_efectivas != null && p.horas_efectivas !== ''
     ? p.horas_efectivas : p.horas);
-  const efect = Number.isFinite(bruto) ? bruto : 0;
-  return { tramo, efect, muertas: tramo == null ? null : Math.max(0, tramo - efect) };
+  const efect = Number.isFinite(bruto) ? round2(bruto) : 0;
+  return { tramo, efect, muertas: tramo == null ? null : Math.max(0, round2(tramo - efect)) };
 };
 
 // Los partes que no cuelgan de ninguna incidencia: traslados, movilizaciones,
 // mantenimientos. No son un error ni un hueco, son su propio grupo.
 const SIN_INCIDENCIA = 'Sin incidencia';
+
 
 const codigoIncidencia = (p) => {
   if (!p || !p.incidente_id) return '—';
@@ -311,8 +328,8 @@ export default function Maquinaria({ irAIncidente }) {
       // El combustible nunca vino del backend: siempre se sumó de las filas.
       total_combustible: suma(p => p.fuel_gallons),
       conHorometro: conHm.length,
-      total_program: conHm.reduce((a, p) => a + horasDe(p).tramo, 0),
-      total_muertas: conHm.reduce((a, p) => a + horasDe(p).muertas, 0),
+      total_program: round2(conHm.reduce((a, p) => a + horasDe(p).tramo, 0)),
+      total_muertas: round2(conHm.reduce((a, p) => a + horasDe(p).muertas, 0)),
     };
   }, [historial, filtroInc]);
 
@@ -345,9 +362,11 @@ export default function Maquinaria({ irAIncidente }) {
       const conHm = g.partes.filter(p => horasDe(p).tramo != null);
       return {
         ...g,
-        horas: g.partes.reduce((a, p) => a + horasDe(p).efect, 0),
-        program: conHm.reduce((a, p) => a + horasDe(p).tramo, 0),
-        muertas: conHm.reduce((a, p) => a + horasDe(p).muertas, 0),
+        // Redondeadas tambien: sumar 0.1 + 0.2 vuelve a dejar brizna, y el
+        // subtotal del grupo se resalta por su cuenta igual que la fila.
+        horas: round2(g.partes.reduce((a, p) => a + horasDe(p).efect, 0)),
+        program: round2(conHm.reduce((a, p) => a + horasDe(p).tramo, 0)),
+        muertas: round2(conHm.reduce((a, p) => a + horasDe(p).muertas, 0)),
         conHorometro: conHm.length,
         combust: g.partes.reduce((a, p) => a + (parseFloat(p.fuel_gallons) || 0), 0),
         costo: g.partes.reduce((a, p) => a + (parseFloat(p.costo) || 0), 0),

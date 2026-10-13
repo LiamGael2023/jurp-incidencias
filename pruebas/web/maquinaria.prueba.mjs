@@ -91,10 +91,10 @@ ok(t0.anchoPisos.every(a => a === t0.th.length),
 ok(t0.th.slice(COL_HORAS, COL_HORAS + 3).join(' ') === 'PROGRAM. MUERTAS EFECT.',
    'las horas van en tres columnas: programadas, muertas y efectivas',
    t0.th.join(' · '));
-ok(t0.partes === ESPERADO.total.partes, 'están los 11 partes, repartidos', t0.partes);
-ok(t0.grupos.length === 4, 'en cuatro grupos: las tres incidencias y los sueltos',
+ok(t0.partes === ESPERADO.total.partes, 'están los 15 partes, repartidos', t0.partes);
+ok(t0.grupos.length === 5, 'en cinco grupos: las cuatro incidencias y los sueltos',
    t0.grupos.map(g => g.cab.split(' ')[0]).join(' · '));
-ok(/INCIDENTE-001/.test(t0.grupos[0].cab) && /Sin incidencia/.test(t0.grupos[3].cab),
+ok(/INCIDENTE-001/.test(t0.grupos[0].cab) && /Sin incidencia/.test(t0.grupos.at(-1).cab),
    'la del parte más reciente arriba, y los partes sin incidencia al final',
    t0.grupos.map(g => g.cab.split(' ')[0]).join(' → '));
 
@@ -112,6 +112,57 @@ for (const [cod, esp] of Object.entries(ESPERADO)) {
   ok(g && g.costo.replace(/,/g, '').includes(esp.costo.toFixed(2)),
      'y su costo', g && g.costo);
 }
+// ── El resalte no puede contradecir a la cifra ───────────────────────────
+// Las horas muertas van en ámbar cuando las hay. El horómetro se guarda con
+// decimales y restarlo deja brizna -1010.0 − 1000.3 da 9.700000000000045-,
+// así que quitarle las 9.70 efectivas dejaba 4.6e-14: imprime «0.00 HE» y
+// NO es cero, con lo que la celda salía resaltada diciendo cero. Y solo en
+// algunas filas, según qué decimales tocaran, que es lo que lo hacía
+// incomprensible desde fuera.
+//
+// La regla, y vale para cualquier resalte: si la cifra impresa es 0.00, la
+// celda va apagada. Se comprueba leyendo el color de verdad, no el dato.
+const resaltes = await p.evaluate(() => {
+  const th = [...document.querySelectorAll('table thead tr')].pop().children.length;
+  const malas = [];
+  for (const tb of document.querySelectorAll('table tbody')) {
+    for (const tr of tb.children) {
+      // La columna de muertas: la 7ª en las filas de parte, la 3ª en las
+      // cabeceras de grupo (que empiezan con una celda unida).
+      const esParte = tr.children.length === th;
+      const celda = tr.children[esParte ? 6 : 2];
+      if (!celda) continue;
+      const txt = celda.innerText.trim();
+      const color = getComputedStyle(celda).color;
+      const apagada = /148, 163, 184/.test(color);      // el gris de «no hay»
+      if (/^0[.,]00/.test(txt) && !apagada) {
+        malas.push(`${tr.children[0].innerText.trim().slice(0, 22)}: «${txt}» en ${color}`);
+      }
+    }
+  }
+  return malas;
+});
+ok(resaltes.length === 0,
+   'ninguna celda de 0.00 horas muertas sale resaltada, ni en filas ni en subtotales',
+   resaltes.slice(0, 3).join(' | '));
+
+// Y al revés: donde SÍ hay horas muertas, el resalte tiene que estar. Sin
+// esto, apagarlo todo pasaría la prueba de arriba.
+const conMuertas = await p.evaluate(() => {
+  const th = [...document.querySelectorAll('table thead tr')].pop().children.length;
+  let n = 0;
+  for (const tb of document.querySelectorAll('table tbody')) {
+    for (const tr of tb.children) {
+      const esParte = tr.children.length === th;
+      const celda = tr.children[esParte ? 6 : 2];
+      if (celda && /^1[.,]00/.test(celda.innerText.trim())
+          && /180, 83, 9/.test(getComputedStyle(celda).color)) n++;
+    }
+  }
+  return n;
+});
+ok(conMuertas >= 3, 'y donde sí las hay, el ámbar sigue puesto', `${conMuertas} celdas`);
+
 // ── Un parte sin horómetro no es un parte con cero horas muertas ─────────
 // Cientos de partes antiguos se guardaron sin horómetro. Rellenar ahí un
 // cero afirmaría que no hubo horas muertas, que es una afirmación y no un
@@ -120,7 +171,7 @@ const huerfano = await p.evaluate(() => {
   const th = [...document.querySelectorAll('table thead tr')].pop().children.length;
   for (const tb of document.querySelectorAll('table tbody')) {
     for (const tr of tb.children) {
-      if (tr.children.length === th && /PD-0011/.test(tr.innerText)) {
+      if (tr.children.length === th && /PD-0015/.test(tr.innerText)) {
         const c = [...tr.children].map(x => x.innerText.trim());
         return { program: c[5], muertas: c[6], efect: c[7] };
       }
@@ -134,11 +185,11 @@ ok(huerfano && huerfano.program === '—' && huerfano.muertas === '—',
 ok(huerfano && huerfano.efect.includes('1.00'),
    'pero sus horas efectivas sí se saben y se cuentan', huerfano && huerfano.efect);
 // El total de programadas sale SOLO de los que tienen horómetro: 37, no 38.
-ok(/37\.00 HE/.test(t0.pieTxt) && /3\.00 HE/.test(t0.pieTxt) && /35\.00 HE/.test(t0.pieTxt),
-   'y el pie suma 37 − 3 = 35, sin contar al que no tiene horómetro',
+ok(/66\.10 HE/.test(t0.pieTxt) && /3\.00 HE/.test(t0.pieTxt) && /64\.10 HE/.test(t0.pieTxt),
+   'y el pie suma 66,10 − 3 = 64,10, sin contar al que no tiene horómetro',
    t0.pieTxt.slice(0, 90));
 
-ok(/4 incidencias/.test(t0.pieTxt) && /11 parte/.test(t0.pieTxt),
+ok(/5 incidencias/.test(t0.pieTxt) && /15 parte/.test(t0.pieTxt),
    'y el pie dice cuántas incidencias y cuántos partes hay en total',
    t0.pieTxt.slice(0, 60));
 
@@ -146,12 +197,13 @@ const sel = 'select[title="Ver solo los partes de una incidencia"]';
 ok(await p.locator(sel).count() === 1, 'la ficha trae el selector de incidencia');
 
 const opciones = await p.locator(`${sel} option`).allTextContents();
-ok(opciones.length === 4,
-   'ofrece las tres incidencias del historial, más «todas»', opciones.join(' | '));
+ok(opciones.length === 5,
+   'ofrece las cuatro incidencias del historial, más «todas»', opciones.join(' | '));
 // El parte sin incidencia no es una incidencia: no puede salir como opción.
 ok(!opciones.some(o => /—|null|undefined/.test(o)),
    'y el parte sin incidencia no aparece como opción');
-ok(/\(5\)/.test(opciones[1]) && /\(3\)/.test(opciones[2]) && /\(2\)/.test(opciones[3]),
+ok(/\(5\)/.test(opciones[1]) && /\(4\)/.test(opciones[2]) && /\(3\)/.test(opciones[3])
+   && /\(2\)/.test(opciones[4]),
    'cada una dice cuántos partes tiene, de más a menos', opciones.slice(1).join(' '));
 
 // Lo que se ve en pantalla: filas, tarjetas y pie.
@@ -172,7 +224,7 @@ for (const [cod, esp] of Object.entries(ESPERADO)) {
 await p.selectOption(sel, 'INCIDENTE-001-12062026');
 await p.waitForTimeout(500);
 const cab = await p.evaluate(() => document.body.innerText.replace(/\s+/g, ' '));
-ok(/5 de 11/.test(cab), 'la tarjeta de PARTES dice «5 de 11», no 11 a secas',
+ok(/5 de 15/.test(cab), 'la tarjeta de PARTES dice «5 de 15», no 15 a secas',
    (cab.match(/PARTES[^|]{0,30}/) || [''])[0]);
 ok(/S\/ 1,?500/.test(cab), 'y el costo es el de la incidencia, no el total',
    (cab.match(/S\/ [\d,.]+/g) || []).join(' '));
@@ -267,9 +319,9 @@ ok(pf.total && pf.horas && pf.costo,
 await p.selectOption(sel, '');
 await p.waitForTimeout(500);
 const v = await leerTabla();
-ok(v.partes === ESPERADO.total.partes, 'quitar el filtro devuelve los 11 partes', v.partes);
-ok(v.grupos.length === 4, 'y los cuatro grupos', v.grupos.length);
-ok(v.pieTxt.includes('11 parte'), 'y el pie vuelve al total', v.pieTxt.slice(0, 50));
+ok(v.partes === ESPERADO.total.partes, 'quitar el filtro devuelve los 15 partes', v.partes);
+ok(v.grupos.length === 5, 'y los cinco grupos', v.grupos.length);
+ok(v.pieTxt.includes('15 parte'), 'y el pie vuelve al total', v.pieTxt.slice(0, 50));
 
 ok(errs.length === 0, 'ningún error de JS en toda la prueba', errs.join(' | '));
 
