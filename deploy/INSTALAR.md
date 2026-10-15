@@ -65,7 +65,7 @@ chmod o+x /var/www/envs/front /var/www/envs/front/releases
 Prueba:
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" http://incidencias.192.81.132.87.nip.io/
+curl -s -o /dev/null -w "%{http_code}\n" http://nexhydro.192.81.132.87.nip.io/
 ```
 
 Un **200** y ya está sirviendo.
@@ -73,7 +73,7 @@ Un **200** y ya está sirviendo.
 ## 5. Certificado
 
 ```bash
-sudo certbot --nginx -d incidencias.192.81.132.87.nip.io
+sudo certbot --nginx -d nexhydro.192.81.132.87.nip.io
 ```
 
 ## 6. Despliegue automático
@@ -91,14 +91,19 @@ tail -20 /var/www/envs/front/deploy.log
 
 ---
 
-## Cuando tengas el subdominio definitivo
+## Cuando se migre el Linode viejo
 
-Crea `incidencias.jriegopresurizado.org.pe` en tu panel de DNS apuntando a
-`192.81.132.87`, agrégalo al `server_name` de `nginx-front.conf`, y:
+El dominio definitivo es `nexhydro.jriegopresurizado.org.pe`. Créalo en tu panel
+de DNS apuntando a `192.81.132.87`, agrégalo al `server_name` de
+`nginx-front.conf` junto al de nip.io, y pide el certificado para los dos:
 
 ```bash
-sudo certbot --nginx -d incidencias.192.81.132.87.nip.io -d incidencias.jriegopresurizado.org.pe
+sudo certbot --nginx -d nexhydro.192.81.132.87.nip.io -d nexhydro.jriegopresurizado.org.pe
 ```
+
+Conviene dejar los dos nombres activos un tiempo: quien tenga guardado el de
+nip.io sigue entrando mientras el nuevo propaga. Después se puede quitar el de
+nip.io del `server_name`.
 
 Ahí ya puedes apagar el proyecto en Vercel.
 
