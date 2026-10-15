@@ -1,19 +1,4 @@
 {
-  "$comment": [
-    "ESTE FICHERO NO LEE VARIABLES DE ENTORNO. Los rewrites se resuelven en",
-    "el borde de Vercel, antes de que exista nada del código, así que",
-    "VITE_API_BASE no llega hasta aquí: el día del dominio definitivo hay",
-    "que cambiar estos destinos A MANO y volver a desplegar.",
-    "",
-    "Es el ÚNICO sitio del front donde queda un host escrito; todo lo demás",
-    "sale de src/api.js.",
-    "",
-    "PENDIENTE DE SEGURIDAD en /api/: va por HTTP, no HTTPS. Lo que pasa por",
-    "ahí —incluidos los tokens de sesión de PLUVIRA— viaja en claro entre",
-    "Vercel y ese servidor. En cuanto sistema.jriegopresurizado.org.pe sirva",
-    "HTTPS hay que cambiarlo; no se ha tocado todavía para no dejar la app",
-    "sin datos si ese host aún no lo tiene."
-  ],
   "rewrites": [
     {
       "source": "/innovapi/(.*)",

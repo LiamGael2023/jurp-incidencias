@@ -19,8 +19,10 @@
  *
  * LA QUE NO PASA POR AQUÍ ES LA DE vercel.json. El proxy /vigapi/ se
  * resuelve en el borde de Vercel, antes de que exista nada de este código,
- * y su fichero de configuración no lee variables de entorno. Esa hay que
- * cambiarla a mano, y por eso está anotada en el propio vercel.json.
+ * y su fichero de configuración no lee variables de entorno: esa hay que
+ * cambiarla a mano. Tampoco admite comentarios —Vercel lo valida contra su
+ * esquema y rechaza cualquier clave que no conozca—, así que lo que hay que
+ * saber de él está en DESPLIEGUE.md.
  */
 
 // Sin barra al final: todo lo de abajo la pone, y dos seguidas rompen
