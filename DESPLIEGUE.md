@@ -30,6 +30,55 @@ De ahí salen tres cosas, y conviene usar la que toca:
 Hoy son el mismo valor. Están separadas para que el día que las imágenes se
 sirvan de otro sitio se cambie una línea y no veinte llamadas.
 
+## Comprobar desde el navegador a qué servidor llama
+
+Abrir la app desplegada, F12 → Console.
+
+### 1. ¿Qué host lleva dentro el build que está en producción?
+
+Es la pregunta que de verdad importa después de desplegar: si el build es
+anterior a la migración, la app sigue llamando al servidor viejo aunque el
+repo esté bien. Lee el propio bundle que el navegador acaba de cargar:
+
+```js
+(async () => {
+  const hosts = new Set();
+  for (const s of document.querySelectorAll('script[src]')) {
+    const t = await (await fetch(s.src)).text();
+    for (const m of t.matchAll(/https?:\/\/[a-z0-9.\-]+\.(?:duckdns\.org|nip\.io|jriegopresurizado\.org\.pe)/g)) hosts.add(m[0]);
+  }
+  console.log('Backend dentro de este build:', [...hosts]);
+  console.log([...hosts].some(h => h.includes('duckdns'))
+    ? 'SIGUE EL SERVIDOR VIEJO: este build es anterior a la migracion'
+    : 'sin rastro del servidor viejo');
+})();
+```
+
+### 2. ¿A qué origen ha llamado la página?
+
+```js
+const h = {};
+for (const e of performance.getEntriesByType('resource')) {
+  const o = new URL(e.name).origin;
+  h[o] = (h[o] || 0) + 1;
+}
+console.table(Object.entries(h).sort((a, b) => b[1] - a[1])
+  .map(([origen, peticiones]) => ({ origen, peticiones })));
+```
+
+Sale todo lo que la página ha pedido desde que se cargó, sin recargar nada.
+Lo mismo se ve en **Network → Fetch/XHR**, columna *Domain*.
+
+### CUIDADO: lo que pasa por el proxy sale como propio
+
+Las llamadas a `/vigapi/` y `/api/` las reenvía Vercel desde su borde. El
+navegador solo ve una petición a `jurp-incidencias.vercel.app`, así que **en
+Network y en la tabla de arriba aparecen como tráfico propio**, no con el
+host del backend. Comprobado: el salto es invisible desde el navegador.
+
+O sea que no verlo ahí no prueba nada. Para esas dos rutas, lo que manda es
+el destino escrito en `vercel.json`.
+
 ## `vercel.json` hay que cambiarlo a mano
 
 Es el **único** sitio del front donde queda un host escrito. Los *rewrites*
