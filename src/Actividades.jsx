@@ -33,8 +33,9 @@ import {
   FaFileInvoice,
 } from 'react-icons/fa';
 import GestionCosteo from './GestionCosteo';
+import { API_OPS } from './api';
 
-const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
+const API = API_OPS;
 
 const Portal = ({ children }) => createPortal(children, document.body);
 

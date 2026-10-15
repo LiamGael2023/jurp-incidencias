@@ -35,7 +35,7 @@ import refAltura from './assets/ref_altura.png';
 import refAncho from './assets/ref_ancho.png';
 import MantenedorEquipos from './MantenedorEquipos';
 import VisorImagen from './VisorImagen';
-import { API_OPS } from './api';
+import { API_OPS, API_BASE } from './api';
 import { rutaDe, cuelgaDe, bajarSolo } from './arbolPartidas';
 import { imgToBase64 } from './costeo/imagen';
 import {
@@ -434,7 +434,7 @@ export default function GestionCosteo({
     }
   };
   const cargarCosteosGuardados = async (incidenteId) => {
-    const BASE_URL = 'https://gideonstudio.duckdns.org'; 
+    const BASE_URL = API_BASE;
     try {
       const [resPers, resMat, resMaq] = await Promise.all([
         fetch(`${BASE_URL}/api/v1/mobile/operations/incident-personnels/`),
@@ -529,7 +529,7 @@ export default function GestionCosteo({
     } catch (error) { console.error("❌ Error al obtener los recursos guardados:", error); }
   };
   const abrirModalPdf = (dbId) => {
-    const url = `https://gideonstudio.duckdns.org/api/v1/mobile/operations/daily-part-heavy-equipments/${dbId}/pdf/`;
+    const url = `${API_OPS}/daily-part-heavy-equipments/${dbId}/pdf/`;
     setPdfUrlActivo(url);
     setModalPdfAbierto(true);
   };
@@ -546,7 +546,7 @@ export default function GestionCosteo({
       confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar',
     });
     if (!conf.isConfirmed) return;
-    const BASE_URL = 'https://gideonstudio.duckdns.org';
+    const BASE_URL = API_BASE;
     try {
       const resultados = await Promise.all(registros.map(reg =>
         fetch(`${BASE_URL}/api/v1/mobile/operations/${reg.endpoint}/${reg.dbId}/`, { method: 'DELETE' })
@@ -576,7 +576,7 @@ export default function GestionCosteo({
       confirmButtonText: 'Sí, finalizar', cancelButtonText: 'Cancelar',
     });
     if (!conf.isConfirmed) return;
-    const BASE_URL = 'https://gideonstudio.duckdns.org';
+    const BASE_URL = API_BASE;
     try {
       const r = await fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/${fila.dbId}/cerrar/`, { method: 'POST' });
       if (r.ok) {
@@ -1403,7 +1403,7 @@ export default function GestionCosteo({
     const recursosNuevos = recursos.filter(r => !r.guardadoEnDB && !r.esBorrador);
     if (recursosNuevos.length === 0) return Swal.fire({ icon: 'info', title: 'Todo al día', text: 'No hay recursos nuevos por guardar.' });
     setGuardando(true);
-    const BASE_URL = 'https://gideonstudio.duckdns.org'; 
+    const BASE_URL = API_BASE;
     const token = localStorage.getItem('userToken'); 
     try {
       for (const r of recursosNuevos) {

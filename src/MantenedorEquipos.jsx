@@ -18,8 +18,9 @@ import { createPortal } from 'react-dom';
 import Swal from 'sweetalert2';
 import { FaPlus, FaEdit, FaTrash, FaTimes, FaChevronRight, FaSync, FaCircle, FaSearch, FaTools, FaCopy } from 'react-icons/fa';
 import './MantenedorEquipos.css';
+import { API_OPS } from './api';
 
-const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
+const API = API_OPS;
 
 // Endpoints AllowAny; no enviamos token (uno vencido daría 401).
 function headers(json = true) {

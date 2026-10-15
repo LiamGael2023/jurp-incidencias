@@ -40,8 +40,8 @@ import {
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Swal from 'sweetalert2';
+import { API_OPS } from './api';
 
-const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
 const soles = (n) => 'S/ ' + (parseFloat(n) || 0).toLocaleString('es-PE',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });

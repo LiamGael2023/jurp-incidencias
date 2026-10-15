@@ -78,6 +78,7 @@ import geoViasAcceso from './data/garitas/VIAS_DE_ACCESO.json';
 import geoViaAuxiliar from './data/garitas/VIA_AUXILIAR.json';
 import geoRedNacional from './data/garitas/RED_NACIONAL.json';
 import PanelReportes from './ReportesANA';
+import { API_OPS, API_BASE } from './api';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const crearIconoSimbologia = (url, sz = 28) => L.icon({ iconUrl: url, iconSize: [sz, sz], iconAnchor: [sz/2, sz/2], popupAnchor: [0, -(sz/2)] });
@@ -105,7 +106,7 @@ const NIVELES_ALERTA = {
 
 const COLORS_USUARIO = ['#e8590c','#7048e8','#12b886','#f03e3e','#1098ad','#ae3ec9','#f59f00','#4c6ef5'];
 // Capas KMZ/KML guardadas en el servidor.
-const API_CAPAS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations/capas-mapa';
+const API_CAPAS = `${API_OPS}/capas-mapa`;
 
 // ── Config KMZ ──────────────────────────────────────────────────────────────
 const KMZ_CONFIG = [
@@ -795,7 +796,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
   // ── Cargar costeos de gestión ──────────────────────────────────────────
   const cargarCosteos = async () => {
-    const BASE = 'https://gideonstudio.duckdns.org';
+    const BASE = API_BASE;
     try {
       const [rP, rM, rQ] = await Promise.all([
         fetch(`${BASE}/api/v1/mobile/operations/incident-personnels/`),

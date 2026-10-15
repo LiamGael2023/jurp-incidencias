@@ -12,7 +12,7 @@
  * este DID, o guardar cada lectura en nuestra base.
  */
 
-// /vigapi/ es el proxy de Vercel hacia gideonstudio.duckdns.org/api/v1/
+// /vigapi/ es el proxy de Vercel hacia el backend, /api/v1/ (ver vercel.json)
 const API = '/vigapi/mobile/operations/innova';
 
 /** Lectura actual de una estación. `did` opcional: si falta, la primera. */

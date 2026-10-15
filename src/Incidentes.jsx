@@ -524,7 +524,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   // Trae TODOS los costeos de una vez y los agrupa por incidente.
   // (Una sola llamada por tipo, no una por incidente: mucho más rápido.)
   const recopilarDatosGlobales = async () => {
-    const BASE = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
+    const BASE = API_OPS;
     const [rPers, rMat, rMaq] = await Promise.all([
       fetch(`${BASE}/incident-personnels/`),
       fetch(`${BASE}/incident-materials/`),

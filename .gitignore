@@ -30,3 +30,8 @@ pruebas/lamina/.build/
 # de pruebas/, y no es codigo fuente.
 __pycache__/
 *.py[cod]
+
+# Variables locales. .env.example sí se versiona: es la plantilla.
+.env
+.env.local
+.env.*.local

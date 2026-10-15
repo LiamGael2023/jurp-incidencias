@@ -10,6 +10,7 @@ import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { API_OPS, API_BASE } from './api';
 
 
 // Los modales se cuelgan del <body>, no del árbol de la página.
@@ -175,7 +176,7 @@ function Incidentes() {
   const galeriaSiguiente = () => setGaleriaIndex(i => Math.min(galeriaMedia.length - 1, i + 1));
 
   const cargarCosteosGuardados = async (incidenteId) => {
-    const BASE_URL = 'https://gideonstudio.duckdns.org'; 
+    const BASE_URL = API_BASE;
     try {
       const [resPers, resMat, resMaq] = await Promise.all([
         fetch(`${BASE_URL}/api/v1/mobile/operations/incident-personnels/`),
@@ -204,7 +205,7 @@ function Incidentes() {
   };
 
   const abrirModalPdf = (dbId) => {
-    const url = `https://gideonstudio.duckdns.org/api/v1/mobile/operations/daily-part-heavy-equipments/${dbId}/pdf/`;
+    const url = `${API_OPS}/daily-part-heavy-equipments/${dbId}/pdf/`;
     setPdfUrlActivo(url);
     setModalPdfAbierto(true);
   };
@@ -411,7 +412,7 @@ function Incidentes() {
     const recursosNuevos = recursos.filter(r => !r.guardadoEnDB);
     if (recursosNuevos.length === 0) return Swal.fire({ icon: 'info', title: 'Todo al día', text: 'No hay recursos nuevos.' });
     setGuardando(true);
-    const BASE_URL = 'https://gideonstudio.duckdns.org'; 
+    const BASE_URL = API_BASE;
     const token = localStorage.getItem('userToken'); 
     try {
       for (const r of recursosNuevos) {

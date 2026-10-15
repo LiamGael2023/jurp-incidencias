@@ -23,8 +23,9 @@ import {
   FaMapMarkerAlt, FaSearch,
 } from 'react-icons/fa';
 import ModalImportarPresupuesto from './ImportarPresupuesto';
+import { API_OPS } from './api';
 
-const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
+const API = API_OPS;
 
 const Portal = ({ children }) => createPortal(children, document.body);
 

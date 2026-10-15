@@ -17,8 +17,8 @@ import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
 import logo from './assets/jurp.png';
 import './MaquinariaGIS.css';
+import { API_OPS } from './api';
 
-const API_OPS = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
 
 // Los modales se cuelgan del <body>, no del árbol donde se escriben.
 //

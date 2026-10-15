@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import { FaSyncAlt, FaShieldAlt, FaClock, FaCar, FaExclamationTriangle, FaChevronLeft, FaChevronRight, FaTimes, FaImage, FaMapMarkerAlt, FaUser, FaCalendarAlt, FaCheckCircle, FaSignInAlt, FaSignOutAlt } from 'react-icons/fa';
 import './Incidentes.css';
+import { MEDIA } from './api';
 
-// Todo pasa por el rewrite de vercel.json: /vigapi/* → gideonstudio /api/v1/*
+// Todo pasa por el rewrite de vercel.json: /vigapi/* → el backend /api/v1/*
 // Llamar al dominio absoluto lo bloquea CORS, porque el navegador no permite
 // que la web de Vercel consulte otro dominio sin su autorización expresa.
 const BASE = '/vigapi';
 
-// El servidor de vigilancia devuelve las imágenes con URL absoluta propia,
-// que no pasa por el rewrite. Se sirven directo desde ahí.
-const MEDIA = 'https://gideonstudio.duckdns.org';
+// Las imágenes llegan con URL absoluta propia, que no pasa por el rewrite:
+// se sirven directo desde el backend (MEDIA, en api.js).
 
 function Vigilancia() {
   const [tab, setTab] = useState('incidentes');

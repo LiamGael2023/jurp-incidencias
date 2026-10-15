@@ -8,6 +8,7 @@ import {
 import ExcelJS from 'exceljs';
 import Swal from 'sweetalert2';
 import './Incidentes.css';
+import { API_OPS } from './api';
 
 /**
  * Listado global de partes diarios.
@@ -31,7 +32,7 @@ import './Incidentes.css';
 // que cubre toda la pantalla. Comprobado en Chromium con las hojas reales.
 const Portal = ({ children }) => createPortal(children, document.body);
 
-const API = 'https://gideonstudio.duckdns.org/api/v1/mobile/operations';
+const API = API_OPS;
 
 // En fecha local, no UTC: toISOString() devuelve el día de Greenwich, y de
 // 7 p.m. en adelante en Perú eso ya es mañana.
