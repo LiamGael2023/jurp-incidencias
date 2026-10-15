@@ -3,11 +3,35 @@ import './Login.css';
 import logo from './assets/logo1.png';
 import portadaPortada from './assets/Portada-Pagina-Web-Julio.png';
 
-function Login({ onLoginSuccess }) {
+/*
+ * CADA APP TIENE SU PROPIO PADRÓN DE USUARIOS, y no son el mismo.
+ *
+ * PLUVIRA nació con las cuentas del sistema de riego, en el servidor de
+ * JURP. Para SENTRIA no nos dieron acceso a ese padrón, así que sus
+ * vigilantes viven en una tabla aparte, la del backend de vigilancia.
+ *
+ * Por eso el login no puede tener una sola dirección: un vigilante que
+ * escriba sus datos correctos recibiría un 401 si se le pregunta al
+ * servidor equivocado, y el mensaje diría «usuario o contraseña
+ * incorrectos» —que es mentira y manda a buscar el problema donde no está.
+ *
+ * `/api/` y `/vigapi/` son los dos reenvíos de vercel.json; cada uno sale a
+ * un servidor distinto.
+ */
+const LOGIN_POR_APP = {
+  pluvira: '/api/v1/mobile/auth/login/',
+  sentria: '/vigapi/mobile/auth/login/',
+};
+
+function Login({ onLoginSuccess, app }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Sin `app` definida se usa el padrón de PLUVIRA, que es el histórico y el
+  // que cubre a casi todo el mundo.
+  const urlLogin = LOGIN_POR_APP[app] || LOGIN_POR_APP.pluvira;
 
   const handleSubmit = async (e) => {
     e.preventDefault(); 
@@ -20,7 +44,7 @@ function Login({ onLoginSuccess }) {
     };
 
     try {
-      const respuesta = await fetch('/api/v1/mobile/auth/login/', {
+      const respuesta = await fetch(urlLogin, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json' 
@@ -45,8 +69,12 @@ function Login({ onLoginSuccess }) {
             if (resultado.user?.id != null) {
               localStorage.setItem('userId', String(resultado.user.id));
             }
+            // 5. De qué padrón salió el token. Las pantallas que llaman a los
+            //    dos servidores lo necesitan: el token de uno no vale en el
+            //    otro, y sin esta marca no hay manera de saber cuál es cuál.
+            localStorage.setItem('authOrigen', app === 'sentria' ? 'sentria' : 'pluvira');
             
-            // 5. Le pasamos los datos a App.jsx
+            // 6. Le pasamos los datos a App.jsx
             onLoginSuccess(token, username);
         } else {
             setError('Error de servidor: No se recibió un token válido.');
@@ -71,7 +99,9 @@ function Login({ onLoginSuccess }) {
           alt="Logo J Riego Presurizado" 
           className="login-logo"
         />
-        <div className="login-titulo">Sistema de Monitoreo</div>
+        <div className="login-titulo">
+          {app === 'sentria' ? 'SENTRIA · Vigilancia' : 'Sistema de Monitoreo'}
+        </div>
 
         <form className="formulario" onSubmit={handleSubmit}>
           <div className="input-grupo">

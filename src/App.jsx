@@ -123,6 +123,9 @@ function App() {
     localStorage.removeItem('userGroups');
     localStorage.removeItem('userId');
     localStorage.removeItem('appElegida');
+    // De qué padrón salió el token que se acaba de tirar. Dejarla puesta
+    // haría que la siguiente sesión arrastrara el origen de la anterior.
+    localStorage.removeItem('authOrigen');
     setToken(null);
     setNombreUsuario('');
     setMenuPerfilAbierto(false);
@@ -153,8 +156,14 @@ function App() {
   }
 
   // 2) Login
+  //
+  // `app` NO es opcional aquí: cada app tiene su propio padrón de usuarios y
+  // el login llama a un servidor distinto según cuál sea (ver Login.jsx). Sin
+  // pasarla, un vigilante de SENTRIA iría contra el padrón de PLUVIRA, donde
+  // no existe, y recibiría «usuario o contraseña incorrectos» con sus datos
+  // bien escritos.
   if (!token) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return <Login onLoginSuccess={handleLoginSuccess} app={appElegida} />;
   }
 
   // 3) Vistas con el diseño nuevo: se montan a pantalla completa con el rail.
