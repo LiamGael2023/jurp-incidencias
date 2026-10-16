@@ -1553,14 +1553,20 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                 // Una estación callada no es un cero: es un dato que falta, y
                 // en ámbar se distingue de los recuentos normales. El title
                 // dice cuáles, que es lo primero que se pregunta al verlo.
+                //
+                // Dice "sin datos" y no "sin conexión" a propósito. Esto cuenta
+                // las que no han reportado HOY, y a las 00:10 eso son casi
+                // todas: no están caídas, están esperando su primera lectura
+                // del día. Llamarlas desconectadas sería afirmar de más justo
+                // en el momento en que el recuento es más alto.
                 <span
                   style={{ color: '#f6c344', fontWeight: 600, cursor: 'help' }}
                   title={
-                    'Sin conexión: ' +
+                    'Sin lecturas hoy: ' +
                     lluviasAPI.filter(l => l.sinDatos).map(l => l.name).join(', ')
                   }
                 >
-                  {` · ${sinDatosN} sin conexión`}
+                  {` · ${sinDatosN} sin datos`}
                 </span>
               )}
             </span>

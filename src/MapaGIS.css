@@ -195,8 +195,11 @@
   border-color: #35B6E9; transform: translateY(-2px);
 }
 .gis-kpi-click:disabled { cursor: default; opacity: .75; }
+/* 250px y no 190: con las cuatro cuentas —pluviómetros, Davis, Innova y las
+   que no reportaron— la línea pasa de 190 y el recuento que importa es
+   justo el último, que era el que se comía la elipsis. */
 .gis-kpi-nota {
-  display: block; margin-top: 2px; max-width: 190px;
+  display: block; margin-top: 2px; max-width: 250px;
   font-size: 10px; font-weight: 600; color: #a6c9e0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
