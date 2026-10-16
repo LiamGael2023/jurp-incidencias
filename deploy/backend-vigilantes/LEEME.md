@@ -37,3 +37,35 @@ Cron, cada cinco minutos:
 
 EL DÍA DEL CORTE: añadir `--base http://127.0.0.1:8003` o, mejor, dejar de
 apuntar al servidor viejo y usar el dominio definitivo.
+
+## vigilar_estaciones.py
+
+Avisa por push cuando una estación deja de reportar, y cuando vuelve. Nació de
+que LUZMILA estuvo nueve días caída sin que nadie se enterara.
+
+Instalación igual que el anterior:
+
+```bash
+cp /var/www/envs/front/repo/deploy/backend-vigilantes/vigilar_estaciones.py \
+   /var/www/envs/vigilantes/operations/management/commands/
+touch /var/www/envs/vigilantes/estado_estaciones.json
+sudo chown 33:33 /var/www/envs/vigilantes/estado_estaciones.json
+```
+
+Ese archivo guarda qué estaciones están caídas, para avisar una sola vez por
+caída y no en cada pasada. Tiene que pertenecer al usuario del contenedor (33).
+
+Prueba, sin mandar nada:
+
+```bash
+docker exec django_api python manage.py vigilar_estaciones --token <TOKEN> --dry-run
+```
+
+Cron, cada veinte minutos:
+
+```
+*/20 * * * * cd /var/www/envs/vigilantes && /usr/bin/docker compose exec -T web python manage.py vigilar_estaciones --token <TOKEN> >> /home/webadmin/vigilar_estaciones.log 2>&1
+```
+
+Por defecto avisa a `supervisor_group` y considera caída una estación con más
+de 6 horas de silencio. Ambas cosas se cambian con `--usuarios` y `--horas`.
