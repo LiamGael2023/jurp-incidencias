@@ -1549,7 +1549,20 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               {lluviasAPI.filter(l => l.tipo !== 'davis' && l.tipo !== 'innova').length} pluv
               · {lluviasAPI.filter(l => l.tipo === 'davis').length} Davis
               {lluviasAPI.some(l => l.tipo === 'innova') && ` · ${lluviasAPI.filter(l => l.tipo === 'innova').length} Innova`}
-              {sinDatosN > 0 && ` · ${sinDatosN} sin datos`}
+              {sinDatosN > 0 && (
+                // Una estación callada no es un cero: es un dato que falta, y
+                // en ámbar se distingue de los recuentos normales. El title
+                // dice cuáles, que es lo primero que se pregunta al verlo.
+                <span
+                  style={{ color: '#f6c344', fontWeight: 600, cursor: 'help' }}
+                  title={
+                    'Sin conexión: ' +
+                    lluviasAPI.filter(l => l.sinDatos).map(l => l.name).join(', ')
+                  }
+                >
+                  {` · ${sinDatosN} sin conexión`}
+                </span>
+              )}
             </span>
           </span>
         </div>
