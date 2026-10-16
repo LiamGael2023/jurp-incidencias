@@ -111,9 +111,14 @@ class Command(BaseCommand):
         """
         Marca de tiempo de la última lectura dentro de la ventana, o None.
 
-        max_points=1 adelgaza la serie al mínimo: las estadísticas se calculan
-        antes del recorte, así que el dato que interesa llega igual y la
-        respuesta pesa nada.
+        max_points va ALTO a propósito. El recorte de la API se aplica ANTES
+        de calcular las estadísticas, así que pedir pocos puntos no adelgaza
+        la respuesta: falsea el resultado. Con max_points=1 toda estación
+        devolvía como "última lectura" la primera de la ventana, y las 28
+        aparecían caídas desde el día en que empieza la consulta.
+
+        3 días son unas 288 lecturas y 60 unas 5.760: por debajo del límite,
+        o sea sin recorte.
         """
         hoy = timezone.localtime(timezone.now())
         datos = self._pedir(
@@ -123,7 +128,7 @@ class Command(BaseCommand):
                 "end_date": fecha(hoy + timedelta(days=1)),
                 "station_id": station_id,
                 "metric": "rainfall_mm",
-                "max_points": 1,
+                "max_points": 9000,
             },
         )
         stats = datos.get("stats") or {}
