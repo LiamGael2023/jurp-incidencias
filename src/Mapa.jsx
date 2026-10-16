@@ -1255,7 +1255,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   // sostiene texto blanco y el rojo oficial no sostiene texto oscuro.
   const nivelLluvia = (r) => UMBRALES_LLUVIA.filter(u => r >= u.desde).pop() || null;
 
-  const crearIconoLluvia = (r, cr, tipo = 'pluviometro', sinDatos = false, nombre = '') => {
+  const crearIconoLluvia = (r, cr, tipo = 'pluviometro', sinDatos = false, nombre = '', caida = false) => {
     const esDavis = tipo === 'davis';
     const esInnova = tipo === 'innova';
     const nivel = sinDatos ? null : nivelLluvia(r);
@@ -1263,29 +1263,41 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
     // Sin lluvia la estación recede: fondo oscuro y tinta apagada. Lo que llama
     // la atención debe ser el agua, no el inventario de estaciones.
+    //
+    // La excepción es una estación caída. Esa NO debe recederse: es una avería,
+    // y pasó nueve días invisible precisamente por verse igual que las que
+    // simplemente no habían reportado todavía. Va en rojo apagado, con su
+    // símbolo, y late despacio.
     const fondo = llueve ? nivel.fill : '#111827';
-    const tinta = llueve ? nivel.texto : (sinDatos ? '#64748b' : '#8da8c0');
+    const tinta = llueve ? nivel.texto : (caida ? '#ff8787' : (sinDatos ? '#64748b' : '#8da8c0'));
     const tintaNombre = llueve
       ? (nivel.texto === '#ffffff' ? 'rgba(255,255,255,.85)' : '#1e3a5f')
-      : (sinDatos ? '#64748b' : '#c6d8e8');
+      : (caida ? '#ffb3b3' : (sinDatos ? '#64748b' : '#c6d8e8'));
 
     // El fondo del mapa va de #273b40 a #b19f86: ningún relleno contrasta con
     // los dos extremos, así que la separación la da un anillo oscuro propio,
     // no el color. El anillo es oscuro en los tres niveles: en la alerta el
     // relleno ya es rojo, y un anillo rojo encima lo único que haría es
     // emborronar el borde. La alarma la llevan el ⚠ y el latido más rápido.
-    const anillo = llueve ? '#0b1b2b' : '#334155';
+    const anillo = llueve ? '#0b1b2b' : (caida ? '#7f1d1d' : '#334155');
     const grosor = cr ? 2 : 1;
 
     // El latido rápido lo gana la alerta roja, no solo lo extraordinario: es el
     // nivel que el backend ya considera digno de notificar a todo el mundo.
     const clase = llueve
       ? (nivel.nivel === 'roj' ? 'gis-lluvia-alerta' : 'gis-lluvia-activa')
-      : '';
+      : (caida ? 'gis-estacion-caida' : '');
+
+    // Una caída no se atenúa: atenuarla es lo que la escondía.
+    const opacidad = caida ? 0.95 : (sinDatos ? 0.55 : (llueve ? 1 : 0.8));
+    const etiqueta = caida
+      ? '⊘ sin conexión'
+      : (sinDatos ? 'sin datos' : (cr ? '⚠ ' : '') + r.toFixed(1) + ' mm');
+
     return divIcon({
       className: 'icono-vacio',
-      html: `<div class="${clase}" style="display:flex;flex-direction:column;align-items:center;margin-top:-30px;opacity:${sinDatos ? 0.55 : (llueve ? 1 : 0.8)}">
-               <div style="background:${fondo};border:${grosor}px solid ${anillo};color:${tinta};font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;text-align:center;line-height:1.25;box-shadow:0 1px 4px rgba(0,0,0,.55)">${nombre ? `<span style="display:block;color:${tintaNombre};font-size:9px;font-weight:600">${nombre}</span>` : ''}${sinDatos ? 'sin datos' : (cr ? '⚠ ' : '') + r.toFixed(1) + ' mm'}</div>
+      html: `<div class="${clase}" style="display:flex;flex-direction:column;align-items:center;margin-top:-30px;opacity:${opacidad}">
+               <div style="background:${fondo};border:${grosor}px solid ${anillo};color:${tinta};font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;text-align:center;line-height:1.25;box-shadow:0 1px 4px rgba(0,0,0,.55)">${nombre ? `<span style="display:block;color:${tintaNombre};font-size:9px;font-weight:600">${nombre}</span>` : ''}${etiqueta}</div>
                <div style="line-height:0;margin-top:3px">${esInnova ? '<span style="font-size:22px;line-height:1">📡</span>' : (esDavis ? '<svg width="30" height="32" viewBox="0 0 28 30" style="display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"><g stroke="#111827" stroke-width="1.5" stroke-linejoin="round" paint-order="stroke"><g fill="#ffffff"><rect x="12.7" y="5" width="2.6" height="20" rx="0.6"/><rect x="5.5" y="6.1" width="17" height="1.9" rx="0.9"/><rect x="16.4" y="11.2" width="5.2" height="7" rx="2.2"/><path d="M8.6 28.6 L12.4 24.4 h3.2 l3.8 4.2 z"/></g><g fill="#111827"><circle cx="5.6" cy="7" r="2.3"/><circle cx="14" cy="3.6" r="2.3"/><circle cx="22.4" cy="7" r="2.3"/></g></g></svg>' : '<span style="font-size:22px;line-height:1">🌧️</span>')}</div>
              </div>`,
       iconSize: [130, 74], iconAnchor: [65, 52],
@@ -1412,7 +1424,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             .filter(p => p.tipo === 'davis' ? capas.Davis : capas.Lluvias)   // innova va con los pluviómetros
             .filter(p => !soloConLluvia || p.totalRain > 0)
             .map(p => (
-            <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical, p.tipo, p.sinDatos, verNombres ? p.name : '')}
+            <Marker key={p.id} position={[p.lat, p.lng]} icon={crearIconoLluvia(p.totalRain, p.isCritical, p.tipo, p.sinDatos, verNombres ? p.name : '', estaCaida(p))}
               eventHandlers={{ click: () => abrirDetalleLluvia(p.id) }} />
           ))}
         </MapContainer>
