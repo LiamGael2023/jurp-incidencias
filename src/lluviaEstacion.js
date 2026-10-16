@@ -37,30 +37,101 @@ async function pedirDia(stationId, fecha, token) {
   return { json: j, lecturas };
 }
 
+// Días hacia atrás que se miran para saber desde cuándo calla una estación.
+// Más allá de esto da igual el número exacto: lo que hay que decir es "lleva
+// semanas", y rastrear sesenta días por cada estación sale caro para no
+// añadir nada.
+const DIAS_BUSQUEDA = 10;
+
+/**
+ * Cuándo reportó por última vez, mirando hacia atrás DIAS_BUSQUEDA.
+ * → Date | null   (null = ni siquiera en esa ventana)
+ *
+ * Solo se llama para estaciones que hoy no tienen nada, que es cuando la
+ * pregunta importa. Mientras reportan con normalidad nadie paga esta
+ * consulta, que es la cara.
+ */
+async function ultimaLectura(stationId, fecha, token) {
+  const desde = new Date(fecha);
+  desde.setDate(desde.getDate() - DIAS_BUSQUEDA);
+  const url = `/api/v1/mobile/davis/rain-gauges/filtered-data/`
+    + `?start_date=${fmtFecha(desde)}&end_date=${fmtFecha(fecha)}`
+    + `&station_id=${stationId}&metric=rainfall_mm&max_points=9000`;
+  try {
+    const r = await fetch(url, { headers: { Authorization: `Token ${token}` } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    // max_points va alto a propósito: la API recorta la serie ANTES de
+    // calcular las estadísticas, así que pedir pocos puntos no aligera la
+    // respuesta, devuelve mal la fecha.
+    const t = j.stats?.last_timestamp;
+    return t ? new Date(t) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 /**
  * Total de un día.
- * → { mm, lecturas, sinDatos }
+ * → { mm, lecturas, sinDatos, ultima }
  *
  * 'sinDatos' distingue "la estación no reportó" de "reportó y no llovió":
  * mostrar 0 mm en el primer caso afirmaría algo que no se sabe.
+ *
+ * 'ultima' separa dos cosas que se veían iguales: a las 00:10 casi ninguna
+ * estación ha reportado todavía y eso es normal, mientras que una que calla
+ * desde hace nueve días está muerta. Sin esta fecha, las dos salían como
+ * "sin datos" y la segunda se perdía entre las primeras —que es exactamente
+ * lo que pasó con LUZMILA.
  */
 export async function lluviaDelDia(stationId, tipo, fecha, token) {
   try {
     const res = await pedirDia(stationId, fecha, token);
-    if (!res) return { mm: 0, lecturas: 0, sinDatos: true };
+    if (!res) return { mm: 0, lecturas: 0, sinDatos: true, ultima: null };
 
     const { json, lecturas } = res;
     const n = typeof json.stats?.count === 'number' ? json.stats.count : lecturas.length;
-    if (!n) return { mm: 0, lecturas: 0, sinDatos: true };
+    if (!n) {
+      const ultima = await ultimaLectura(stationId, fecha, token);
+      return { mm: 0, lecturas: 0, sinDatos: true, ultima };
+    }
 
     const mm = typeof json.total_precipitation === 'number'
       ? json.total_precipitation
       : lecturas.reduce((a, x) => a + x.v, 0);
 
-    return { mm, lecturas: n, sinDatos: false };
+    const ult = json.stats?.last_timestamp;
+    return { mm, lecturas: n, sinDatos: false, ultima: ult ? new Date(ult) : null };
   } catch (e) {
-    return { mm: 0, lecturas: 0, sinDatos: true };
+    return { mm: 0, lecturas: 0, sinDatos: true, ultima: null };
   }
+}
+
+/**
+ * Horas que una estación puede estar callada antes de considerarla caída.
+ * Las Davis reportan cada quince minutos: seis horas son veinticuatro
+ * lecturas perdidas, suficiente para descartar un corte pasajero.
+ */
+export const HORAS_CAIDA = 6;
+
+/**
+ * ¿Está caída? Recibe lo que devuelve lluviaDelDia.
+ *
+ * Una estación que reportó hace media hora no está caída aunque hoy no tenga
+ * lecturas —pasa cada noche, entre medianoche y su primer envío—.
+ */
+export function estaCaida(est, ahora = new Date()) {
+  if (!est || !est.sinDatos) return false;
+  if (!est.ultima) return true;            // ni rastro en diez días
+  return (ahora - est.ultima) > HORAS_CAIDA * 3600 * 1000;
+}
+
+/** "9 d" / "7 h" / "más de 10 d", para decirlo en poco espacio. */
+export function desdeCuando(est, ahora = new Date()) {
+  if (!est || !est.ultima) return `más de ${DIAS_BUSQUEDA} d`;
+  const ms = ahora - est.ultima;
+  const dias = Math.floor(ms / 86400000);
+  return dias >= 1 ? `${dias} d` : `${Math.floor(ms / 3600000)} h`;
 }
 
 /**

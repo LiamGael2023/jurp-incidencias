@@ -26,7 +26,7 @@ import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion, FaCli
 import { useRuta, CapaRuta, fmtDistancia, fmtTiempo } from './RutaGIS';
 import Mapa3D from './Mapa3D';
 import { leerTodas as leerInnova, horaDeLectura } from './InnovaWeather';
-import { lluviaDelDia, lluviaPorHora, sinUbicacion } from './lluviaEstacion';
+import { lluviaDelDia, lluviaPorHora, sinUbicacion, estaCaida, desdeCuando } from './lluviaEstacion';
 
 import geoCanalMadre from './data/Canal_Madre.json';
 import geoLateral10 from './data/Lateral_10.json';
@@ -657,6 +657,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   // Solo cuentan las que tienen lecturas hoy: una sin datos no es un 0 mm.
   const conDatos = lluviasAPI.filter(l => !l.sinDatos);
   const sinDatosN = lluviasAPI.length - conDatos.length;
+  // De las que hoy no reportan, cuáles llevan caídas de verdad. A las 00:10
+  // casi todas están "sin datos" y ninguna está caída; a media mañana solo
+  // queda la que de verdad dejó de enviar. Son dos cosas distintas y hasta
+  // ahora se mostraban como una.
+  const caidas = lluviasAPI.filter(l => estaCaida(l));
   const lluviaMax = conDatos.length ? Math.max(...conDatos.map(l => l.totalRain)) : 0;
   // El KPI muestra el máximo, no un total: sumar acumulados de estaciones
   // distintas no significa nada. Se indica de cuál es y cuántas registran lluvia.
@@ -733,11 +738,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           !sinUbicacion(parseFloat(eq.latitude), parseFloat(eq.longitude)));
         const lluvias = await Promise.all(validos.map(eq => lluviaDelDia(eq.id, eq.tipo, now, token)));
         validos.forEach((eq, i) => {
-          const { mm, lecturas, sinDatos } = lluvias[i];
+          const { mm, lecturas, sinDatos, ultima } = lluvias[i];
           nd.push({
             id: eq.id, name: eq.nombre || (eq.tipo === 'davis' ? 'Estación Davis' : 'Pluviómetro'),
             tipo: eq.tipo, lat: parseFloat(eq.latitude), lng: parseFloat(eq.longitude),
-            totalRain: mm, lecturas, sinDatos, isCritical: mm > 20,
+            totalRain: mm, lecturas, sinDatos, ultima, isCritical: mm > 20,
           });
         });
         // Estaciones InnovaWeather (Innova-T): no son Davis ni están en el
@@ -1549,24 +1554,39 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               {lluviasAPI.filter(l => l.tipo !== 'davis' && l.tipo !== 'innova').length} pluv
               · {lluviasAPI.filter(l => l.tipo === 'davis').length} Davis
               {lluviasAPI.some(l => l.tipo === 'innova') && ` · ${lluviasAPI.filter(l => l.tipo === 'innova').length} Innova`}
-              {sinDatosN > 0 && (
-                // Una estación callada no es un cero: es un dato que falta, y
-                // en ámbar se distingue de los recuentos normales. El title
-                // dice cuáles, que es lo primero que se pregunta al verlo.
-                //
-                // Dice "sin datos" y no "sin conexión" a propósito. Esto cuenta
-                // las que no han reportado HOY, y a las 00:10 eso son casi
-                // todas: no están caídas, están esperando su primera lectura
-                // del día. Llamarlas desconectadas sería afirmar de más justo
-                // en el momento en que el recuento es más alto.
+              {/* Dos avisos distintos, y por eso dos colores.
+
+                  "sin datos" (ámbar) son las que hoy aún no han reportado:
+                  a las 00:10 son casi todas y es normal, el día acaba de
+                  empezar. Baja solo conforme avanza la mañana.
+
+                  "sin conexión" (rojo) son las que llevan más de seis horas
+                  calladas. Esa no se arregla esperando. Mezclarlas era el
+                  motivo de que LUZMILA pasara nueve días caída a la vista de
+                  todos: su aviso se perdía entre los que sí eran normales. */}
+              {sinDatosN - caidas.length > 0 && (
                 <span
                   style={{ color: '#f6c344', fontWeight: 600, cursor: 'help' }}
                   title={
-                    'Sin lecturas hoy: ' +
-                    lluviasAPI.filter(l => l.sinDatos).map(l => l.name).join(', ')
+                    'Aún sin reportar hoy: ' +
+                    lluviasAPI
+                      .filter(l => l.sinDatos && !estaCaida(l))
+                      .map(l => l.name)
+                      .join(', ')
                   }
                 >
-                  {` · ${sinDatosN} sin datos`}
+                  {` · ${sinDatosN - caidas.length} sin datos`}
+                </span>
+              )}
+              {caidas.length > 0 && (
+                <span
+                  style={{ color: '#ff6b6b', fontWeight: 700, cursor: 'help' }}
+                  title={
+                    'Sin conexión: ' +
+                    caidas.map(l => `${l.name} (${desdeCuando(l)})`).join(', ')
+                  }
+                >
+                  {` · ${caidas.length} sin conexión`}
                 </span>
               )}
             </span>
