@@ -1579,6 +1579,10 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                 </span>
               )}
               {caidas.length > 0 && (
+                // Con una o dos se las nombra: es la información que de
+                // verdad se busca, y esconderla tras un hover de un segundo
+                // la vuelve invisible en la práctica. Con más, no caben y se
+                // dice cuántas; el title las lista en cualquier caso.
                 <span
                   style={{ color: '#ff6b6b', fontWeight: 700, cursor: 'help' }}
                   title={
@@ -1586,7 +1590,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                     caidas.map(l => `${l.name} (${desdeCuando(l)})`).join(', ')
                   }
                 >
-                  {` · ${caidas.length} sin conexión`}
+                  {caidas.length <= 2
+                    ? ` · sin conexión: ${caidas.map(l => `${l.name} (${desdeCuando(l)})`).join(', ')}`
+                    : ` · ${caidas.length} sin conexión`}
                 </span>
               )}
             </span>

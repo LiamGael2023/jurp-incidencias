@@ -195,13 +195,14 @@
   border-color: #35B6E9; transform: translateY(-2px);
 }
 .gis-kpi-click:disabled { cursor: default; opacity: .75; }
-/* 250px y no 190: con las cuatro cuentas —pluviómetros, Davis, Innova y las
-   que no reportaron— la línea pasa de 190 y el recuento que importa es
-   justo el último, que era el que se comía la elipsis. */
+/* Se dejó de recortar con elipsis: lo que quedaba fuera era siempre el final
+   de la línea, que es justo donde van los avisos —las que no reportan y las
+   que están sin conexión—. Ahora la nota pasa a la línea siguiente en vez de
+   desaparecer. Las otras tarjetas tienen notas cortas y no cambian. */
 .gis-kpi-nota {
-  display: block; margin-top: 2px; max-width: 250px;
+  display: block; margin-top: 2px; max-width: 260px;
   font-size: 10px; font-weight: 600; color: #a6c9e0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  white-space: normal; line-height: 1.35;
 }
 .gis-kpi-lupa {
   position: absolute; top: 9px; right: 10px; font-size: 10px; color: #5ad4e6; opacity: .65;
