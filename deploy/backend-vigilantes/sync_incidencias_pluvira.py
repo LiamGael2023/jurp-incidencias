@@ -66,11 +66,20 @@ LARGO_LUGAR = 255
 
 
 def nombre_tipo(incidencia):
-    """Etiqueta legible del tipo, con el detalle cuando es 'Otros'."""
+    """
+    Etiqueta legible del tipo, con el detalle cuando es 'Otros'.
+
+    Si el detalle no entra en los 50 caracteres del campo se devuelve el tipo
+    a secas, no la frase cortada: "Otro (Protección de Canoa 8 | Canal La"
+    no informa más que "Otros" y encima parece un error. El texto completo
+    está en description, que es un TextField.
+    """
     base = TIPOS.get(str(incidencia.get("type")), "Incidente")
     otro = (incidencia.get("another_type") or "").strip()
     if otro and base == "Otros":
-        base = "Otro ({0})".format(otro)
+        completo = "Otro ({0})".format(otro)
+        if len(completo) <= LARGO_TIPO:
+            return completo
     return base[:LARGO_TIPO]
 
 
