@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react';
 import { MapContainer, Marker, Popup, GeoJSON, ImageOverlay, useMap, useMapEvents } from 'react-leaflet';
 import L, { divIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -1583,16 +1583,41 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                 // verdad se busca, y esconderla tras un hover de un segundo
                 // la vuelve invisible en la práctica. Con más, no caben y se
                 // dice cuántas; el title las lista en cualquier caso.
+                //
+                // Cada nombre vuela hasta su punto. Leer "LUZMILA" y tener
+                // que buscarla a mano en el mapa es dejar el trabajo a medias.
                 <span
-                  style={{ color: '#ff6b6b', fontWeight: 700, cursor: 'help' }}
+                  style={{ color: '#ff6b6b', fontWeight: 700 }}
                   title={
                     'Sin conexión: ' +
                     caidas.map(l => `${l.name} (${desdeCuando(l)})`).join(', ')
                   }
                 >
-                  {caidas.length <= 2
-                    ? ` · sin conexión: ${caidas.map(l => `${l.name} (${desdeCuando(l)})`).join(', ')}`
-                    : ` · ${caidas.length} sin conexión`}
+                  {' · '}
+                  {caidas.length <= 2 ? (
+                    <>
+                      sin conexión:{' '}
+                      {caidas.map((l, k) => (
+                        <Fragment key={l.id}>
+                          {k > 0 && ', '}
+                          <button
+                            type="button"
+                            onClick={() => mapRef.current?.flyTo([l.lat, l.lng], 15, { duration: 1.2 })}
+                            title={`Ir a ${l.name}`}
+                            style={{
+                              background: 'none', border: 0, padding: 0,
+                              font: 'inherit', color: 'inherit',
+                              textDecoration: 'underline', cursor: 'pointer',
+                            }}
+                          >
+                            {l.name} ({desdeCuando(l)})
+                          </button>
+                        </Fragment>
+                      ))}
+                    </>
+                  ) : (
+                    `${caidas.length} sin conexión`
+                  )}
                 </span>
               )}
             </span>
