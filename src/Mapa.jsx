@@ -2260,6 +2260,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         <Mapa3D
           incidentes={incEnMapa}
           capasLinea={capasLinea3D}
+          estaciones={lluviasAPI}
           onCerrar={() => setVer3D(false)}
           onSeleccionar={(inc) => { setVer3D(false); seleccionarIncidente(inc); }}
         />
