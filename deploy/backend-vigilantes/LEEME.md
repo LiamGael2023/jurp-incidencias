@@ -69,3 +69,38 @@ Cron, cada veinte minutos:
 
 Por defecto avisa a `supervisor_group` y considera caída una estación con más
 de 6 horas de silencio. Ambas cosas se cambian con `--usuarios` y `--horas`.
+
+## pronostico_lluvia.py
+
+Avisa por push cuando el pronóstico (Open-Meteo) prevé lluvia de nivel
+amarillo, naranja o rojo en alguna estación dentro de las próximas horas. Usa
+los mismos umbrales que el mapa, pasados a mm/h (0.84 / 2.52 / 4.24), y avisa
+una sola vez por estación, día y nivel: solo repite si el nivel sube.
+
+Instalación:
+
+```bash
+cp /var/www/envs/front/repo/deploy/backend-vigilantes/pronostico_lluvia.py \
+   /var/www/envs/vigilantes/operations/management/commands/
+touch /var/www/envs/vigilantes/estado_pronostico.json
+sudo chown 33:33 /var/www/envs/vigilantes/estado_pronostico.json
+```
+
+Necesita salida a internet desde el contenedor (`api.open-meteo.com`), igual
+que la consulta a InnovaWeather.
+
+Prueba, sin mandar nada:
+
+```bash
+docker exec django_api python manage.py pronostico_lluvia --token <TOKEN> --dry-run
+```
+
+Cron, cada hora (los modelos se actualizan cada pocas horas; más seguido no
+aporta):
+
+```
+15 * * * * cd /var/www/envs/vigilantes && /usr/bin/docker compose exec -T web python manage.py pronostico_lluvia --token <TOKEN> >> /home/webadmin/pronostico_lluvia.log 2>&1
+```
+
+Por defecto mira 48 horas, cuenta solo horas con probabilidad >= 40 % y avisa a
+`supervisor_group`. Se cambia con `--horas`, `--prob` y `--usuarios`.

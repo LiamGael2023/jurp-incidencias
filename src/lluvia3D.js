@@ -144,16 +144,91 @@ export function simularDia(estaciones, { intensidadPico = 1.6, semilla = 7 } = {
   return out;
 }
 
+// ── Pronóstico (Open-Meteo) ────────────────────────────────────────────
+// Lluvia prevista por hora para la coordenada de cada estación. Open-Meteo
+// combina por dentro los modelos globales (ECMWF, GFS, ICON…) y elige el que
+// mejor anda en cada zona; la probabilidad sale de sus ensembles.
+//
+// Se pide desde el navegador (la API admite CORS) y se guarda una hora en
+// localStorage: los modelos se actualizan cada pocas horas, y sin caché cada
+// apertura del 3D repetiría la misma consulta.
+//
+// No necesita sensor: una estación caída tiene igual su pronóstico.
+
+const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
+const CACHE_PRON_MS = 60 * 60 * 1000;
+
+// Más allá de esto el pronóstico es tendencia, no dato para decidir.
+export const HORAS_CONFIABLES = 72;
+
+export async function cargarPronostico(estaciones, dias = 3) {
+  const pts = estaciones.filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lng));
+  if (!pts.length) throw new Error('No hay estaciones con ubicación.');
+  const lat = pts.map(e => e.lat.toFixed(4)).join(',');
+  const lng = pts.map(e => e.lng.toFixed(4)).join(',');
+  const clave = `pron3d:${dias}:${lat}:${lng}`;
+
+  let crudo = null;
+  try {
+    const c = JSON.parse(localStorage.getItem(clave) || 'null');
+    if (c && Date.now() - c.t < CACHE_PRON_MS) crudo = c.d;
+  } catch { /* sin almacenamiento: se consulta */ }
+
+  if (!crudo) {
+    const url = `${OPEN_METEO}?latitude=${lat}&longitude=${lng}`
+      + '&hourly=precipitation,precipitation_probability'
+      + `&forecast_days=${Math.min(16, dias + 1)}&timezone=America%2FLima`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`El servicio de pronóstico respondió ${r.status}`);
+    crudo = await r.json();
+    try { localStorage.setItem(clave, JSON.stringify({ t: Date.now(), d: crudo })); } catch { /* lleno */ }
+  }
+
+  // Con una sola coordenada la respuesta es un objeto; con varias, una lista.
+  const lista = Array.isArray(crudo) ? crudo : [crudo];
+  const horas = lista[0]?.hourly?.time || [];
+  // Arranca en la hora en curso: lo ya pasado lo dicen las estaciones.
+  const ahora = new Date();
+  ahora.setMinutes(0, 0, 0);
+  let ini = horas.findIndex(t => new Date(t) >= ahora);
+  if (ini < 0) ini = 0;
+  const nSlots = Math.min(dias * 24, horas.length - ini);
+
+  const series = {}, prob = {};
+  estaciones.forEach(e => { series[e.id] = null; prob[e.id] = null; });
+  pts.forEach((e, i) => {
+    const h = lista[i]?.hourly;
+    if (!h) return;
+    const s = new Float32Array(nSlots), p = new Uint8Array(nSlots);
+    for (let k = 0; k < nSlots; k++) {
+      s[k] = Math.max(0, h.precipitation?.[ini + k] ?? 0);
+      p[k] = Math.max(0, Math.min(100, h.precipitation_probability?.[ini + k] ?? 0));
+    }
+    series[e.id] = s; prob[e.id] = p;
+  });
+
+  return { series, prob, t0: new Date(horas[ini]), nSlots, minSlot: 60 };
+}
+
+/**
+ * Los umbrales de alerta están en mm por cuarto de hora. Una lluvia horaria
+ * se compara en su equivalente: 1 mm/h repartido parejo son 0.25 mm/15 min.
+ * Es una aproximación (la lluvia real llega en ráfagas), por eso el panel
+ * siempre dice qué unidad está mostrando.
+ */
+export const equivalente15 = (mm, minSlot) => mm * MIN_SLOT / minSlot;
+
 // ── Derivados ──────────────────────────────────────────────────────────
-/** → { intensidad, acumulado, maxSlot: Float32Array(96) con el máximo por slot } */
+/** → { intensidad, acumulado, maxSlot: Float32Array con el máximo por slot } */
 export function preparar(series) {
   const intensidad = {}, acumulado = {};
-  const maxSlot = new Float32Array(SLOTS);
+  const n = Object.values(series).find(Boolean)?.length || SLOTS;
+  const maxSlot = new Float32Array(n);
   for (const [id, s] of Object.entries(series)) {
     if (!s) { intensidad[id] = null; acumulado[id] = null; continue; }
-    const ac = new Float32Array(SLOTS);
+    const ac = new Float32Array(n);
     let suma = 0;
-    for (let i = 0; i < SLOTS; i++) {
+    for (let i = 0; i < n; i++) {
       suma += s[i];
       ac[i] = suma;
       if (s[i] > maxSlot[i]) maxSlot[i] = s[i];
