@@ -86,7 +86,10 @@ const mm = (v) => v * PX_MM;
 const GRUPOS_ESCALA = [
   { titulo: 'Detalle — una estructura, un empalme', escalas: [200, 500] },
   { titulo: 'Obra — un tramo de canal', escalas: [1000, 2000, 2500] },
-  { titulo: 'Conjunto — el sector o el valle', escalas: [5000, 10000, 20000, 25000] },
+  // 30.000 y 40.000 llenan el salto de 20,5 a 41 km por lámina, que era el
+  // hueco donde cae un tramo de canal de entre veinte y treinta kilómetros:
+  // no cabía en la de 25.000 y en la de 50.000 sobraba media hoja.
+  { titulo: 'Conjunto — el sector o el valle', escalas: [5000, 10000, 20000, 25000, 30000, 40000] },
   /* LA CUENCA. El canal madre mide 155 km y a 1:25.000 —la escala más
    * abierta que había— hacían falta cuatro láminas para recorrerlo entero.
    * Para una lámina de ubicación o una portada eso no sirve: hace falta que
@@ -112,7 +115,20 @@ const ESCALAS_LAMINA = GRUPOS_ESCALA.flatMap(g => g.escalas);
  * esta pantalla viva, y a 1:200.000 el encuadre es el valle entero. Antes de
  * existir ese recorte, el valle completo congelaba el navegador once
  * segundos. */
-const ESCALA_SIN_PUNTOS = 25000;
+const ESCALA_SIN_PUNTOS = 40000;
+
+/* Y A PARTIR DE AQUI SE DIBUJAN, PERO SIN NOMBRE.
+ *
+ * Son dos preguntas distintas y antes las respondia una sola. El simbolo de
+ * una toma sigue valiendo a 1:40.000 —dice que ahi hay algo, que es media
+ * lamina de conjunto—, pero su nombre no: a esa escala las estructuras de un
+ * canal caen a menos de cuatro milimetros unas de otras y los rotulos se
+ * pisan hasta ser ilegibles. Un plano de conjunto ensena donde estan las
+ * cosas; para saber como se llaman esta el de obra.
+ *
+ * Tambien es lo que hace la escala abierta utilizable: el rotulo es un nodo
+ * del DOM por estructura, y son la mitad de lo que cuesta repintar. */
+const ESCALA_CON_ROTULOS = 25000;
 
 // Código de capa → su nombre legible, para el buscador. Se arma una vez: el
 // catálogo de capas no cambia en caliente.
@@ -1350,15 +1366,21 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               {envolvente && <div className="lam-medida-n">{envolvente.n} estructuras en el encuadre</div>}
               {/* Una lámina sin estructuras tiene que decir por qué, o se lee
                   como que el inventario está vacío. */}
-              {escala > ESCALA_SIN_PUNTOS && (
+              {escala > ESCALA_SIN_PUNTOS ? (
                 <div className="lam-medida-n lam-aviso-escala">
                   A 1:{escala.toLocaleString('es-PE')} no se dibujan las
                   estructuras: un símbolo de 4 mm cubriría{' '}
                   {(escala * 4 / 1000).toLocaleString('es-PE')} m de terreno y
                   saldrían todas amontonadas. Quedan los canales, los sectores
-                  y los lotes. Para verlas, 1:25.000 o más cerca.
+                  y los lotes. Para verlas, 1:40.000 o más cerca.
                 </div>
-              )}
+              ) : escala > ESCALA_CON_ROTULOS ? (
+                <div className="lam-medida-n lam-aviso-escala">
+                  A 1:{escala.toLocaleString('es-PE')} las estructuras salen
+                  sin nombre: a esta escala los rótulos se pisarían unos a
+                  otros. Para leerlos, 1:25.000 o más cerca.
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -1610,7 +1632,8 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               style={{ height: '100%', width: '100%' }} ref={mapRef}>
               <TeselasBase base={base} />
               {!descargando && <CapasInventario inv={inv} racimo={false} limites={limites}
-                etiquetas="nombre" impresion sinPuntos={escala > ESCALA_SIN_PUNTOS} />}
+                etiquetas={escala <= ESCALA_CON_ROTULOS ? 'nombre' : null}
+                impresion sinPuntos={escala > ESCALA_SIN_PUNTOS} />}
               <MarcasProgresiva marcas={marcasPK} />
               <EtiquetasSector sectores={etiquetasSector} />
               <EncuadreFijo centro={centro} zoom={zoom} onMover={alMover} />

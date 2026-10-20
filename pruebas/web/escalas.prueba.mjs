@@ -49,6 +49,7 @@ ok(km >= 155, 'a la escala más abierta cabe el canal madre entero',
 
 const estado = () => p.evaluate(() => ({
   marcas: document.querySelectorAll('.leaflet-marker-icon').length,
+  rotulos: document.querySelectorAll('.leaflet-tooltip').length,
   aviso: document.querySelector('.lam-aviso-escala')?.textContent?.trim().slice(0, 60) || null,
   leyenda: [...document.querySelectorAll('.lam-leyenda *')]
     .filter(e => !e.children.length).map(e => e.textContent.trim()).filter(Boolean),
@@ -61,13 +62,34 @@ const ir = async (d) => {
   return estado();
 };
 
-// ── a 1:25.000 todo sigue como estaba ──
+/* TRES BANDAS, no dos. Que el símbolo valga y que el nombre valga son dos
+ * preguntas distintas, y antes las respondía una sola:
+ *
+ *   hasta 1:25.000   estructura y nombre
+ *   30.000-40.000    la estructura sí, el nombre no: a esa escala los
+ *                    rótulos se pisan unos a otros
+ *   desde 1:50.000   ninguna de las dos
+ */
+
+// ── hasta 1:25.000, todo ──
 const e25 = await ir(25000);
-ok(e25.marcas > 0, 'a 1:25.000 se siguen dibujando las estructuras', `${e25.marcas}`);
-ok(!e25.aviso, 'y no sale ningún aviso');
+ok(e25.marcas > 0, 'a 1:25.000 se dibujan las estructuras', `${e25.marcas}`);
+ok(e25.rotulos > 0, 'y con su nombre', `${e25.rotulos}`);
+ok(!e25.aviso, 'y no hace falta avisar de nada');
 ok(e25.membrete === '1:25,000', 'el membrete lo rotula', e25.membrete);
 
-// ── a partir de ahí, no ──
+// ── la banda intermedia: símbolo sí, nombre no ──
+for (const d of [30000, 40000]) {
+  const e = await ir(d);
+  ok(e.marcas > 0, `a 1:${d} las estructuras siguen dibujándose`, `${e.marcas}`);
+  ok(e.rotulos === 0, `pero sin nombre`, `${e.rotulos} rótulos`);
+  ok(/sin nombre/.test(e.aviso || ''), 'y se dice', e.aviso);
+  // Lo que hace utilizable la escala abierta: el rótulo es un nodo del DOM
+  // por estructura y son la mitad de lo que cuesta repintar.
+  ok(e.leyenda.length > 0, 'la leyenda sigue explicando los símbolos que sí están');
+}
+
+// ── desde 1:50.000, ninguna ──
 for (const d of [50000, 100000, 200000]) {
   const e = await ir(d);
   ok(e.marcas === 0, `a 1:${d} no se dibujan estructuras`, `${e.marcas}`);
@@ -83,7 +105,17 @@ for (const d of [50000, 100000, 200000]) {
 // ── y se vuelve atrás sin secuelas ──
 const vuelta = await ir(10000);
 ok(vuelta.marcas > 0, 'al volver a 1:10.000 reaparecen las estructuras', `${vuelta.marcas}`);
+ok(vuelta.rotulos > 0, 'y sus nombres', `${vuelta.rotulos}`);
 ok(!vuelta.aviso, 'y el aviso se va');
+
+// ── el hueco que motivó todo esto ──
+// Un tramo de veinte a treinta kilómetros no cabía en la lámina de 25.000 y
+// en la de 50.000 sobraba media hoja.
+const kmDe = (d) => Number((ops.find(o => o.startsWith(`1:${d.toLocaleString('en-US')}`))
+  .match(/([\d.]+) km/) || [])[1]);
+ok(kmDe(30000) > 20 && kmDe(40000) < 41,
+   'las nuevas llenan el salto de 20,5 a 41 km por lámina',
+   `25k=${kmDe(25000)} · 30k=${kmDe(30000)} · 40k=${kmDe(40000)} · 50k=${kmDe(50000)}`);
 
 ok(errs.length === 0, 'sin errores de JavaScript', errs.join(' | ').slice(0, 150));
 

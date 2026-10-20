@@ -21,7 +21,7 @@ import pw from '/opt/node-tools/node_modules/playwright-core/index.js';
 
 const URL = 'http://localhost:5199/pruebas/web/lamina.html';
 const ESCALAS = ['200', '500', '1000', '2000', '2500', '5000', '10000', '20000', '25000',
-                 '50000', '100000', '200000'];
+                 '30000', '40000', '50000', '100000', '200000'];
 
 const r = [];
 const ok = (c, m, e) => { r.push(!!c); console.log(`${c ? 'ok  ' : 'MAL '} ${m}${e ? `   [${e}]` : ''}`); };
