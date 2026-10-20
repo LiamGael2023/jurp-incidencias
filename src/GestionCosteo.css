@@ -344,3 +344,24 @@
   font-size: 11.5px;
   color: #713f12;
 }
+
+/* ── LA CABECERA DE DOS PISOS ──
+   Tres grupos: lo programado, lo ejecutado y lo que queda. Sin agruparlas,
+   "Cant." salía tres veces seguidas y había que contar columnas para saber
+   de cuál era cada una. */
+
+.cos-prog-grupos th.g {
+  background: #dbeafe;
+  font-size: 10.5px;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+}
+
+/* La línea que separa un grupo del siguiente. Va en la PRIMERA celda de
+ * cada grupo -de ahí la clase en los td, no solo en los th-: una raya solo
+ * en la cabecera se pierde en cuanto la tabla tiene seis filas. */
+.cos-prog-tabla th.g,
+.cos-prog-tabla td.g { border-left: 2px solid #bfdbfe; }
+
+.cos-prog-tabla th { vertical-align: bottom; }
+.cos-prog-tabla td.n { font-variant-numeric: tabular-nums; }

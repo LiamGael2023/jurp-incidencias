@@ -47,6 +47,21 @@ ok(new RegExp(E.total.toLocaleString('es-PE', { minimumFractionDigits: 2 })
      .replace(/[.,]/g, '[.,]')).test(raiz),
    'cuyo total es la suma de las hojas, no de todo',
    `${raiz.replace(/\n/g, ' ')} — esperado ${E.total}`);
+
+/* Las tres columnas de la raíz, por su número exacto. El riesgo no es que
+ * falte una: es que sumen también los títulos, que ya traen la suma de sus
+ * hijos. El total saldría justo al doble y los dos números son plausibles. */
+const celdasRaiz = await p.evaluate(() =>
+  [...document.querySelector('.cos-prog-raiz').querySelectorAll('td')]
+    .map(td => td.textContent.replace(/[^\d.-]/g, '')));
+ok(Number(celdasRaiz[5]) === E.total,
+   'la raíz valoriza el programado sin contar los títulos',
+   `${celdasRaiz[5]} — esperado ${E.total}`);
+ok(Number(celdasRaiz[7]) === E.valorizado,
+   'y lo ejecutado igual', `${celdasRaiz[7]} — esperado ${E.valorizado}`);
+ok(Math.abs(Number(celdasRaiz[9]) - (E.total - E.valorizado)) < 0.02,
+   'y el saldo es la resta de los dos',
+   `${celdasRaiz[9]} — esperado ${E.total - E.valorizado}`);
 // Un título que sumara también a los títulos de debajo contaría doble.
 const sumaTitulos = await p.evaluate(() => [...document.querySelectorAll('.cos-prog-titulo')]
   .map(tr => tr.querySelectorAll('td')[5].textContent.trim()));
@@ -61,8 +76,40 @@ ok(/unid/i.test(cuerpo) && /cant/i.test(cuerpo) && /precio/i.test(cuerpo)
 const pasada = await p.locator('.cos-prog-tabla td.mal').first().innerText();
 ok(/-40/.test(pasada) && /pasada/i.test(pasada),
    'la partida pasada de saldo se marca', pasada.replace(/\n/g, ' '));
-ok(await p.locator('.cos-prog-tabla td.mal').count() === 1,
-   'y solo esa', `${await p.locator('.cos-prog-tabla td.mal').count()}`);
+/* Una sola FILA marcada, no una sola celda: desde que el saldo va en
+ * cantidad y en soles, la partida pasada marca dos celdas y contarlas daba
+ * un MAL que no existia. */
+const filasMal = await p.evaluate(() => new Set(
+  [...document.querySelectorAll('.cos-prog-tabla td.mal')].map(td => td.parentElement)).size);
+ok(filasMal === 1, 'y solo esa', `${filasMal} filas`);
+
+// ── la cabecera de dos pisos ──
+const g = await p.locator('.cos-prog-grupos th.g').allInnerTexts();
+ok(g.length === 3 && /programado/i.test(g[0]) && /ejecutado/i.test(g[1])
+   && /saldo/i.test(g[2]), 'la cabecera agrupa en Programado, Ejecutado y Saldo',
+   g.join(' | '));
+const anchos = await p.evaluate(() => [...document.querySelectorAll('.cos-prog-grupos th.g')]
+  .map(th => th.colSpan));
+ok(JSON.stringify(anchos) === '[4,2,2]',
+   'con cuatro columnas lo programado y dos cada uno de los otros',
+   JSON.stringify(anchos));
+const celdas = await p.evaluate(() => {
+  const tr = document.querySelector('.cos-prog-tabla tbody tr:not(.cos-prog-raiz):not(.cos-prog-titulo)');
+  return [...tr.querySelectorAll('td')].length;
+});
+ok(celdas === 11, 'y cada partida trae las diez columnas más las acciones',
+   `${celdas}`);
+
+// El saldo en soles es el total menos lo valorizado: si se escribiera a
+// mano dejaria de cuadrar con las dos columnas que tiene al lado.
+const cuadra = await p.evaluate(() => {
+  const n = (s) => Number(String(s).replace(/[^\d.-]/g, ''));
+  return [...document.querySelectorAll(
+    '.cos-prog-tabla tbody tr:not(.cos-prog-raiz):not(.cos-prog-titulo)')]
+    .map(tr => [...tr.querySelectorAll('td')].map(td => td.textContent))
+    .every(c => Math.abs((n(c[5]) - n(c[7])) - n(c[9])) < 0.02);
+});
+ok(cuadra, 'el saldo en soles cuadra con total menos ejecutado en todas las filas');
 
 // ── el bloque va ARRIBA, antes del costeo ──
 // Es lo que se decide primero: qué hay que hacer. Lo de abajo es lo que se

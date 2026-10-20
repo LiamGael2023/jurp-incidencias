@@ -532,6 +532,19 @@ export default function GestionCosteo({
     } finally { setProgGuardando(false); }
   };
 
+  /* EL TOTAL DE LA RAIZ SUMA SOLO LAS HOJAS.
+   *
+   * Un título ya trae la suma de lo que cuelga de él, así que contarlo
+   * además de sus hijos duplica el importe. Y el error no se ve: los dos
+   * números son plausibles y nadie los suma a mano para comprobarlo. */
+  const totalesRaiz = useMemo(() => {
+    const hojas = progDetalle.filter(x => !x.es_titulo);
+    return {
+      importe: hojas.reduce((a, x) => a + Number(x.importe || 0), 0),
+      valorizado: hojas.reduce((a, x) => a + Number(x.valorizado || 0), 0),
+    };
+  }, [progDetalle]);
+
   /* Una fila de partida del presupuesto de la incidencia. Va aquí y no
    * dentro del JSX para que la rama del título y la de la hoja se lean una
    * al lado de otra: son la misma tabla con columnas distintas, y mezcladas
@@ -545,13 +558,17 @@ export default function GestionCosteo({
         <td className="cod"
           style={{ paddingLeft: 10 + (p.nivel || 1) * 12 }}>{p.codigo}</td>
         <td>{p.descripcion}</td>
-        <td className="n">{p.unidad}</td>
+        <td className="n g">{p.unidad}</td>
         <td className="n">{fmtNum(p.metrado)}</td>
         <td className="n">{fmtNum(p.precio)}</td>
         <td className="n">{fmtNum(p.importe)}</td>
-        <td className="n">{fmtNum(p.ejecutado)}</td>
-        <td className={`n${pasada ? ' mal' : ''}`}>
+        <td className="n g">{fmtNum(p.ejecutado)}</td>
+        <td className="n">{fmtNum(p.valorizado)}</td>
+        <td className={`n g${pasada ? ' mal' : ''}`}>
           {fmtNum(p.saldo)}{pasada && <b> pasada</b>}
+        </td>
+        <td className={`n${pasada ? ' mal' : ''}`}>
+          {fmtNum(Number(p.importe || 0) - Number(p.valorizado || 0))}
         </td>
         {!bloqueado && (
           <td className="n">
@@ -1944,16 +1961,29 @@ export default function GestionCosteo({
                   {progDetalle.length > 0 && (
                     <div style={{ overflowX: 'auto' }}>
                       <table className="cos-prog-tabla">
+                        {/* CABECERA DE DOS PISOS. Las mismas tres preguntas
+                            que se hace cualquiera mirando esto: qué estaba
+                            programado, qué se lleva hecho y qué queda. Sin
+                            agrupar, «Cant.» aparecía tres veces y había que
+                            adivinar de cuál era cada una. */}
                         <thead>
+                          <tr className="cos-prog-grupos">
+                            <th rowSpan={2}>Item</th>
+                            <th rowSpan={2}>Descripción</th>
+                            <th className="n g" colSpan={4}>Programado</th>
+                            <th className="n g" colSpan={2}>Ejecutado</th>
+                            <th className="n g" colSpan={2}>Saldo</th>
+                            {!bloqueado && <th rowSpan={2} />}
+                          </tr>
                           <tr>
-                            <th>Item</th><th>Descripción</th>
-                            <th className="n">Unid.</th>
+                            <th className="n g">Unid.</th>
                             <th className="n">Cant.</th>
                             <th className="n">Precio</th>
                             <th className="n">Total</th>
-                            <th className="n">Ejecutado</th>
-                            <th className="n">Saldo</th>
-                            {!bloqueado && <th />}
+                            <th className="n g">Cant.</th>
+                            <th className="n">Total</th>
+                            <th className="n g">Cant.</th>
+                            <th className="n">Total</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1966,11 +1996,13 @@ export default function GestionCosteo({
                             <tr className="cos-prog-raiz">
                               <td className="cod">1</td>
                               <td>{(sujeto && sujeto.titulo) || 'Esta incidencia'}</td>
-                              <td /><td /><td />
-                              <td className="n">{fmtNum(progDetalle
-                                .filter(x => !x.es_titulo)
-                                .reduce((a, x) => a + Number(x.importe || 0), 0))}</td>
-                              <td /><td />
+                              <td className="g" /><td /><td />
+                              <td className="n">{fmtNum(totalesRaiz.importe)}</td>
+                              <td className="g" />
+                              <td className="n">{fmtNum(totalesRaiz.valorizado)}</td>
+                              <td className="g" />
+                              <td className="n">{fmtNum(
+                                totalesRaiz.importe - totalesRaiz.valorizado)}</td>
                               {!bloqueado && <td />}
                             </tr>
                           )}
@@ -1982,9 +2014,17 @@ export default function GestionCosteo({
                                   {p.codigo}
                                 </td>
                                 <td>{p.descripcion}</td>
-                                <td /><td /><td />
+                                {/* Un título no tiene unidad, así que sus
+                                    cantidades no se pueden sumar: 3 m3 más 2
+                                    glb no son 5 de nada. Lo que sí suma es el
+                                    dinero, que es lo que lleva. */}
+                                <td className="g" /><td /><td />
                                 <td className="n">{fmtNum(p.importe)}</td>
-                                <td /><td />
+                                <td className="g" />
+                                <td className="n">{fmtNum(p.valorizado)}</td>
+                                <td className="g" />
+                                <td className="n">{fmtNum(
+                                  Number(p.importe || 0) - Number(p.valorizado || 0))}</td>
                                 {/* Solo en la incidencia, igual que en las
                                     hojas: el presupuesto de una obra no se
                                     reestructura desde la ficha de un parte. */}

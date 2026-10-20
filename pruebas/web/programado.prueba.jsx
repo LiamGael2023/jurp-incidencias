@@ -41,21 +41,21 @@ const PARTIDAS = [
 const DETALLE = [
   { id: 10, codigo: '01', descripcion: 'TRABAJOS PRELIMINARES',
     es_titulo: true, nivel: 1, unidad: '', metrado: null, precio: null,
-    importe: 9844, ejecutado: null, saldo: null, avance: null },
+    importe: 9844, valorizado: 1472, ejecutado: null, saldo: null, avance: null },
   { id: 1, codigo: '01.01', descripcion: 'Movilizacion y desmovilizacion de maquinaria pesada',
     es_titulo: false, nivel: 2,
-    unidad: 'glb', metrado: 1, precio: 8500, importe: 8500,
+    unidad: 'glb', metrado: 1, precio: 8500, importe: 8500, valorizado: 0,
     ejecutado: 0, saldo: 1, avance: 0 },
   { id: 2, codigo: '01.02', descripcion: 'Trazo y replanteo',
     es_titulo: false, nivel: 2,
-    unidad: 'm2', metrado: 420, precio: 3.2, importe: 1344,
+    unidad: 'm2', metrado: 420, precio: 3.2, importe: 1344, valorizado: 1472,
     ejecutado: 460, saldo: -40, avance: 109.5 },
   { id: 20, codigo: '02', descripcion: 'OBRAS PROVISIONALES',
     es_titulo: true, nivel: 1, unidad: '', metrado: null, precio: null,
-    importe: 4238.5, ejecutado: null, saldo: null, avance: null },
+    importe: 4238.5, valorizado: 2450, ejecutado: null, saldo: null, avance: null },
   { id: 3, codigo: '02.01', descripcion: 'Excavacion de material suelto',
     es_titulo: false, nivel: 2,
-    unidad: 'm3', metrado: 173, precio: 24.5, importe: 4238.5,
+    unidad: 'm3', metrado: 173, precio: 24.5, importe: 4238.5, valorizado: 2450,
     ejecutado: 100, saldo: 73, avance: 57.8 },
 ];
 
@@ -66,6 +66,8 @@ window.__ESPERADO = {
   hojas: DETALLE.filter(d => !d.es_titulo).length,
   // La suma de las hojas: es lo que tiene que salir en la fila raíz.
   total: DETALLE.filter(d => !d.es_titulo).reduce((a, d) => a + d.importe, 0),
+  valorizado: DETALLE.filter(d => !d.es_titulo)
+    .reduce((a, d) => a + d.valorizado, 0),
   pasada: '01.02',
 };
 window.__PATCH = null;
@@ -123,11 +125,11 @@ window.fetch = async (u, opc = {}) => {
       const fila = esTitulo
         ? { id: 900 + detalle.length, codigo, descripcion: c.descripcion,
             es_titulo: true, nivel: hondo, unidad: '', metrado: null,
-            precio: null, importe: 0, ejecutado: null, saldo: null, avance: null }
+            precio: null, importe: 0, valorizado: 0, ejecutado: null, saldo: null, avance: null }
         : { id: 900 + detalle.length, codigo, descripcion: c.descripcion,
             es_titulo: false, nivel: hondo, unidad: c.unidad,
             metrado: c.metrado, precio: c.precio,
-            importe: c.metrado * c.precio,
+            importe: c.metrado * c.precio, valorizado: 0,
             ejecutado: 0, saldo: c.metrado, avance: 0 };
       detalle = [...detalle, fila].sort((a, b) => a.codigo.localeCompare(b.codigo));
       return devuelve();
