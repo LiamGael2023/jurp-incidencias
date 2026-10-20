@@ -563,7 +563,19 @@ export default function GestionCosteo({
       const r = await fetch(`${API_OPS}/partidas/${q}`);
       if (!r.ok) return;
       const d = await r.json();
-      setPartidas(Array.isArray(d) ? d : (d.partidas || []));
+      const todas = Array.isArray(d) ? d : (d.partidas || []);
+      /* LOS TITULOS NO SE IMPUTAN.
+       *
+       * Un presupuesto cargado trae sus capítulos como filas: el de drenaje
+       * son 57 filas, de las que 19 son títulos. Ofrecerlos en el selector
+       * del parte deja imputar metrado contra una fila que ya suma el de
+       * sus hijos, y el avance sale contado dos veces.
+       *
+       * Se reconocen por `es_titulo`, y si el servidor todavía no lo manda
+       * —el campo es nuevo—, por no tener unidad: las dos vías de alta que
+       * existen, el importador de Excel y el formulario, exigen unidad a
+       * toda partida, así que una fila sin unidad no es una partida. */
+      setPartidas(todas.filter(p => !(p.es_titulo || !(p.unidad || '').trim())));
     } catch (e) { /* backend sin el endpoint: se sigue sin partidas */ }
   };
   const cargarCargos = async () => {
@@ -1905,6 +1917,14 @@ export default function GestionCosteo({
                   {progSoporte === 'ok' && !bloqueado
                    && progDetalle.length === 0 && !progAbierto && (
                     <div className="cos-prog-nota">
+                      {/* LAS DOS RAMAS NO DICEN LO MISMO, Y NO ES UN MATIZ.
+                          Una incidencia no tiene proyecto, así que el
+                          selector del parte carga el presupuesto de TODAS
+                          las obras: avisar de eso es el motivo de este
+                          bloque. Una actividad de obra sí lo tiene y su
+                          selector filtra por obra, así que decirle "incluidas
+                          las de otras obras" era falso y asustaba sin
+                          motivo. */}
                       {esIncidencia ? <>
                         Sin partidas. Escribe aquí las que haga falta para
                         atender este incidente; el parte diario solo ofrecerá
@@ -1913,8 +1933,8 @@ export default function GestionCosteo({
                         las de otras obras.
                       </> : <>
                         Sin partidas. Mientras no elijas ninguna, el parte
-                        diario ofrece las {partidas.length} del presupuesto
-                        entero — incluidas las de otras obras.
+                        diario ofrece las {partidas.length} de esta obra. Elige
+                        aquí las de esta actividad y solo ofrecerá esas.
                       </>}
                     </div>
                   )}

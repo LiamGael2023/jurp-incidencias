@@ -173,6 +173,37 @@ def paso_conteo(texto):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# PIEZA 2b · el serializer de Partida dice si es un titulo
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Sin esto, quien lee /partidas/ no puede distinguir un capitulo de una
+# partida. El presupuesto de drenaje son 57 filas de las que 19 son titulos,
+# y el selector del parte diario las ofrecia todas: imputar metrado contra un
+# titulo lo cuenta dos veces, porque el titulo ya suma el de sus hijos.
+#
+# El navegador puede deducirlo -un titulo no tiene unidad, y las dos vias de
+# alta exigen unidad a toda partida- y de hecho lo hace, para funcionar
+# mientras este parche no este aplicado. Pero deducir no es saber: el dia que
+# alguien cargue una partida sin unidad por otra via, la deduccion la
+# escondera. Mejor que el servidor lo diga.
+
+SER_RE = re.compile(
+    r'(class PartidaSerializer\b(?:.|\n)*?fields = \[(?:.|\n)*?)"activo"')
+
+
+def paso_serializer(texto):
+    if '"es_titulo"' in texto:
+        return texto, "ya estaba: es_titulo en PartidaSerializer"
+    if "class PartidaSerializer" not in texto:
+        return None, "no encuentro PartidaSerializer"
+    nuevo, n = SER_RE.subn(r'\1"es_titulo", "activo"', texto, count=1)
+    if not n:
+        return None, ("no encuentro Meta.fields de PartidaSerializer con "
+                      '"activo" dentro; dime como quedo')
+    return nuevo, "PartidaSerializer devuelve es_titulo"
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # PIEZA 3 · las vistas  (fichero nuevo)
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -546,6 +577,7 @@ def principal():
     app = os.path.join(base, "operations")
     f_models = os.path.join(app, "models.py")
     f_proy = os.path.join(app, "views_proyectos.py")
+    f_part = os.path.join(app, "views_partidas.py")
     f_vista = os.path.join(app, "views_presupuesto.py")
     f_urls = os.path.join(app, "urls.py")
 
@@ -565,16 +597,22 @@ def principal():
     txt_m = io.open(f_models, encoding="utf-8").read()
     txt_p = io.open(f_proy, encoding="utf-8").read()
     txt_u = io.open(f_urls, encoding="utf-8").read()
+    txt_s = io.open(f_part, encoding="utf-8").read() if os.path.isfile(f_part) else None
 
     nuevo_m, av_m = paso_modelo(txt_m)
     nuevo_p, av_p = paso_conteo(txt_p)
     nuevo_u, av_u = paso_urls(txt_u)
+    if txt_s is None:
+        nuevo_s, av_s = None, "no encuentro views_partidas.py"
+    else:
+        nuevo_s, av_s = paso_serializer(txt_s)
     vista_existe = os.path.isfile(f_vista)
     av_v = ("ya estaba: views_presupuesto.py" if vista_existe
             else "se crea views_presupuesto.py")
 
     print("1. models.py             %s" % av_m)
     print("2. views_proyectos.py    %s" % av_p)
+    print("2b. views_partidas.py   %s" % av_s)
     print("3. views_presupuesto.py  %s" % av_v)
     print("4. urls.py               %s" % av_u)
     print("")
@@ -582,6 +620,7 @@ def principal():
     fallos = []
     for quien, nuevo, av in (("models.py", nuevo_m, av_m),
                              ("views_proyectos.py", nuevo_p, av_p),
+                             ("views_partidas.py", nuevo_s, av_s),
                              ("urls.py", nuevo_u, av_u)):
         if nuevo is None:
             fallos.append("%s: %s" % (quien, av))
@@ -598,6 +637,7 @@ def principal():
     for quien, txt, falta in (
             ("models.py", nuevo_m, "es_titulo"),
             ("views_proyectos.py", nuevo_p, "es_titulo=False"),
+            ("views_partidas.py", nuevo_s, '"es_titulo"'),
             ("urls.py", nuevo_u, "presupuesto_alta")):
         if falta not in txt:
             print("NO SE ESCRIBE NADA: en %s no salio %r." % (quien, falta))
@@ -612,6 +652,7 @@ def principal():
     for ruta, viejo, nuevo, nombre in (
             (f_models, txt_m, nuevo_m, "models.py"),
             (f_proy, txt_p, nuevo_p, "views_proyectos.py"),
+            (f_part, txt_s, nuevo_s, "views_partidas.py"),
             (f_urls, txt_u, nuevo_u, "urls.py")):
         if nuevo != viejo:
             print("respaldo %s" % respaldo(ruta))

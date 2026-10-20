@@ -74,6 +74,20 @@ class ProyectoSerializer(serializers.ModelSerializer):
         return obj.partidas.filter(activo=True).count()
 '''
 
+PART = '''from rest_framework import serializers
+from .models import Partida
+
+
+class PartidaSerializer(serializers.ModelSerializer):
+    total = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Partida
+        fields = ["id", "obra", "proyecto", "codigo", "descripcion", "unidad",
+                  "metrado", "precio", "estructura", "grupo", "ruta",
+                  "activo", "total"]
+'''
+
 URLS = '''from django.urls import path, include
 
 from .views import reabrir_incidente
@@ -101,6 +115,7 @@ def monta(base, models=MODELS):
     os.makedirs(app)
     io.open(os.path.join(app, "models.py"), "w", encoding="utf-8").write(models)
     io.open(os.path.join(app, "views_proyectos.py"), "w", encoding="utf-8").write(PROY)
+    io.open(os.path.join(app, "views_partidas.py"), "w", encoding="utf-8").write(PART)
     io.open(os.path.join(app, "urls.py"), "w", encoding="utf-8").write(URLS)
     return app
 
@@ -138,6 +153,17 @@ for n, txt in (("models.py", m), ("views_proyectos.py", pr),
 t("Partida gana es_titulo", "es_titulo = models.BooleanField" in m)
 t("el conteo de partidas deja fuera los titulos",
   "activo=True, es_titulo=False" in pr)
+pa = lee(app, "views_partidas.py")
+t("PartidaSerializer devuelve es_titulo", '"es_titulo"' in pa)
+t("y entra dentro de Meta.fields, no suelto",
+  '"es_titulo"' in pa.split("fields = [")[1].split("]")[0])
+t("sin perder ningun campo que ya estaba",
+  all(c in pa for c in ('"ruta"', '"activo"', '"total"', '"metrado"')))
+try:
+    ast.parse(pa); t("views_partidas.py sigue siendo valido", True)
+except SyntaxError as e:
+    t("views_partidas.py sigue siendo valido", False, str(e))
+
 t("existe el alta", "def presupuesto_alta" in v)
 t("y el detalle", "def presupuesto_detalle" in v)
 t("cuelga del proyecto por proyecto_ref", "proyecto_ref=pro" in v)
@@ -256,6 +282,9 @@ t("una ruta rota no tumba el alta",
 c2, s2 = corre(PRE, tmp)
 t("la segunda pasada termina bien", c2 == 0, s2.strip()[-200:])
 t("y dice que ya estaba", "ya estaba" in s2)
+t("es_titulo no se duplica en el serializer",
+  lee(app, "views_partidas.py").count('"es_titulo"') == 1,
+  str(lee(app, "views_partidas.py").count('"es_titulo"')))
 t("es_titulo no se duplica",
   lee(app, "models.py").count("es_titulo = models.BooleanField") == 1)
 t("ni las rutas", lee(app, "urls.py").count("presupuesto_alta") == 2,
@@ -293,6 +322,7 @@ io.open(os.path.join(appS, "models.py"), "w", encoding="utf-8").write(
     MODELS.replace("    proyecto_ref = models.ForeignKey('Proyecto', on_delete=models.CASCADE,\n"
                    "                                     related_name='partidas', null=True)\n", ""))
 io.open(os.path.join(appS, "views_proyectos.py"), "w", encoding="utf-8").write(PROY)
+io.open(os.path.join(appS, "views_partidas.py"), "w", encoding="utf-8").write(PART)
 io.open(os.path.join(appS, "urls.py"), "w", encoding="utf-8").write(URLS)
 cS, sS = corre(PRE, tmpS)
 t("sin proyecto_ref, falla", cS != 0, sS.strip()[-200:])

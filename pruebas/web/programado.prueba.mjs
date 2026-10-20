@@ -165,6 +165,11 @@ ok(/presupuesto entero/i.test(vacio),
    'y se avisa de que el parte ofrecerá el presupuesto entero', vacio.replace(/\n/g, ' ').slice(0, 80));
 ok(new RegExp(`\\b${E.partidas}\\b`).test(vacio),
    'diciendo cuántas son', vacio.replace(/\n/g, ' ').slice(0, 80));
+/* Y que NO diga el total de filas. El presupuesto de drenaje son 57 filas
+ * de las que 19 son capítulos: decir 57 promete partidas que no existen. */
+ok(!new RegExp(`\\b${E.filas}\\b`).test(vacio),
+   'y no el total de filas, que incluye los capítulos',
+   `no debe decir ${E.filas}: ${vacio.replace(/\n/g, ' ').slice(0, 80)}`);
 
 // ══════════ EL SERVIDOR TODAVÍA NO LO SOPORTA ══════════
 // Es el estado real hasta que se aplique el parche.
@@ -417,6 +422,22 @@ ok(await p.locator('.cos-prog-forma').count() === 0,
    'y no el formulario de alta');
 ok(await p.locator('.cos-prog-edita').count() === 0,
    'ni se ofrece editar una partida del presupuesto de la obra');
+
+// ══════════ UNA ACTIVIDAD SIN PROGRAMAR: EL AVISO ES OTRO ══════════
+/* Una actividad de obra SI tiene proyecto, y su selector ya filtra por obra.
+ * Decirle "incluidas las de otras obras" -el texto de la incidencia- era
+ * falso y asustaba sin motivo. */
+await ir('act-vacia');
+const avisoAct = await p.locator('.cos-prog-nota').innerText();
+ok(/de esta obra/i.test(avisoAct),
+   'a una actividad se le dice que son las de SU obra',
+   avisoAct.replace(/\n/g, ' ').slice(0, 90));
+ok(!/otras obras/i.test(avisoAct),
+   'y NO que incluyen las de otras obras, que seria falso',
+   avisoAct.replace(/\n/g, ' ').slice(0, 90));
+ok(new RegExp(`\\b${E.partidas}\\b`).test(avisoAct),
+   'con el número de partidas imputables, sin contar capítulos',
+   avisoAct.replace(/\n/g, ' ').slice(0, 90));
 
 // ══════════ CERRADA: SE DICE POR QUE, NO SE INVITA A ESCRIBIR ══════════
 // El aviso decía «Escribe aquí las que haga falta» con los botones ocultos

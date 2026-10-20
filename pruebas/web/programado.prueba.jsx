@@ -6,6 +6,7 @@
  *   ?v=con        tiene tres programadas, una pasada de saldo
  *   ?v=viejo      el servidor todavía no lleva el campo (parche sin aplicar)
  *   ?v=actividad  la OTRA rama del modal: una actividad de obra
+ *   ?v=act-vacia  una actividad de obra sin partidas programadas
  *   ?v=cerrada    la incidencia está cerrada: no se puede escribir
  *
  * El tercero importa tanto como los otros: es el estado real hasta que
@@ -30,6 +31,12 @@ const v = new URLSearchParams(location.search).get('v') || 'con';
 /* Un presupuesto como el real: dos obras, para que se note si el selector
  * del parte ofrece las de la otra. */
 const PARTIDAS = [
+  /* Un presupuesto cargado trae sus CAPITULOS como filas: el de drenaje son
+   * 57 filas de las que 19 son títulos. El selector del parte las ofrecía
+   * todas, e imputar metrado contra un título lo cuenta dos veces, porque el
+   * título ya suma el de sus hijos. Van aquí para que eso se note. */
+  { id: 90, codigo: '01', descripcion: 'ESTRUCTURAS DE TRATAMIENTO', es_titulo: true, unidad: '', metrado: 0, precio: 0 },
+  { id: 91, codigo: '01.02', descripcion: 'OBRAS PROVISIONALES', unidad: '', metrado: 0, precio: 0 },
   { id: 1, codigo: '01.02.01.01', descripcion: 'Movilizacion y desmovilizacion de maquinaria pesada', unidad: 'glb', metrado: 1, precio: 8500 },
   { id: 2, codigo: '01.02.01.02', descripcion: 'Trazo y replanteo', unidad: 'm2', metrado: 420, precio: 3.2 },
   { id: 3, codigo: '01.02.02.01', descripcion: 'Excavacion de material suelto', unidad: 'm3', metrado: 173, precio: 24.5 },
@@ -61,7 +68,9 @@ const DETALLE = [
 ];
 
 window.__ESPERADO = {
-  partidas: PARTIDAS.length,
+  // Solo las imputables: las dos primeras son capítulos.
+  partidas: PARTIDAS.filter(p => (p.unidad || '').trim()).length,
+  filas: PARTIDAS.length,
   programadas: DETALLE.length,
   titulos: DETALLE.filter(d => d.es_titulo).length,
   hojas: DETALLE.filter(d => !d.es_titulo).length,
@@ -213,7 +222,7 @@ createRoot(document.getElementById('app')).render(
                  por qué en vez de invitar a escribir. */
               bloqueado: v === 'cerrada',
               textoCerrado: 'Incidencia cerrada' }}
-    campoVinculo={v === 'actividad' ? 'actividad_obra' : 'incident_report'}
+    campoVinculo={v.startsWith('act') ? 'actividad_obra' : 'incident_report'}
     onCerrar={() => {}}
     onCambio={() => {}}
   />
