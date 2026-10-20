@@ -20,6 +20,11 @@ const p = await b.newPage({ viewport: { width: 1500, height: 1000 } });
 const errs = [];
 p.on('pageerror', e => errs.push(String(e)));
 
+/* Hay dos botones de alta en la incidencia -Título y Partida- asi que se
+ * eligen por su texto; .first() daria siempre el mismo y la prueba del
+ * titulo pasaria creando una partida. */
+const btn = (txt) => p.locator(`button.cos-prog-add:has-text("${txt}")`).click();
+
 const ir = async (v) => {
   await p.goto(`${BASE}?v=${v}`, { waitUntil: 'domcontentloaded' });
   await p.waitForSelector('.cos-prog', { timeout: 15000 });
@@ -30,11 +35,27 @@ const ir = async (v) => {
 await ir('con');
 const E = await p.evaluate(() => window.__ESPERADO);
 
-ok(await p.locator('.cos-prog-tabla tbody tr').count() === E.programadas,
-   'salen las partidas programadas', `${E.programadas}`);
+// +1 por la raíz: la incidencia, que se dibuja y no se guarda.
+ok(await p.locator('.cos-prog-tabla tbody tr').count() === E.programadas + 1,
+   'salen todas las filas del presupuesto, más la raíz', `${E.programadas + 1}`);
+ok(await p.locator('.cos-prog-titulo').count() === E.titulos,
+   'los títulos se distinguen de las partidas', `${E.titulos}`);
+ok(await p.locator('.cos-prog-raiz').count() === 1,
+   'y hay una sola fila raíz');
+const raiz = await p.locator('.cos-prog-raiz').innerText();
+ok(new RegExp(E.total.toLocaleString('es-PE', { minimumFractionDigits: 2 })
+     .replace(/[.,]/g, '[.,]')).test(raiz),
+   'cuyo total es la suma de las hojas, no de todo',
+   `${raiz.replace(/\n/g, ' ')} — esperado ${E.total}`);
+// Un título que sumara también a los títulos de debajo contaría doble.
+const sumaTitulos = await p.evaluate(() => [...document.querySelectorAll('.cos-prog-titulo')]
+  .map(tr => tr.querySelectorAll('td')[5].textContent.trim()));
+ok(sumaTitulos.length === E.titulos && sumaTitulos.every(x => x && x !== '0.00'),
+   'y cada título trae el suyo', sumaTitulos.join(' | '));
 const cuerpo = await p.locator('.cos-prog').innerText();
-ok(/presupuestado/i.test(cuerpo) && /ejecutado/i.test(cuerpo) && /saldo/i.test(cuerpo),
-   'con presupuestado, ejecutado y saldo');
+ok(/unid/i.test(cuerpo) && /cant/i.test(cuerpo) && /precio/i.test(cuerpo)
+   && /total/i.test(cuerpo) && /ejecutado/i.test(cuerpo) && /saldo/i.test(cuerpo),
+   'con las columnas del expediente: unidad, cantidad, precio y total');
 
 // El saldo negativo es el único número que obliga a hacer algo.
 const pasada = await p.locator('.cos-prog-tabla td.mal').first().innerText();
@@ -58,16 +79,29 @@ ok(orden, 'el bloque va antes del costeo');
  * DELETE a su propia ruta, no por un PATCH que reescribe la lista. Antes
  * aquí se comprobaba el PATCH; ese camino sigue vivo pero solo para las
  * actividades de obra, y se comprueba en su apartado. */
-await p.locator('.cos-prog-quita').first().click();
+const antesBorrar = await p.locator('.cos-prog-tabla tbody tr').count();
+await p.locator('.cos-prog-titulo .cos-prog-quita').first().click();
 await p.waitForTimeout(700);
 const urlsCon = await p.evaluate(() => window.__URLS);
 ok(urlsCon.some(x => /^DELETE .*\/incidentes\/\d+\/partidas\/\d+\/$/.test(x)),
-   'quitar una partida de la incidencia va por DELETE a su ruta',
+   'quitar va por DELETE a la ruta de esa fila',
    urlsCon.filter(x => x.startsWith('DELETE')).join(' | ').slice(0, 110));
 ok(!urlsCon.some(x => /^PATCH .*\/incidentes\/\d+\/$/.test(x)),
    'y NO reescribiendo la lista entera con un PATCH');
-ok(await p.locator('.cos-prog-tabla tbody tr').count() === E.programadas - 1,
-   'y la tabla lo refleja');
+// Ese primero es un título CON hijos: llevárselo tiraría filas que no se
+// están mirando.
+const quejaTit = await p.locator('.cos-prog-mal').innerText();
+ok(/colgando/.test(quejaTit), 'un título con hijos no se borra, y se dice por qué',
+   quejaTit.replace(/\n/g, ' ').slice(0, 80));
+ok(await p.locator('.cos-prog-tabla tbody tr').count() === antesBorrar,
+   'y no se va ninguna fila');
+
+// Una hoja suelta sí se va.
+await p.locator('tr:not(.cos-prog-titulo):not(.cos-prog-raiz) .cos-prog-quita')
+  .first().click();
+await p.waitForTimeout(700);
+ok(await p.locator('.cos-prog-tabla tbody tr').count() === antesBorrar - 1,
+   'una partida sin partes imputados sí se va');
 
 // ══════════ SIN NINGUNA PROGRAMADA ══════════
 await ir('sin');
@@ -87,13 +121,13 @@ ok(/todavía no guarda|todavia no guarda/i.test(falta),
 ok(/parche_partidas_de_incidencia/.test(falta),
    'y qué hay que aplicar para habilitarlo');
 ok(await p.locator('.cos-prog-add').count() === 0,
-   'y no se ofrece un botón que no puede funcionar');
+   'y no se ofrece ningún botón que no pueda funcionar');
 
 // ══════════ CREAR UNA PARTIDA PROPIA DE LA INCIDENCIA ══════════
 // Una incidencia no tiene presupuesto del que elegir: lo que haga falta para
 // atenderla se escribe cuando pasa.
 await ir('sin');
-await p.locator('.cos-prog-add').click();
+await btn('Partida');
 await p.waitForTimeout(300);
 ok(await p.locator('.cos-prog-forma').count() === 1,
    'en una incidencia el añadir abre un formulario');
@@ -131,10 +165,76 @@ const enviado = await p.evaluate(() => window.__POST);
 ok(enviado && enviado.descripcion === 'Retiro de material colapsado en canoa 8'
    && enviado.unidad === 'm3' && enviado.metrado === 120 && enviado.precio === 24.5,
    'se manda lo escrito, con los números como números', JSON.stringify(enviado));
-ok(await p.locator('.cos-prog-tabla tbody tr').count() === 1,
-   'y la partida aparece en la tabla');
-const fila = await p.locator('.cos-prog-tabla tbody tr').first().innerText();
+ok(await p.locator('.cos-prog-tabla tbody tr').count() === 2,
+   'y la partida aparece en la tabla, bajo la raíz');
+const fila = await p.locator('.cos-prog-tabla tbody tr').nth(1).innerText();
 ok(/\b01\b/.test(fila), 'con el código 01 que puso el servidor', fila.replace(/\n/g, ' '));
+
+// ══════════ ARMAR LA ESTRUCTURA: UN TITULO Y UNA PARTIDA DENTRO ══════════
+// Es lo que se pidió: que el presupuesto de la incidencia se arme como el
+// del expediente, con títulos que agrupan.
+await btn('Título');
+await p.waitForTimeout(300);
+ok(await p.locator('.cos-prog-forma').getAttribute('data-tipo') === 'titulo',
+   'el botón de Título abre el formulario de título');
+ok(await p.locator('.cos-prog-forma input[type="number"]').count() === 0,
+   'que no pide metrado ni precio');
+ok(/suma/i.test(await p.locator('.cos-prog-forma').innerText()),
+   'y dice que su total lo suman sus hijos');
+
+await p.locator('.cos-prog-forma input').nth(0).fill('TRABAJOS PRELIMINARES');
+await p.locator('.cos-prog-ok').click();
+await p.waitForTimeout(600);
+const postTit = await p.evaluate(() => window.__POST);
+ok(postTit && postTit.tipo === 'titulo' && !('unidad' in postTit),
+   'se manda como título, sin unidad ni precio', JSON.stringify(postTit));
+ok(await p.locator('.cos-prog-titulo').count() === 1,
+   'y aparece como título en la tabla');
+const codTit = await p.locator('.cos-prog-titulo td.cod').innerText();
+ok(codTit.trim() === '02', 'con el código de raíz que sigue', codTit);
+
+// ── ahora una partida DENTRO de ese título ──
+await btn('Partida');
+await p.waitForTimeout(300);
+const opciones = await p.locator('.cos-prog-forma select option').allInnerTexts();
+ok(opciones.length === 2 && /TRABAJOS PRELIMINARES/.test(opciones.join('|')),
+   'el formulario ofrece colgarla del título recién creado', opciones.join(' | '));
+await p.locator('.cos-prog-forma select').selectOption({ label: opciones[1] });
+await p.locator('.cos-prog-forma input').nth(0).fill('Trazo y replanteo');
+await p.locator('.cos-prog-forma input').nth(1).fill('mes');
+await p.locator('.cos-prog-forma input').nth(2).fill('3');
+await p.locator('.cos-prog-forma input').nth(3).fill('6207');
+await p.locator('.cos-prog-ok').click();
+await p.waitForTimeout(600);
+const postHijo = await p.evaluate(() => window.__POST);
+ok(postHijo && postHijo.padre, 'se manda colgada de ese título',
+   JSON.stringify(postHijo));
+const codigos = await p.locator('.cos-prog-tabla tbody td.cod').allInnerTexts();
+ok(codigos.map(x => x.trim()).includes('02.01'),
+   'y el servidor le da el código 02.01, dentro del título',
+   codigos.map(x => x.trim()).join(' | '));
+
+// El sangrado es lo que hace legible el árbol: un hijo no puede empezar
+// donde empieza su padre.
+const sangria = await p.evaluate(() => {
+  const celda = (cod) => [...document.querySelectorAll('.cos-prog-tabla td.cod')]
+    .find(td => td.textContent.trim() === cod);
+  const pad = (td) => td ? parseFloat(getComputedStyle(td).paddingLeft) : null;
+  return { padre: pad(celda('02')), hijo: pad(celda('02.01')) };
+});
+ok(sangria.hijo > sangria.padre, 'y se dibuja sangrado bajo él',
+   `padre ${sangria.padre}px, hijo ${sangria.hijo}px`);
+
+// La raíz suma las hojas, no los títulos: si contara los dos, el total
+// saldría doblado y los dos números son plausibles.
+const totalRaiz = await p.evaluate(() =>
+  document.querySelector('.cos-prog-raiz').querySelectorAll('td')[5].textContent.trim());
+/* El número exacto, no uno de dos posibles. Lo puesto: 120 × 24.50 = 2 940
+ * y 3 × 6 207 = 18 621, que suman 21 561. Si la raíz contara también los
+ * títulos saldría 40 182, y aceptar "2940 ó 21561" dejaba pasar justo el
+ * error que esto vigila. */
+ok(totalRaiz.replace(/[^\d]/g, '') === '2156100',
+   'y la raíz suma solo las hojas: 21 561.00', totalRaiz);
 
 // ══════════ QUE SE LEA ══════════
 // Dos veces escribí texto con la paleta oscura dentro de un panel claro y
@@ -174,9 +274,28 @@ ok(malos.every(f => f.ratio >= MINIMO),
 
 // ══════════ CORREGIR Y BORRAR ══════════
 await ir('con');
-await p.locator('.cos-prog-edita').first().click();
+// ── el lápiz de un TÍTULO: solo se renombra ──
+await p.locator('.cos-prog-titulo .cos-prog-edita').first().click();
 await p.waitForTimeout(300);
 ok(await p.locator('.cos-prog-forma').count() === 1, 'el lápiz abre el formulario');
+ok(await p.locator('.cos-prog-forma').getAttribute('data-tipo') === 'titulo',
+   'y sabe que es un título');
+ok(await p.locator('.cos-prog-forma input[type="number"]').count() === 0,
+   'un título no ofrece metrado ni precio: su total lo suman sus hijos');
+const nomTit = await p.locator('.cos-prog-forma input').nth(0).inputValue();
+ok(/TRABAJOS/i.test(nomTit), 'prellenado con el nombre del título', nomTit);
+await p.locator('.cos-prog-forma input').nth(0).fill('TRABAJOS PRELIMINARES Y ACCESOS');
+await p.locator('.cos-prog-ok').click();
+await p.waitForTimeout(600);
+const editTit = await p.evaluate(() => window.__PATCH_PARTIDA);
+ok(editTit && editTit.descripcion === 'TRABAJOS PRELIMINARES Y ACCESOS'
+   && !('unidad' in editTit) && !('precio' in editTit),
+   'y al renombrarlo solo se manda la descripción', JSON.stringify(editTit));
+
+// ── el lápiz de una PARTIDA: los cuatro campos ──
+await p.locator('tr:not(.cos-prog-titulo):not(.cos-prog-raiz) .cos-prog-edita')
+  .first().click();
+await p.waitForTimeout(300);
 const prellenado = await p.locator('.cos-prog-forma input').nth(0).inputValue();
 ok(/movilizacion/i.test(prellenado), 'prellenado con la partida de la fila', prellenado);
 
@@ -191,9 +310,9 @@ ok(await p.locator('.cos-prog-forma').count() === 0, 'y el formulario se cierra'
 // ── borrar una con metrado ya imputado: 409, y se explica ──
 const antes = await p.locator('.cos-prog-tabla tbody tr').count();
 const filas = p.locator('.cos-prog-tabla tbody tr');
-const n = await filas.count();
 let iPasada = 0;
-for (let i = 0; i < n; i++) {
+const nf = await filas.count();
+for (let i = 0; i < nf; i++) {
   if (/pasada/i.test(await filas.nth(i).innerText())) { iPasada = i; break; }
 }
 await filas.nth(iPasada).locator('.cos-prog-quita').click();
@@ -204,12 +323,19 @@ ok(/3 parte/.test(queja), 'borrar una con partes imputados se rechaza diciendo c
 ok(await p.locator('.cos-prog-tabla tbody tr').count() === antes,
    'y la fila sigue ahí');
 
-// ── borrar una sin imputar: se va ──
-let iLibre = 0;
-for (let i = 0; i < n; i++) {
-  if (!/pasada/i.test(await filas.nth(i).innerText())) { iLibre = i; break; }
+/* ── borrar una sin imputar: se va ──
+ * Se busca entre las HOJAS: la raíz no tiene botones y un título con hijos
+ * se rechaza, así que recorrer todas las filas daba con una sin papelera y
+ * la prueba se quedaba esperando treinta segundos. */
+const hojas = p.locator(
+  '.cos-prog-tabla tbody tr:not(.cos-prog-titulo):not(.cos-prog-raiz)');
+const nh = await hojas.count();
+let iLibre = -1;
+for (let i = 0; i < nh; i++) {
+  if (!/pasada/i.test(await hojas.nth(i).innerText())) { iLibre = i; break; }
 }
-await filas.nth(iLibre).locator('.cos-prog-quita').click();
+ok(iLibre >= 0, 'hay una partida sin metrado imputado que borrar', `${nh} hojas`);
+await hojas.nth(iLibre).locator('.cos-prog-quita').click();
 await p.waitForTimeout(600);
 ok(await p.locator('.cos-prog-tabla tbody tr').count() === antes - 1,
    'una sin partes imputados sí se borra');
@@ -229,7 +355,7 @@ ok(await p.locator('.cos-prog-falta').count() === 0,
 ok(await p.locator('.cos-prog-tabla tbody tr').count() === E.programadas,
    'y se ven sus partidas programadas');
 // La actividad SÍ tiene presupuesto: ahí la escalera se queda.
-await p.locator('.cos-prog-add').click();
+await btn('Partida');
 await p.waitForTimeout(300);
 ok(await p.locator('.cos-prog-escalera').count() === 1,
    'en una actividad el añadir sigue abriendo la escalera');

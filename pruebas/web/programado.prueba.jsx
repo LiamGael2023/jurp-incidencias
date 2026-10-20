@@ -36,17 +36,38 @@ const PARTIDAS = [
   { id: 5, codigo: '02.01.01.02', descripcion: 'Concreto f c=210 (OTRA OBRA)', unidad: 'm3', metrado: 36, precio: 420 },
 ];
 
+/* El presupuesto de la incidencia, con la forma del expediente: títulos que
+ * agrupan y partidas con metrado solo en las hojas. */
 const DETALLE = [
-  { id: 1, codigo: '01.02.01.01', descripcion: 'Movilizacion y desmovilizacion de maquinaria pesada',
-    unidad: 'glb', metrado: 1, precio: 8500, ejecutado: 0, saldo: 1, avance: 0 },
-  { id: 3, codigo: '01.02.02.01', descripcion: 'Excavacion de material suelto',
-    unidad: 'm3', metrado: 173, precio: 24.5, ejecutado: 100, saldo: 73, avance: 57.8 },
-  { id: 2, codigo: '01.02.01.02', descripcion: 'Trazo y replanteo',
-    unidad: 'm2', metrado: 420, precio: 3.2, ejecutado: 460, saldo: -40, avance: 109.5 },
+  { id: 10, codigo: '01', descripcion: 'TRABAJOS PRELIMINARES',
+    es_titulo: true, nivel: 1, unidad: '', metrado: null, precio: null,
+    importe: 9844, ejecutado: null, saldo: null, avance: null },
+  { id: 1, codigo: '01.01', descripcion: 'Movilizacion y desmovilizacion de maquinaria pesada',
+    es_titulo: false, nivel: 2,
+    unidad: 'glb', metrado: 1, precio: 8500, importe: 8500,
+    ejecutado: 0, saldo: 1, avance: 0 },
+  { id: 2, codigo: '01.02', descripcion: 'Trazo y replanteo',
+    es_titulo: false, nivel: 2,
+    unidad: 'm2', metrado: 420, precio: 3.2, importe: 1344,
+    ejecutado: 460, saldo: -40, avance: 109.5 },
+  { id: 20, codigo: '02', descripcion: 'OBRAS PROVISIONALES',
+    es_titulo: true, nivel: 1, unidad: '', metrado: null, precio: null,
+    importe: 4238.5, ejecutado: null, saldo: null, avance: null },
+  { id: 3, codigo: '02.01', descripcion: 'Excavacion de material suelto',
+    es_titulo: false, nivel: 2,
+    unidad: 'm3', metrado: 173, precio: 24.5, importe: 4238.5,
+    ejecutado: 100, saldo: 73, avance: 57.8 },
 ];
 
-window.__ESPERADO = { partidas: PARTIDAS.length, programadas: DETALLE.length,
-                      pasada: '01.02.01.02' };
+window.__ESPERADO = {
+  partidas: PARTIDAS.length,
+  programadas: DETALLE.length,
+  titulos: DETALLE.filter(d => d.es_titulo).length,
+  hojas: DETALLE.filter(d => !d.es_titulo).length,
+  // La suma de las hojas: es lo que tiene que salir en la fila raíz.
+  total: DETALLE.filter(d => !d.es_titulo).reduce((a, d) => a + d.importe, 0),
+  pasada: '01.02',
+};
 window.__PATCH = null;
 /* Todas las URL pedidas, para poder afirmar a QUÉ ruta fue el modal. Sin
  * esto, "el bloque se ve" no distingue entre pedir la ruta correcta y pedir
@@ -78,19 +99,37 @@ window.fetch = async (u, opc = {}) => {
     if (metodo === 'POST') {
       const c = JSON.parse(opc.body);
       window.__POST = c;
+      const esTitulo = c.tipo === 'titulo';
       const faltan = {};
       if (!c.descripcion) faltan.descripcion = ['Hace falta la descripcion.'];
-      if (!c.unidad) faltan.unidad = ['Hace falta la unidad.'];
+      if (!esTitulo && !c.unidad) faltan.unidad = ['Hace falta la unidad.'];
       if (Object.keys(faltan).length) return json(faltan, 400);
-      // El mayor que ya hay, no cuántas son: igual que el servidor.
-      const mayor = detalle.reduce(
-        (a, d) => Math.max(a, parseInt(d.codigo, 10) || 0), 0);
-      detalle = [...detalle, {
-        id: 900 + detalle.length, codigo: String(mayor + 1).padStart(2, '0'),
-        descripcion: c.descripcion, unidad: c.unidad,
-        metrado: c.metrado, precio: c.precio,
-        ejecutado: 0, saldo: c.metrado, avance: 0,
-      }];
+
+      const padre = c.padre ? detalle.find(d => String(d.id) === String(c.padre)) : null;
+      if (c.padre && !padre) return json({ padre: ['No esta.'] }, 400);
+      if (padre && !padre.es_titulo) {
+        return json({ padre: [`Solo se puede colgar de un titulo. '${padre.codigo}' es una partida.`] }, 400);
+      }
+      /* El correlativo entre HERMANOS, mirando el mayor —no contando—, igual
+       * que el servidor: contar devuelve un código repetido en cuanto se
+       * borra uno de en medio. */
+      const prefijo = padre ? `${padre.codigo}.` : '';
+      const hondo = padre ? padre.nivel + 1 : 1;
+      const mayor = detalle
+        .filter(d => d.nivel === hondo && d.codigo.startsWith(prefijo))
+        .reduce((a, d) => Math.max(a, parseInt(d.codigo.split('.').pop(), 10) || 0), 0);
+      const codigo = prefijo + String(mayor + 1).padStart(2, '0');
+
+      const fila = esTitulo
+        ? { id: 900 + detalle.length, codigo, descripcion: c.descripcion,
+            es_titulo: true, nivel: hondo, unidad: '', metrado: null,
+            precio: null, importe: 0, ejecutado: null, saldo: null, avance: null }
+        : { id: 900 + detalle.length, codigo, descripcion: c.descripcion,
+            es_titulo: false, nivel: hondo, unidad: c.unidad,
+            metrado: c.metrado, precio: c.precio,
+            importe: c.metrado * c.precio,
+            ejecutado: 0, saldo: c.metrado, avance: 0 };
+      detalle = [...detalle, fila].sort((a, b) => a.codigo.localeCompare(b.codigo));
       return devuelve();
     }
     if (metodo === 'PATCH') {
@@ -102,6 +141,16 @@ window.fetch = async (u, opc = {}) => {
       return devuelve();
     }
     if (metodo === 'DELETE') {
+      const fila = detalle.find(d => d.id === pid);
+      // Un título con algo colgando se llevaría por delante filas que no se
+      // están mirando.
+      const hijos = fila
+        ? detalle.filter(d => d.codigo.startsWith(fila.codigo + '.')) : [];
+      if (hijos.length) {
+        return json({ detail: `No se puede quitar: '${fila.codigo}' tiene `
+                              + `${hijos.length} fila(s) colgando. Quitalas primero.`,
+                      hijos: hijos.length }, 409);
+      }
       // La id 2 es la que lleva 460 ejecutados: tiene partes imputados.
       if (pid === 2) {
         return json({ detail: 'No se puede quitar: 3 parte(s) ya le imputaron '

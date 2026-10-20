@@ -289,3 +289,58 @@
 .cos-prog-cancel:hover:not(:disabled) { background: #f1f5f9; }
 .cos-prog-ok:disabled,
 .cos-prog-cancel:disabled { opacity: .55; cursor: not-allowed; }
+
+/* ── EL ARBOL DEL PRESUPUESTO ──
+   La raíz es la incidencia y los títulos agrupan. Se distinguen por peso y
+   fondo, no por color de texto: el color solo ya se pierde al imprimir en
+   blanco y negro, que es como acaba este cuadro en un expediente. */
+
+.cos-prog-raiz td {
+  font-weight: 800;
+  background: #eef2ff;
+  border-top: 2px solid #c7d2fe;
+  border-bottom: 1px solid #c7d2fe;
+}
+
+.cos-prog-titulo td {
+  font-weight: 700;
+  background: #fef9c3;          /* el amarillo de los grupos del expediente */
+  border-top: 1px solid #fde68a;
+  border-bottom: 1px solid #fde68a;
+}
+
+/* El sangrado lo pone el JSX según el nivel: una regla por nivel en CSS
+ * pondría un techo arbitrario a la profundidad del presupuesto. */
+.cos-prog-tabla td.cod { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.cos-prog-botones { display: inline-flex; gap: 6px; }
+
+.cos-prog-campo.medio { flex: 1 1 240px; min-width: 180px; }
+
+.cos-prog-campo select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 9px;
+  font-size: 13px;
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+.cos-prog-campo select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .18);
+}
+.cos-prog-campo select.mal { border-color: #dc2626; background: #fef2f2; }
+
+/* El formulario de título se distingue del de partida por el borde, para
+ * que no haya duda de qué se está creando cuando los dos botones están al
+ * lado. */
+.cos-prog-forma.es-titulo { border-color: #fcd34d; background: #fffbeb; }
+
+.cos-prog-pista {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: #713f12;
+}

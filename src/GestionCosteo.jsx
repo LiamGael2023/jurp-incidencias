@@ -38,7 +38,7 @@ import VisorImagen from './VisorImagen';
 import { API_OPS, API_BASE } from './api';
 import { rutaDe, cuelgaDe, bajarSolo } from './arbolPartidas';
 import EscaleraPartida from './SelectorPartida';
-import FormaPartida from './FormaPartida';
+import FormaPartida, { destinos } from './FormaPartida';
 import { imgToBase64 } from './costeo/imagen';
 import './GestionCosteo.css';
 import {
@@ -141,11 +141,13 @@ export default function GestionCosteo({
    * Una actividad de obra SÍ tiene presupuesto, así que allí la escalera se
    * queda. Por eso esto se bifurca en vez de cambiarse para los dos. */
   const esIncidencia = campoVinculo !== 'actividad_obra';
-  const NUEVA = { descripcion: '', unidad: '', metrado: '', precio: '' };
+  const NUEVA = { descripcion: '', unidad: '', metrado: '', precio: '', padre: '' };
   const [progNueva, setProgNueva] = useState(NUEVA);
   const [progErr, setProgErr] = useState({});
   // El id que se está editando en la tabla, o null.
   const [progEdit, setProgEdit] = useState(null);
+  // 'titulo' | 'partida' — qué se está dando de alta.
+  const [progTipo, setProgTipo] = useState('partida');
   // Por qué se soltó la partida al cambiar de actividad. Se dice una vez y
   // se va: un aviso que se queda ahí deja de leerse.
   const [avisoPartida, setAvisoPartida] = useState('');
@@ -463,24 +465,35 @@ export default function GestionCosteo({
     // para decir "falta la descripción" es un viaje de más.
     const fallos = {};
     if (!progNueva.descripcion.trim()) fallos.descripcion = 'Hace falta.';
-    if (!progNueva.unidad.trim()) fallos.unidad = 'Hace falta.';
+    if (progTipo !== 'titulo' && !progNueva.unidad.trim()) fallos.unidad = 'Hace falta.';
     if (Object.keys(fallos).length) { setProgErr(fallos); return; }
+
+    /* Un título solo manda su descripción. Mandar unidad y precio en cero
+     * sería decirle al servidor que esa fila tiene precio propio, y una fila
+     * que suma a sus hijos y además tiene precio no significa una cosa
+     * sola. */
+    const cuerpo = progTipo === 'titulo'
+      ? { tipo: 'titulo', padre: progNueva.padre || null,
+          descripcion: progNueva.descripcion.trim() }
+      : { tipo: 'partida', padre: progNueva.padre || null,
+          descripcion: progNueva.descripcion.trim(),
+          unidad: progNueva.unidad.trim(),
+          metrado: Number(progNueva.metrado) || 0,
+          precio: Number(progNueva.precio) || 0 };
 
     setProgGuardando(true);
     try {
       const r = await fetch(`${API_OPS}/incidentes/${sujeto.id}/partidas/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          descripcion: progNueva.descripcion.trim(),
-          unidad: progNueva.unidad.trim(),
-          metrado: Number(progNueva.metrado) || 0,
-          precio: Number(progNueva.precio) || 0,
-        }),
+        body: JSON.stringify(cuerpo),
       });
       if (!r.ok) { await explicarFallo(r); return; }
       aplicarRespuesta(await r.json());
-      setProgNueva(NUEVA);
+      /* Se vacía todo MENOS dónde va: quien mete tres partidas seguidas las
+       * mete en el mismo título, y volver a elegirlo cada vez es el clic que
+       * acaba poniéndolas donde no son. */
+      setProgNueva({ ...NUEVA, padre: progNueva.padre });
     } catch (e) {
       setProgAviso({ mal: true, txt: 'No se pudo guardar.' });
     } finally { setProgGuardando(false); }
@@ -517,6 +530,57 @@ export default function GestionCosteo({
     } catch (e) {
       setProgAviso({ mal: true, txt: 'No se pudo quitar.' });
     } finally { setProgGuardando(false); }
+  };
+
+  /* Una fila de partida del presupuesto de la incidencia. Va aquí y no
+   * dentro del JSX para que la rama del título y la de la hoja se lean una
+   * al lado de otra: son la misma tabla con columnas distintas, y mezcladas
+   * en línea acababan en un ternario de cuarenta líneas. */
+  const hoja = (p) => {
+    // El saldo en rojo cuando ya se pasó: es el único número de esta tabla
+    // que obliga a hacer algo.
+    const pasada = Number(p.saldo) < 0;
+    return (
+      <tr key={p.id}>
+        <td className="cod"
+          style={{ paddingLeft: 10 + (p.nivel || 1) * 12 }}>{p.codigo}</td>
+        <td>{p.descripcion}</td>
+        <td className="n">{p.unidad}</td>
+        <td className="n">{fmtNum(p.metrado)}</td>
+        <td className="n">{fmtNum(p.precio)}</td>
+        <td className="n">{fmtNum(p.importe)}</td>
+        <td className="n">{fmtNum(p.ejecutado)}</td>
+        <td className={`n${pasada ? ' mal' : ''}`}>
+          {fmtNum(p.saldo)}{pasada && <b> pasada</b>}
+        </td>
+        {!bloqueado && (
+          <td className="n">
+            {/* Editar solo en la incidencia: en una actividad la partida es
+                del presupuesto de la obra y cambiarla desde aquí movería ese
+                presupuesto entero. */}
+            {esIncidencia && (
+              <button type="button" className="cos-prog-edita"
+                disabled={progGuardando} title="Corregir esta partida"
+                onClick={() => {
+                  setProgErr({}); setProgAbierto(false);
+                  setProgEdit({
+                    id: p.id, es_titulo: false,
+                    descripcion: p.descripcion || '',
+                    unidad: p.unidad || '',
+                    metrado: String(p.metrado ?? ''),
+                    precio: String(p.precio ?? ''),
+                  });
+                }}><FaPen size={10} /></button>
+            )}
+            <button type="button" className="cos-prog-quita"
+              disabled={progGuardando}
+              title={esIncidencia ? 'Borrar esta partida'
+                                  : 'Quitar de lo programado'}
+              onClick={() => quitarProgramada(p.id)}><FaTrash size={10} /></button>
+          </td>
+        )}
+      </tr>
+    );
   };
 
   const quitarProgramada = async (id) => {
@@ -861,7 +925,12 @@ export default function GestionCosteo({
    * el código para saber de qué cuelga— y progDetalle es un resumen. */
   const partidasDelParte = useMemo(() => {
     if (!progDetalle.length) return partidas;
-    const ids = new Set(progDetalle.map(p => String(p.id)));
+    /* LOS TITULOS NO ENTRAN. Un título es una fila que agrupa: no tiene
+     * unidad ni precio, y su total es la suma de lo que cuelga. Imputarle
+     * metrado a un título sumaría trabajo contra una fila que ya cuenta el
+     * de sus hijos, y el avance saldría contado dos veces. */
+    const ids = new Set(progDetalle.filter(p => !p.es_titulo)
+                                   .map(p => String(p.id)));
     const sub = partidas.filter(p => ids.has(String(p.id)));
     // Si por lo que sea ninguna coincide, mejor el presupuesto entero que un
     // selector vacío: lo primero es molesto, lo segundo bloquea el parte.
@@ -1800,17 +1869,34 @@ export default function GestionCosteo({
                         <b className="cos-prog-n">{progDetalle.length}</b>
                       )}
                     </span>
-                    {progSoporte === 'ok' && !bloqueado && (
+                    {progSoporte === 'ok' && !bloqueado && esIncidencia && (
+                      <span className="cos-prog-botones">
+                        {['titulo', 'partida'].map(tp => (
+                          <button key={tp} type="button" className="cos-prog-add"
+                            onClick={() => {
+                              const cerrar = progAbierto && progTipo === tp;
+                              setProgAbierto(!cerrar);
+                              setProgTipo(tp);
+                              setProgErr({}); setProgEdit(null);
+                              if (!cerrar) setProgNueva({ ...NUEVA, padre: progNueva.padre });
+                            }}>
+                            {progAbierto && progTipo === tp
+                              ? <><FaTimes size={10} /> Cancelar</>
+                              : <><FaPlus size={10} /> {tp === 'titulo'
+                                    ? 'Título' : 'Partida'}</>}
+                          </button>
+                        ))}
+                      </span>
+                    )}
+                    {progSoporte === 'ok' && !bloqueado && !esIncidencia && (
                       <button type="button" className="cos-prog-add"
                         onClick={() => {
                           setProgAbierto(a => !a);
                           setProgErr({});
-                          if (esIncidencia) setProgNueva(NUEVA);
-                          else setProgRuta(bajarSolo(partidas, []));
+                          setProgRuta(bajarSolo(partidas, []));
                         }}>
                         {progAbierto ? <><FaTimes size={10} /> Cancelar</>
-                                     : <><FaPlus size={10} /> {esIncidencia
-                                           ? 'Nueva partida' : 'Añadir partida'}</>}
+                                     : <><FaPlus size={10} /> Añadir partida</>}
                       </button>
                     )}
                   </div>
@@ -1860,59 +1946,70 @@ export default function GestionCosteo({
                       <table className="cos-prog-tabla">
                         <thead>
                           <tr>
-                            <th>Código</th><th>Partida</th>
-                            <th className="n">Presupuestado</th>
+                            <th>Item</th><th>Descripción</th>
+                            <th className="n">Unid.</th>
+                            <th className="n">Cant.</th>
+                            <th className="n">Precio</th>
+                            <th className="n">Total</th>
                             <th className="n">Ejecutado</th>
                             <th className="n">Saldo</th>
                             {!bloqueado && <th />}
                           </tr>
                         </thead>
                         <tbody>
+                          {/* LA RAIZ ES LA INCIDENCIA, y no se guarda: se
+                              dibuja. Es el equivalente al nombre del proyecto
+                              en el Excel del presupuesto. Guardarla sería
+                              crear una fila que nadie eligió y que no se
+                              puede borrar ni editar. */}
+                          {esIncidencia && (
+                            <tr className="cos-prog-raiz">
+                              <td className="cod">1</td>
+                              <td>{(sujeto && sujeto.titulo) || 'Esta incidencia'}</td>
+                              <td /><td /><td />
+                              <td className="n">{fmtNum(progDetalle
+                                .filter(x => !x.es_titulo)
+                                .reduce((a, x) => a + Number(x.importe || 0), 0))}</td>
+                              <td /><td />
+                              {!bloqueado && <td />}
+                            </tr>
+                          )}
                           {progDetalle.map(p => {
-                            // El saldo en rojo cuando ya se paso: es el unico
-                            // numero de esta tabla que obliga a hacer algo.
-                            const pasada = Number(p.saldo) < 0;
-                            return (
-                              <tr key={p.id}>
-                                <td className="cod">{p.codigo}</td>
-                                <td>{p.descripcion}</td>
-                                <td className="n">{fmtNum(p.metrado)} <i>{p.unidad}</i></td>
-                                <td className="n">{fmtNum(p.ejecutado)} <i>{p.unidad}</i></td>
-                                <td className={`n${pasada ? ' mal' : ''}`}>
-                                  {fmtNum(p.saldo)} <i>{p.unidad}</i>
-                                  {pasada && <b> pasada</b>}
+                            if (p.es_titulo) return (
+                              <tr key={p.id} className="cos-prog-titulo">
+                                <td className="cod"
+                                  style={{ paddingLeft: 10 + (p.nivel || 1) * 12 }}>
+                                  {p.codigo}
                                 </td>
-                                {!bloqueado && (
+                                <td>{p.descripcion}</td>
+                                <td /><td /><td />
+                                <td className="n">{fmtNum(p.importe)}</td>
+                                <td /><td />
+                                {/* Solo en la incidencia, igual que en las
+                                    hojas: el presupuesto de una obra no se
+                                    reestructura desde la ficha de un parte. */}
+                                {!bloqueado && !esIncidencia && <td />}
+                                {!bloqueado && esIncidencia && (
                                   <td className="n">
-                                    {/* Editar solo en la incidencia: en una
-                                        actividad la partida es del
-                                        presupuesto de la obra y cambiarla
-                                        desde aquí movería ese presupuesto
-                                        entero. */}
-                                    {esIncidencia && (
-                                      <button type="button" className="cos-prog-edita"
-                                        disabled={progGuardando}
-                                        title="Corregir esta partida"
-                                        onClick={() => {
-                                          setProgErr({}); setProgAbierto(false);
-                                          setProgEdit({
-                                            id: p.id,
-                                            descripcion: p.descripcion || '',
-                                            unidad: p.unidad || '',
-                                            metrado: String(p.metrado ?? ''),
-                                            precio: String(p.precio ?? ''),
-                                          });
-                                        }}><FaPen size={10} /></button>
-                                    )}
+                                    <button type="button" className="cos-prog-edita"
+                                      disabled={progGuardando}
+                                      title="Renombrar este título"
+                                      onClick={() => {
+                                        setProgErr({}); setProgAbierto(false);
+                                        setProgEdit({ id: p.id, es_titulo: true,
+                                          descripcion: p.descripcion || '',
+                                          unidad: '', metrado: '', precio: '' });
+                                      }}><FaPen size={10} /></button>
                                     <button type="button" className="cos-prog-quita"
                                       disabled={progGuardando}
-                                      title={esIncidencia ? 'Borrar esta partida'
-                                                          : 'Quitar de lo programado'}
-                                      onClick={() => quitarProgramada(p.id)}><FaTrash size={10} /></button>
+                                      title="Borrar este título"
+                                      onClick={() => quitarProgramada(p.id)}>
+                                      <FaTrash size={10} /></button>
                                   </td>
                                 )}
                               </tr>
                             );
+                            return hoja(p);
                           })}
                         </tbody>
                       </table>
@@ -1922,24 +2019,30 @@ export default function GestionCosteo({
                   {progEdit && esIncidencia && (
                     <FormaPartida
                       key={`edit-${progEdit.id}`}
-                      titulo={`Corregir la partida ${
+                      tipo={progEdit.es_titulo ? 'titulo' : 'partida'}
+                      titulo={`Corregir ${progEdit.es_titulo ? 'el título' : 'la partida'} ${
                         (progDetalle.find(p => p.id === progEdit.id) || {}).codigo || ''}`}
                       valor={progEdit}
                       errores={progErr}
                       guardando={progGuardando}
                       onCambio={setProgEdit}
-                      onGuardar={() => editarPartida(progEdit.id, {
-                        descripcion: progEdit.descripcion.trim(),
-                        unidad: progEdit.unidad.trim(),
-                        metrado: Number(progEdit.metrado) || 0,
-                        precio: Number(progEdit.precio) || 0,
-                      })}
+                      onGuardar={() => editarPartida(progEdit.id,
+                        progEdit.es_titulo
+                          ? { descripcion: progEdit.descripcion.trim() }
+                          : {
+                            descripcion: progEdit.descripcion.trim(),
+                            unidad: progEdit.unidad.trim(),
+                            metrado: Number(progEdit.metrado) || 0,
+                            precio: Number(progEdit.precio) || 0,
+                          })}
                       onCancelar={() => { setProgEdit(null); setProgErr({}); }}
                     />
                   )}
 
                   {progAbierto && esIncidencia && (
                     <FormaPartida
+                      tipo={progTipo}
+                      padres={destinos(progDetalle)}
                       valor={progNueva}
                       errores={progErr}
                       guardando={progGuardando}
