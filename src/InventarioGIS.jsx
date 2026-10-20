@@ -1689,7 +1689,9 @@ export function FichaActivo({ inv }) {
           )}
         </div>
 
-        <div className="inv-ficha-pie">
+        {/* inv-modal-pie, no una clase propia: es el mismo pie del formulario
+            de evaluación y así hereda el tema claro ya definido. */}
+        <div className="inv-modal-pie">
           <button className="inv-btn-sec" onClick={inv.cerrarFicha}>Cerrar</button>
           {evaluable && (
             <button className="inv-btn-pri"

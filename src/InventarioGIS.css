@@ -1160,16 +1160,29 @@
   background: rgba(15, 23, 42, 0.94);
   backdrop-filter: blur(12px);
 }
+/* ═══════════════════════════════════════════════════════════════════════
+   FICHA DEL ACTIVO: características y fotos — tema claro
 
-/* ══════════════════════════════════════════════════════════
-   Ficha del activo: características y fotos
-   ══════════════════════════════════════════════════════════ */
+   Va DESPUÉS del bloque del modal de evaluación, y con sus mismos colores,
+   porque comparte contenedor: .inv-modal es blanco con cabecera azul.
 
-/* Más ancha que el formulario de evaluación: aquí la tabla tiene dos
-   columnas de texto y las miniaturas necesitan sitio para que se vea qué
-   hay en cada foto. */
-.inv-ficha { width: 520px; }
+   Escribí esto primero con la paleta del panel de capas —texto casi blanco
+   sobre cristal oscuro— y sobre el fondo blanco del modal no se leía nada:
+   las características salían en gris clarísimo y el botón de añadir fotos
+   era invisible. Los colores de aquí son los del formulario de evaluación,
+   que es el vecino de al lado:
 
+       rótulo  #48617c      dato     #1d273b
+       borde   #e6eef7      apagado  #5b7590
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Un poco más ancha que el formulario: la tabla tiene dos columnas de texto
+   y las miniaturas necesitan sitio. Hace falta subir también max-width,
+   porque el bloque del modal lo fija en 480 con !important. */
+.inv-ficha { width: 560px; max-width: 560px !important; }
+
+/* El botón que la abre vive en el GLOBO DEL MAPA, que sigue siendo oscuro:
+   este no se toca. */
 .inv-btn-ficha {
   width: 100%;
   margin-top: 8px;
@@ -1188,124 +1201,158 @@
 }
 .inv-btn-ficha:hover { background: rgba(76, 110, 245, .34); }
 
+/* ── características ── */
 .inv-cob {
   margin-left: 8px;
   text-transform: none;
   letter-spacing: 0;
-  font-size: 9.5px;
-  color: #ffd8a8;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #b45309;
 }
 
-.inv-ficha-tabla { width: 100%; border-collapse: collapse; font-size: 11.5px; }
-.inv-ficha-tabla th,
-.inv-ficha-tabla td {
-  padding: 4px 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, .06);
+.inv-ficha-tabla { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+.inv-modal .inv-ficha-tabla th,
+.inv-modal .inv-ficha-tabla td {
+  padding: 6px 4px;
+  border-bottom: 1px solid #e6eef7;
   vertical-align: top;
-}
-.inv-ficha-tabla th {
-  width: 40%;
   text-align: left;
-  font-weight: 600;
-  color: #8fb4cd;
-  text-transform: capitalize;
 }
-.inv-ficha-tabla td { color: #e3eef7; }
-.inv-ficha-tabla tr:last-child th,
-.inv-ficha-tabla tr:last-child td { border-bottom: none; }
+
+/* Sin text-transform: la etiqueta viene ya escrita del servidor, y
+   capitalizar palabra por palabra convertía "Obra · tipo de sección" en
+   "Obra · Tipo De Sección". */
+.inv-modal .inv-ficha-tabla th {
+  width: 42%;
+  font-size: 12px;
+  font-weight: 700;
+  color: #48617c;
+}
+.inv-modal .inv-ficha-tabla td { color: #1d273b; font-weight: 600; }
+.inv-modal .inv-ficha-tabla tr:last-child th,
+.inv-modal .inv-ficha-tabla tr:last-child td { border-bottom: none; }
+
+.inv-modal .inv-nota {
+  font-size: 12px;
+  color: #5b7590;
+  background: #f7fafd;
+  border: 1px solid #e2ecf6;
+  border-radius: 8px;
+  padding: 9px 11px;
+  margin: 0 0 10px;
+  font-style: normal;
+}
 
 /* ── miniaturas ──
-   Cuadradas y recortadas: las fotos de campo vienen en vertical y en
-   horizontal mezcladas, y una rejilla con alturas distintas se lee peor que
-   el recorte, aunque el recorte pierda bordes. La foto entera está a un clic. */
+   Cuadradas y recortadas: las fotos de campo vienen mezcladas en vertical y
+   horizontal, y una rejilla con alturas distintas se lee peor que el
+   recorte. La foto entera está a un clic. */
 .inv-fotos {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-  gap: 6px;
-  margin-bottom: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 7px;
+  margin-bottom: 11px;
 }
 
-.inv-foto {
+.inv-modal .inv-foto {
   position: relative;
   aspect-ratio: 1;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, .14);
-  border-radius: 6px;
+  border: 1px solid #d9e6f3;
+  border-radius: 8px;
   overflow: hidden;
-  background: rgba(255, 255, 255, .05);
+  background: #f1f6fb;
   cursor: pointer;
 }
-.inv-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.inv-foto:hover { border-color: rgba(76, 110, 245, .75); }
+.inv-modal .inv-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.inv-modal .inv-foto:hover { border-color: #1268C3; }
 
 .inv-foto-lupa {
   position: absolute;
   right: 4px;
   bottom: 4px;
   padding: 2px 4px;
-  border-radius: 3px;
+  border-radius: 4px;
   color: #fff;
-  background: rgba(5, 12, 20, .62);
+  background: rgba(11, 42, 91, .72);
   opacity: 0;
   transition: opacity .12s;
 }
 .inv-foto:hover .inv-foto-lupa { opacity: 1; }
 
 /* ── zona de subida ── */
-.inv-subir {
+.inv-modal .inv-subir {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 9px 10px;
-  border: 1px dashed rgba(255, 255, 255, .22);
-  border-radius: 6px;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px dashed #bcd2e8;
+  border-radius: 10px;
+  background: #f7fafd;
 }
-.inv-subir.encima {
-  border-color: rgba(76, 110, 245, .9);
-  background: rgba(76, 110, 245, .14);
+.inv-modal .inv-subir.encima {
+  border-color: #1268C3;
+  background: #e8f3fd;
 }
 
-.inv-btn-foto {
+.inv-modal .inv-btn-foto {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 11px;
-  font-size: 11px;
+  gap: 7px;
+  padding: 8px 14px;
+  font-size: 12.5px;
   font-weight: 700;
-  color: #e9f2f9;
-  background: rgba(255, 255, 255, .11);
-  border: 1px solid rgba(255, 255, 255, .2);
-  border-radius: 5px;
+  color: #fff;
+  background: #1268C3;
+  border: 1px solid #1268C3;
+  border-radius: 8px;
   cursor: pointer;
+  box-shadow: 0 2px 6px rgba(18, 104, 195, .28);
 }
-.inv-btn-foto:hover { background: rgba(255, 255, 255, .18); }
+.inv-modal .inv-btn-foto:hover { background: #0f579f; }
 
-.inv-subir-pista { font-size: 10.5px; color: #7ba7c7; }
+.inv-modal .inv-subir-pista { font-size: 12px; color: #5b7590; }
 
-.inv-subiendo { list-style: none; margin: 8px 0 0; padding: 0; font-size: 10.5px; }
-.inv-subiendo li {
+.inv-modal .inv-subiendo { list-style: none; margin: 9px 0 0; padding: 0; font-size: 12px; }
+.inv-modal .inv-subiendo li {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   padding: 3px 0;
-  color: #8fb4cd;
+  color: #48617c;
 }
-.inv-subiendo li.ok { color: #8ce99a; }
-.inv-subiendo li.error { color: #ff8787; }
+.inv-modal .inv-subiendo li.ok { color: #0b9268; }
+.inv-modal .inv-subiendo li.error { color: #b91c1c; }
 .inv-subiendo-nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
-.inv-subiendo-nota { color: #7ba7c7; font-size: 10px; }
+.inv-subiendo-nota { color: #5b7590; font-size: 11px; }
+
+/* La evaluación dentro de la ficha. Su estilo original es para el globo
+   oscuro del mapa, así que aquí se repinta. */
+.inv-modal .inv-pop-eval {
+  background: #f7fafd;
+  border: 1px solid #e2ecf6;
+  border-left: 3px solid var(--e, #1268C3);
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+.inv-modal .inv-pop-eval-tit { color: #5b7590; font-size: 11px; }
+.inv-modal .inv-pop-eval-estado { color: #1d273b; font-size: 13px; font-weight: 700; }
+.inv-modal .inv-pop-eval-obs { color: #48617c; font-size: 12px; }
 
 /* ── visor a pantalla completa ──
-   Por encima del modal (1200) porque se abre desde dentro de él. */
+   Este SÍ es oscuro, y debe serlo: una foto se mira sobre fondo negro. Va
+   por encima del modal (1200) porque se abre desde dentro de él. */
 .inv-visor {
   position: fixed;
   inset: 0;
   z-index: 1300;
-  background: rgba(3, 8, 14, .9);
+  background: rgba(3, 8, 14, .92);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px 72px;
+  padding: 40px 20px 78px;
 }
 .inv-visor img {
   max-width: 100%;
@@ -1316,46 +1363,39 @@
 
 .inv-visor-barra {
   position: absolute;
-  bottom: 16px;
+  bottom: 18px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  background: rgba(10, 20, 32, .92);
-  border: 1px solid rgba(255, 255, 255, .14);
-  color: #cfe3f2;
-  font-size: 11.5px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: rgba(10, 20, 32, .94);
+  border: 1px solid rgba(255, 255, 255, .16);
+  color: #e9f2f9;
+  font-size: 12px;
   font-weight: 700;
 }
 .inv-visor-barra button {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 9px;
-  color: #cfe3f2;
-  background: rgba(255, 255, 255, .1);
-  border: 1px solid rgba(255, 255, 255, .16);
-  border-radius: 5px;
+  padding: 6px 10px;
+  color: #e9f2f9;
+  background: rgba(255, 255, 255, .12);
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
 }
-.inv-visor-barra button:hover { background: rgba(255, 255, 255, .18); }
+.inv-visor-barra button:hover { background: rgba(255, 255, 255, .22); }
 .inv-visor-barra button:disabled { opacity: .35; cursor: default; }
 .inv-visor-borrar { color: #ffa8a8 !important; }
-.inv-visor-borrar:hover { background: rgba(224, 49, 49, .3) !important; }
+.inv-visor-borrar:hover { background: rgba(224, 49, 49, .32) !important; }
 
-.inv-ficha-pie {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid rgba(255, 255, 255, .09);
-}
-
-@media (max-width: 580px) {
+@media (max-width: 600px) {
   .inv-ficha { width: 100%; }
-  .inv-ficha-tabla th { width: 45%; }
+  .inv-modal .inv-ficha-tabla th { width: 46%; }
+  .inv-fotos { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); }
 }
