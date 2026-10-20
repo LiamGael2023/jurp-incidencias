@@ -1942,6 +1942,20 @@ export function PanelInventario({ inv, onVolar }) {
           </div>
         )}
 
+        {/* SIN CAMPAÑA NO SE EVALÚA, Y HAY QUE DECIRLO.
+            El bloque de abajo se pinta solo si hay campaña, así que cuando no
+            la hay el panel se quedaba mudo: las capas cargaban con normalidad,
+            pero el botón «Evaluar» no aparecía en ninguna estructura y nada
+            explicaba por qué. La campaña se crea en el servidor; el front solo
+            las lee. */}
+        {!inv.iniciando && !inv.error && !inv.campania && (
+          <div className="inv-nota inv-sin-campania">
+            <b>No hay campaña abierta.</b> Las capas se ven, pero no se puede
+            evaluar hasta que se cree la campaña del año en el administrador
+            del servidor y quede <i>en proceso</i>.
+          </div>
+        )}
+
         {/* ── campaña y avance ── */}
         {inv.campania && (
           <div className="inv-campania">
