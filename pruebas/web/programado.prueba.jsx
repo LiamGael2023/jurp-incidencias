@@ -6,6 +6,7 @@
  *   ?v=con        tiene tres programadas, una pasada de saldo
  *   ?v=viejo      el servidor todavía no lleva el campo (parche sin aplicar)
  *   ?v=actividad  la OTRA rama del modal: una actividad de obra
+ *   ?v=cerrada    la incidencia está cerrada: no se puede escribir
  *
  * El tercero importa tanto como los otros: es el estado real hasta que
  * alguien corra el parche, y tiene que decirlo en vez de salir vacío.
@@ -207,7 +208,11 @@ createRoot(document.getElementById('app')).render(
     abierto
     sujeto={{ id: 7, titulo: 'INCIDENTE-002-14082026',
               subtitulo: 'Otros (Proteccion de Canoa 8) en CANAL LATERAL 10',
-              detalle: 'C-08' }}
+              detalle: 'C-08',
+              /* Cerrada: los botones se ocultan, y el aviso tiene que decir
+                 por qué en vez de invitar a escribir. */
+              bloqueado: v === 'cerrada',
+              textoCerrado: 'Incidencia cerrada' }}
     campoVinculo={v === 'actividad' ? 'actividad_obra' : 'incident_report'}
     onCerrar={() => {}}
     onCambio={() => {}}

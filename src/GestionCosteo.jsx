@@ -1942,7 +1942,21 @@ export default function GestionCosteo({
                     </div>
                   )}
 
-                  {progSoporte === 'ok' && progDetalle.length === 0 && !progAbierto && (
+                  {/* CERRADA: se dice, y no se invita a escribir.
+                      El texto de abajo decía «Escribe aquí las que haga
+                      falta» mientras los botones estaban ocultos por estar
+                      cerrada la incidencia. Quien lo leía buscaba un botón
+                      que no existe y no tenía forma de saber por qué. */}
+                  {progSoporte === 'ok' && bloqueado && progDetalle.length === 0 && (
+                    <div className="cos-prog-nota cos-prog-cerrada">
+                      {textoCerrado}: no se pueden añadir ni corregir partidas.
+                      Para armar su presupuesto, reábrela con el botón{' '}
+                      <b>Reabrir</b> del pie de esta ventana.
+                    </div>
+                  )}
+
+                  {progSoporte === 'ok' && !bloqueado
+                   && progDetalle.length === 0 && !progAbierto && (
                     <div className="cos-prog-nota">
                       {esIncidencia ? <>
                         Sin partidas. Escribe aquí las que haga falta para

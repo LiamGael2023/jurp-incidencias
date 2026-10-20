@@ -418,6 +418,23 @@ ok(await p.locator('.cos-prog-forma').count() === 0,
 ok(await p.locator('.cos-prog-edita').count() === 0,
    'ni se ofrece editar una partida del presupuesto de la obra');
 
+// ══════════ CERRADA: SE DICE POR QUE, NO SE INVITA A ESCRIBIR ══════════
+// El aviso decía «Escribe aquí las que haga falta» con los botones ocultos
+// por estar cerrada la incidencia: quien lo leía buscaba un botón que no
+// existe y no tenía forma de saber por qué.
+await ir('cerrada');
+ok(await p.locator('.cos-prog-add').count() === 0,
+   'cerrada, no hay botones de alta');
+const cerr = await p.locator('.cos-prog-cerrada').innerText();
+ok(/cerrada/i.test(cerr), 'y se dice que está cerrada', cerr.replace(/\n/g, ' ').slice(0, 70));
+ok(/reabr/i.test(cerr), 'diciendo cómo desbloquearla', cerr.replace(/\n/g, ' ').slice(0, 90));
+ok(!/escribe aqu/i.test(await p.locator('.cos-prog').innerText()),
+   'y YA NO invita a escribir lo que no se puede escribir');
+const flojosC = (await medidorDe(p)('.cos-prog-cerrada'))
+  .filter(f => f.visible && f.ratio < MINIMO);
+ok(flojosC.length === 0, 'y ese aviso se lee',
+   flojosC.map(f => `${f.ratio}:1`).join(' | '));
+
 // ══════════ EJECUCION PRESUPUESTAL ══════════
 // Las tres secciones del gasto bajo una cabecera, que es la pareja del
 // bloque PROGRAMADO. Sueltas parecían tres cosas distintas.

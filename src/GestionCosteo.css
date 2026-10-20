@@ -426,3 +426,11 @@
 
 /* La tabla ya trae su propio borde superior; dentro del bloque sobra. */
 .cos-ejec .tbl-table-responsive.tbl-border-top { border-top: 0; }
+
+/* La nota de "cerrada" no es un error: es una condición. Ámbar y no rojo,
+ * que el rojo de esta pantalla significa saldo pasado. */
+.cos-prog-cerrada {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #78350f;
+}
