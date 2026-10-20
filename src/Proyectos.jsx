@@ -20,9 +20,11 @@ import { createPortal } from 'react-dom';
 import {
   FaPlus, FaSyncAlt, FaTimes, FaExclamationTriangle, FaCheckCircle,
   FaFolderOpen, FaFileExcel, FaTrash, FaEdit, FaSpinner,
-  FaMapMarkerAlt, FaSearch,
+  FaMapMarkerAlt, FaSearch, FaListUl,
 } from 'react-icons/fa';
 import ModalImportarPresupuesto from './ImportarPresupuesto';
+import PresupuestoProyecto from './PresupuestoProyecto';
+import './PresupuestoProyecto.css';
 import { API_OPS } from './api';
 
 const API = API_OPS;
@@ -51,6 +53,11 @@ const VACIO = {
 export default function Proyectos() {
   const [lista, setLista] = useState([]);
   const [importando, setImportando] = useState(null);
+  /* El presupuesto que se está mirando. Hasta ahora la pantalla decía
+   * cuántas partidas tiene cada proyecto y cuánto suman, pero no dejaba
+   * verlas: para leer el cuadro había que entrar a una actividad y abrir
+   * el selector, que es un sitio para ELEGIR una partida, no para leerlo. */
+  const [viendo, setViendo] = useState(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
   const [busca, setBusca] = useState('');
@@ -283,6 +290,13 @@ export default function Proyectos() {
                         </td>
                         <td style={{ padding:'10px 12px', textAlign:'right',
                           whiteSpace:'nowrap' }}>
+                          <button onClick={() => setViendo(p)}
+                            title={sinPres
+                              ? 'Ver el presupuesto y escribirlo a mano'
+                              : `Ver las ${p.partidas} partidas del presupuesto`}
+                            style={{ ...btnIco, color:'#1d4ed8' }}>
+                            <FaListUl size={12} />
+                          </button>
                           <button onClick={() => setImportando(p)}
                             title={sinPres ? 'Importar el presupuesto'
                                            : 'Volver a importar el presupuesto'}
@@ -432,6 +446,14 @@ export default function Proyectos() {
           </div>
         </Portal>
       )}
+
+      {/* ── Ver y escribir el presupuesto ───────────────────────────────── */}
+      <PresupuestoProyecto
+        proyecto={viendo}
+        abierto={!!viendo}
+        onCerrar={() => setViendo(null)}
+        onCambio={cargar}
+      />
 
       {/* ── Importar el presupuesto ─────────────────────────────────────── */}
       {importando && (
