@@ -13,6 +13,7 @@ import {
 import { prepararFoto, motivoRechazo, urlFoto, ordenarFotos, peso } from './fotosActivo';
 import { caracteristicas, cobertura, tituloActivo } from './fichaActivo';
 import Swal from 'sweetalert2';
+import { coloresDeCapa, nombreRasgo } from './sectores';
 import './InventarioGIS.css';
 
 // Simbología oficial del inventario. Son los mismos archivos que usa el
@@ -141,7 +142,10 @@ const GRUPOS = [
       { codigo: 'canal_lateral_10',  label: 'Canal Lateral 10',  color: '#4dabf7', tipo: 'line', weight: 3 },
       { codigo: 'subalterales',      label: 'Subalterales',      color: '#a5d8ff', tipo: 'line', weight: 2 },
       { codigo: 'redes_presurizado', label: 'Redes presurizado', color: '#74c0fc', tipo: 'line', dash: '3 5', weight: 2 },
-      { codigo: 'sectores_pech',     label: 'Sectores PECH',     color: '#aec14a', tipo: 'poly' },
+      // porSector: cada polígono con su color y su nombre escrito encima.
+      // Sin esto los sectores eran una sola mancha verde y no se veía dónde
+      // acababa uno y empezaba el siguiente.
+      { codigo: 'sectores_pech',     label: 'Sectores PECH',     color: '#aec14a', tipo: 'poly', porSector: true },
       { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#c0d259', tipo: 'poly' },
       { codigo: 'lotes',             label: 'Lotes',             color: '#d2e070', tipo: 'poly' },
     ],
@@ -196,6 +200,10 @@ export { TODOS_GRUPOS as GRUPOS_CAPAS, TODAS as TODAS_LAS_CAPAS };
 // rotula: con dos mil seiscientos puntos el mapa se vuelve una mancha de
 // texto, y ademas la mayoria sigue metida en un racimo.
 const ZOOM_ETIQUETAS = 16;
+const ZOOM_SECTORES = 11;
+
+// El coloreado por vecindad y el rotulo de los sectores viven en su propio
+// modulo: son funciones puras y asi se comprueban sin montar el mapa.
 
 /**
  * Cuelga los marcadores del racimo, o directamente del mapa si está apagado.
@@ -733,6 +741,12 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
   const refCluster = useRef(null);
   const [zoom, setZoom] = useState(() => mapa.getZoom());
   const rotular = etiquetas ? true : zoom >= ZOOM_ETIQUETAS;
+  /* Los sectores son poligonos grandes: su nombre cabe mucho antes que el de
+   * un activo suelto, y de hecho es lo que se quiere leer al mirar el valle.
+   * Por eso tiene su propio umbral, bastante mas bajo que el de los puntos
+   * (16): a 11 ya se ve el valle entero con sus sectores rotulados, y por
+   * debajo se pisarian unos a otros. En la lamina salen siempre. */
+  const rotularSector = etiquetas ? true : zoom >= ZOOM_SECTORES;
 
   useEffect(() => {
     const alZoom = () => setZoom(mapa.getZoom());
@@ -829,11 +843,17 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
 
         // Líneas y polígonos: un solo GeoJSON por capa.
         if (capa.tipo === 'line' || capa.tipo === 'poly') {
+          // Un color por sector, repartido para que dos vecinos no repitan.
+          const porSector = capa.porSector ? coloresDeCapa(fc) : null;
           return (
             <GeoJSON
-              key={`inv-${capa.codigo}`}
+              // El rótulo se ata al crear la capa, y onEachFeature no se
+              // vuelve a ejecutar: la clave lleva el estado para que Leaflet
+              // la rehaga al cruzar el zoom.
+              key={`inv-${capa.codigo}${capa.porSector ? `-${rotularSector}` : ''}`}
               data={fc}
               style={(f) => {
+                const tono = (porSector && porSector.get(f)) || capa.color;
                 // Las obras del PECH van más tenues: son contexto.
                 const esPech = (f?.properties?.ambito) === 'PECH';
                 /*
@@ -853,22 +873,28 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                  */
                 const grueso = impresion ? 1.6 : 1;
                 return {
-                  color: capa.color,
+                  color: tono,
                   // El grosor es la otra mitad de la jerarquía: el troncal
                   // pesa, las ramas adelgazan. Sin esto, cuatro pasos de
                   // azul no se distinguen de un vistazo.
                   weight: capa.tipo === 'line'
                     ? (capa.weight || 3) * grueso
-                    : (impresion ? 2.2 : 1.2),
-                  opacity: esPech ? (impresion ? 0.8 : 0.5) : 0.95,
-                  dashArray: esPech ? '6 4' : (capa.dash || null),
-                  fillColor: capa.color,
+                    : (porSector ? (impresion ? 2.6 : 2) : (impresion ? 2.2 : 1.2)),
+                  opacity: (esPech && !porSector) ? (impresion ? 0.8 : 0.5) : 0.95,
+                  // Un sector con color propio NO va punteado aunque sea del
+                  // PECH: el guion lo decia "esto es contexto", y aqui el
+                  // sector es justo lo que se quiere leer.
+                  dashArray: (esPech && !porSector) ? '6 4' : (capa.dash || null),
+                  fillColor: tono,
                   // Las áreas van casi sin relleno: son el suelo sobre el que
                   // se leen los canales, no la información principal. Con
                   // relleno fuerte tapaban la imagen satelital entera.
-                  fillOpacity: capa.tipo === 'poly'
-                    ? (impresion ? (esPech ? 0.10 : 0.16) : (esPech ? 0.04 : 0.08))
-                    : 0,
+                  // Con color propio el relleno sube un poco: es lo que
+                  // separa un sector del de al lado. Sigue siendo tenue, que
+                  // debajo hay imagen satelital que no se debe tapar.
+                  fillOpacity: capa.tipo !== 'poly' ? 0
+                    : porSector ? (impresion ? 0.26 : 0.20)
+                    : (impresion ? (esPech ? 0.10 : 0.16) : (esPech ? 0.04 : 0.08)),
                 };
               }}
               onEachFeature={(f, layer) => {
@@ -884,11 +910,21 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                     + `${amb === 'JURP' ? 'JURP' : amb === 'PECH' ? 'Chavimochic' : 'sin ámbito'}`
                     + '</span>'
                   : '';
+                const nombre = porSector ? nombreRasgo(p) : null;
                 layer.bindPopup(
-                  `<div class="inv-pop"><div class="inv-pop-tit">${capa.label}</div>
-                   <div class="inv-pop-sub">${chip}</div>
+                  `<div class="inv-pop"><div class="inv-pop-tit">${nombre || capa.label}</div>
+                   <div class="inv-pop-sub">${nombre ? `${capa.label} ` : ''}${chip}</div>
                    <table class="inv-pop-tabla"><tbody>${filas}</tbody></table></div>`
                 );
+                // El nombre, escrito en el centro del sector. De lejos no:
+                // son poligonos grandes, pero a escala de valle se pisarian
+                // unos a otros y taparian el mapa.
+                if (nombre && rotularSector) {
+                  layer.bindTooltip(nombre, {
+                    permanent: true, direction: 'center',
+                    className: 'inv-eti-sector', opacity: 1,
+                  });
+                }
               }}
             />
           );
