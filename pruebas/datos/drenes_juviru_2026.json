@@ -1,0 +1,32 @@
+{
+  "proyecto": "JURP-JUV 2026",
+  "nombre": "LIMPIEZA Y DESCOLMATACION DE SISTEMA DE DRENAJE VALLE VIRU",
+  "fuente": "Cuadro de metas 2026 por dren, transcrito del cuadro que mando Liam el 20/10/2026",
+  "comprobacion": {
+    "longitud_programado": 42080.00,
+    "petroleo_programado": 6240.67,
+    "longitud_ejecutado": 39079.00,
+    "petroleo_ejecutado": 5920.00
+  },
+  "drenes": [
+    {"dren": "DV Compositan I",     "longitud": 3000.00, "petroleo": 435.00,  "ej_longitud": 3500.00,  "ej_petroleo": 400.00},
+    {"dren": "DV Compositan II",    "longitud": 1450.00, "petroleo": 228.33,  "ej_longitud": 2790.00,  "ej_petroleo": 160.00},
+    {"dren": "DV 3.1",              "longitud": 2500.00, "petroleo": 368.33,  "ej_longitud": 2760.00,  "ej_petroleo": 280.00},
+    {"dren": "DV 3.0",              "longitud": 3740.00, "petroleo": 533.67,  "ej_longitud": 4988.00,  "ej_petroleo": 560.00},
+    {"dren": "DV Huancaquito Alto", "longitud": 3180.00, "petroleo": 459.00,  "ej_longitud": 3280.00,  "ej_petroleo": 200.00},
+    {"dren": "DV 2.0",              "longitud": 5000.00, "petroleo": 701.67,  "ej_longitud": 0.00,     "ej_petroleo": 0.00},
+    {"dren": "DV 1.2",              "longitud": 3500.00, "petroleo": 501.67,  "ej_longitud": 0.00,     "ej_petroleo": 0.00},
+    {"dren": "DV 1.6",              "longitud": 1000.00, "petroleo": 168.33,  "ej_longitud": 0.00,     "ej_petroleo": 0.00},
+    {"dren": "DV Pino",             "longitud": 2000.00, "petroleo": 301.67,  "ej_longitud": 0.00,     "ej_petroleo": 0.00},
+    {"dren": "DV 1.5",              "longitud": 1340.00, "petroleo": 213.67,  "ej_longitud": 0.00,     "ej_petroleo": 0.00},
+    {"dren": "DV Chanquin",         "longitud": 5400.00, "petroleo": 755.00,  "ej_longitud": 2700.00,  "ej_petroleo": 240.00},
+    {"dren": "DV Fronton Bajo",     "longitud": 4500.00, "petroleo": 635.00,  "ej_longitud": 5400.00,  "ej_petroleo": 600.00},
+    {"dren": "DV 8.0",              "longitud": 570.00,  "petroleo": 111.00,  "ej_longitud": 0.00,     "ej_petroleo": 0.00},
+    {"dren": "DV 4.1",              "longitud": 1200.00, "petroleo": 195.00,  "ej_longitud": 1261.00,  "ej_petroleo": 135.00},
+    {"dren": "DV 4.2",              "longitud": 1000.00, "petroleo": 168.33,  "ej_longitud": 0.00,     "ej_petroleo": 0.00},
+    {"dren": "DV 4.3",              "longitud": 800.00,  "petroleo": 141.67,  "ej_longitud": 0.00,     "ej_petroleo": 0.00},
+    {"dren": "DV Flautero",         "longitud": 1000.00, "petroleo": 168.33,  "ej_longitud": 1000.00,  "ej_petroleo": 80.00},
+    {"dren": "DV Carbonera",        "longitud": 900.00,  "petroleo": 155.00,  "ej_longitud": 750.00,   "ej_petroleo": 920.00},
+    {"dren": "DV 4.0",              "longitud": 0.00,    "petroleo": 0.00,    "ej_longitud": 10650.00, "ej_petroleo": 2345.00}
+  ]
+}
