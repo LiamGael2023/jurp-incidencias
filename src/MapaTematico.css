@@ -431,3 +431,20 @@
   background: #1e293b; color: #94a3b8; border: 1px solid #334155; border-radius: 5px;
 }
 .lam-giro-atajos button.activo { background: #206bc4; border-color: #206bc4; color: #fff; }
+
+/* A dónde va a parar la rueda mientras el gesto sigue.
+ *
+ * Un gesto de rueda puede pedir cinco saltos y la lámina se redibuja una sola
+ * vez, al final: sin este acuse, los 180 ms de espera se leen como que la
+ * rueda no hace nada. Va en el panel y NUNCA en el membrete, donde solo puede
+ * figurar la escala que de verdad está dibujada. */
+.lam-pendiente {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-weight: 800;
+  color: #ffd8a8;
+  background: rgba(217, 72, 15, .22);
+  border: 1px solid rgba(217, 72, 15, .45);
+  white-space: nowrap;
+}

@@ -302,53 +302,102 @@ function EncuadreFijo({ centro, zoom, onMover }) {
  * mirando se escapa del encuadre justo al acercarse. El centro nuevo se
  * calcula para que el punto bajo el ratón no se mueva.
  */
-const PASO_RUEDA_MS = 140;
+/* UN GESTO, UN REDIBUJADO.
+ *
+ * Cambiar de escala cuesta caro y no por culpa de la rueda: lo medí, y vale
+ * lo mismo eligiendo la escala en el desplegable, que es como se hacía antes.
+ * El precio sale de redibujar las estructuras del encuadre con sus rótulos, y
+ * escala con cuántas hay: a 1:5.000 son unas 620 marcas y tarda algo más de
+ * un segundo; a 1:200 son dos y tarda 130 ms.
+ *
+ * Lo que la rueda cambió es la frecuencia. Antes uno elegía escala de vez en
+ * cuando; ahora un solo giro puede pedir cinco saltos, y cinco redibujados de
+ * un segundo encadenados dejan el papel pegajoso aunque cada uno por separado
+ * costara lo de siempre.
+ *
+ * Así que la rueda acumula y se aplica una vez, cuando el gesto termina. El
+ * salto se decide al vuelo y el papel se redibuja en la escala final, no en
+ * las cuatro por las que ha pasado.
+ *
+ * EL ANCLA SE TOMA AL EMPEZAR. Durante el gesto el mapa no se mueve —todavía
+ * no se ha aplicado nada—, así que el punto bajo el cursor sigue siendo el
+ * mismo y el encuadre final se calcula contra él. */
+const ESPERA_RUEDA_MS = 220;
+/* Cuánto hay que girar para saltar una escala. Una muesca de un ratón manda
+ * del orden de 100-120; un trackpad, decenas de eventos de 3 o 4. Contando
+ * EVENTOS, el trackpad cruzaba el catálogo entero de un roce. Contando
+ * recorrido, los dos gestos se miden con la misma vara. */
+const RECORRIDO_POR_ESCALA = 110;
+/* Y un tope por gesto: un manotazo no debe llevarse la lámina de 1:25.000 a
+ * 1:200, que son dos mundos distintos. */
+const MAX_SALTOS_POR_GESTO = 4;
 
-function RuedaEscala({ escalas, escala, onCambiar }) {
+function RuedaEscala({ escalas, escala, onCambiar, onPendiente }) {
   const map = useMap();
-  const ultimo = useRef(0);
+  const pendiente = useRef(null);   // { i, punto, latlng }
+  const reloj = useRef(null);
 
   useEffect(() => {
     const cont = map.getContainer();
+
+    const aplicar = () => {
+      const q = pendiente.current;
+      pendiente.current = null;
+      reloj.current = null;
+      onPendiente?.(null);
+      if (!q) return;
+
+      const nueva = escalas[q.i];
+      const z2 = zoomParaEscala({
+        escala: nueva, lat: q.latlng.lat,
+        anchoPx: mm(MAPA_MM.ancho), anchoMm: MAPA_MM.ancho,
+      });
+      // El centro que deja el punto del cursor donde estaba, a la escala nueva.
+      const destino = map.unproject(
+        map.project(q.latlng, z2).subtract(q.punto.subtract(map.getSize().divideBy(2))),
+        z2);
+      onCambiar(nueva, [destino.lat, destino.lng]);
+    };
 
     const alRodar = (ev) => {
       // Sin esto el papel se desplaza bajo el puntero mientras se cambia de
       // escala, que es justo lo contrario de lo que se ha pedido.
       ev.preventDefault();
-
-      // Un paso por gesto. Un trackpad manda decenas de eventos diminutos y
-      // sin esto la lámina cruzaría el catálogo entero de un manotazo.
-      const ahora = Date.now();
-      if (ahora - ultimo.current < PASO_RUEDA_MS) return;
       if (!ev.deltaY) return;
-      ultimo.current = ahora;
-
-      const i = escalas.indexOf(escala);
-      if (i < 0) return;
-      // Rueda arriba = acercarse = denominador más pequeño.
-      const j = ev.deltaY < 0 ? i - 1 : i + 1;
-      if (j < 0 || j >= escalas.length) return;   // se acabó el catálogo
-      const nueva = escalas[j];
 
       const r = cont.getBoundingClientRect();
-      const puntoCursor = L.point(ev.clientX - r.left, ev.clientY - r.top);
-      const bajoCursor = map.containerPointToLatLng(puntoCursor);
-      const z2 = zoomParaEscala({
-        escala: nueva, lat: bajoCursor.lat,
-        anchoPx: mm(MAPA_MM.ancho), anchoMm: MAPA_MM.ancho,
-      });
+      const punto = L.point(ev.clientX - r.left, ev.clientY - r.top);
 
-      // El centro que deja 'bajoCursor' donde estaba, a la escala nueva.
-      const destino = map.unproject(
-        map.project(bajoCursor, z2).subtract(puntoCursor.subtract(map.getSize().divideBy(2))),
-        z2);
+      // El primer evento del gesto fija el ancla y el punto de partida.
+      if (!pendiente.current) {
+        const i = escalas.indexOf(escala);
+        if (i < 0) return;
+        pendiente.current = {
+          i0: i, i, punto, latlng: map.containerPointToLatLng(punto), recorrido: 0,
+        };
+      }
+      const q = pendiente.current;
+      q.recorrido += ev.deltaY;
 
-      onCambiar(nueva, [destino.lat, destino.lng]);
+      // Rueda arriba (deltaY negativo) = acercarse = denominador más pequeño.
+      let saltos = Math.trunc(q.recorrido / RECORRIDO_POR_ESCALA);
+      saltos = Math.max(-MAX_SALTOS_POR_GESTO, Math.min(MAX_SALTOS_POR_GESTO, saltos));
+      // Topes del catálogo: pasarse no debe dejar una escala inventada.
+      const j = Math.max(0, Math.min(escalas.length - 1, q.i0 + saltos));
+      if (j === q.i) return;            // el giro aún no da para otro salto
+      q.i = j;
+      onPendiente?.(escalas[j]);
+
+      clearTimeout(reloj.current);
+      reloj.current = setTimeout(aplicar, ESPERA_RUEDA_MS);
     };
 
     cont.addEventListener('wheel', alRodar, { passive: false });
-    return () => cont.removeEventListener('wheel', alRodar);
-  }, [map, escalas, escala, onCambiar]);
+    return () => {
+      cont.removeEventListener('wheel', alRodar);
+      clearTimeout(reloj.current);
+    };
+  }, [map, escalas, escala, onCambiar, onPendiente]);
 
   return null;
 }
@@ -653,6 +702,24 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
   const cambiarEscalaConRueda = useCallback((nueva, nuevoCentro) => {
     setEscala(nueva);
     setCentro(nuevoCentro);
+  }, []);
+
+  /* A dónde va a parar la rueda mientras el gesto sigue. NO toca el membrete:
+   * ahí solo puede figurar la escala que de verdad está dibujada. Esto es el
+   * acuse de recibo del gesto, y vive en el panel, que es donde se pregunta.
+   *
+   * SE ESCRIBE A MANO EN EL DOM, no con estado de React, y la diferencia no es
+   * de estilo: con `useState` cada golpe de rueda repintaba el componente
+   * entero —con las seiscientas y pico marcas del encuadre dentro—, y emitir
+   * cinco golpes pasó de instantáneo a 2,7 segundos. El indicador pesaba más
+   * que lo que venía a avisar. */
+  const refPendiente = useRef(null);
+  const mostrarPendiente = useCallback((nueva) => {
+    const el = refPendiente.current;
+    if (!el) return;
+    if (nueva == null) { el.textContent = ''; el.hidden = true; return; }
+    el.textContent = `→ 1:${nueva.toLocaleString('es-PE')}`;
+    el.hidden = false;
   }, []);
   const [giro, setGiro] = useState(0);        // grados, en sentido horario
   const [version, setVersion] = useState(0);     // repinta la cuadrícula al mover
@@ -1185,6 +1252,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
           <p className="lam-ayuda">
             Escala fija <b>1:{escala.toLocaleString('es-PE')}</b>: lo rotulado
             es lo dibujado. La rueda del ratón salta de escala en escala.
+            <span className="lam-pendiente" ref={refPendiente} hidden />
           </p>
 
           {descargando && (
@@ -1500,7 +1568,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               <EtiquetasSector sectores={etiquetasSector} />
               <EncuadreFijo centro={centro} zoom={zoom} onMover={alMover} />
               <RuedaEscala escalas={ESCALAS_LAMINA} escala={escala}
-                onCambiar={cambiarEscalaConRueda} />
+                onCambiar={cambiarEscalaConRueda} onPendiente={mostrarPendiente} />
               <CuadriculaUTM version={version} />
             </MapContainer>
           </div>

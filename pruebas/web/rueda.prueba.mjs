@@ -52,9 +52,13 @@ await p.waitForTimeout(500);
 const e1 = await escala();
 ok(e1 < e0, 'la rueda hacia arriba acerca: baja el denominador', `1:${e0} → 1:${e1}`);
 
-// ── un gesto, un paso ──
-// Un trackpad manda decenas de eventos diminutos; sin freno, la lámina
-// cruzaría el catálogo entero de un manotazo.
+// ── el trackpad no cruza el catálogo de un roce ──
+// Manda decenas de eventos diminutos. Contando EVENTOS, un roce se llevaba la
+// lámina de 1:5.000 a 1:200. Lo que cuenta es el recorrido del giro, que es
+// la misma vara para el ratón y para el trackpad.
+const catalogo = [200, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000];
+const pasos = (a, b) => Math.abs(catalogo.indexOf(a) - catalogo.indexOf(b));
+
 await p.evaluate(() => {
   const el = document.querySelector('.leaflet-container');
   const r = el.getBoundingClientRect();
@@ -64,17 +68,32 @@ await p.evaluate(() => {
       bubbles: true, cancelable: true }));
   }
 });
-await p.waitForTimeout(400);
+await p.waitForTimeout(600);
 const e2 = await escala();
-ok(e2 === e1 || e2 < e1, 'veinticinco eventos seguidos no cruzan el catálogo',
-   `1:${e1} → 1:${e2}`);
+ok(pasos(e1, e2) <= 1, 'un roce de trackpad salta una escala, no el catálogo',
+   `1:${e1} → 1:${e2} (${pasos(e1, e2)} paso/s)`);
+
+// Y un manotazo tampoco: hay tope por gesto.
+await p.evaluate(() => {
+  const el = document.querySelector('.leaflet-container');
+  const r = el.getBoundingClientRect();
+  for (let i = 0; i < 40; i++) {
+    el.dispatchEvent(new WheelEvent('wheel', {
+      deltaY: -120, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+      bubbles: true, cancelable: true }));
+  }
+});
+await p.waitForTimeout(600);
+const eTope = await escala();
+ok(pasos(e2, eTope) <= 4, 'un manotazo no cruza el catálogo entero',
+   `1:${e2} → 1:${eTope} (${pasos(e2, eTope)} paso/s)`);
 
 // ── alejarse ──
 await p.mouse.move(cx, cy);
 await p.mouse.wheel(0, 300);
 await p.waitForTimeout(500);
 const e3 = await escala();
-ok(e3 > e2, 'la rueda hacia abajo aleja', `1:${e2} → 1:${e3}`);
+ok(e3 > eTope, 'la rueda hacia abajo aleja', `1:${eTope} → 1:${e3}`);
 
 // ── la escala que se rotula es la que se dibuja ──
 // Es la razón de ser del candado: si la rueda metiera un zoom libre, el
