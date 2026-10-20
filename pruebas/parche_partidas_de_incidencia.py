@@ -97,12 +97,27 @@ def escribir(ruta, texto):
     return copia
 
 
-def buscar_fichero(app, patron):
-    """El .py de la app donde aparece `patron`. None si en ninguno."""
-    for nombre in sorted(os.listdir(app)):
-        if not nombre.endswith(".py"):
-            continue
-        ruta = os.path.join(app, nombre)
+def py_del_proyecto(base):
+    """Todos los .py del proyecto, sin entrar en lo que no es codigo nuestro."""
+    FUERA = {"migrations", "__pycache__", "venv", ".venv", "env",
+             "site-packages", "node_modules", "static", "media"}
+    for raiz, dirs, ficheros in os.walk(base):
+        dirs[:] = [d for d in dirs if d not in FUERA and not d.startswith(".")]
+        for n in sorted(ficheros):
+            if n.endswith(".py"):
+                yield os.path.join(raiz, n)
+
+
+def buscar_fichero(base, patron):
+    """El .py donde aparece `patron`. None si en ninguno.
+
+    Recorre el PROYECTO entero y no solo los .py sueltos de la app: la
+    primera version miraba solo operations/*.py y en el servidor no encontro
+    el serializer, que puede estar en un subpaquete (operations/serializers/)
+    o directamente en otra app. Un parche que se rinde por mirar en un unico
+    sitio obliga a abrir el servidor a mano, que es lo que viene a evitar.
+    """
+    for ruta in py_del_proyecto(base):
         try:
             if re.search(patron, leer(ruta), re.M):
                 return ruta
@@ -308,19 +323,42 @@ def main():
         return 1
     pasos.append((f_models, nuevo, nota))
 
-    # El serializer puede estar en cualquier fichero de la app.
-    f_ser = buscar_fichero(app, r"^class\s+IncidentReportSerializer\s*\(")
+    # El serializer puede estar en cualquier fichero del proyecto.
+    f_ser = buscar_fichero(base, r"^class\s+IncidentReportSerializer\s*\(")
     clase = "IncidentReportSerializer"
     if not f_ser:
         # Algunos proyectos lo llaman de otra forma; se busca por el modelo.
-        f_ser = buscar_fichero(app, r"model\s*=\s*IncidentReport\b")
+        f_ser = buscar_fichero(base, r"model\s*=\s*IncidentReport\b")
         if f_ser:
-            m = re.search(r"^class\s+(\w+)\s*\([^)]*Serializer[^)]*\)",
-                          leer(f_ser), re.M)
-            clase = m.group(1) if m else clase
+            # La clase que declara ese Meta.model, que es la de mas arriba.
+            txt = leer(f_ser)
+            pos = re.search(r"model\s*=\s*IncidentReport\b", txt).start()
+            clases = list(re.finditer(r"^class\s+(\w+)\s*\(", txt[:pos], re.M))
+            if clases:
+                clase = clases[-1].group(1)
     if not f_ser:
-        print("MAL  no encuentro el serializer de IncidentReport en %s" % app)
-        print("     Dime como se llama su fichero y lo ajusto.")
+        print("MAL  no encuentro ningun serializer de IncidentReport en %s" % base)
+        print("")
+        print("     Puede que la API no use un serializer de DRF para la")
+        print("     incidencia y arme el diccionario a mano. Esto es lo que")
+        print("     hay, para decidir donde meterlo:")
+        print("")
+        vistos = 0
+        for ruta in py_del_proyecto(base):
+            try:
+                txt = leer(ruta)
+            except (IOError, UnicodeDecodeError):
+                continue
+            for n, linea in enumerate(txt.splitlines(), 1):
+                if "IncidentReport" in linea:
+                    print("       %s:%s  %s"
+                          % (os.path.relpath(ruta, base), n, linea.strip()[:96]))
+                    vistos += 1
+                    if vistos >= 40:
+                        print("       ... (y mas)")
+                        return 1
+        if not vistos:
+            print("       (ni una mencion: ¿es esta la carpeta del proyecto?)")
         return 1
 
     nuevo, nota = parche_serializer(leer(f_ser), clase)
