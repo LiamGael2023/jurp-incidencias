@@ -1399,3 +1399,265 @@
   .inv-modal .inv-ficha-tabla th { width: 46%; }
   .inv-fotos { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FORMULARIO DE EVALUACIÓN — más ancho, en dos columnas y legible
+
+   Lo que había: 480 px de ancho, una columna, y los títulos de los bloques
+   con la paleta oscura —texto claro sobre un fondo translúcido claro—, o sea
+   invisibles sobre el blanco del modal. Una ficha del ANA son setenta campos
+   repartidos en diez bloques, y así era una tira estrecha de desplegables
+   grises sin principio ni final.
+
+   Lo que se arregla:
+
+     ancho       880 px, y los campos en rejilla: en una pantalla de
+                 escritorio caben dos o tres por fila en vez de una. El
+                 teléfono vuelve a una columna solo.
+     bloques     banda azul clara con el título en oscuro, cuántos campos
+                 tiene y si le falta alguno. Se ve cuál está abierto.
+     avance      una barra arriba con cuántos obligatorios quedan. Antes eso
+                 solo se sabía al fallar el guardado.
+     el que falta  se pinta en rojo en el propio campo, y la vista salta a él.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.inv-eval {
+  width: 880px;
+  max-width: 880px !important;
+  max-height: 92vh;
+}
+.inv-eval .inv-modal-body { max-height: none; flex: 1; padding: 18px 22px !important; }
+
+/* ── barra de avance ── */
+.inv-avanza {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 22px;
+  background: #f1f7fd;
+  border-bottom: 1px solid #e2ecf6;
+}
+.inv-avanza-barra {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: #dbe8f5;
+  overflow: hidden;
+}
+.inv-avanza-barra i {
+  display: block;
+  height: 100%;
+  background: #1268C3;
+  transition: width .25s ease;
+}
+.inv-avanza.listo .inv-avanza-barra i { background: #0CA678; }
+
+.inv-avanza-txt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #48617c;
+  white-space: nowrap;
+}
+.inv-avanza-txt b { color: #b45309; font-weight: 800; }
+.inv-avanza.listo .inv-avanza-txt { color: #0b7a56; }
+
+.inv-avanza-todo { display: flex; gap: 6px; flex-shrink: 0; }
+.inv-avanza-todo button {
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #1268C3;
+  background: #fff;
+  border: 1px solid #cbd9e8;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.inv-avanza-todo button:hover { background: #e8f3fd; border-color: #9fc9ec; }
+
+/* ── bloques ── */
+.inv-modal .inv-bloque { margin-bottom: 10px; }
+
+.inv-modal .inv-bloque-tit {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 11px 14px;
+  border: 1px solid #dbe8f5;
+  border-radius: 10px;
+  background: #f1f7fd;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0B2A5B;
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.inv-modal .inv-bloque-tit:hover { background: #e4f0fb; border-color: #9fc9ec; }
+.inv-modal .inv-bloque-tit.abierta {
+  background: #e4f0fb;
+  border-color: #9fc9ec;
+  border-radius: 10px 10px 0 0;
+  margin-bottom: 0;
+}
+.inv-modal .inv-bloque-tit span { flex: 1; }
+
+/* Cuántos campos hay dentro, sin tener que abrirlo. */
+.inv-bloque-n {
+  flex-shrink: 0;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: #5b7590;
+  background: #fff;
+  border: 1px solid #dbe8f5;
+  border-radius: 9px;
+  padding: 1px 7px;
+}
+.inv-bloque-ok { flex-shrink: 0; color: #0CA678; }
+
+.inv-modal .inv-bloque-falta {
+  flex-shrink: 0;
+  min-width: 19px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #d9480f;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+/* El cuerpo del bloque abierto, pegado a su cabecera. */
+.inv-modal .inv-bloque-tit.abierta + .inv-campos {
+  border: 1px solid #9fc9ec;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: #fbfdff;
+  padding: 16px 14px;
+  margin-bottom: 10px;
+}
+
+/* ── rejilla de campos ──
+   Dos o tres columnas según el ancho. 240 px es lo que necesita el
+   desplegable más largo del catálogo sin que se le corte la opción. */
+.inv-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px 18px;
+  align-items: start;
+}
+.inv-campos .inv-campo { margin-bottom: 0; }
+/* Lo que se escribe a mano ocupa toda la fila: un detalle o una observación
+   en una columna de 240 px no deja leer lo que uno acaba de escribir. */
+.inv-campos .inv-campo.ancho { grid-column: 1 / -1; }
+
+.inv-modal .inv-campo label {
+  font-size: 12.5px !important;
+  margin-bottom: 6px;
+}
+
+.inv-modal .inv-campo input[type="text"],
+.inv-modal .inv-campo input[type="number"],
+.inv-modal .inv-campo select,
+.inv-modal .inv-campo textarea {
+  font-size: 14px !important;
+  padding: 10px 12px !important;
+}
+
+/* El obligatorio que quedó vacío al intentar guardar. */
+.inv-modal .inv-campo.falta input,
+.inv-modal .inv-campo.falta select,
+.inv-modal .inv-campo.falta textarea {
+  border-color: #e03131 !important;
+  background: #fff5f5 !important;
+  box-shadow: 0 0 0 3px rgba(224, 49, 49, .12);
+}
+.inv-modal .inv-campo.falta label { color: #b91c1c !important; }
+
+/* Un checkbox suelto no se ve; con su caja y su Sí/No, sí. */
+.inv-modal .inv-check {
+  display: flex !important;
+  align-items: center;
+  gap: 9px;
+  margin: 0 !important;
+  padding: 9px 12px;
+  background: #f7fafd;
+  border: 1px solid #cbd9e8;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600 !important;
+  color: #1d273b !important;
+}
+.inv-modal .inv-check:hover { background: #eef4fa; border-color: #9fc9ec; }
+.inv-modal .inv-check input[type="checkbox"] {
+  width: 17px; height: 17px; accent-color: #1268C3; cursor: pointer; margin: 0;
+}
+.inv-modal .inv-check span { font-size: 13.5px; }
+
+.inv-modal .inv-campo-fila { display: flex; flex-direction: column; gap: 8px; }
+.inv-modal .inv-campo-fila select { width: 100%; }
+
+.inv-eval .inv-modal-sep {
+  grid-column: 1 / -1;
+  margin-top: 18px;
+}
+
+@media (max-width: 900px) {
+  .inv-eval { width: 100%; max-width: 100% !important; }
+}
+@media (max-width: 620px) {
+  .inv-campos { grid-template-columns: 1fr; }
+  .inv-avanza { padding: 9px 14px; gap: 9px; flex-wrap: wrap; }
+  .inv-avanza-todo { display: none; }
+  .inv-eval .inv-modal-body { padding: 14px !important; }
+}
+
+/* Los separadores de sección iban en #7b93ad sobre blanco: 3.2:1, por debajo
+   del 4.5 que pide AA, y se veían como un gris lavado. Con 11.5 px en
+   versalitas espaciadas el texto ya es pequeño de por sí, así que el color
+   tiene que compensar. #51688a da 6.4:1 sin dejar de ser un rótulo discreto.
+   Lo encontró pruebas/web/evaluacion.prueba.mjs midiéndolo, no leyéndolo. */
+.inv-modal .inv-modal-sep {
+  color: #51688a !important;
+  font-size: 11.5px;
+  letter-spacing: .1em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* La nota de "sin fotos todavía" estaba justo en el límite (4.56:1). */
+.inv-modal .inv-nota { color: #4d6681; }
+
+/* El textarea se salía por la derecha de su bloque: tenía width 100% y
+   padding, y sin box-sizing el relleno se suma al ancho en vez de caber
+   dentro. Se ve enseguida en la captura y no se ve nunca leyendo el CSS. */
+.inv-modal .inv-campo input,
+.inv-modal .inv-campo select,
+.inv-modal .inv-campo textarea { box-sizing: border-box; max-width: 100%; }
+
+/* Los campos sin bloque —los obligatorios de cabecera, que no llevan título—
+   quedaban sueltos sobre el blanco mientras el resto iba en tarjetas, y
+   parecían de otra pantalla. Misma caja que los demás, sin cabecera. */
+.inv-modal .inv-bloque > .inv-campos:first-child {
+  border: 1px solid #dbe8f5;
+  border-radius: 10px;
+  background: #fbfdff;
+  padding: 16px 14px;
+  margin-bottom: 10px;
+}
+
+/* El primer separador no necesita línea ni hueco arriba: ya lo separa la
+   cabecera azul, y dejaba una franja vacía al abrir la ficha. */
+.inv-modal-body > .inv-modal-sep:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}

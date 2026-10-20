@@ -8,7 +8,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import {
   FaClipboardCheck, FaTimes, FaSyncAlt, FaCrosshairs,
   FaChevronDown, FaChevronRight, FaExclamationCircle, FaPlusCircle, FaSearch,
-  FaListUl, FaCamera, FaTrash, FaChevronLeft, FaImages, FaExpand,
+  FaListUl, FaCamera, FaTrash, FaChevronLeft, FaImages, FaExpand, FaCheckCircle,
 } from 'react-icons/fa';
 import { prepararFoto, motivoRechazo, urlFoto, ordenarFotos, peso } from './fotosActivo';
 import { caracteristicas, cobertura, tituloActivo } from './fichaActivo';
@@ -1110,6 +1110,9 @@ export function ModalEvaluacion({ inv }) {
   const [guardando, setGuardando] = useState(false);
   const [fallo, setFallo] = useState(null);
   const [cerradas, setCerradas] = useState({});
+  // Tras un guardado fallido, los obligatorios vacíos se pintan en rojo.
+  const [senalar, setSenalar] = useState(false);
+  const cuerpo = useRef(null);
 
   const ev = inv.evaluando;
   const campos = ev ? (inv.formularios[ev.tipo] || null) : null;
@@ -1161,6 +1164,7 @@ export function ModalEvaluacion({ inv }) {
       prioridad: previa?.prioridad || '',
     });
     setFallo(null);
+    setSenalar(false);
   }, [ev?.tipo, ev?.fid, campos]);
 
   if (!ev) return null;
@@ -1174,14 +1178,35 @@ export function ModalEvaluacion({ inv }) {
     const activos = (campos || []).filter(c => !ocultoPorRespuesta(c, valores));
 
     const faltan = activos
-      .filter(c => c.obligatorio && (valores[c.campo] === '' || valores[c.campo] == null))
-      .map(c => c.etiqueta);
+      .filter(c => c.obligatorio && (valores[c.campo] === '' || valores[c.campo] == null));
     if (faltan.length) {
-      setFallo(`Falta completar: ${faltan.join(', ')}`);
+      /* Antes esto era una lista de nombres al pie del formulario y había que
+       * ir buscándolos a mano por bloques cerrados. Ahora se abren los bloques
+       * que los contienen, se marcan los campos en rojo y la vista salta al
+       * primero: el mensaje dice cuántos son, la pantalla dice cuáles. */
+      setSenalar(true);
+      const conFalta = new Set(faltan.map(c => {
+        const corte = c.etiqueta.indexOf(' · ');
+        return corte > 0 ? c.etiqueta.slice(0, corte) : '';
+      }));
+      setCerradas(s => {
+        const n = { ...s };
+        conFalta.forEach(t => { if (t) n[t] = false; });
+        return n;
+      });
+      setFallo(faltan.length === 1
+        ? 'Falta un campo obligatorio, marcado en rojo.'
+        : `Faltan ${faltan.length} campos obligatorios, marcados en rojo.`);
+      // Tras repintar con los bloques abiertos, llevar la vista al primero.
+      setTimeout(() => {
+        cuerpo.current?.querySelector('.inv-campo.falta')
+          ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 60);
       return;
     }
 
     setGuardando(true);
+    setSenalar(false);
     setFallo(null);
 
     // los numéricos viajan como número, no como texto
@@ -1211,9 +1236,22 @@ export function ModalEvaluacion({ inv }) {
 
   const nombre = ev.props?.nombre || ev.props?.codigo || `#${ev.fid}`;
 
+  /* CUÁNTO FALTA. Una ficha del ANA son setenta campos repartidos en diez
+   * bloques cerrados: sin esto, lo único que dice cuánto queda es el error al
+   * intentar guardar, y entonces hay que abrir los bloques uno a uno. */
+  const activos = (campos || []).filter(c => !ocultoPorRespuesta(c, valores));
+  const sinLlenar = activos.filter(
+    c => c.obligatorio && (valores[c.campo] === '' || valores[c.campo] == null));
+  const obligatorios = activos.filter(c => c.obligatorio).length;
+  const hechos = obligatorios - sinLlenar.length;
+  const pct = obligatorios ? Math.round((hechos / obligatorios) * 100) : 100;
+
+  const todas = (cerrar) => setCerradas(
+    Object.fromEntries((secciones || []).map(g => [g.titulo, cerrar])));
+
   return (
     <div className="inv-modal-fondo" onClick={inv.cerrarEvaluacion}>
-      <div className="inv-modal gis-glass" onClick={e => e.stopPropagation()}>
+      <div className="inv-modal inv-eval gis-glass" onClick={e => e.stopPropagation()}>
 
         <div className="inv-modal-head">
           <div>
@@ -1227,7 +1265,26 @@ export function ModalEvaluacion({ inv }) {
             onClick={inv.cerrarEvaluacion}><FaTimes /></button>
         </div>
 
-        <div className="inv-modal-body">
+        {obligatorios > 0 && (
+          <div className={`inv-avanza${sinLlenar.length === 0 ? ' listo' : ''}`}>
+            <div className="inv-avanza-barra">
+              <i style={{ width: `${pct}%` }} />
+            </div>
+            <span className="inv-avanza-txt">
+              {sinLlenar.length === 0
+                ? <><FaCheckCircle size={11} /> Obligatorios completos</>
+                : <>Faltan <b>{sinLlenar.length}</b> de {obligatorios} obligatorios</>}
+            </span>
+            {secciones && secciones.length > 2 && (
+              <span className="inv-avanza-todo">
+                <button type="button" onClick={() => todas(false)}>Abrir todo</button>
+                <button type="button" onClick={() => todas(true)}>Cerrar todo</button>
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="inv-modal-body" ref={cuerpo}>
           {!campos && (
             <div className="inv-cargando">
               <FaSyncAlt className="icon-spin" /> Cargando formulario…
@@ -1254,89 +1311,109 @@ export function ModalEvaluacion({ inv }) {
             return (
               <div className="inv-bloque" key={g.titulo || '_general'}>
                 {g.titulo !== '' && (
-                  <button type="button" className="inv-bloque-tit"
+                  <button type="button"
+                    className={`inv-bloque-tit${abierta ? ' abierta' : ''}`}
                     onClick={() => setCerradas(s => ({ ...s, [g.titulo]: abierta }))}>
-                    {abierta ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
+                    {abierta ? <FaChevronDown size={10} /> : <FaChevronRight size={10} />}
                     <span>{g.titulo}</span>
-                    {faltanAqui > 0 && (
-                      <b className="inv-bloque-falta">{faltanAqui}</b>
-                    )}
+                    {/* Qué hay dentro, sin tener que abrirlo. */}
+                    <em className="inv-bloque-n">{visibles.length}</em>
+                    {faltanAqui > 0
+                      ? <b className="inv-bloque-falta">{faltanAqui}</b>
+                      : <FaCheckCircle className="inv-bloque-ok" size={11} />}
                   </button>
                 )}
 
-                {abierta && visibles.map(c => {
-                  const base = ev.props?.[c.campo];
-                  const cambiado = base != null && String(base) !== String(valores[c.campo]);
-                  return (
-                    <div className="inv-campo" key={c.campo}>
-                      <label>
-                        {c.corta}
-                        {c.obligatorio && <b className="inv-req">*</b>}
-                        {cambiado && (
-                          <span className="inv-campo-base">antes: {String(base)}</span>
-                        )}
-                      </label>
+                {abierta && (
+                  <div className="inv-campos">
+                    {visibles.map(c => {
+                      const base = ev.props?.[c.campo];
+                      const cambiado = base != null && String(base) !== String(valores[c.campo]);
+                      const vacio = valores[c.campo] === '' || valores[c.campo] == null;
+                      // Tras un intento de guardado fallido, el campo que falta
+                      // se marca en rojo. Antes el único aviso era una lista de
+                      // nombres al pie, y había que buscarlos a mano.
+                      const senalado = senalar && c.obligatorio && vacio;
+                      const esTexto = c.tipo_dato === 'texto' && /detalle|observ/i.test(c.corta);
+                      return (
+                        <div
+                          className={`inv-campo${esTexto ? ' ancho' : ''}${senalado ? ' falta' : ''}`}
+                          key={c.campo}>
+                          <label>
+                            {c.corta}
+                            {c.obligatorio && <b className="inv-req">*</b>}
+                            {cambiado && (
+                              <span className="inv-campo-base">antes: {String(base)}</span>
+                            )}
+                          </label>
 
-                      {c.tipo_dato === 'opcion' && c.opciones?.length ? (
-                        <select value={valores[c.campo] ?? ''}
-                                onChange={e => cambiar(c.campo, e.target.value)}>
-                          <option value="">— sin dato —</option>
-                          {c.opciones.map(o => (
-                            <option key={o.codigo} value={o.codigo}>{o.etiqueta}</option>
-                          ))}
-                        </select>
-                      ) : c.tipo_dato === 'booleano' ? (
-                        <input type="checkbox" checked={!!valores[c.campo]}
-                               onChange={e => cambiar(c.campo, e.target.checked)} />
-                      ) : c.tipo_dato === 'texto' && /detalle$/i.test(c.corta) ? (
-                        <textarea rows={2} value={valores[c.campo] ?? ''}
-                                  onChange={e => cambiar(c.campo, e.target.value)} />
-                      ) : (
-                        <input
-                          type={c.tipo_dato === 'numero' || c.tipo_dato === 'entero'
-                                ? 'number' : 'text'}
-                          step={c.tipo_dato === 'numero' ? '0.01' : '1'}
-                          value={valores[c.campo] ?? ''}
-                          onChange={e => cambiar(c.campo, e.target.value)} />
-                      )}
-                    </div>
-                  );
-                })}
+                          {c.tipo_dato === 'opcion' && c.opciones?.length ? (
+                            <select value={valores[c.campo] ?? ''}
+                                    onChange={e => cambiar(c.campo, e.target.value)}>
+                              <option value="">— sin dato —</option>
+                              {c.opciones.map(o => (
+                                <option key={o.codigo} value={o.codigo}>{o.etiqueta}</option>
+                              ))}
+                            </select>
+                          ) : c.tipo_dato === 'booleano' ? (
+                            <label className="inv-check">
+                              <input type="checkbox" checked={!!valores[c.campo]}
+                                     onChange={e => cambiar(c.campo, e.target.checked)} />
+                              <span>{valores[c.campo] ? 'Sí' : 'No'}</span>
+                            </label>
+                          ) : esTexto ? (
+                            <textarea rows={2} value={valores[c.campo] ?? ''}
+                                      onChange={e => cambiar(c.campo, e.target.value)} />
+                          ) : (
+                            <input
+                              type={c.tipo_dato === 'numero' || c.tipo_dato === 'entero'
+                                    ? 'number' : 'text'}
+                              step={c.tipo_dato === 'numero' ? '0.01' : '1'}
+                              value={valores[c.campo] ?? ''}
+                              onChange={e => cambiar(c.campo, e.target.value)} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
 
           <div className="inv-modal-sep">Registro</div>
 
-          <div className="inv-campo">
-            <label>Evaluador</label>
-            <input type="text" value={resumen.evaluador}
-              placeholder="Nombre de quien evalúa"
-              onChange={e => setResumen(s => ({ ...s, evaluador: e.target.value }))} />
-          </div>
+          <div className="inv-campos">
+            <div className="inv-campo">
+              <label>Evaluador</label>
+              <input type="text" value={resumen.evaluador}
+                placeholder="Nombre de quien evalúa"
+                onChange={e => setResumen(s => ({ ...s, evaluador: e.target.value }))} />
+            </div>
 
-          <div className="inv-campo">
-            <label>Observaciones</label>
-            <textarea rows={2} value={resumen.observaciones}
-              placeholder="Detalle de lo observado en campo"
-              onChange={e => setResumen(s => ({ ...s, observaciones: e.target.value }))} />
-          </div>
+            <div className="inv-campo inv-campo-fila">
+              <label className="inv-check">
+                <input type="checkbox" checked={resumen.requiere_mant}
+                  onChange={e => setResumen(s => ({ ...s, requiere_mant: e.target.checked }))} />
+                <span>Requiere mantenimiento</span>
+              </label>
+              {resumen.requiere_mant && (
+                <select value={resumen.prioridad}
+                  onChange={e => setResumen(s => ({ ...s, prioridad: e.target.value }))}>
+                  <option value="">Prioridad…</option>
+                  <option value="alta">Alta</option>
+                  <option value="media">Media</option>
+                  <option value="baja">Baja</option>
+                </select>
+              )}
+            </div>
 
-          <div className="inv-campo inv-campo-fila">
-            <label>
-              <input type="checkbox" checked={resumen.requiere_mant}
-                onChange={e => setResumen(s => ({ ...s, requiere_mant: e.target.checked }))} />
-              Requiere mantenimiento
-            </label>
-            {resumen.requiere_mant && (
-              <select value={resumen.prioridad}
-                onChange={e => setResumen(s => ({ ...s, prioridad: e.target.value }))}>
-                <option value="">Prioridad…</option>
-                <option value="alta">Alta</option>
-                <option value="media">Media</option>
-                <option value="baja">Baja</option>
-              </select>
-            )}
+            <div className="inv-campo ancho">
+              <label>Observaciones</label>
+              <textarea rows={3} value={resumen.observaciones}
+                placeholder="Detalle de lo observado en campo"
+                onChange={e => setResumen(s => ({ ...s, observaciones: e.target.value }))} />
+            </div>
           </div>
 
           {fallo && (
