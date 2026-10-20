@@ -21,9 +21,12 @@ const colores = coloresDeCapa(FC);
 window.__COLORES = NOMBRES.map((n, i) => colores.get(FC.features[i]));
 window.__NOMBRES = NOMBRES;
 
+const MIN_PX_SECTOR = 70;
+
 function Banco() {
+  const z = Number(new URLSearchParams(location.search).get('z') || 11);
   return (
-    <MapContainer center={[-8.49, -78.79]} zoom={11} style={{ height: '100%' }}>
+    <MapContainer center={[-8.49, -78.79]} zoom={z} style={{ height: '100%' }}>
       <TileLayer url="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMI87MDAAHgAOP0T1/AAAAAAElFTkSuQmCC" />
       <GeoJSON
         data={FC}
@@ -36,6 +39,22 @@ function Banco() {
             permanent: true, direction: 'center',
             className: 'inv-eti-sector', opacity: 1,
           });
+          const ajustar = () => {
+            const tt = layer.getTooltip(), b = layer.getBounds?.();
+            const m = layer._map;
+            if (!tt || !b || !m) return;
+            const a = m.latLngToContainerPoint(b.getNorthWest());
+            const c = m.latLngToContainerPoint(b.getSouthEast());
+            const lado = Math.min(Math.abs(c.x - a.x), Math.abs(c.y - a.y));
+            tt.setOpacity(lado >= MIN_PX_SECTOR ? 1 : 0);
+            window.__ROTULOS_VISIBLES = document.querySelectorAll(
+              '.inv-eti-sector').length
+              ? [...document.querySelectorAll('.inv-eti-sector')]
+                  .filter(e => Number(getComputedStyle(e).opacity) > .5).length
+              : 0;
+            window.__ZOOM = m.getZoom();
+          };
+          layer.on('add', () => { ajustar(); layer._map.on('zoomend', ajustar); });
         }} />
     </MapContainer>
   );

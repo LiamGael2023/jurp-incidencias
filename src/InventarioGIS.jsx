@@ -200,7 +200,20 @@ export { TODOS_GRUPOS as GRUPOS_CAPAS, TODAS as TODAS_LAS_CAPAS };
 // rotula: con dos mil seiscientos puntos el mapa se vuelve una mancha de
 // texto, y ademas la mayoria sigue metida en un racimo.
 const ZOOM_ETIQUETAS = 16;
-const ZOOM_SECTORES = 11;
+
+/* Lado minimo, en pixeles de pantalla, para que un sector lleve su nombre
+ * escrito encima.
+ *
+ * Primero puse un zoom fijo (11) y estaba mal: hay CINCO sectores y ocupan el
+ * valle entero, asi que a la escala en la que uno mira el valle -que es
+ * justo cuando quiere leerlos- quedaban por debajo del umbral y no salia
+ * ninguno. Y un numero de zoom no sabe cuantos sectores hay ni como de
+ * grandes son: con cinco sobra sitio, con cincuenta no.
+ *
+ * Medir el tamano en pantalla se ajusta solo: el rotulo aparece cuando el
+ * poligono tiene sitio para el, se quite o se ponga zoom, y da igual si
+ * manana la capa trae cinco o cincuenta. */
+const MIN_PX_SECTOR = 70;
 
 // El coloreado por vecindad y el rotulo de los sectores viven en su propio
 // modulo: son funciones puras y asi se comprueban sin montar el mapa.
@@ -741,12 +754,19 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
   const refCluster = useRef(null);
   const [zoom, setZoom] = useState(() => mapa.getZoom());
   const rotular = etiquetas ? true : zoom >= ZOOM_ETIQUETAS;
-  /* Los sectores son poligonos grandes: su nombre cabe mucho antes que el de
-   * un activo suelto, y de hecho es lo que se quiere leer al mirar el valle.
-   * Por eso tiene su propio umbral, bastante mas bajo que el de los puntos
-   * (16): a 11 ya se ve el valle entero con sus sectores rotulados, y por
-   * debajo se pisarian unos a otros. En la lamina salen siempre. */
-  const rotularSector = etiquetas ? true : zoom >= ZOOM_SECTORES;
+  /* Ensena o esconde el rotulo de UN sector segun el sitio que tenga en
+   * pantalla. Lo gobierna la propia capa, no un efecto de React: el primer
+   * intento recorria el mapa desde un useEffect y salia siempre a cero,
+   * porque ese efecto corre antes de que las capas lleguen a anadirse. */
+  const ajustarRotulo = useCallback((layer) => {
+    const tt = layer.getTooltip?.();
+    const b = layer.getBounds?.();
+    if (!tt || !b || !mapa) return;
+    const a = mapa.latLngToContainerPoint(b.getNorthWest());
+    const c = mapa.latLngToContainerPoint(b.getSouthEast());
+    const lado = Math.min(Math.abs(c.x - a.x), Math.abs(c.y - a.y));
+    tt.setOpacity(etiquetas || lado >= MIN_PX_SECTOR ? 1 : 0);
+  }, [mapa, etiquetas]);
 
   useEffect(() => {
     const alZoom = () => setZoom(mapa.getZoom());
@@ -850,7 +870,7 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
               // El rótulo se ata al crear la capa, y onEachFeature no se
               // vuelve a ejecutar: la clave lleva el estado para que Leaflet
               // la rehaga al cruzar el zoom.
-              key={`inv-${capa.codigo}${capa.porSector ? `-${rotularSector}` : ''}`}
+              key={`inv-${capa.codigo}`}
               data={fc}
               style={(f) => {
                 const tono = (porSector && porSector.get(f)) || capa.color;
@@ -916,14 +936,22 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                    <div class="inv-pop-sub">${nombre ? `${capa.label} ` : ''}${chip}</div>
                    <table class="inv-pop-tabla"><tbody>${filas}</tbody></table></div>`
                 );
-                // El nombre, escrito en el centro del sector. De lejos no:
-                // son poligonos grandes, pero a escala de valle se pisarian
-                // unos a otros y taparian el mapa.
-                if (nombre && rotularSector) {
+                // El nombre, en el centro del sector. Se ata siempre; quien
+                // decide si se ve es el efecto de arriba, segun el sitio que
+                // tenga el poligono en pantalla.
+                if (nombre) {
                   layer.bindTooltip(nombre, {
                     permanent: true, direction: 'center',
                     className: 'inv-eti-sector', opacity: 1,
                   });
+                  // Cada sector se vigila a si mismo: al entrar al mapa y en
+                  // cada cambio de zoom. Asi no depende de cuando React
+                  // decida repintar ni hay que recorrer dos mil capas.
+                  const ajustar = () => ajustarRotulo(layer);
+                  layer.on('add', ajustar);
+                  layer.on('remove', () => mapa.off('zoomend', ajustar));
+                  mapa.on('zoomend', ajustar);
+                  ajustar();
                 }
               }}
             />
