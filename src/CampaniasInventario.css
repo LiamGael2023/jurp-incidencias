@@ -5,10 +5,22 @@
  * no tiene detrás una imagen satelital que obligue a oscurecerla.
  */
 
+/* EL RAIL FLOTA ENCIMA DEL CONTENIDO, no ocupa sitio en el flujo: es una
+ * capa fija sobre toda la altura. Cada pantalla se aparta sola sumando
+ * --rail-w, que publica RailGIS y cambia al plegarlo. Sin esto, la pantalla
+ * empieza en el borde izquierdo y la primera tarjeta queda tapada por el
+ * menú —que es exactamente lo que pasaba aquí—.
+ *
+ * La transición acompaña al plegado del rail, como en Maquinaria, Incidentes
+ * y Estadísticas. */
 .cmp-wrap {
   height: 100%;
-  overflow: auto;
-  padding: 16px 20px 28px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 20px 20px;
+  padding-left: calc(var(--rail-w, 286px) + 20px);
+  transition: padding-left .35s ease;
   background: #f4f7fb;
   color: #1d273b;
 }
@@ -264,7 +276,13 @@
 .cmp-descargas { margin-left: auto; display: flex; gap: 8px; }
 
 /* ── tabla ── */
+/* La tabla es la que se desplaza, no la página entera: así las cifras y los
+ * filtros se quedan a la vista y la cabecera pegajosa tiene contra qué
+ * pegarse. Con el scroll en la página, 'position: sticky' no se agarraba a
+ * nada y la cabecera desaparecía a las diez filas. */
 .cmp-tabla-wrap {
+  flex: 1;
+  min-height: 180px;
   background: #fff;
   border: 1px solid #e2ecf6;
   border-radius: 10px;
@@ -333,7 +351,9 @@
 .cmp-ir:hover { background: #1268C3; color: #fff; border-color: #1268C3; }
 
 @media (max-width: 760px) {
-  .cmp-wrap { padding: 12px; }
+  /* Plegado, el rail deja una franja estrecha; el padding sale igual de
+     --rail-w, así que basta con reducir el margen propio. */
+  .cmp-wrap { padding: 12px; padding-left: calc(var(--rail-w, 72px) + 12px); }
   .cmp-cab-der { margin-left: 0; width: 100%; }
   .cmp-descargas { margin-left: 0; }
 }

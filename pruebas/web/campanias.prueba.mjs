@@ -64,6 +64,47 @@ await p.waitForSelector('.cmp-tabla', { timeout: 10000 });
 await p.waitForTimeout(400);
 const E = await p.evaluate(() => window.__ESPERADO);
 
+// ── NADA DEBAJO DEL MENU ──
+// El rail flota encima del contenido. Si la pantalla no se aparta con
+// --rail-w, empieza en el borde izquierdo y el menú le tapa la primera
+// tarjeta: paso tal cual en produccion.
+for (const modo of ['', '?rail=plegado']) {
+  if (modo) {
+    await p.goto(BASE + modo, { waitUntil: 'domcontentloaded' });
+    await p.waitForSelector('.cmp-tabla', { timeout: 10000 });
+    await p.waitForTimeout(500);
+  }
+  const tapados = await p.evaluate(() => {
+    const rail = document.getElementById('rail-falso').getBoundingClientRect();
+    const malos = [];
+    for (const sel of ['.cmp-cab', '.cmp-kpi', '.cmp-filtros', '.cmp-tabla-wrap']) {
+      document.querySelectorAll(sel).forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (r.width && r.left < rail.right - 1) malos.push(`${sel} empieza en ${Math.round(r.left)}`);
+      });
+    }
+    return { malos, rail: rail.right };
+  });
+  ok(tapados.malos.length === 0,
+     `nada queda debajo del menú${modo ? ' (plegado)' : ' (abierto)'}`,
+     tapados.malos.length ? tapados.malos.slice(0, 3).join(' | ') : `rail hasta ${tapados.rail}px`);
+}
+await p.goto(BASE, { waitUntil: 'domcontentloaded' });
+await p.waitForSelector('.cmp-tabla', { timeout: 10000 });
+await p.waitForTimeout(400);
+
+// La cabecera de la tabla tiene que quedarse al desplazar.
+const pegajosa = await p.evaluate(() => {
+  const w = document.querySelector('.cmp-tabla-wrap');
+  const th = document.querySelector('.cmp-tabla thead th');
+  const antes = th.getBoundingClientRect().top;
+  w.scrollTop = 250;
+  return { desplaza: w.scrollHeight > w.clientHeight,
+           quieta: Math.abs(th.getBoundingClientRect().top - antes) < 2 };
+});
+ok(pegajosa.desplaza, 'la tabla se desplaza por dentro, no la página entera');
+ok(pegajosa.quieta, 'y su cabecera se queda fija al desplazar');
+
 // ── lo que enseña ──
 const filas = await p.locator('.cmp-tabla tbody tr').count();
 ok(filas === E.evaluaciones, 'salen todas las evaluaciones del año', `${filas}`);

@@ -78,8 +78,23 @@ window.fetch = async (u, opc = {}) => {
   return json([]);
 };
 
+/* UN RAIL DE MENTIRA, pero con el mismo tamaño y la misma variable que el de
+ * verdad. El rail real flota sobre el contenido —no ocupa sitio— y publica
+ * --rail-w para que cada pantalla se aparte. Sin reproducirlo aquí, la prueba
+ * no podía ver que la pantalla salía DEBAJO del menú, que es justo el fallo
+ * que llegó al usuario. ?rail=plegado prueba la otra posición. */
+const plegado = new URLSearchParams(location.search).get('rail') === 'plegado';
+const ANCHO = plegado ? 72 : 286;
+document.documentElement.style.setProperty('--rail-w', `${ANCHO}px`);
+window.__RAIL = ANCHO;
+
 createRoot(document.getElementById('app')).render(
-  <div style={{ height: '100vh' }}>
-    <CampaniasInventario irAActivo={(a) => { window.__IDO = a; }} />
+  <div style={{ position: 'fixed', inset: 0, display: 'flex', overflow: 'hidden' }}>
+    <div id="rail-falso" style={{
+      position: 'fixed', left: 0, top: 0, bottom: 0, width: ANCHO, zIndex: 50,
+      background: '#fff', borderRight: '1px solid #dbe8f5' }} />
+    <div style={{ position: 'relative', zIndex: 1, flex: 1, minWidth: 0 }}>
+      <CampaniasInventario irAActivo={(a) => { window.__IDO = a; }} />
+    </div>
   </div>
 );
