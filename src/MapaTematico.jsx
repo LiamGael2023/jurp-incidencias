@@ -286,6 +286,74 @@ function EncuadreFijo({ centro, zoom, onMover }) {
 }
 
 /**
+ * La rueda del ratón cambia la ESCALA, no el zoom.
+ *
+ * El zoom está clavado a propósito: lo que la lámina rotula tiene que ser lo
+ * que dibuja, y un zoom libre dejaría el membrete diciendo 1:10 000 sobre un
+ * mapa a otra cosa. Pero eso dejaba la rueda muerta sobre el papel, que es el
+ * gesto que todo el mundo hace en un mapa, y obligaba a bajar al desplegable
+ * de escalas para acercarse un poco.
+ *
+ * Así que la rueda salta de escala en escala por el catálogo. Se siente como
+ * un zoom y sigue sin mentir: cada paso es una escala rotulable de verdad.
+ *
+ * SE ANCLA EN EL PUNTO DEL CURSOR, como el zoom de cualquier mapa. Cambiar
+ * solo la escala estira alrededor del centro, y entonces lo que uno está
+ * mirando se escapa del encuadre justo al acercarse. El centro nuevo se
+ * calcula para que el punto bajo el ratón no se mueva.
+ */
+const PASO_RUEDA_MS = 140;
+
+function RuedaEscala({ escalas, escala, onCambiar }) {
+  const map = useMap();
+  const ultimo = useRef(0);
+
+  useEffect(() => {
+    const cont = map.getContainer();
+
+    const alRodar = (ev) => {
+      // Sin esto el papel se desplaza bajo el puntero mientras se cambia de
+      // escala, que es justo lo contrario de lo que se ha pedido.
+      ev.preventDefault();
+
+      // Un paso por gesto. Un trackpad manda decenas de eventos diminutos y
+      // sin esto la lámina cruzaría el catálogo entero de un manotazo.
+      const ahora = Date.now();
+      if (ahora - ultimo.current < PASO_RUEDA_MS) return;
+      if (!ev.deltaY) return;
+      ultimo.current = ahora;
+
+      const i = escalas.indexOf(escala);
+      if (i < 0) return;
+      // Rueda arriba = acercarse = denominador más pequeño.
+      const j = ev.deltaY < 0 ? i - 1 : i + 1;
+      if (j < 0 || j >= escalas.length) return;   // se acabó el catálogo
+      const nueva = escalas[j];
+
+      const r = cont.getBoundingClientRect();
+      const puntoCursor = L.point(ev.clientX - r.left, ev.clientY - r.top);
+      const bajoCursor = map.containerPointToLatLng(puntoCursor);
+      const z2 = zoomParaEscala({
+        escala: nueva, lat: bajoCursor.lat,
+        anchoPx: mm(MAPA_MM.ancho), anchoMm: MAPA_MM.ancho,
+      });
+
+      // El centro que deja 'bajoCursor' donde estaba, a la escala nueva.
+      const destino = map.unproject(
+        map.project(bajoCursor, z2).subtract(puntoCursor.subtract(map.getSize().divideBy(2))),
+        z2);
+
+      onCambiar(nueva, [destino.lat, destino.lng]);
+    };
+
+    cont.addEventListener('wheel', alRodar, { passive: false });
+    return () => cont.removeEventListener('wheel', alRodar);
+  }, [map, escalas, escala, onCambiar]);
+
+  return null;
+}
+
+/**
  * Cuadrícula UTM sobre el mapa, con sus rótulos en los bordes.
  *
  * Va en un SVG encima del mapa y no como capa de Leaflet porque los rótulos
@@ -577,6 +645,15 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
   const [centro, setCentro] = useState(null);
+
+  /* La rueda cambia escala y centro a la vez: el centro es el que deja el
+   * punto del cursor donde estaba. Van juntos a propósito —en dos pasos, el
+   * mapa se dibujaría una vez a la escala nueva con el centro viejo y se
+   * vería saltar—. */
+  const cambiarEscalaConRueda = useCallback((nueva, nuevoCentro) => {
+    setEscala(nueva);
+    setCentro(nuevoCentro);
+  }, []);
   const [giro, setGiro] = useState(0);        // grados, en sentido horario
   const [version, setVersion] = useState(0);     // repinta la cuadrícula al mover
   const [limites, setLimites] = useState(null);
@@ -1106,8 +1183,8 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
         <div className="lam-panel-cuerpo">
           <h2>Lámina temática</h2>
           <p className="lam-ayuda">
-            Escala fija <b>1:{escala.toLocaleString('es-PE')}</b>, zoom bloqueado: lo
-            rotulado es lo dibujado.
+            Escala fija <b>1:{escala.toLocaleString('es-PE')}</b>: lo rotulado
+            es lo dibujado. La rueda del ratón salta de escala en escala.
           </p>
 
           {descargando && (
@@ -1422,6 +1499,8 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               <MarcasProgresiva marcas={marcasPK} />
               <EtiquetasSector sectores={etiquetasSector} />
               <EncuadreFijo centro={centro} zoom={zoom} onMover={alMover} />
+              <RuedaEscala escalas={ESCALAS_LAMINA} escala={escala}
+                onCambiar={cambiarEscalaConRueda} />
               <CuadriculaUTM version={version} />
             </MapContainer>
           </div>
