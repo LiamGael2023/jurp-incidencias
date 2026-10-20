@@ -2,9 +2,14 @@
 """Carga las metas 2026 por dren como presupuesto del proyecto JURP-JUV 2026.
 
     docker compose exec -T web python manage.py shell < cargar_drenes_juviru.py
-    APLICAR=1 docker compose exec -T web python manage.py shell < cargar_drenes_juviru.py
+    docker compose exec -e APLICAR=1 -T web python manage.py shell < cargar_drenes_juviru.py
 
 SIN APLICAR=1 SOLO MIRA. Imprime lo que haria y no escribe nada.
+
+EL -e NO ES ADORNO. Poner "APLICAR=1 docker compose exec ..." delante define
+la variable para el docker de TU maquina, no dentro del contenedor, donde
+corre esto. El script no la ve, se queda en modo mirar, y parece que no hizo
+nada sin decir por que. Hay que pasarsela con -e.
 
 DE DONDE SALE. Del cuadro de metas por dren del valle Viru: 19 drenes, cada
 uno con dos medidas -longitud limpiada en metros y petroleo en galones-.
@@ -158,8 +163,11 @@ print("    ... y %d mas" % (len(plan) - 6))
 if not APLICAR:
     print("")
     print("Nada tocado. Para aplicarlo:")
-    print("    APLICAR=1 docker compose exec -T web python manage.py shell < %s" %
-          "cargar_drenes_juviru.py")
+    print("    docker compose exec -e APLICAR=1 -T web \\")
+    print("      python manage.py shell < cargar_drenes_juviru.py")
+    print("")
+    print("    El -e hace falta: 'APLICAR=1 docker compose ...' define la")
+    print("    variable fuera del contenedor y aqui dentro no se ve.")
     raise SystemExit(0)
 
 
