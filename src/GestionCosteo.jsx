@@ -1970,9 +1970,9 @@ export default function GestionCosteo({
                           <tr className="cos-prog-grupos">
                             <th rowSpan={2}>Item</th>
                             <th rowSpan={2}>Descripción</th>
-                            <th className="n g" colSpan={4}>Programado</th>
-                            <th className="n g" colSpan={2}>Ejecutado</th>
-                            <th className="n g" colSpan={2}>Saldo</th>
+                            <th className="g cen" colSpan={4}>Programado</th>
+                            <th className="g cen" colSpan={2}>Ejecutado</th>
+                            <th className="g cen" colSpan={2}>Saldo</th>
                             {!bloqueado && <th rowSpan={2} />}
                           </tr>
                           <tr>

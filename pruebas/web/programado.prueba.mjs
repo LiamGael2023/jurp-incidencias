@@ -85,6 +85,13 @@ ok(filasMal === 1, 'y solo esa', `${filasMal} filas`);
 
 // ── la cabecera de dos pisos ──
 const g = await p.locator('.cos-prog-grupos th.g').allInnerTexts();
+/* Centrado sobre sus columnas. A la derecha parecia el encabezado de la
+ * ultima columna del grupo en vez del de las cuatro. */
+const alineado = await p.evaluate(() =>
+  [...document.querySelectorAll('.cos-prog-grupos th.g')]
+    .map(th => getComputedStyle(th).textAlign));
+ok(alineado.every(a => a === 'center'),
+   'los rótulos de grupo van centrados sobre sus columnas', alineado.join(' | '));
 ok(g.length === 3 && /programado/i.test(g[0]) && /ejecutado/i.test(g[1])
    && /saldo/i.test(g[2]), 'la cabecera agrupa en Programado, Ejecutado y Saldo',
    g.join(' | '));

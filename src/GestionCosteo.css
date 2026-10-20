@@ -365,3 +365,8 @@
 
 .cos-prog-tabla th { vertical-align: bottom; }
 .cos-prog-tabla td.n { font-variant-numeric: tabular-nums; }
+
+/* El rótulo del grupo va centrado SOBRE sus columnas, no pegado a la
+ * derecha: alineado a la derecha parecía el encabezado de la última columna
+ * del grupo en vez del de las cuatro. */
+.cos-prog-tabla th.cen { text-align: center; white-space: nowrap; }
