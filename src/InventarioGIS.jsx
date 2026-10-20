@@ -982,10 +982,16 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                     </tbody>
                   </table>
 
-                  <button type="button" className="inv-btn-ficha"
-                    onClick={() => inv.abrirFicha(capa.codigo, p.fid, p, capa)}>
-                    <FaListUl size={10} /> Ver ficha y fotos
-                  </button>
+                  {/* En la lámina no: ahí el mapa es una hoja para imprimir,
+                      no hay dónde abrir una pantalla completa, y la vista que
+                      la dibuja no monta la ficha. Un botón que no hace nada es
+                      peor que no tenerlo. */}
+                  {!impresion && (
+                    <button type="button" className="inv-btn-ficha"
+                      onClick={() => inv.abrirFicha(capa.codigo, p.fid, p, capa)}>
+                      <FaListUl size={10} /> Ver ficha y fotos
+                    </button>
+                  )}
 
                   {ev ? (
                     <div className="inv-pop-eval" style={{ '--e': COLOR_ESTADO[ev.estado_cons] }}>

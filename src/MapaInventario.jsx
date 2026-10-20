@@ -14,7 +14,7 @@ import {
 import { MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
 import './MapaHerramientas.css';
 import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion,
-         BuscadorInventario } from './InventarioGIS';
+         FichaActivo, BuscadorInventario } from './InventarioGIS';
 
 /**
  * Visor del módulo INVENTARIO.
@@ -197,9 +197,13 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
       <PanelInventario inv={inv}
         onVolar={(b) => mapRef.current?.fitBounds(b, { padding: [50, 50], maxZoom: 16 })} />
 
-      {/* Formulario de evaluación. Sin esto, el botón "Evaluar" del popup
-          cambia el estado pero no se abre nada en pantalla. */}
+      {/* LAS DOS PANTALLAS QUE USAN useInventario TIENEN QUE MONTAR ESTAS DOS.
+          Sin ellas, los botones del popup cambian el estado y no se abre nada:
+          ni error, ni aviso, nada. Ya pasó con la ficha —estaba montada en
+          Mapa.jsx y no aquí, y en Inventario "Ver ficha y fotos" no hacía
+          nada—, así que lo vigila pruebas/montaje_inventario.prueba.mjs. */}
       <ModalEvaluacion inv={inv} />
+      <FichaActivo inv={inv} />
 
       {/* ══════════════ LEYENDA ══════════════ */}
       <div className="gis-leyenda gis-glass">
