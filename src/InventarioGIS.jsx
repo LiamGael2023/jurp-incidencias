@@ -13,7 +13,7 @@ import {
 import { prepararFoto, motivoRechazo, urlFoto, ordenarFotos, peso } from './fotosActivo';
 import { caracteristicas, cobertura, tituloActivo } from './fichaActivo';
 import Swal from 'sweetalert2';
-import { coloresDeCapa, nombreRasgo } from './sectores';
+import { datosDeCapa } from './sectores';
 import './InventarioGIS.css';
 
 // Simbología oficial del inventario. Son los mismos archivos que usa el
@@ -864,7 +864,7 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
         // Líneas y polígonos: un solo GeoJSON por capa.
         if (capa.tipo === 'line' || capa.tipo === 'poly') {
           // Un color por sector, repartido para que dos vecinos no repitan.
-          const porSector = capa.porSector ? coloresDeCapa(fc) : null;
+          const porSector = capa.porSector ? datosDeCapa(fc) : null;
           return (
             <GeoJSON
               // El rótulo se ata al crear la capa, y onEachFeature no se
@@ -873,7 +873,7 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
               key={`inv-${capa.codigo}`}
               data={fc}
               style={(f) => {
-                const tono = (porSector && porSector.get(f)) || capa.color;
+                const tono = (porSector && porSector.color(f)) || capa.color;
                 // Las obras del PECH van más tenues: son contexto.
                 const esPech = (f?.properties?.ambito) === 'PECH';
                 /*
@@ -930,7 +930,7 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                     + `${amb === 'JURP' ? 'JURP' : amb === 'PECH' ? 'Chavimochic' : 'sin ámbito'}`
                     + '</span>'
                   : '';
-                const nombre = porSector ? nombreRasgo(p) : null;
+                const nombre = porSector ? porSector.nombre(f) : null;
                 layer.bindPopup(
                   `<div class="inv-pop"><div class="inv-pop-tit">${nombre || capa.label}</div>
                    <div class="inv-pop-sub">${nombre ? `${capa.label} ` : ''}${chip}</div>

@@ -64,6 +64,14 @@ ok(z12.nombres.length === 6, 'de cerca se ven todos los nombres',
    z12.nombres.join(' | '));
 ok(z12.nombres.includes('Chao Norte'), 'y dicen el nombre del sector');
 
+// EL FALLO QUE LLEGO A PRODUCCION: los cinco sectores rotulados "PECH",
+// porque era el valor del primer campo de la lista de nombres probables.
+ok(!z12.nombres.includes('PECH'), 'ninguno dice PECH', z12.nombres.join(' | '));
+ok(new Set(z12.nombres).size === z12.nombres.length,
+   'y no hay dos etiquetas iguales', z12.nombres.join(' | '));
+const campo = await p.evaluate(() => window.__CAMPO);
+ok(campo === 'zona', 'la capa eligió el campo que distingue', campo);
+
 const z6 = await ver(6);
 ok(z6.visibles === 0, 'de lejos no sale ninguno: se pisarian', `${z6.visibles}`);
 

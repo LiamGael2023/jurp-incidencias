@@ -37,12 +37,93 @@ const PALETA_SECTOR = [
   '#eda100',   // amarillo — el cuarto, solo si la vecindad lo obliga
 ];
 
-/** El nombre del sector, mire como lo mire la capa. */
-export const nombreRasgo = (p) => {
-  for (const k of ['nombre', 'sector', 'nom_sector', 'nombre_sector',
-                   'sector_nom', 'nom', 'codigo', 'descripcion']) {
-    const v = p?.[k];
-    if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+/* ── DE QUÉ CAMPO SALE EL NOMBRE ──
+
+   Primero lo buscaba en una lista de nombres probables —'nombre', 'sector',
+   'nom_sector'…— y cogía el primero que existiera. Salió mal de la peor
+   manera: los cinco sectores quedaron rotulados «PECH», porque ese era el
+   valor del primer campo que encajaba. Cinco etiquetas iguales no rotulan
+   nada, y encima parecen puestas a propósito.
+
+   El fallo de fondo es que la lista adivina. Un rótulo que sirve para
+   distinguir cinco polígonos tiene que ser DISTINTO en cada uno: eso no se
+   adivina del nombre de la columna, se cuenta. Así que se miran todos los
+   campos y gana el que más valores distintos tenga; la lista de nombres
+   probables queda solo para desempatar.
+
+   Y si ninguno distingue —todos los campos repiten—, no se rotula. Es más
+   honesto un sector sin nombre que cinco diciendo lo mismo. */
+
+/* Campos que nunca son el nombre: identificadores internos, restos de la
+ * geometría y el ámbito, que por definición se repite en toda la capa. */
+const NO_ROTULAN = new Set([
+  'fid', 'id', 'pk', 'gid', 'objectid', 'geom', 'geometry', 'the_geom',
+  'shape_length', 'shape_area', 'st_length', 'st_area', 'ambito',
+]);
+
+/* Solo para desempatar entre campos que distinguen igual de bien. */
+const PREFERIDOS = ['nombre', 'sector', 'nom_sector', 'nombre_sector',
+                    'sector_nom', 'nom', 'descripcion', 'codigo'];
+
+const texto = (v) => {
+  if (v === null || v === undefined) return '';
+  const s = String(v).trim();
+  return s.toLowerCase() === 'none' || s.toLowerCase() === 'null' ? '' : s;
+};
+
+/**
+ * Qué campo rotula mejor este conjunto de polígonos, o null si ninguno.
+ *
+ * Gana el que más valores distintos tiene. A igualdad, el que suene a nombre;
+ * y a igualdad de eso, el más corto, que es el que cabe escrito en el mapa.
+ */
+export function campoRotulo(features = []) {
+  const n = features.length;
+  if (!n) return null;
+
+  const cuenta = new Map();   // campo → Set de valores
+  const largo = new Map();    // campo → suma de longitudes
+  for (const f of features) {
+    for (const [k, v] of Object.entries(f?.properties || {})) {
+      if (NO_ROTULAN.has(k)) continue;
+      const s = texto(v);
+      if (!s || s.length > 60) continue;      // un párrafo no es un rótulo
+      if (!cuenta.has(k)) { cuenta.set(k, new Set()); largo.set(k, 0); }
+      cuenta.get(k).add(s);
+      largo.set(k, largo.get(k) + s.length);
+    }
+  }
+
+  let mejor = null;
+  for (const [k, vals] of cuenta) {
+    // Con un solo valor distinto no rotula: es justo el caso "PECH".
+    if (vals.size < 2) continue;
+    const pref = PREFERIDOS.indexOf(k);
+    const cand = {
+      campo: k,
+      distintos: vals.size,
+      pref: pref < 0 ? PREFERIDOS.length : pref,
+      medio: largo.get(k) / n,
+    };
+    if (!mejor
+      || cand.distintos > mejor.distintos
+      || (cand.distintos === mejor.distintos && cand.pref < mejor.pref)
+      || (cand.distintos === mejor.distintos && cand.pref === mejor.pref
+          && cand.medio < mejor.medio)) {
+      mejor = cand;
+    }
+  }
+  return mejor ? mejor.campo : null;
+}
+
+/** El nombre de un polígono según el campo elegido para toda la capa. */
+export const nombreRasgo = (p, campo) => {
+  if (campo) return texto(p?.[campo]) || null;
+  // Sin campo decidido —un polígono suelto, fuera de una capa— se cae a la
+  // lista de siempre. No distingue nada, pero no deja la ficha muda.
+  for (const k of PREFERIDOS) {
+    const s = texto(p?.[k]);
+    if (s) return s;
   }
   return null;
 };
@@ -115,9 +196,28 @@ export function colorearPorVecindad(features = [], paleta = PALETA_SECTOR) {
 /* Se calcula una vez por FeatureCollection. La clave es el propio objeto: si
  * la capa se vuelve a descargar llega otro y se recalcula solo. */
 const cacheSector = new WeakMap();
-export function coloresDeCapa(fc) {
+
+/**
+ * Lo que necesita una capa de sectores para pintarse: el color de cada
+ * polígono y de qué campo sale su nombre.
+ *
+ * Se calcula una vez por FeatureCollection. La clave es el propio objeto: si
+ * la capa se vuelve a descargar llega otro y se recalcula solo.
+ *
+ * → { color(f) → hex, campo, nombre(f) → string|null }
+ */
+export function datosDeCapa(fc) {
   if (!fc?.features?.length) return null;
-  let m = cacheSector.get(fc);
-  if (!m) { m = colorearPorVecindad(fc.features); cacheSector.set(fc, m); }
-  return m;
+  let d = cacheSector.get(fc);
+  if (!d) {
+    const color = colorearPorVecindad(fc.features);
+    const campo = campoRotulo(fc.features);
+    d = {
+      campo,
+      color: (f) => color.get(f),
+      nombre: (f) => nombreRasgo(f?.properties, campo),
+    };
+    cacheSector.set(fc, d);
+  }
+  return d;
 }

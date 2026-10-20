@@ -6,19 +6,23 @@
 import { MapContainer, GeoJSON, TileLayer } from 'react-leaflet';
 import { createRoot } from 'react-dom/client';
 import 'leaflet/dist/leaflet.css';
-import { coloresDeCapa, nombreRasgo } from '../../src/sectores';
+import { datosDeCapa } from '../../src/sectores';
 import '../../src/InventarioGIS.css';
 
 const NOMBRES = ['Moche', 'Virú Alto', 'Virú Bajo', 'Chao Norte', 'Chao Sur', 'Tomaval'];
-const FC = { type: 'FeatureCollection', features: NOMBRES.map((nombre, i) => {
+/* COMO LLEGA DE VERDAD: 'nombre' vale 'PECH' en los cinco —fue lo que rotulo
+ * las cinco etiquetas iguales— y lo que distingue esta en otro campo. */
+const FC = { type: 'FeatureCollection', features: NOMBRES.map((zona, i) => {
   const x = -78.85 + (i % 3) * 0.12, y = -8.55 + Math.floor(i / 3) * 0.12;
-  return { type: 'Feature', properties: { nombre, ambito: 'PECH' },
+  return { type: 'Feature',
+    properties: { nombre: 'PECH', ambito: 'PECH', zona, fid: i + 1 },
     geometry: { type: 'Polygon', coordinates: [[
       [x, y], [x + 0.12, y], [x + 0.12, y + 0.12], [x, y + 0.12], [x, y]]] } };
 }) };
 
-const colores = coloresDeCapa(FC);
-window.__COLORES = NOMBRES.map((n, i) => colores.get(FC.features[i]));
+const capa = datosDeCapa(FC);
+window.__COLORES = FC.features.map(f => capa.color(f));
+window.__CAMPO = capa.campo;
 window.__NOMBRES = NOMBRES;
 
 const MIN_PX_SECTOR = 70;
@@ -31,11 +35,11 @@ function Banco() {
       <GeoJSON
         data={FC}
         style={(f) => ({
-          color: colores.get(f), weight: 2, opacity: .95,
-          fillColor: colores.get(f), fillOpacity: .20,
+          color: capa.color(f), weight: 2, opacity: .95,
+          fillColor: capa.color(f), fillOpacity: .20,
         })}
         onEachFeature={(f, layer) => {
-          layer.bindTooltip(nombreRasgo(f.properties), {
+          layer.bindTooltip(capa.nombre(f), {
             permanent: true, direction: 'center',
             className: 'inv-eti-sector', opacity: 1,
           });
