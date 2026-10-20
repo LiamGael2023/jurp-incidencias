@@ -1,0 +1,14 @@
+
+/* ───────────────────────────────────────────────────────────────────────
+   SweetAlert por encima de TODO, en toda la aplicación.
+
+   Su contenedor trae z-index 1060 de fábrica, y en este sistema hay varias
+   capas por encima: el modal del inventario está en 1200 y el visor de
+   fotos en 1300. Un aviso que pregunta «¿borrar esta foto?» dibujado por
+   debajo del panel desde el que se pulsó no se ve —y la pantalla parece
+   congelada, porque el fondo del aviso sí bloquea los clics—.
+
+   Esta regla existía en MantenedorEquipos.css, que solo se carga en esa
+   pantalla; aquí está donde tiene que estar, que es en el CSS global.
+   ─────────────────────────────────────────────────────────────────────── */
+.swal2-container { z-index: 200000 !important; }

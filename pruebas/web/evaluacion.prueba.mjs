@@ -150,6 +150,46 @@ ok(filas.some(f => /usuarios/i.test(f) && /\b0\b/.test(f)),
 ok(!filas.some(f => /Tipo De Secc|De Diseño/.test(f)),
    'los rótulos no se capitalizan palabra por palabra');
 
+// ── EL AVISO SE VE, NO SE ESCONDE DETRAS DE LA FICHA ──
+// SweetAlert trae z-index 1060 y la ficha esta en 1200: sin la regla global,
+// el "¿borrar esta foto?" se dibuja DEBAJO del panel desde el que se pulso.
+// No se ve nada y la pantalla parece congelada, porque el fondo del aviso si
+// bloquea los clics.
+await p.goto(BASE + '?v=ficha&fotos=1', { waitUntil: 'domcontentloaded' });
+await p.waitForSelector('.inv-ficha', { timeout: 10000 });
+await p.waitForTimeout(400);
+ok(await p.locator('.inv-foto').count() > 0, 'la galería trae una foto que borrar');
+await p.locator('.inv-foto').first().click();
+await p.waitForSelector('.inv-visor', { timeout: 5000 });
+await p.locator('.inv-visor-borrar').click();
+await p.waitForSelector('.swal2-container', { timeout: 5000 });
+await p.waitForTimeout(300);
+
+const capas = await p.evaluate(() => {
+  const z = (sel) => {
+    const el = document.querySelector(sel);
+    return el ? Number(getComputedStyle(el).zIndex) || 0 : null;
+  };
+  const popup = document.querySelector('.swal2-popup');
+  const r = popup.getBoundingClientRect();
+  // Quien recibe el clic en el centro del aviso: si no es el propio aviso,
+  // hay algo por encima tapandolo.
+  const encima = document.elementFromPoint(r.left + r.width / 2, r.top + 20);
+  return { swal: z('.swal2-container'), ficha: z('.inv-modal-fondo'), visor: z('.inv-visor'),
+           alcanzable: popup.contains(encima) };
+});
+ok(capas.swal > capas.ficha, 'el aviso va por encima de la ficha',
+   `swal ${capas.swal} vs ficha ${capas.ficha}`);
+ok(capas.swal > capas.visor, 'y por encima del visor de fotos',
+   `swal ${capas.swal} vs visor ${capas.visor}`);
+ok(capas.alcanzable, 'y se puede pulsar: no hay nada tapándolo');
+
+const botones = await p.locator('.swal2-actions button:visible').allInnerTexts();
+ok(botones.some(t => /borrar/i.test(t)) && botones.some(t => /conservar/i.test(t)),
+   'con botones que dicen qué hace cada uno', botones.join(' / '));
+const enfocado = await p.evaluate(() => document.activeElement?.className || '');
+ok(/cancel/i.test(enfocado), 'y el foco empieza en Conservar, no en Borrar', enfocado.slice(0, 40));
+
 ok(errs.length === 0, 'sin errores de JavaScript', errs.join(' | ').slice(0, 160));
 
 await b.close();

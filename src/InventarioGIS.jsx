@@ -12,6 +12,7 @@ import {
 } from 'react-icons/fa';
 import { prepararFoto, motivoRechazo, urlFoto, ordenarFotos, peso } from './fotosActivo';
 import { caracteristicas, cobertura, tituloActivo } from './fichaActivo';
+import Swal from 'sweetalert2';
 import './InventarioGIS.css';
 
 // Simbología oficial del inventario. Son los mismos archivos que usa el
@@ -1561,7 +1562,21 @@ function GaleriaFotos({ tipo, fid, nombre }) {
   }, [tipo, fid, cargar]);
 
   const borrar = useCallback(async (foto) => {
-    if (!window.confirm('¿Borrar esta foto? No se puede deshacer.')) return;
+    const { isConfirmed } = await Swal.fire({
+      icon: 'warning',
+      title: '¿Borrar esta foto?',
+      text: 'No se puede deshacer.',
+      showCancelButton: true,
+      confirmButtonText: 'Borrar',
+      cancelButtonText: 'Conservar',
+      confirmButtonColor: '#d63939',
+      cancelButtonColor: '#5b7590',
+      reverseButtons: true,
+      // El foco empieza en Cancelar: un Intro de mas no debe borrar una foto
+      // que alguien subio desde el campo y no se puede volver a tomar.
+      focusCancel: true,
+    });
+    if (!isConfirmed) return;
     try {
       const r = await fetch(`${API_FOTOS}${foto.id}/`, { method: 'DELETE', headers: cabeceras() });
       if (!r.ok && r.status !== 204) { setFallo(`No se pudo borrar (${r.status})`); return; }

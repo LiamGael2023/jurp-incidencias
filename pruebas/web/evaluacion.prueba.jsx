@@ -10,7 +10,6 @@
  * al real —bloques, obligatorios, condicionales— y la prueba lee el color
  * calculado de cada rótulo.
  */
-import { useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ModalEvaluacion, FichaActivo } from '../../src/InventarioGIS';
 
@@ -86,11 +85,26 @@ function inventarioFalso(que) {
   };
 }
 
+/* EL STUB VA AQUI, NO EN UN useEffect.
+ * Los efectos de los hijos corren ANTES que los del padre, asi que la galeria
+ * ya habia pedido sus fotos con el fetch de verdad antes de que el padre lo
+ * sustituyera, y la prueba no veia ninguna foto. A nivel de modulo se instala
+ * antes de que React monte nada. */
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+// ?fotos=1 para el caso con galeria; sin el, la ficha ensena el aviso de
+// "todavia no hay fotos", que tambien hay que comprobar que se lee.
+const CON_FOTOS = new URLSearchParams(location.search).has('fotos');
+window.fetch = async (u) => {
+  const url = String(u);
+  if (url.includes('/fotos/') && CON_FOTOS) {
+    return new Response(JSON.stringify([
+      { id: 7, imagen: PNG, tomada: '2026-09-12', descripcion: 'Vista general' },
+    ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  return new Response('{}', { status: 404 });
+};
+
 function Banco() {
-  // Sin servidor de fotos: la galería tiene que decirlo, no romperse.
-  useEffect(() => {
-    window.fetch = async () => new Response('{}', { status: 404 });
-  }, []);
   const cual = new URLSearchParams(location.search).get('v') || 'eval';
   const inv = inventarioFalso(cual);
   return cual === 'ficha' ? <FichaActivo inv={inv} /> : <ModalEvaluacion inv={inv} />;

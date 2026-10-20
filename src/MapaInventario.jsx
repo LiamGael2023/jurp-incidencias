@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import './MapaDashboard.css';
 import './MapaGIS.css';
 import RailGIS from './RailGIS';
+import Swal from 'sweetalert2';
 import { TeselasBase, SelectorBase, CAPA_POR_DEFECTO } from './capasBase';
 import {
   FaGlobe, FaSyncAlt, FaCamera, FaShareAlt,
@@ -180,15 +181,25 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app,
           title={inv.cluster
             ? `Agrupando ${inv.totalVisibles.toLocaleString('es-PE')} activos — apágalo para verlos uno a uno`
             : `Mostrando ${inv.totalVisibles.toLocaleString('es-PE')} activos sin agrupar — enciéndelo si el mapa va lento`}
-          onClick={() => {
+          onClick={async () => {
             const MUCHOS = 800;
             if (inv.cluster && inv.totalVisibles > MUCHOS) {
-              const sigue = window.confirm(
-                `Vas a mostrar ${inv.totalVisibles.toLocaleString('es-PE')} activos sin agrupar.\n\n`
-                + 'El mapa puede tardar unos segundos en responder. Si solo necesitas '
-                + 'fotografiar una zona, apaga antes las capas que no vas a mostrar.\n\n'
-                + '¿Continuar?');
-              if (!sigue) return;
+              const { isConfirmed } = await Swal.fire({
+                icon: 'warning',
+                title: 'Son muchos activos',
+                html: `Vas a mostrar <b>${inv.totalVisibles.toLocaleString('es-PE')}</b> `
+                  + 'activos sin agrupar.<br><br>El mapa puede tardar unos segundos en '
+                  + 'responder.<br><small style="color:#64748b">Si solo necesitas '
+                  + 'fotografiar una zona, apaga antes las capas que no vas a mostrar.</small>',
+                showCancelButton: true,
+                confirmButtonText: 'Mostrar igualmente',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#d97706',
+                cancelButtonColor: '#5b7590',
+                reverseButtons: true,
+                focusCancel: true,
+              });
+              if (!isConfirmed) return;
             }
             inv.alternarCluster();
           }}>

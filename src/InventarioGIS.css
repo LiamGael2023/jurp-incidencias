@@ -1676,3 +1676,17 @@
 }
 .inv-sin-campania b { color: #ffc078; }
 .inv-sin-campania i { font-style: normal; font-weight: 700; color: #ffc078; }
+
+/* SweetAlert por encima de las capas que define ESTE archivo.
+ *
+ * La ficha está en 1200 y el visor de fotos en 1300; SweetAlert trae 1060 de
+ * fábrica. Un «¿borrar esta foto?» lanzado desde el visor se dibujaba por
+ * DEBAJO de él: no se veía nada y la pantalla parecía congelada, porque el
+ * fondo del aviso sí bloquea los clics.
+ *
+ * La regla está también en index.css, para toda la aplicación. Se repite aquí
+ * a propósito: los z-index con los que compite se declaran en este archivo, y
+ * quien los cambie tiene que ver esta línea al lado. Depender de que otro CSS
+ * esté cargado es justo lo que la deja de aplicar cuando alguien monta la
+ * ficha en otro sitio. */
+.swal2-container { z-index: 200000 !important; }

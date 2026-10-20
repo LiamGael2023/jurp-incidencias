@@ -6,6 +6,7 @@ import {
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
+import Swal from 'sweetalert2';
 import { TODAS_LAS_CAPAS } from './InventarioGIS';
 import './Incidentes.css';
 import './EstadisticasGIS.css';
@@ -290,11 +291,21 @@ function CampaniasInventario({ irAActivo }) {
 
   const cerrar = async () => {
     if (!activa) return;
-    if (!window.confirm(
-      `¿Cerrar la campaña ${activa.anio}?\n\n`
-      + 'Deja de poder evaluarse: el botón «Evaluar» desaparece de las '
-      + 'estructuras. Lo ya evaluado se conserva y se sigue consultando '
-      + 'desde aquí.')) return;
+    const { isConfirmed } = await Swal.fire({
+      icon: 'question',
+      title: `¿Cerrar la campaña ${activa.anio}?`,
+      html: 'Deja de poder evaluarse: el botón «Evaluar» desaparece de las '
+        + 'estructuras.<br><br><small style="color:#64748b">Lo ya evaluado se '
+        + 'conserva y se sigue consultando desde aquí, cambiando de año.</small>',
+      showCancelButton: true,
+      confirmButtonText: `Cerrar ${activa.anio}`,
+      cancelButtonText: 'Dejarla abierta',
+      confirmButtonColor: '#d97706',
+      cancelButtonColor: '#5b7590',
+      reverseButtons: true,
+      focusCancel: true,
+    });
+    if (!isConfirmed) return;
     setCreando(true); setAvisoAccion(null);
     try {
       const r = await fetch(`${API}/campanias/${activa.id}/`, {
