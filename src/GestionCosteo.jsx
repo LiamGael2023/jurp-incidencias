@@ -1686,7 +1686,11 @@ export default function GestionCosteo({
                       incidencia. Mientras tanto, el parte diario sigue
                       ofreciendo el presupuesto entero
                       {partidas.length ? ` (${partidas.length} partidas de todas las obras)` : ''}.
-                      Se habilita aplicando <code>pruebas/parche_partidas_de_incidencia.py</code>.
+                      {/* El nombre a secas, no la ruta del repo: en el
+                          servidor el archivo se descarga suelto y
+                          `python3 pruebas/...` no existiria ahi. */}
+                      Se habilita aplicando <code>parche_partidas_de_incidencia.py</code>
+                      {' '}en el servidor.
                     </div>
                   )}
 
