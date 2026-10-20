@@ -726,7 +726,8 @@ export function useInventario() {
 /* ══════════════════════════════════════════════════════════
    Capas sobre el mapa — va DENTRO del <MapContainer>
    ══════════════════════════════════════════════════════════ */
-export function CapasInventario({ inv, racimo = null, limites = null, etiquetas = null, impresion = false }) {
+export function CapasInventario({ inv, racimo = null, limites = null, etiquetas = null,
+                                  impresion = false, sinPuntos = false }) {
   /**
    * `etiquetas` fuerza el rótulo de cada activo sin esperar al zoom. En el
    * visor las etiquetas aparecen solo de cerca, porque con dos mil seiscientos
@@ -995,7 +996,7 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
           El racimo se puede apagar: para documentar con una captura estorba,
           porque en la foto salen burbujas con un número en vez de los activos. */}
       <Racimo activo={conRacimo} innerRef={refCluster}>
-      {TODAS.map(capa => {
+      {!sinPuntos && TODAS.map(capa => {
         if (!inv.visibles[capa.codigo]) return null;
         if (capa.tipo === 'line' || capa.tipo === 'poly') return null;
         const fc = inv.datosDe(capa.codigo);

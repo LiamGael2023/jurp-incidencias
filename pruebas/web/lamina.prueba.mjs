@@ -20,7 +20,8 @@
 import pw from '/opt/node-tools/node_modules/playwright-core/index.js';
 
 const URL = 'http://localhost:5199/pruebas/web/lamina.html';
-const ESCALAS = ['200', '500', '1000', '2000', '2500', '5000', '10000', '20000', '25000'];
+const ESCALAS = ['200', '500', '1000', '2000', '2500', '5000', '10000', '20000', '25000',
+                 '50000', '100000', '200000'];
 
 const r = [];
 const ok = (c, m, e) => { r.push(!!c); console.log(`${c ? 'ok  ' : 'MAL '} ${m}${e ? `   [${e}]` : ''}`); };
@@ -60,10 +61,15 @@ ok(!mem.desborda, 'y el membrete no se desborda por haberlo agrandado');
 const g = await p.evaluate(() => [...document.querySelectorAll('.lam-escala optgroup')]
   .filter(x => /^1:/.test(x.children[0]?.textContent || ''))
   .map(x => ({ t: x.label, v: [...x.children].map(o => o.value) })));
-ok(g.length === 3, 'las escalas salen en tres grupos, no en una lista corrida', g.length);
+// Agrupadas y no en una lista corrida: diez escalas seguidas no se leen. El
+// número de grupos no se fija —se añadió el de cuenca cuando el canal de
+// 155 km no cabía en ninguna— pero cada uno tiene que decir para qué sirve.
+ok(g.length >= 3, 'las escalas salen en grupos, no en una lista corrida', g.length);
+ok(g.every(x => x.t && x.t.includes('—')),
+   'y cada grupo dice para qué sirve', g.map(x => x.t).join(' · '));
 ok(g[0]?.v.join() === '200,500', 'el primero es el de detalle', g[0]?.v.join(' '));
 ok(g.flatMap(x => x.v).join() === ESCALAS.join(),
-   'y entre los tres están todas, de más cerca a más lejos');
+   'y entre todos están las del catálogo, de más cerca a más lejos');
 
 // ── Lo rotulado es lo dibujado ───────────────────────────────────────────
 for (const v of ESCALAS) {

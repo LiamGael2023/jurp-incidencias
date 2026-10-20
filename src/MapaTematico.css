@@ -448,3 +448,15 @@
   border: 1px solid rgba(217, 72, 15, .45);
   white-space: nowrap;
 }
+
+/* Por qué esta lámina no lleva estructuras. Va en ámbar, no en rojo: no es
+   un error, es cómo se dibuja un plano de conjunto. */
+.lam-aviso-escala {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  line-height: 1.5;
+  color: #ffd8a8 !important;
+  background: rgba(217, 72, 15, .14);
+  border: 1px solid rgba(217, 72, 15, .35);
+}

@@ -87,8 +87,32 @@ const GRUPOS_ESCALA = [
   { titulo: 'Detalle — una estructura, un empalme', escalas: [200, 500] },
   { titulo: 'Obra — un tramo de canal', escalas: [1000, 2000, 2500] },
   { titulo: 'Conjunto — el sector o el valle', escalas: [5000, 10000, 20000, 25000] },
+  /* LA CUENCA. El canal madre mide 155 km y a 1:25.000 —la escala más
+   * abierta que había— hacían falta cuatro láminas para recorrerlo entero.
+   * Para una lámina de ubicación o una portada eso no sirve: hace falta que
+   * quepa todo de una vez.
+   *
+   * Son las escalas de la serie cartográfica nacional, no inventadas:
+   * 1:50.000 es la carta del IGN, y a 1:200.000 entran los 155 km del canal
+   * en una sola hoja A1. */
+  { titulo: 'Cuenca — el valle entero', escalas: [50000, 100000, 200000] },
 ];
 const ESCALAS_LAMINA = GRUPOS_ESCALA.flatMap(g => g.escalas);
+
+/* A PARTIR DE AQUI NO SE DIBUJAN LAS ESTRUCTURAS, solo canales, sectores y
+ * lotes.
+ *
+ * No es una limitacion tecnica disfrazada: a 1:50.000, un milimetro de papel
+ * son cincuenta metros, asi que el simbolo de una toma —cuatro milimetros—
+ * cubre doscientos metros de terreno. Las 2.633 estructuras del valle se
+ * amontonarian en una mancha de simbolos pisandose, sin que se distinga
+ * ninguna. Ningun plano de la serie nacional dibuja mobiliario a esa escala.
+ *
+ * Y ademas las dibujaria todas: el recorte al encuadre es lo que mantiene
+ * esta pantalla viva, y a 1:200.000 el encuadre es el valle entero. Antes de
+ * existir ese recorte, el valle completo congelaba el navegador once
+ * segundos. */
+const ESCALA_SIN_PUNTOS = 25000;
 
 // Código de capa → su nombre legible, para el buscador. Se arma una vez: el
 // catálogo de capas no cambia en caliente.
@@ -1021,9 +1045,21 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
   const capasEncendidas = useMemo(
     () => TODAS_LAS_CAPAS.filter(c => inv.visibles[c.codigo]).length, [inv.visibles]);
 
-  const leyenda = useMemo(() => GRUPOS_CAPAS
-    .map(g => ({ titulo: g.titulo, capas: g.capas.filter(c => inv.visibles[c.codigo] && asomaEnLamina(c.codigo)) }))
-    .filter(g => g.capas.length), [inv.visibles, asomaEnLamina]);
+  const leyenda = useMemo(() => {
+    // A escala de cuenca las estructuras no se dibujan, así que tampoco se
+    // explican: una leyenda que describe símbolos que no están en el papel
+    // manda a quien lee el plano a buscarlos.
+    const sinPuntos = escala > ESCALA_SIN_PUNTOS;
+    return GRUPOS_CAPAS
+      .map(g => ({
+        titulo: g.titulo,
+        capas: g.capas.filter(c => inv.visibles[c.codigo]
+          && !c.oculta
+          && !(sinPuntos && c.tipo !== 'line' && c.tipo !== 'poly')
+          && asomaEnLamina(c.codigo)),
+      }))
+      .filter(g => g.capas.length);
+  }, [inv.visibles, asomaEnLamina, escala]);
 
   /**
    * Hasta que el inventario termine de bajar no se dibujan los activos.
@@ -1312,6 +1348,17 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
                       {' '}a esta escala. Recorta el rango, abre la escala o genera varias.</>
               )}
               {envolvente && <div className="lam-medida-n">{envolvente.n} estructuras en el encuadre</div>}
+              {/* Una lámina sin estructuras tiene que decir por qué, o se lee
+                  como que el inventario está vacío. */}
+              {escala > ESCALA_SIN_PUNTOS && (
+                <div className="lam-medida-n lam-aviso-escala">
+                  A 1:{escala.toLocaleString('es-PE')} no se dibujan las
+                  estructuras: un símbolo de 4 mm cubriría{' '}
+                  {(escala * 4 / 1000).toLocaleString('es-PE')} m de terreno y
+                  saldrían todas amontonadas. Quedan los canales, los sectores
+                  y los lotes. Para verlas, 1:25.000 o más cerca.
+                </div>
+              )}
             </div>
           )}
 
@@ -1563,7 +1610,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               style={{ height: '100%', width: '100%' }} ref={mapRef}>
               <TeselasBase base={base} />
               {!descargando && <CapasInventario inv={inv} racimo={false} limites={limites}
-                etiquetas="nombre" impresion />}
+                etiquetas="nombre" impresion sinPuntos={escala > ESCALA_SIN_PUNTOS} />}
               <MarcasProgresiva marcas={marcasPK} />
               <EtiquetasSector sectores={etiquetasSector} />
               <EncuadreFijo centro={centro} zoom={zoom} onMover={alMover} />
