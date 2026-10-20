@@ -120,23 +120,42 @@ function CampaniasInventario({ irAActivo }) {
     })();
   }, []);
 
+  /* "No hay evaluaciones" y "el servidor fallo" NO son lo mismo, y la tabla
+   * los pintaba igual: si /evaluaciones/ devolvia un 500 -que es justo lo que
+   * lleva fallando en el servidor nuevo-, la pantalla decia tan tranquila
+   * "todavia no hay ninguna evaluacion en la campana 2026". Afirmar que un
+   * ano esta sin evaluar cuando en realidad no se pudo preguntar es peor que
+   * no enseinar nada: manda a alguien a reevaluar lo que ya estaba hecho. */
+  const [falloTabla, setFalloTabla] = useState(null);
+
   useEffect(() => {
-    if (!activa) { setEvaluaciones([]); setAvance([]); return; }
+    if (!activa) { setEvaluaciones([]); setAvance([]); setFalloTabla(null); return; }
     let cancelado = false;
     (async () => {
-      setCargandoTabla(true);
+      setCargandoTabla(true); setFalloTabla(null);
       try {
         const [re, ra] = await Promise.all([
           fetch(`${API}/evaluaciones/?campania=${activa.anio}`, { headers: cab() }),
           fetch(`${API}/campanias/${activa.id}/avance/`, { headers: cab() }),
         ]);
         if (cancelado) return;
+
         if (re.ok) { const d = await re.json(); setEvaluaciones(d.results || d || []); }
-        else setEvaluaciones([]);
+        else { setEvaluaciones([]); setFalloTabla(`El servidor respondió ${re.status} al pedir las evaluaciones`); }
+
         if (ra.ok) { const d = await ra.json(); setAvance(d.detalle || []); }
-        else setAvance([]);
+        else {
+          setAvance([]);
+          // El avance da el total del inventario. Sin él, la cifra "X de Y"
+          // sale sin Y, y conviene decir por qué en vez de enseñar un hueco.
+          if (re.ok) setFalloTabla(`El servidor respondió ${ra.status} al pedir el avance: `
+            + 'las cifras salen sin el total del inventario');
+        }
       } catch (e) {
-        if (!cancelado) { setEvaluaciones([]); setAvance([]); }
+        if (!cancelado) {
+          setEvaluaciones([]); setAvance([]);
+          setFalloTabla('No se pudo consultar las evaluaciones');
+        }
       } finally {
         if (!cancelado) setCargandoTabla(false);
       }
@@ -556,6 +575,12 @@ function CampaniasInventario({ irAActivo }) {
           {/* ── tabla ── */}
           {cargandoTabla ? (
             <div className="cmp-cargando"><FaSyncAlt className="icon-spin" /> Cargando evaluaciones…</div>
+          ) : falloTabla ? (
+            <div className="cmp-error">
+              <FaExclamationCircle /> {falloTabla}. No se sabe qué hay evaluado
+              en {activa.anio}: lo que ves arriba no es el estado real.
+              <button onClick={() => setActiva(a => ({ ...a }))}>Reintentar</button>
+            </div>
           ) : vista.length === 0 ? (
             <div className="cmp-vacio">
               {filas.length === 0

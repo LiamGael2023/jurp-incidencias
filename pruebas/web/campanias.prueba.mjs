@@ -164,6 +164,21 @@ ok(/solo lectura|backend/i.test(aviso),
    'un 405 se explica por su nombre, no como "error"', aviso.replace(/\n/g, ' ').slice(0, 90));
 await revisar('.cmp-aviso.mal', 'aviso de error');
 
+// ── un 500 NO es "no hay evaluaciones" ──
+// Es el fallo que lleva dando el inventario en el servidor nuevo, y decir
+// "todavia no hay ninguna evaluacion" cuando no se pudo preguntar manda a
+// alguien a reevaluar lo que ya estaba hecho.
+await p.goto(BASE + '?evals500=1', { waitUntil: 'domcontentloaded' });
+await p.waitForSelector('.cmp-kpis', { timeout: 10000 });
+await p.waitForTimeout(500);
+const cuerpo = await p.locator('.cmp-wrap').innerText();
+ok(!/no hay ninguna evaluaci/i.test(cuerpo),
+   'un 500 no se disfraza de "no hay ninguna evaluación"');
+const err = await p.locator('.cmp-error').innerText();
+ok(/500/.test(err), 'dice el código que devolvió el servidor', err.replace(/\n/g, ' ').slice(0, 80));
+ok(/no es el estado real|no se sabe/i.test(err),
+   'y avisa de que las cifras de arriba no son el estado real');
+
 ok(errs.length === 0, 'sin errores de JavaScript', errs.join(' | ').slice(0, 150));
 
 await b.close();

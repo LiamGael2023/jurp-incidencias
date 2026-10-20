@@ -46,6 +46,9 @@ const json = (d, status = 200) =>
 
 // ?sinescritura=1 simula el viewset de solo lectura: POST y PATCH dan 405.
 const sinEscritura = new URLSearchParams(location.search).has('sinescritura');
+// ?evals500=1 reproduce el fallo real del servidor nuevo: el inventario
+// devuelve 500. La pantalla NO debe decir que no hay evaluaciones.
+const evals500 = new URLSearchParams(location.search).has('evals500');
 window.__CREADO = null;
 
 window.fetch = async (u, opc = {}) => {
@@ -68,6 +71,7 @@ window.fetch = async (u, opc = {}) => {
   if (url.includes('/campanias/')) return json(CAMPANIAS);
   if (url.includes('/capas/indice/')) return json(INDICE);
   if (url.includes('/evaluaciones/')) {
+    if (evals500) return json({ detail: 'error' }, 500);
     const anio = Number(new URL(url, location.origin).searchParams.get('campania'));
     return json(anio === 2026 ? EVALS : []);
   }
