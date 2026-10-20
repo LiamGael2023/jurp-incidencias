@@ -14,6 +14,8 @@ import { prepararFoto, motivoRechazo, urlFoto, ordenarFotos, peso } from './foto
 import { caracteristicas, cobertura, tituloActivo } from './fichaActivo';
 import Swal from 'sweetalert2';
 import { datosDeCapa } from './sectores';
+import { codcatsConLicencia, colorLote, tieneLicencia, textoLicencia,
+         CAPA_LICENCIAS, COLOR_CON_LICENCIA, COLOR_SIN_LICENCIA } from './lotes';
 import './InventarioGIS.css';
 
 // Simbología oficial del inventario. Son los mismos archivos que usa el
@@ -146,8 +148,15 @@ const GRUPOS = [
       // Sin esto los sectores eran una sola mancha verde y no se veía dónde
       // acababa uno y empezaba el siguiente.
       { codigo: 'sectores_pech',     label: 'Sectores PECH',     color: '#aec14a', tipo: 'poly', porSector: true },
-      { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#c0d259', tipo: 'poly' },
-      { codigo: 'lotes',             label: 'Lotes',             color: '#d2e070', tipo: 'poly' },
+      /* ÁREAS CON LICENCIA NO ES UNA CAPA APARTE: comprobado contra el
+         servidor, sus 205 polígonos SON 205 de los 211 lotes, idénticos
+         hasta los 10 cm y con el mismo código catastral. Lo que la distingue
+         es un campo, no una geometría. Se sigue descargando —de ahí sale
+         quién tiene licencia— pero no se dibuja ni se lista: dibujarla era
+         pintar 205 polígonos dos veces para esconder el único dato que
+         importaba. */
+      { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#c0d259', tipo: 'poly', oculta: true },
+      { codigo: 'lotes',             label: 'Lotes',             color: '#d2e070', tipo: 'poly', porLicencia: true },
     ],
   },
 ];
@@ -753,6 +762,12 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
   const mapa = useMap();
   const refCluster = useRef(null);
   const [zoom, setZoom] = useState(() => mapa.getZoom());
+  /* Quién tiene licencia. Sale de la capa de áreas, que ya se descarga y no
+   * se dibuja: su único trabajo es decir qué códigos catastrales la tienen.
+   * Se recalcula solo cuando esa capa llega o cambia de ámbito. */
+  const fcLicencias = inv.datosDe(CAPA_LICENCIAS);
+  const conLicencia = useMemo(() => codcatsConLicencia(fcLicencias), [fcLicencias]);
+
   const rotular = etiquetas ? true : zoom >= ZOOM_ETIQUETAS;
   /* Ensena o esconde el rotulo de UN sector segun el sitio que tenga en
    * pantalla. Lo gobierna la propia capa, no un efecto de React: el primer
@@ -857,6 +872,8 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
   return (
     <>
       {TODAS.map(capa => {
+        // Las capas de solo-datos alimentan a otra y no se dibujan.
+        if (capa.oculta) return null;
         if (!inv.visibles[capa.codigo]) return null;
         const fc = inv.datosDe(capa.codigo);
         if (!fc?.features?.length) return null;
@@ -865,6 +882,8 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
         if (capa.tipo === 'line' || capa.tipo === 'poly') {
           // Un color por sector, repartido para que dos vecinos no repitan.
           const porSector = capa.porSector ? datosDeCapa(fc) : null;
+          // Verde o naranja según tenga licencia de agua.
+          const licencias = capa.porLicencia ? conLicencia : null;
           return (
             <GeoJSON
               // El rótulo se ata al crear la capa, y onEachFeature no se
@@ -873,7 +892,9 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
               key={`inv-${capa.codigo}`}
               data={fc}
               style={(f) => {
-                const tono = (porSector && porSector.color(f)) || capa.color;
+                const tono = (porSector && porSector.color(f))
+                  || (licencias && colorLote(f, licencias, capa.color))
+                  || capa.color;
                 // Las obras del PECH van más tenues: son contexto.
                 const esPech = (f?.properties?.ambito) === 'PECH';
                 /*
@@ -913,7 +934,7 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                   // separa un sector del de al lado. Sigue siendo tenue, que
                   // debajo hay imagen satelital que no se debe tapar.
                   fillOpacity: capa.tipo !== 'poly' ? 0
-                    : porSector ? (impresion ? 0.26 : 0.20)
+                    : (porSector || licencias) ? (impresion ? 0.26 : 0.20)
                     : (impresion ? (esPech ? 0.10 : 0.16) : (esPech ? 0.04 : 0.08)),
                 };
               }}
@@ -931,9 +952,16 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                     + '</span>'
                   : '';
                 const nombre = porSector ? porSector.nombre(f) : null;
+                // La licencia, con todas las letras: el color la cuenta de un
+                // vistazo, pero quien abre el globo quiere leerla.
+                const lic = licencias
+                  ? `<div class="inv-pop-lic ${tieneLicencia(f, licencias) ? 'si' : 'no'}">`
+                    + `${textoLicencia(f, licencias)}</div>`
+                  : '';
                 layer.bindPopup(
                   `<div class="inv-pop"><div class="inv-pop-tit">${nombre || capa.label}</div>
                    <div class="inv-pop-sub">${nombre ? `${capa.label} ` : ''}${chip}</div>
+                   ${lic}
                    <table class="inv-pop-tabla"><tbody>${filas}</tbody></table></div>`
                 );
                 // El nombre, en el centro del sector. Se ata siempre; quien
@@ -2150,7 +2178,7 @@ export function PanelInventario({ inv, onVolar }) {
               {g.titulo}
             </div>
 
-            {grupoAbierto[i] && g.capas.map(c => (
+            {grupoAbierto[i] && g.capas.filter(c => !c.oculta).map(c => (
               <div key={c.codigo} className="gis-capa">
                 <label>
                   <input
@@ -2160,6 +2188,14 @@ export function PanelInventario({ inv, onVolar }) {
                   />
                   {c.ico ? (
                     <img src={c.ico} alt="" className="inv-capa-ico" />
+                  ) : c.porLicencia ? (
+                    /* Dos muestras: esta capa se pinta por licencia, y una
+                       sola pastilla de color estaría mintiendo sobre lo que
+                       se va a ver en el mapa. */
+                    <span className="inv-capa-par" title="Verde: con licencia · Naranja: sin licencia">
+                      <i style={{ background: COLOR_CON_LICENCIA }} />
+                      <i style={{ background: COLOR_SIN_LICENCIA }} />
+                    </span>
                   ) : (
                     <span
                       style={{

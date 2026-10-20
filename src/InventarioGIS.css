@@ -1711,3 +1711,21 @@
   pointer-events: none;
 }
 .leaflet-tooltip.inv-eti-sector::before { display: none; }   /* sin flecha */
+
+/* Las dos muestras de una capa que se pinta por licencia. Una sola pastilla
+   mentiría sobre lo que se va a ver en el mapa. */
+.inv-capa-par { display: inline-flex; gap: 2px; flex-shrink: 0; }
+.inv-capa-par i { display: block; width: 6px; height: 14px; border-radius: 2px; }
+
+/* Si tiene licencia de agua, en el globo del lote y con todas las letras: el
+   color lo cuenta de un vistazo, pero quien abre el globo quiere leerlo. */
+.inv-pop-lic {
+  margin: 5px 0;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+.inv-pop-lic.si { color: #0b2545; background: #1baf7a; }
+.inv-pop-lic.no { color: #fff; background: #eb6834; }
