@@ -18,7 +18,7 @@
 // segura de no saber después cuál de las dos cosas rompió qué.
 
 
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import {
   FaCalendarAlt, FaCheckCircle, FaChevronRight, FaDownload, FaFileExcel,
@@ -37,7 +37,9 @@ import MantenedorEquipos from './MantenedorEquipos';
 import VisorImagen from './VisorImagen';
 import { API_OPS, API_BASE } from './api';
 import { rutaDe, cuelgaDe, bajarSolo } from './arbolPartidas';
+import EscaleraPartida from './SelectorPartida';
 import { imgToBase64 } from './costeo/imagen';
+import './GestionCosteo.css';
 import {
   CATEGORIAS, IMG_METRADO, STEP4, txtEstadoInc,
   UNIDADES_METRADO, UNIDADES_METRADO_TXT, actividadesDesdeBackend, actividadesParaBackend,
@@ -103,6 +105,29 @@ export default function GestionCosteo({
   const [partidas, setPartidas] = useState([]);             // presupuesto de obra
   const [modalAvance, setModalAvance] = useState(false);
   const [casRuta, setCasRuta] = useState([]);
+
+  /* ── LO PROGRAMADO: qué partidas del presupuesto ejecuta este sujeto ──
+   *
+   * Hasta ahora el selector de partidas del parte ofrecía el presupuesto
+   * ENTERO de la empresa. Se veía en pantalla: una incidencia de la Canoa 8
+   * del Lateral 10 ofreciendo partidas de la TOMA 10.5, que es otra obra. El
+   * código intenta acotarlo por proyecto —`?obra=` si el sujeto lo trae— pero
+   * una incidencia no tiene proyecto: nace de un canal, no de una obra
+   * presupuestada, así que el filtro no se aplicaba nunca.
+   *
+   * Elegir entre ochenta y tres partidas de cinco obras para imputar un
+   * metrado no es una molestia: es una ocasión de equivocarse en cada parte,
+   * y el error se descubre al valorizar, con cien partes ya hechos.
+   *
+   * Se eligen UNA vez aquí arriba y a partir de ahí el parte elige solo entre
+   * ellas. */
+  const [progDetalle, setProgDetalle] = useState([]);   // del servidor
+  const [progRuta, setProgRuta] = useState([]);         // escalera del añadir
+  const [progAbierto, setProgAbierto] = useState(false);
+  const [progGuardando, setProgGuardando] = useState(false);
+  const [progAviso, setProgAviso] = useState(null);
+  // 'no-soportado' cuando el backend todavía no lleva el campo.
+  const [progSoporte, setProgSoporte] = useState('cargando');
   // Por qué se soltó la partida al cambiar de actividad. Se dice una vez y
   // se va: un aviso que se queda ahí deja de leerse.
   const [avisoPartida, setAvisoPartida] = useState('');
@@ -157,6 +182,15 @@ export default function GestionCosteo({
     if (!abierto) return;
     cargarPartidas();
   }, [abierto, sujeto && sujeto.obra]);
+
+  // Lo programado se pide por sujeto, no por obra: es suyo.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!abierto || !sujeto || !sujeto.id) return;
+    setProgDetalle([]); setProgRuta([]); setProgAbierto(false);
+    setProgAviso(null); setProgSoporte('cargando');
+    cargarProgramado();
+  }, [abierto, sujeto && sujeto.id]);
 
   useEffect(() => { cargarCargos(); }, []);
 
@@ -297,6 +331,67 @@ export default function GestionCosteo({
       if (r.ok) setCatModelos(await r.json());
     } catch (e) { console.error(e); }
   };
+  /* Las dos pantallas que usan este modal guardan en sitios distintos, y es
+   * lo único que cambia entre ellas. */
+  const rutaSujeto = campoVinculo === 'actividad_obra' ? 'actividades' : 'incidentes';
+
+  /* EL SUJETO NO TRAE SUS PARTIDAS. La incidencia que llega aquí viene del
+   * padrón de PLUVIRA, y las partidas viven del lado de operaciones; la
+   * actividad viene de operaciones pero el listado no las carga. Así que se
+   * piden aparte, una vez por sujeto. */
+  const cargarProgramado = async () => {
+    if (!sujeto || !sujeto.id) return;
+    try {
+      const r = await fetch(`${API_OPS}/${rutaSujeto}/${sujeto.id}/`);
+      if (!r.ok) { setProgSoporte(r.status === 404 ? 'no-soportado' : 'error'); return; }
+      const d = await r.json();
+      if (!('partidas_detalle' in d) && !('partidas' in d)) {
+        // El endpoint existe pero el campo no: falta aplicar el parche.
+        setProgSoporte('no-soportado');
+        return;
+      }
+      setProgDetalle(d.partidas_detalle || []);
+      setProgSoporte('ok');
+    } catch (e) {
+      setProgSoporte('error');
+    }
+  };
+
+  const guardarProgramado = async (ids) => {
+    setProgGuardando(true); setProgAviso(null);
+    try {
+      const r = await fetch(`${API_OPS}/${rutaSujeto}/${sujeto.id}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partidas: ids }),
+      });
+      if (!r.ok) {
+        /* Se dicen por su nombre: un 405 lo arregla quien toca el backend y
+         * un 403 quien da permisos. Un "error" a secas no manda a nadie. */
+        setProgAviso({ mal: true, txt: r.status === 405
+          ? 'El servidor no admite guardar partidas aquí todavía: falta aplicar '
+            + 'pruebas/parche_partidas_de_incidencia.py.'
+          : r.status === 403 ? 'Tu usuario no tiene permiso para cambiar esto.'
+          : `El servidor respondió ${r.status}.` });
+        return false;
+      }
+      const d = await r.json().catch(() => ({}));
+      setProgDetalle(d.partidas_detalle || []);
+      setProgSoporte('ok');
+      return true;
+    } catch (e) {
+      setProgAviso({ mal: true, txt: 'No se pudo guardar.' });
+      return false;
+    } finally {
+      setProgGuardando(false);
+    }
+  };
+
+  const quitarProgramada = async (id) => {
+    const ids = progDetalle.map(p => p.id).filter(x => String(x) !== String(id));
+    await guardarProgramado(ids);
+  };
+
   const cargarPartidas = async () => {
     try {
       // Del proyecto del sujeto si lo trae. Pedirlas todas y filtrar en el
@@ -622,6 +717,24 @@ export default function GestionCosteo({
   // La unidad de la partida elegida en la linea que se esta editando. Si hay
   // partida, ella manda: el metrado se imputa a ELLA, y dejar elegir otra
   // unidad solo sirve para que no sume y nadie sepa por que.
+  /* DE DÓNDE ELIGE EL PARTE.
+   *
+   * De lo programado, si hay. Si no, del presupuesto entero, que es lo que
+   * se hacía siempre: así una incidencia sin programar sigue funcionando
+   * igual que antes y nadie se queda sin poder imputar un metrado.
+   *
+   * Se cruzan los ids contra `partidas` en vez de usar progDetalle tal cual
+   * porque la escalera necesita la partida completa —rutaDe y cuelgaDe leen
+   * el código para saber de qué cuelga— y progDetalle es un resumen. */
+  const partidasDelParte = useMemo(() => {
+    if (!progDetalle.length) return partidas;
+    const ids = new Set(progDetalle.map(p => String(p.id)));
+    const sub = partidas.filter(p => ids.has(String(p.id)));
+    // Si por lo que sea ninguna coincide, mejor el presupuesto entero que un
+    // selector vacío: lo primero es molesto, lo segundo bloquea el parte.
+    return sub.length ? sub : partidas;
+  }, [partidas, progDetalle]);
+
   const partidaDeLaLinea = partidas.find(
     x => String(x.id) === String(actForm.partidaId));
   const unidadDePartida = partidaDeLaLinea ? partidaDeLaLinea.unidad : '';
@@ -636,7 +749,10 @@ export default function GestionCosteo({
       : (nuevoRecurso.hmInicio !== '' && nuevoRecurso.hmInicio != null ? String(nuevoRecurso.hmInicio) : '');
     // Hereda la zona del parte para no volver a escribirla en cada línea.
     setActForm({ ...estadoInicialActividad, zonaTrabajo: nuevoRecurso.zonaTrabajo || '', hmInicio: previo });
-    setCasRuta(bajarSolo(partidas, []));
+    // Baja por la lista de la que de verdad se va a elegir: con lo
+    // programado acotado a tres partidas, los niveles de arriba no
+    // deciden nada y se dan por elegidos solos.
+    setCasRuta(bajarSolo(partidasDelParte, []));
     setActEditando(null);
     setModalActividad(true);
   };
@@ -1538,6 +1654,118 @@ export default function GestionCosteo({
                   <h4 className="tbl-alert-title">{subtitulo}</h4>
                   <div className="tbl-text-muted">{detalle}</div>
                 </div>
+                {/* ══════════ PROGRAMADO ══════════
+                     Qué partidas del presupuesto ejecuta este sujeto. Se
+                     eligen aquí una vez y el parte diario elige solo entre
+                     ellas, en vez de entre las ochenta y tres de cinco obras
+                     distintas. */}
+                <div className="cos-prog">
+                  <div className="cos-prog-cab">
+                    <span className="cos-prog-tit">
+                      <FaListUl size={11} /> Programado · partidas del presupuesto
+                      {progDetalle.length > 0 && (
+                        <b className="cos-prog-n">{progDetalle.length}</b>
+                      )}
+                    </span>
+                    {progSoporte === 'ok' && !bloqueado && (
+                      <button type="button" className="cos-prog-add"
+                        onClick={() => { setProgAbierto(a => !a); setProgRuta(bajarSolo(partidas, [])); }}>
+                        {progAbierto ? <><FaTimes size={10} /> Cancelar</>
+                                     : <><FaPlus size={10} /> Añadir partida</>}
+                      </button>
+                    )}
+                  </div>
+
+                  {progSoporte === 'cargando' && (
+                    <div className="cos-prog-nota">Consultando…</div>
+                  )}
+
+                  {progSoporte === 'no-soportado' && (
+                    <div className="cos-prog-nota cos-prog-falta">
+                      Este servidor todavía no guarda las partidas de la
+                      incidencia. Mientras tanto, el parte diario sigue
+                      ofreciendo el presupuesto entero
+                      {partidas.length ? ` (${partidas.length} partidas de todas las obras)` : ''}.
+                      Se habilita aplicando <code>pruebas/parche_partidas_de_incidencia.py</code>.
+                    </div>
+                  )}
+
+                  {progAviso && (
+                    <div className={`cos-prog-nota${progAviso.mal ? ' cos-prog-mal' : ''}`}>
+                      {progAviso.txt}
+                    </div>
+                  )}
+
+                  {progSoporte === 'ok' && progDetalle.length === 0 && !progAbierto && (
+                    <div className="cos-prog-nota">
+                      Sin partidas. Mientras no elijas ninguna, el parte diario
+                      ofrece las {partidas.length} del presupuesto entero —
+                      incluidas las de otras obras.
+                    </div>
+                  )}
+
+                  {progDetalle.length > 0 && (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="cos-prog-tabla">
+                        <thead>
+                          <tr>
+                            <th>Código</th><th>Partida</th>
+                            <th className="n">Presupuestado</th>
+                            <th className="n">Ejecutado</th>
+                            <th className="n">Saldo</th>
+                            {!bloqueado && <th />}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {progDetalle.map(p => {
+                            // El saldo en rojo cuando ya se paso: es el unico
+                            // numero de esta tabla que obliga a hacer algo.
+                            const pasada = Number(p.saldo) < 0;
+                            return (
+                              <tr key={p.id}>
+                                <td className="cod">{p.codigo}</td>
+                                <td>{p.descripcion}</td>
+                                <td className="n">{fmtNum(p.metrado)} <i>{p.unidad}</i></td>
+                                <td className="n">{fmtNum(p.ejecutado)} <i>{p.unidad}</i></td>
+                                <td className={`n${pasada ? ' mal' : ''}`}>
+                                  {fmtNum(p.saldo)} <i>{p.unidad}</i>
+                                  {pasada && <b> pasada</b>}
+                                </td>
+                                {!bloqueado && (
+                                  <td className="n">
+                                    <button type="button" className="cos-prog-quita"
+                                      disabled={progGuardando}
+                                      title="Quitar de lo programado"
+                                      onClick={() => quitarProgramada(p.id)}><FaTrash size={10} /></button>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {progAbierto && (
+                    <div className="cos-prog-escalera">
+                      <EscaleraPartida
+                        partidas={partidas}
+                        camino={progRuta}
+                        onCamino={setProgRuta}
+                        valor=""
+                        ocultar={progDetalle.map(p => p.id)}
+                        onElegir={async (id) => {
+                          if (!id) return;
+                          const ok = await guardarProgramado(
+                            [...progDetalle.map(p => p.id), Number(id)]);
+                          if (ok) { setProgAbierto(false); setProgRuta([]); }
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 {/* Rango de fechas: acota el costeo a un periodo concreto.
                     Útil para el informe semanal o de quincena. */}
                 <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', margin:'12px 0 4px', padding:'10px 12px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8 }}>
@@ -2579,19 +2807,23 @@ export default function GestionCosteo({
                      pasa arriba, donde solo hay un presupuesto: se ve el
                      camino completo sin tener que abrir dos combos que no
                      deciden nada. */}
-                {partidas.length > 0 && (() => {
+                {partidasDelParte.length > 0 && (() => {
                   const norm = normaUnidad;
                   const mv = calcMetradoDe(actForm);
                   const uAct = norm(mv.unit || actForm.unidadMetrado);
-                  const sel = partidas.find(p => String(p.id) === String(actForm.partidaId));
+                  const sel = partidasDelParte.find(p => String(p.id) === String(actForm.partidaId));
                   const choca = sel && uAct && norm(sel.unidad) !== uAct;
+                  // De lo programado arriba, o del presupuesto entero si no
+                  // hay nada programado.
+                  const acotado = progDetalle.length > 0
+                    && partidasDelParte.length < partidas.length;
 
-                  const candidatas = partidas.filter(p => cuelgaDe(p, casRuta));
+                  const candidatas = partidasDelParte.filter(p => cuelgaDe(p, casRuta));
 
                   // Un peldaño por cada nivel del camino, más el siguiente.
                   const peldanos = [];
                   for (let i = 0; i <= casRuta.length; i++) {
-                    const base = partidas.filter(p => cuelgaDe(p, casRuta.slice(0, i)));
+                    const base = partidasDelParte.filter(p => cuelgaDe(p, casRuta.slice(0, i)));
                     const ops = [];
                     base.forEach(p => {
                       const n = rutaDe(p)[i];
@@ -2604,7 +2836,7 @@ export default function GestionCosteo({
                   const hojas = candidatas.filter(p => rutaDe(p).length === casRuta.length);
 
                   const ponerPartida = (id) => {
-                    const p = partidas.find(x => String(x.id) === String(id));
+                    const p = partidasDelParte.find(x => String(x.id) === String(id));
                     setActForm({ ...actForm,
                       partidaId: id,
                       // Copiados a propósito: si mañana se recarga el
@@ -2639,6 +2871,20 @@ export default function GestionCosteo({
                           <span style={{ color:'#1463A5' }}> de {sujeto.obra}</span>
                         )}
                         <small style={{ color:'#94a3b8', fontWeight:400 }}> · opcional</small>
+                        {/* DE DONDE SALEN ESTAS OPCIONES. Sin decirlo, no se
+                            distingue "no esta la partida que busco" de "esta
+                            pero no la programaron arriba", que se arreglan en
+                            sitios distintos. */}
+                        {acotado ? (
+                          <div style={{ fontSize:'11.5px', fontWeight:600, color:'#0b7a56', marginTop:'3px' }}>
+                            Solo las {partidasDelParte.length} programadas para esta incidencia
+                          </div>
+                        ) : partidas.length > 0 && (
+                          <div style={{ fontSize:'11.5px', fontWeight:400, color:'#b45309', marginTop:'3px' }}>
+                            Las {partidas.length} del presupuesto entero — prográmalas
+                            arriba y aquí saldrán solo las de esta incidencia
+                          </div>
+                        )}
                       </div>
 
                       {/* Un nivel con UNA sola opcion ya venia elegido solo:

@@ -1,0 +1,162 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   PROGRAMADO: las partidas del presupuesto que este sujeto ejecuta.
+
+   Va arriba del costeo, antes del periodo y de las tres categorías, porque
+   es lo que se decide primero: qué hay que hacer. Lo de abajo es lo que se
+   gastó haciéndolo.
+
+   Tema claro, como el resto del modal (fondo blanco, azul #1463A5).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.cos-prog {
+  margin: 12px 0 4px;
+  padding: 11px 13px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #1463A5;
+  border-radius: 8px;
+}
+
+.cos-prog-cab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cos-prog-tit {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #1463A5;
+}
+
+.cos-prog-n {
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: #1463A5;
+  color: #fff;
+  font-size: 10.5px;
+  text-align: center;
+}
+
+.cos-prog-add {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1463A5;
+  background: #fff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cos-prog-add:hover { background: #eff6ff; border-color: #93c5fd; }
+
+.cos-prog-nota {
+  margin-top: 9px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #475569;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+.cos-prog-nota code {
+  padding: 1px 5px;
+  background: #f1f5f9;
+  border-radius: 3px;
+  font-size: 11.5px;
+  color: #0f172a;
+}
+
+/* Falta el campo en el servidor: ámbar, no rojo. No es un error de nadie,
+   es un paso de despliegue pendiente. */
+.cos-prog-falta {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+.cos-prog-mal {
+  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.cos-prog-tabla {
+  width: 100%;
+  min-width: 620px;
+  margin-top: 9px;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: 12.5px;
+}
+.cos-prog-tabla thead th {
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #0369a1;
+  background: #e0f2fe;
+  white-space: nowrap;
+}
+.cos-prog-tabla th.n,
+.cos-prog-tabla td.n { text-align: right; white-space: nowrap; }
+.cos-prog-tabla td {
+  padding: 8px 10px;
+  border-top: 1px solid #f1f5f9;
+  color: #1e293b;
+}
+.cos-prog-tabla td.cod { font-weight: 700; color: #0369a1; white-space: nowrap; }
+/* La unidad en pequeño: el número es lo que se compara, la unidad solo
+   confirma que se comparan cosas de la misma especie. */
+.cos-prog-tabla td i { font-style: normal; font-size: 11px; color: #94a3b8; }
+
+/* El saldo pasado es el único número de esta tabla que obliga a hacer algo. */
+.cos-prog-tabla td.mal { color: #b91c1c; font-weight: 700; }
+.cos-prog-tabla td.mal i { color: #ef9a9a; }
+.cos-prog-tabla td.mal b {
+  margin-left: 5px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.cos-prog-quita {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cos-prog-quita:hover:not(:disabled) { background: #fee2e2; }
+.cos-prog-quita:disabled { opacity: .5; cursor: not-allowed; }
+
+.cos-prog-escalera {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+}
