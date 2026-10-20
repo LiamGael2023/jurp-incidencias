@@ -99,11 +99,21 @@ try:
                 if "inventario" in ruta:
                     vistas.append(ruta)
     recorrer(get_resolver().url_patterns)
+
+    # SOLO las de la API. El admin genera seis rutas por modelo y, como
+    # "admin" ordena antes que "api", se comia la lista entera: la primera
+    # version de esto imprimio cuarenta rutas del admin y ni una de la API,
+    # dando a entender que no existian.
+    api = sorted(set(v for v in vistas if not v.startswith("admin/")))
     print("")
-    for v in sorted(set(vistas))[:40]:
-        print("    /%s" % v)
-    if not vistas:
-        print("    NINGUNA. La app de inventario no esta enrutada aqui.")
+    if api:
+        for v in api:
+            print("    /%s" % v)
+    else:
+        print("    NINGUNA ruta de API. La app esta en el admin pero no")
+        print("    enrutada bajo /api/: el front pediria y recibiria 404.")
+    print("")
+    print("    (%s rutas del admin, omitidas)" % (len(vistas) - len(api)))
 except Exception as e:
     print("    no se pudo listar: %s" % e)
 
@@ -126,6 +136,19 @@ try:
     else:
         print("")
         print("    probando como: %s" % usuario.username)
+
+        # EL CLIENTE DE PRUEBAS MANDA Host: testserver, Y ESO NO ESTA EN
+        # ALLOWED_HOSTS. Django lo rechaza antes de llegar a la vista y
+        # devuelve un 400 en HTML -no un error de DRF-, identico para
+        # TODAS las rutas. La primera version de este script daba cuatro
+        # "400 Bad Request" seguidos que no significaban nada: el fallo
+        # estaba aqui, no en el inventario. Se anade el host a la lista,
+        # solo para este proceso.
+        from django.conf import settings
+        if "testserver" not in settings.ALLOWED_HOSTS and "*" not in settings.ALLOWED_HOSTS:
+            settings.ALLOWED_HOSTS = list(settings.ALLOWED_HOSTS) + ["testserver"]
+        print("    ALLOWED_HOSTS: %s" % (list(settings.ALLOWED_HOSTS)[:6],))
+
         # raise_request_exception=False: queremos VER el 500, no que el
         # script muera en el primer fallo y oculte las rutas siguientes.
         c = Client(raise_request_exception=False)
@@ -142,6 +165,8 @@ try:
                 r = c.get(ruta)
                 cuerpo = r.content[:180].decode("utf-8", "replace").replace("\n", " ")
                 marca = "  <-- AQUI ESTA EL PROBLEMA" if r.status_code >= 400 else ""
+                if r.status_code == 400 and b"Bad Request (400)" in r.content:
+                    marca = "  <-- 400 de ALLOWED_HOSTS, no del inventario"
                 print("")
                 print("    %s  %s%s" % (r.status_code, ruta, marca))
                 print("        %s" % cuerpo)
