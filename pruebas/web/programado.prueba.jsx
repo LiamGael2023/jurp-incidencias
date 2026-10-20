@@ -52,6 +52,8 @@ window.__PATCH = null;
  * esto, "el bloque se ve" no distingue entre pedir la ruta correcta y pedir
  * otra que casualmente responda. */
 window.__URLS = [];
+window.__POST = null;
+window.__PATCH_PARTIDA = null;
 
 const json = (d, s = 200) => new Response(JSON.stringify(d),
   { status: s, headers: { 'Content-Type': 'application/json' } });
@@ -63,6 +65,54 @@ window.fetch = async (u, opc = {}) => {
   const url = String(u);
   const metodo = (opc.method || 'GET').toUpperCase();
   window.__URLS.push(`${metodo} ${url}`);
+
+  /* ── LAS PARTIDAS PROPIAS DE LA INCIDENCIA ──
+   * El servidor correlativo: 01, 02, 03… dentro de la incidencia, y un 409
+   * si la partida ya tiene metrado imputado en un parte. */
+  const mPart = url.match(/\/incidentes\/\d+\/partidas\/(?:(\d+)\/)?$/);
+  if (mPart) {
+    const pid = mPart[1] ? Number(mPart[1]) : null;
+    const devuelve = () => json({ id: 7, partidas: detalle.map(d => d.id),
+                                  partidas_detalle: detalle });
+
+    if (metodo === 'POST') {
+      const c = JSON.parse(opc.body);
+      window.__POST = c;
+      const faltan = {};
+      if (!c.descripcion) faltan.descripcion = ['Hace falta la descripcion.'];
+      if (!c.unidad) faltan.unidad = ['Hace falta la unidad.'];
+      if (Object.keys(faltan).length) return json(faltan, 400);
+      // El mayor que ya hay, no cuántas son: igual que el servidor.
+      const mayor = detalle.reduce(
+        (a, d) => Math.max(a, parseInt(d.codigo, 10) || 0), 0);
+      detalle = [...detalle, {
+        id: 900 + detalle.length, codigo: String(mayor + 1).padStart(2, '0'),
+        descripcion: c.descripcion, unidad: c.unidad,
+        metrado: c.metrado, precio: c.precio,
+        ejecutado: 0, saldo: c.metrado, avance: 0,
+      }];
+      return devuelve();
+    }
+    if (metodo === 'PATCH') {
+      window.__PATCH_PARTIDA = { id: pid, ...JSON.parse(opc.body) };
+      detalle = detalle.map(d => d.id === pid
+        ? { ...d, ...JSON.parse(opc.body),
+            saldo: JSON.parse(opc.body).metrado - d.ejecutado }
+        : d);
+      return devuelve();
+    }
+    if (metodo === 'DELETE') {
+      // La id 2 es la que lleva 460 ejecutados: tiene partes imputados.
+      if (pid === 2) {
+        return json({ detail: 'No se puede quitar: 3 parte(s) ya le imputaron '
+                              + 'metrado. Si el metrado estaba mal, corrigelo '
+                              + 'en la partida en vez de borrarla.',
+                      partes: 3 }, 409);
+      }
+      detalle = detalle.filter(d => d.id !== pid);
+      return devuelve();
+    }
+  }
 
   /* ── LA ACTIVIDAD DE OBRA: la ruta buena y la trampa ──
    * El orden importa: actividades-obra/ se mira ANTES, porque

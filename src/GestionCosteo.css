@@ -160,3 +160,132 @@
   border: 1px solid #bfdbfe;
   border-radius: 7px;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   EL ALTA DE UNA PARTIDA PROPIA DE LA INCIDENCIA
+   ════════════════════════════════════════════════════════════════════════
+   Mismo tema claro que el resto del bloque. Los colores salen de la paleta
+   que ya usa .cos-prog (azules #1d4ed8 / #bfdbfe sobre blanco); no se
+   inventa ninguno nuevo para que el formulario no parezca pegado de otra
+   pantalla. */
+
+.cos-prog-edita {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 6px;
+  color: #0284c7;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cos-prog-edita:hover:not(:disabled) { background: #e0f2fe; }
+.cos-prog-edita:disabled { opacity: .5; cursor: not-allowed; }
+
+.cos-prog-forma {
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+}
+
+.cos-prog-forma-tit {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  color: #1d4ed8;
+  margin-bottom: 10px;
+}
+
+/* Se envuelve en vez de encogerse. Con cinco campos en una fila fija, en un
+ * portátil la descripción quedaba en 90 px y no cabía ni una palabra. */
+.cos-prog-campos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  align-items: flex-start;
+}
+
+.cos-prog-campo { display: flex; flex-direction: column; gap: 4px; }
+.cos-prog-campo.ancho { flex: 1 1 320px; min-width: 220px; }
+.cos-prog-campo.corto { flex: 0 0 120px; }
+
+.cos-prog-campo > span {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.cos-prog-campo input {
+  /* box-sizing explícito: sin él, el padding se suma al 100% y el campo se
+   * sale de su columna. Ya pasó en la ficha de evaluación. */
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 9px;
+  font-size: 13px;
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+.cos-prog-campo input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .18);
+}
+.cos-prog-campo input.mal { border-color: #dc2626; background: #fef2f2; }
+
+/* El error va debajo de SU campo, no en un montón arriba: con cuatro campos
+ * una lista de errores obliga a emparejarlos a ojo. */
+.cos-prog-campo > em {
+  font-style: normal;
+  font-size: 11px;
+  color: #b91c1c;
+}
+
+.cos-prog-importe { justify-content: flex-end; }
+.cos-prog-importe b {
+  display: block;
+  padding: 7px 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+}
+
+.cos-prog-forma-pie {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cos-prog-ok,
+.cos-prog-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cos-prog-ok {
+  color: #fff;
+  background: #1d4ed8;
+  border: 1px solid #1d4ed8;
+}
+.cos-prog-ok:hover:not(:disabled) { background: #1e40af; }
+.cos-prog-cancel {
+  color: #475569;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+}
+.cos-prog-cancel:hover:not(:disabled) { background: #f1f5f9; }
+.cos-prog-ok:disabled,
+.cos-prog-cancel:disabled { opacity: .55; cursor: not-allowed; }

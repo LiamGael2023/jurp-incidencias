@@ -15,6 +15,7 @@
  * fondo que de verdad tiene detrás.
  */
 import pw from '/opt/node-tools/node_modules/playwright-core/index.js';
+import { medidorDe } from './contraste.mjs';
 
 const BASE = 'http://localhost:5199/pruebas/web/evaluacion.html';
 const r = [];
@@ -25,39 +26,9 @@ const p = await b.newPage({ viewport: { width: 1500, height: 1000 } });
 const errs = [];
 p.on('pageerror', e => errs.push(String(e)));
 
-/* Contraste WCAG. El fondo se busca subiendo por los padres hasta encontrar
- * uno que no sea transparente: es lo que el ojo ve de verdad detrás del
- * texto, y es justo el paso que no se puede hacer leyendo el CSS. */
-const MEDIDOR = `(sel) => {
-  const lum = (c) => {
-    const [r, g, b] = c.match(/[\\d.]+/g).slice(0, 3).map(Number).map(v => {
-      v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-    });
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  };
-  const fondoDe = (el) => {
-    for (let n = el; n; n = n.parentElement) {
-      const bg = getComputedStyle(n).backgroundColor;
-      const a = bg.match(/[\\d.]+/g);
-      if (a && (a.length < 4 || Number(a[3]) > 0.5)) return bg;
-    }
-    return 'rgb(255,255,255)';
-  };
-  return [...document.querySelectorAll(sel)].map(el => {
-    const s = getComputedStyle(el);
-    const L1 = lum(s.color), L2 = lum(fondoDe(el));
-    const ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
-    return {
-      texto: (el.textContent || '').trim().slice(0, 34),
-      color: s.color, fondo: fondoDe(el),
-      ratio: +ratio.toFixed(2),
-      tam: parseFloat(s.fontSize),
-      visible: el.offsetWidth > 0 && el.offsetHeight > 0,
-    };
-  });
-}`;
-
-const medir = (sel) => p.evaluate(new Function('return ' + MEDIDOR)(), sel);
+/* El medidor de contraste vive en contraste.mjs: lo necesitaba tambien la
+ * pantalla de costeo y dos copias se separan con el primer arreglo. */
+const medir = medidorDe(p);
 
 // AA pide 4.5 para texto normal y 3.0 para texto grande (>=18.66px en negrita
 // o >=24px). Aquí casi todo es texto pequeño, así que se exige 4.5.

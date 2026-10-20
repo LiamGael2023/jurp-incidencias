@@ -38,6 +38,7 @@ import VisorImagen from './VisorImagen';
 import { API_OPS, API_BASE } from './api';
 import { rutaDe, cuelgaDe, bajarSolo } from './arbolPartidas';
 import EscaleraPartida from './SelectorPartida';
+import FormaPartida from './FormaPartida';
 import { imgToBase64 } from './costeo/imagen';
 import './GestionCosteo.css';
 import {
@@ -128,6 +129,23 @@ export default function GestionCosteo({
   const [progAviso, setProgAviso] = useState(null);
   // 'no-soportado' cuando el backend todavía no lleva el campo.
   const [progSoporte, setProgSoporte] = useState('cargando');
+
+  /* UNA INCIDENCIA NO ELIGE SUS PARTIDAS: LAS ESCRIBE.
+   *
+   * Aquí había una escalera de presupuestos, y lo que ofrecía era el de otra
+   * obra —«01 · CONSTRUCCION Y MEJORAMIENTO … EN LA TOMA 10.5» para una
+   * incidencia en el Canal Lateral 10—. No era un filtro mal puesto: es que
+   * la incidencia no tiene presupuesto del que elegir. Aparece cuando algo se
+   * rompe, y lo que hay que hacer para arreglarlo se decide entonces.
+   *
+   * Una actividad de obra SÍ tiene presupuesto, así que allí la escalera se
+   * queda. Por eso esto se bifurca en vez de cambiarse para los dos. */
+  const esIncidencia = campoVinculo !== 'actividad_obra';
+  const NUEVA = { descripcion: '', unidad: '', metrado: '', precio: '' };
+  const [progNueva, setProgNueva] = useState(NUEVA);
+  const [progErr, setProgErr] = useState({});
+  // El id que se está editando en la tabla, o null.
+  const [progEdit, setProgEdit] = useState(null);
   // Por qué se soltó la partida al cambiar de actividad. Se dice una vez y
   // se va: un aviso que se queda ahí deja de leerse.
   const [avisoPartida, setAvisoPartida] = useState('');
@@ -404,7 +422,105 @@ export default function GestionCosteo({
     }
   };
 
+  /* ── LAS PARTIDAS PROPIAS DE LA INCIDENCIA ──
+   *
+   * Las tres respuestas del servidor devuelven la incidencia entera, no la
+   * partida sola: la tabla necesita el detalle recalculado —saldos,
+   * presupuestado— y pedirlo aparte dejaría medio segundo los números
+   * viejos en pantalla. */
+  const aplicarRespuesta = (d) => {
+    setProgDetalle(d.partidas_detalle || []);
+    setProgSoporte('ok');
+  };
+
+  /* Un error del servidor se dice con lo que el servidor dijo. Manda los
+   * fallos por campo —{descripcion: ["Hace falta…"]}— y se pintan donde
+   * toca; lo que no sea eso se enseña tal cual. Un "no se pudo guardar" a
+   * secas no le dice a nadie qué arreglar. */
+  const explicarFallo = async (r) => {
+    if (r.status === 404) {
+      setProgAviso({ mal: true, txt: 'Este servidor todavía no admite crear '
+        + 'partidas de la incidencia: falta aplicar '
+        + 'parche_partidas_propias_incidencia.py en el servidor.' });
+      return;
+    }
+    let d = null;
+    try { d = await r.json(); } catch (e) { /* cuerpo vacío o no JSON */ }
+    if (d && typeof d === 'object' && !d.detail) {
+      const porCampo = {};
+      for (const k of Object.keys(d)) {
+        if (NUEVA.hasOwnProperty(k)) porCampo[k] = [].concat(d[k]).join(' ');
+      }
+      if (Object.keys(porCampo).length) { setProgErr(porCampo); return; }
+    }
+    setProgAviso({ mal: true, txt: (d && d.detail)
+      || `El servidor respondió ${r.status}.` });
+  };
+
+  const crearPartida = async () => {
+    setProgErr({}); setProgAviso(null);
+    // Se comprueba aquí ADEMÁS de en el servidor: un viaje de ida y vuelta
+    // para decir "falta la descripción" es un viaje de más.
+    const fallos = {};
+    if (!progNueva.descripcion.trim()) fallos.descripcion = 'Hace falta.';
+    if (!progNueva.unidad.trim()) fallos.unidad = 'Hace falta.';
+    if (Object.keys(fallos).length) { setProgErr(fallos); return; }
+
+    setProgGuardando(true);
+    try {
+      const r = await fetch(`${API_OPS}/incidentes/${sujeto.id}/partidas/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          descripcion: progNueva.descripcion.trim(),
+          unidad: progNueva.unidad.trim(),
+          metrado: Number(progNueva.metrado) || 0,
+          precio: Number(progNueva.precio) || 0,
+        }),
+      });
+      if (!r.ok) { await explicarFallo(r); return; }
+      aplicarRespuesta(await r.json());
+      setProgNueva(NUEVA);
+    } catch (e) {
+      setProgAviso({ mal: true, txt: 'No se pudo guardar.' });
+    } finally { setProgGuardando(false); }
+  };
+
+  const editarPartida = async (id, campos) => {
+    setProgErr({}); setProgAviso(null); setProgGuardando(true);
+    try {
+      const r = await fetch(`${API_OPS}/incidentes/${sujeto.id}/partidas/${id}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(campos),
+      });
+      if (!r.ok) { await explicarFallo(r); return false; }
+      aplicarRespuesta(await r.json());
+      setProgEdit(null);
+      return true;
+    } catch (e) {
+      setProgAviso({ mal: true, txt: 'No se pudo guardar.' });
+      return false;
+    } finally { setProgGuardando(false); }
+  };
+
+  const borrarPartida = async (id) => {
+    setProgAviso(null); setProgGuardando(true);
+    try {
+      const r = await fetch(`${API_OPS}/incidentes/${sujeto.id}/partidas/${id}/`,
+        { method: 'DELETE' });
+      /* El 409 es el caso importante: la partida ya tiene metrado imputado en
+       * un parte. Borrarla dejaría ese parte apuntando a nada. El servidor
+       * dice cuántos son y aquí se repite tal cual. */
+      if (!r.ok) { await explicarFallo(r); return; }
+      aplicarRespuesta(await r.json());
+    } catch (e) {
+      setProgAviso({ mal: true, txt: 'No se pudo quitar.' });
+    } finally { setProgGuardando(false); }
+  };
+
   const quitarProgramada = async (id) => {
+    if (esIncidencia) { await borrarPartida(id); return; }
     const ids = progDetalle.map(p => p.id).filter(x => String(x) !== String(id));
     await guardarProgramado(ids);
   };
@@ -1686,9 +1802,15 @@ export default function GestionCosteo({
                     </span>
                     {progSoporte === 'ok' && !bloqueado && (
                       <button type="button" className="cos-prog-add"
-                        onClick={() => { setProgAbierto(a => !a); setProgRuta(bajarSolo(partidas, [])); }}>
+                        onClick={() => {
+                          setProgAbierto(a => !a);
+                          setProgErr({});
+                          if (esIncidencia) setProgNueva(NUEVA);
+                          else setProgRuta(bajarSolo(partidas, []));
+                        }}>
                         {progAbierto ? <><FaTimes size={10} /> Cancelar</>
-                                     : <><FaPlus size={10} /> Añadir partida</>}
+                                     : <><FaPlus size={10} /> {esIncidencia
+                                           ? 'Nueva partida' : 'Añadir partida'}</>}
                       </button>
                     )}
                   </div>
@@ -1719,9 +1841,17 @@ export default function GestionCosteo({
 
                   {progSoporte === 'ok' && progDetalle.length === 0 && !progAbierto && (
                     <div className="cos-prog-nota">
-                      Sin partidas. Mientras no elijas ninguna, el parte diario
-                      ofrece las {partidas.length} del presupuesto entero —
-                      incluidas las de otras obras.
+                      {esIncidencia ? <>
+                        Sin partidas. Escribe aquí las que haga falta para
+                        atender este incidente; el parte diario solo ofrecerá
+                        esas. Mientras no haya ninguna, ofrece las{' '}
+                        {partidas.length} del presupuesto entero — incluidas
+                        las de otras obras.
+                      </> : <>
+                        Sin partidas. Mientras no elijas ninguna, el parte
+                        diario ofrece las {partidas.length} del presupuesto
+                        entero — incluidas las de otras obras.
+                      </>}
                     </div>
                   )}
 
@@ -1754,9 +1884,30 @@ export default function GestionCosteo({
                                 </td>
                                 {!bloqueado && (
                                   <td className="n">
+                                    {/* Editar solo en la incidencia: en una
+                                        actividad la partida es del
+                                        presupuesto de la obra y cambiarla
+                                        desde aquí movería ese presupuesto
+                                        entero. */}
+                                    {esIncidencia && (
+                                      <button type="button" className="cos-prog-edita"
+                                        disabled={progGuardando}
+                                        title="Corregir esta partida"
+                                        onClick={() => {
+                                          setProgErr({}); setProgAbierto(false);
+                                          setProgEdit({
+                                            id: p.id,
+                                            descripcion: p.descripcion || '',
+                                            unidad: p.unidad || '',
+                                            metrado: String(p.metrado ?? ''),
+                                            precio: String(p.precio ?? ''),
+                                          });
+                                        }}><FaPen size={10} /></button>
+                                    )}
                                     <button type="button" className="cos-prog-quita"
                                       disabled={progGuardando}
-                                      title="Quitar de lo programado"
+                                      title={esIncidencia ? 'Borrar esta partida'
+                                                          : 'Quitar de lo programado'}
                                       onClick={() => quitarProgramada(p.id)}><FaTrash size={10} /></button>
                                   </td>
                                 )}
@@ -1768,7 +1919,37 @@ export default function GestionCosteo({
                     </div>
                   )}
 
-                  {progAbierto && (
+                  {progEdit && esIncidencia && (
+                    <FormaPartida
+                      key={`edit-${progEdit.id}`}
+                      titulo={`Corregir la partida ${
+                        (progDetalle.find(p => p.id === progEdit.id) || {}).codigo || ''}`}
+                      valor={progEdit}
+                      errores={progErr}
+                      guardando={progGuardando}
+                      onCambio={setProgEdit}
+                      onGuardar={() => editarPartida(progEdit.id, {
+                        descripcion: progEdit.descripcion.trim(),
+                        unidad: progEdit.unidad.trim(),
+                        metrado: Number(progEdit.metrado) || 0,
+                        precio: Number(progEdit.precio) || 0,
+                      })}
+                      onCancelar={() => { setProgEdit(null); setProgErr({}); }}
+                    />
+                  )}
+
+                  {progAbierto && esIncidencia && (
+                    <FormaPartida
+                      valor={progNueva}
+                      errores={progErr}
+                      guardando={progGuardando}
+                      onCambio={setProgNueva}
+                      onGuardar={crearPartida}
+                      onCancelar={() => { setProgAbierto(false); setProgErr({}); }}
+                    />
+                  )}
+
+                  {progAbierto && !esIncidencia && (
                     <div className="cos-prog-escalera">
                       <EscaleraPartida
                         partidas={partidas}
