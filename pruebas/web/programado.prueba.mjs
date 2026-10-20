@@ -418,6 +418,39 @@ ok(await p.locator('.cos-prog-forma').count() === 0,
 ok(await p.locator('.cos-prog-edita').count() === 0,
    'ni se ofrece editar una partida del presupuesto de la obra');
 
+// ══════════ EJECUCION PRESUPUESTAL ══════════
+// Las tres secciones del gasto bajo una cabecera, que es la pareja del
+// bloque PROGRAMADO. Sueltas parecían tres cosas distintas.
+await ir('con');
+ok(await p.locator('.cos-ejec').count() === 1,
+   'el gasto va envuelto en un solo bloque');
+ok(/ejecuci[oó]n presupuestal/i.test(await p.locator('.cos-ejec-tit').innerText()),
+   'titulado Ejecución presupuestal',
+   await p.locator('.cos-ejec-tit').innerText());
+
+// Las tres secciones quedan DENTRO, no sueltas al lado.
+const dentro = await p.evaluate(() => {
+  const b = document.querySelector('.cos-ejec');
+  return ['MANO DE OBRA', 'MATERIALES', 'EQUIPO']
+    .every(t => b && b.innerText.toUpperCase().includes(t));
+});
+ok(dentro, 'y las tres secciones del gasto quedan dentro');
+
+// El bloque del programado sigue siendo otro: son dos mitades, no una.
+const separados = await p.evaluate(() => {
+  const prog = document.querySelector('.cos-prog');
+  const ejec = document.querySelector('.cos-ejec');
+  return !!(prog && ejec) && !ejec.contains(prog) && !prog.contains(ejec)
+    && (prog.compareDocumentPosition(ejec) & Node.DOCUMENT_POSITION_FOLLOWING) > 0;
+});
+ok(separados, 'y PROGRAMADO sigue siendo un bloque aparte, encima');
+
+const medir2 = medidorDe(p);
+const flojos2 = (await medir2('.cos-ejec-tit, .cos-ejec-tot, .cos-ejec-tot i'))
+  .filter(f => f.visible && f.texto && f.ratio < MINIMO);
+ok(flojos2.length === 0, 'y su cabecera pasa AA',
+   flojos2.map(f => `"${f.texto}" ${f.ratio}:1`).join(' | '));
+
 ok(errs.length === 0, 'sin errores de JavaScript', errs.join(' | ').slice(0, 150));
 
 await b.close();

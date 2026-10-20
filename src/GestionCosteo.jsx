@@ -2137,7 +2137,32 @@ export default function GestionCosteo({
                   )}
                 </div>
 
-                {/* La tabla agrupada va aquí abajo (sin formulario inline) */}
+                {/* EJECUCION PRESUPUESTAL: las tres secciones del gasto
+                    -mano de obra, materiales y equipo- bajo una sola
+                    cabecera, que es la pareja del bloque PROGRAMADO de
+                    arriba. Sueltas, las tres parecían tres cosas distintas y
+                    no la otra mitad de la misma cuenta. */}
+                <div className="cos-ejec">
+                  <div className="cos-ejec-cab">
+                    <span className="cos-ejec-tit">
+                      <FaFileInvoice size={11} /> Ejecución presupuestal
+                    </span>
+                    {/* El total del bloque, aquí arriba: el del pie queda
+                        lejos en cuanto la lista de equipos crece y hay que
+                        bajar a buscarlo.
+
+                        Y SI HAY FILTRO DE PERIODO, SE DICE. Este número sale
+                        de lo que cae dentro del rango; enseñarlo a secas al
+                        lado de un programado que no se filtra invitaría a
+                        restarlos y sacar un saldo que no es. */}
+                    <span className="cos-ejec-tot">
+                      S/ {fmtNum(costoTotalIncidente)}
+                      {hayRango && (
+                        <i> · solo el periodo filtrado
+                          {ocultosPorRango > 0 ? ` (${ocultosPorRango} fuera)` : ''}</i>
+                      )}
+                    </span>
+                  </div>
 
                 <div className="tbl-table-responsive tbl-border-top">
                   <table className="tbl-table tbl-table-vcenter">
@@ -2303,6 +2328,7 @@ export default function GestionCosteo({
                         })}
                     </tbody>
                   </table>
+                </div>
                 </div>
               </div>
               <div className="tbl-modal-footer" style={{flexWrap:'wrap',gap:'8px'}}>

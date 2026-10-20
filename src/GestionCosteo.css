@@ -370,3 +370,59 @@
  * derecha: alineado a la derecha parecía el encabezado de la última columna
  * del grupo en vez del de las cuatro. */
 .cos-prog-tabla th.cen { text-align: center; white-space: nowrap; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   EJECUCION PRESUPUESTAL
+   ════════════════════════════════════════════════════════════════════════
+   Las tres secciones del gasto bajo una cabecera, igual que PROGRAMADO
+   agrupa el presupuesto. Se usan los mismos tokens que el bloque de arriba
+   —mismo azul, mismo radio, mismo peso de rótulo— para que se lean como las
+   dos mitades de una cuenta y no como dos pantallas pegadas. */
+
+.cos-ejec {
+  margin: 14px 0 0;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #f8fbff;
+  overflow: hidden;
+}
+
+.cos-ejec-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  background: #eff6ff;
+  border-bottom: 1px solid #bfdbfe;
+}
+
+.cos-ejec-tit {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: #1d4ed8;
+}
+
+.cos-ejec-tot {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+/* El aviso del filtro, en el tono de advertencia y no en el del total: es
+ * una condición del número, no parte de él. */
+.cos-ejec-tot i {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+/* La tabla ya trae su propio borde superior; dentro del bloque sobra. */
+.cos-ejec .tbl-table-responsive.tbl-border-top { border-top: 0; }
