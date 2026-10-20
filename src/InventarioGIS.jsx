@@ -8,7 +8,10 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import {
   FaClipboardCheck, FaTimes, FaSyncAlt, FaCrosshairs,
   FaChevronDown, FaChevronRight, FaExclamationCircle, FaPlusCircle, FaSearch,
+  FaListUl, FaCamera, FaTrash, FaChevronLeft, FaImages, FaExpand,
 } from 'react-icons/fa';
+import { prepararFoto, motivoRechazo, urlFoto, ordenarFotos, peso } from './fotosActivo';
+import { caracteristicas, cobertura, tituloActivo } from './fichaActivo';
 import './InventarioGIS.css';
 
 // Simbología oficial del inventario. Son los mismos archivos que usa el
@@ -352,6 +355,8 @@ export function useInventario() {
   const [destacado, setDestacado] = useState(null);
   // activo que se está evaluando: {tipo, fid, props}
   const [evaluando, setEvaluando] = useState(null);
+  // Activo cuya ficha está abierta: { tipo, fid, props, capa }
+  const [ficha, setFicha] = useState(null);
   // definición de campos por tipo, cacheada tras el primer pedido
   const [formularios, setFormularios] = useState({});
   // 'todo' | 'JURP' | 'PECH' — filtro general, el que aplica por defecto
@@ -593,6 +598,18 @@ export function useInventario() {
 
   const cerrarEvaluacion = useCallback(() => setEvaluando(null), []);
 
+  /* La ficha del activo: todo lo que se sabe de una estructura, más sus
+   * fotos. Es una pantalla aparte y no el globo del mapa porque ahí no cabe
+   * —el globo tiene que seguir siendo el vistazo rápido— y porque un globo se
+   * cierra al pulsar fuera, que es justo lo que no debe pasar mientras se
+   * está subiendo una foto. */
+  const abrirFicha = useCallback((tipo, fid, props, capa) => {
+    cargarFormulario(tipo);          // de aquí salen las etiquetas bonitas
+    setFicha({ tipo, fid, props, capa });
+  }, [cargarFormulario]);
+
+  const cerrarFicha = useCallback(() => setFicha(null), []);
+
   // Guarda y refresca en memoria, para no volver a pedir toda la campaña.
   const guardarEvaluacion = useCallback(async (tipo, fid, cuerpo) => {
     if (!campania) return { ok: false, error: 'No hay campaña activa' };
@@ -669,6 +686,7 @@ export function useInventario() {
     campanias, cambiarCampania, altas,
     indice, buscar, irA, destacado, limpiarDestacado,
     evaluando, abrirEvaluacion, cerrarEvaluacion, guardarEvaluacion, formularios,
+    ficha, abrirFicha, cerrarFicha,
     alternarCapa, apagarTodas, evaluacionDe, totalVisibles, recargar: iniciar,
     cluster, alternarCluster,
   };
@@ -946,19 +964,28 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                     )}
                   </div>
 
-                  {/* tbody explícito: sin él React avisa de anidamiento inválido */}
+                  {/* EL GLOBO ES EL VISTAZO, NO LA FICHA. Enseña lo que sitúa
+                      la estructura y poco más; todo lo que trae la capa está
+                      en la ficha, que es donde cabe y donde no se cierra al
+                      pulsar fuera. Antes esta tabla era la única forma de ver
+                      características, y por eso mostraba ocho campos elegidos
+                      a mano y escondía el resto sin decirlo.
+
+                      tbody explícito: sin él React avisa de anidamiento
+                      inválido. */}
                   <table className="inv-pop-tabla">
                     <tbody>
                       {p.nombre_canal && <tr><th>Canal</th><td>{p.nombre_canal}</td></tr>}
                       {p.progresiva != null && <tr><th>Progresiva</th><td>{p.progresiva}</td></tr>}
                       {p.tipo && <tr><th>Tipo</th><td>{p.tipo}</td></tr>}
-                      {p.material && <tr><th>Material</th><td>{p.material}</td></tr>}
                       {p.estado && <tr><th>Estado (base)</th><td>{p.estado}</td></tr>}
-                      {p.num_usuarios != null && <tr><th>Usuarios</th><td>{p.num_usuarios}</td></tr>}
-                      {p.area_total != null && <tr><th>Área</th><td>{p.area_total} ha</td></tr>}
-                      {p.observaciones && <tr><th>Obs.</th><td>{p.observaciones}</td></tr>}
                     </tbody>
                   </table>
+
+                  <button type="button" className="inv-btn-ficha"
+                    onClick={() => inv.abrirFicha(capa.codigo, p.fid, p, capa)}>
+                    <FaListUl size={10} /> Ver ficha y fotos
+                  </button>
 
                   {ev ? (
                     <div className="inv-pop-eval" style={{ '--e': COLOR_ESTADO[ev.estado_cons] }}>
@@ -1321,6 +1348,350 @@ export function ModalEvaluacion({ inv }) {
           </button>
         </div>
 
+      </div>
+    </div>
+  );
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   Ficha del activo: lo que se sabe de la estructura, y sus fotos
+
+   AL PULSAR UNA ESTRUCTURA solo salía un globo con ocho campos escogidos a
+   mano. Lo demás que traía la capa —la luz de una alcantarilla, el número de
+   hojas de una compuerta, el año— se descartaba sin decirlo, y no había forma
+   de saber desde la pantalla que existía.
+
+   La ficha enseña todas las características y añade lo que faltaba del todo:
+   las fotos. Un inventario de obra sin fotografía obliga a ir hasta la
+   estructura para saber cómo está, que es justo lo que el inventario debería
+   ahorrar.
+
+   NO ES UN GLOBO MÁS GRANDE. Un globo de Leaflet se cierra al pulsar el mapa,
+   y eso es inaceptable mientras se sube una foto desde el teléfono con la
+   cobertura de Chao. La ficha es un panel aparte, que solo se cierra cuando
+   se le dice.
+   ══════════════════════════════════════════════════════════ */
+
+/* El contrato con el servidor, en un solo sitio.
+ *
+ *   GET    fotos/?tipo_activo=T&activo_fid=N   → lista
+ *   POST   fotos/   multipart                  → { id, imagen, ... }
+ *   DELETE fotos/<id>/
+ *
+ * La forma imita la de evaluaciones —se consulta por (tipo_activo, activo_fid)
+ * y se crea mandando los dos— para que el backend no tenga que inventar una
+ * convención nueva para esto.
+ */
+const API_FOTOS = `${API}/fotos/`;
+
+function GaleriaFotos({ tipo, fid, nombre }) {
+  const [fotos, setFotos] = useState(null);      // null = todavía cargando
+  const [fallo, setFallo] = useState(null);
+  const [subiendo, setSubiendo] = useState([]);  // [{ nombre, estado, nota }]
+  const [mirando, setMirando] = useState(-1);    // índice en el visor grande
+  const [encima, setEncima] = useState(false);   // arrastrando un archivo
+  const entrada = useRef(null);
+  const vivo = useRef(true);
+
+  useEffect(() => { vivo.current = true; return () => { vivo.current = false; }; }, []);
+
+  const cargar = useCallback(async () => {
+    setFallo(null);
+    try {
+      const r = await fetch(`${API_FOTOS}?tipo_activo=${encodeURIComponent(tipo)}`
+                            + `&activo_fid=${encodeURIComponent(fid)}`,
+                            { headers: cabeceras() });
+      if (!vivo.current) return;
+      if (r.status === 404) {
+        // Distinguir "no hay fotos" de "el servidor no sabe de fotos" importa:
+        // lo primero lo arregla el inspector, lo segundo no.
+        setFotos([]);
+        setFallo('sin-endpoint');
+        return;
+      }
+      if (!r.ok) { setFotos([]); setFallo(`Error ${r.status}`); return; }
+      const d = await r.json();
+      setFotos(ordenarFotos(d.results || d || []));
+    } catch (e) {
+      if (vivo.current) { setFotos([]); setFallo('No se pudo consultar'); }
+    }
+  }, [tipo, fid]);
+
+  useEffect(() => { setFotos(null); cargar(); }, [cargar]);
+
+  // Esc cierra el visor grande antes que la ficha.
+  useEffect(() => {
+    if (mirando < 0) return undefined;
+    const h = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); setMirando(-1); }
+      if (e.key === 'ArrowRight') setMirando(i => Math.min((fotos?.length || 1) - 1, i + 1));
+      if (e.key === 'ArrowLeft') setMirando(i => Math.max(0, i - 1));
+    };
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
+  }, [mirando, fotos]);
+
+  const subir = useCallback(async (archivos) => {
+    const lista = [...archivos].filter(Boolean);
+    if (!lista.length) return;
+
+    // Se marcan todas en pantalla antes de empezar: en campo la subida tarda,
+    // y sin acuse el inspector vuelve a pulsar y sube la foto dos veces.
+    setSubiendo(lista.map(a => ({ nombre: a.name, estado: 'espera' })));
+
+    for (let i = 0; i < lista.length; i++) {
+      const archivo = lista[i];
+      const marcar = (estado, nota) => setSubiendo(s =>
+        s.map((x, j) => (j === i ? { ...x, estado, nota } : x)));
+
+      const malo = motivoRechazo(archivo);
+      if (malo) { marcar('error', malo); continue; }
+
+      marcar('preparando');
+      const { archivo: listo, reducida, antes, despues } = await prepararFoto(archivo);
+      marcar('subiendo', reducida ? `${peso(antes)} → ${peso(despues)}` : null);
+
+      try {
+        const fd = new FormData();
+        fd.append('tipo_activo', tipo);
+        fd.append('activo_fid', String(fid));
+        fd.append('imagen', listo, listo.name);
+        const r = await fetch(API_FOTOS, { method: 'POST', headers: cabeceras(), body: fd });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          const detalle = Object.entries(d)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`).join(' · ');
+          marcar('error', detalle || `Error ${r.status}`);
+          continue;
+        }
+        marcar('ok');
+      } catch (e) {
+        marcar('error', 'No se pudo subir');
+      }
+    }
+
+    await cargar();
+    // Las que salieron bien desaparecen de la lista de progreso; los errores
+    // se quedan, porque son lo único que hay que leer.
+    if (vivo.current) setSubiendo(s => s.filter(x => x.estado === 'error'));
+  }, [tipo, fid, cargar]);
+
+  const borrar = useCallback(async (foto) => {
+    if (!window.confirm('¿Borrar esta foto? No se puede deshacer.')) return;
+    try {
+      const r = await fetch(`${API_FOTOS}${foto.id}/`, { method: 'DELETE', headers: cabeceras() });
+      if (!r.ok && r.status !== 204) { setFallo(`No se pudo borrar (${r.status})`); return; }
+      setMirando(-1);
+      setFotos(f => (f || []).filter(x => x.id !== foto.id));
+    } catch (e) {
+      setFallo('No se pudo borrar');
+    }
+  }, []);
+
+  const soltar = (e) => {
+    e.preventDefault();
+    setEncima(false);
+    if (e.dataTransfer?.files?.length) subir(e.dataTransfer.files);
+  };
+
+  const n = fotos?.length || 0;
+
+  return (
+    <>
+      <div className="inv-modal-sep">
+        <FaImages size={10} /> Fotos{n > 0 && ` · ${n}`}
+      </div>
+
+      {fotos === null && (
+        <div className="inv-cargando"><FaSyncAlt className="icon-spin" /> Cargando fotos…</div>
+      )}
+
+      {fallo === 'sin-endpoint' && (
+        <div className="inv-nota">
+          Este servidor todavía no guarda fotos de activos. Las que subas no se
+          perderán: se enviarán en cuanto el inventario tenga el almacén de
+          fotos activado.
+        </div>
+      )}
+      {fallo && fallo !== 'sin-endpoint' && (
+        <div className="inv-error"><FaExclamationCircle /> {fallo}</div>
+      )}
+
+      {fotos !== null && n === 0 && fallo !== 'sin-endpoint' && (
+        <div className="inv-nota">
+          Sin fotos. La primera es la que más sirve: una vista general de la
+          estructura, con el canal de fondo.
+        </div>
+      )}
+
+      {n > 0 && (
+        <div className="inv-fotos">
+          {fotos.map((f, i) => (
+            <button type="button" key={f.id ?? i} className="inv-foto"
+              onClick={() => setMirando(i)}
+              title={f.descripcion || `Foto ${i + 1} de ${nombre}`}>
+              <img src={urlFoto(f)} alt={f.descripcion || `Foto ${i + 1}`} loading="lazy" />
+              <span className="inv-foto-lupa"><FaExpand size={9} /></span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Zona de subida. El input lleva capture para que en el teléfono abra
+          la cámara directamente, que es como se usa en campo. */}
+      <div className={`inv-subir${encima ? ' encima' : ''}`}
+        onDragOver={e => { e.preventDefault(); setEncima(true); }}
+        onDragLeave={() => setEncima(false)}
+        onDrop={soltar}>
+        <input ref={entrada} type="file" accept="image/*" capture="environment" multiple
+          style={{ display: 'none' }}
+          onChange={e => { subir(e.target.files); e.target.value = ''; }} />
+        <button type="button" className="inv-btn-foto" onClick={() => entrada.current?.click()}>
+          <FaCamera size={11} /> Añadir fotos
+        </button>
+        <span className="inv-subir-pista">o arrástralas aquí</span>
+      </div>
+
+      {subiendo.length > 0 && (
+        <ul className="inv-subiendo">
+          {subiendo.map((s, i) => (
+            <li key={`${s.nombre}:${i}`} className={s.estado}>
+              {s.estado === 'error' ? <FaExclamationCircle size={9} />
+                : s.estado === 'ok' ? '✓'
+                : <FaSyncAlt className="icon-spin" size={9} />}
+              <span className="inv-subiendo-nom">{s.nombre}</span>
+              {s.nota && <span className="inv-subiendo-nota">{s.nota}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {mirando >= 0 && fotos?.[mirando] && (
+        <div className="inv-visor" onClick={() => setMirando(-1)}>
+          <img src={urlFoto(fotos[mirando])} alt="" onClick={e => e.stopPropagation()} />
+          <div className="inv-visor-barra" onClick={e => e.stopPropagation()}>
+            <button type="button" disabled={mirando === 0}
+              onClick={() => setMirando(i => i - 1)}><FaChevronLeft /></button>
+            <span>{mirando + 1} / {n}</span>
+            <button type="button" disabled={mirando === n - 1}
+              onClick={() => setMirando(i => i + 1)}><FaChevronRight /></button>
+            <button type="button" className="inv-visor-borrar"
+              onClick={() => borrar(fotos[mirando])}><FaTrash /> Borrar</button>
+            <button type="button" onClick={() => setMirando(-1)}><FaTimes /></button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export function FichaActivo({ inv }) {
+  const f = inv.ficha;
+  const tipo = f?.tipo;
+
+  // Las etiquetas bonitas de cada campo salen del formulario de evaluación,
+  // que ya se pide al abrir la ficha. Si no ha llegado, se usan los nombres
+  // de columna: la ficha se ve igual, solo menos pulida.
+  const etiquetas = useMemo(() => {
+    const campos = tipo ? inv.formularios[tipo] : null;
+    return Object.fromEntries((campos || [])
+      .filter(c => c.campo && c.etiqueta).map(c => [c.campo, c.etiqueta]));
+  }, [inv.formularios, tipo]);
+
+  const filas = useMemo(() => caracteristicas(f?.props, etiquetas), [f, etiquetas]);
+  const cob = useMemo(() => cobertura(f?.props), [f]);
+
+  useEffect(() => {
+    if (!f) return undefined;
+    const h = (e) => { if (e.key === 'Escape') inv.cerrarFicha(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [f, inv]);
+
+  if (!f) return null;
+
+  const ev = inv.evaluacionDe(f.tipo, f.fid);
+  const nombre = tituloActivo(f.props, f.capa?.label, f.fid);
+  const evaluable = inv.campania && inv.campania.estado !== 'cerrada';
+
+  return (
+    <div className="inv-modal-fondo" onClick={inv.cerrarFicha}>
+      <div className="inv-modal inv-ficha gis-glass" onClick={e => e.stopPropagation()}>
+
+        <div className="inv-modal-head">
+          <div>
+            <div className="inv-modal-tit">{nombre}</div>
+            <div className="inv-modal-sub">
+              {f.capa?.label || f.tipo.replace(/_/g, ' ')}
+              {f.props?.ambito && (
+                <span className={`inv-badge-ambito amb-${f.props.ambito}`}>
+                  {f.props.ambito === 'JURP' ? 'JURP'
+                    : f.props.ambito === 'PECH' ? 'Chavimochic' : 'sin ámbito'}
+                </span>
+              )}
+            </div>
+          </div>
+          <button className="gis-tool" style={{ width: 26, height: 26 }}
+            onClick={inv.cerrarFicha}><FaTimes /></button>
+        </div>
+
+        <div className="inv-modal-body">
+          <div className="inv-modal-sep">
+            Características
+            {/* Decir cuántos campos vienen vacíos es la mitad del valor de un
+                inventario: señala dónde falta levantar dato. */}
+            {cob.vacios > 0 && (
+              <span className="inv-cob" title="Campos de la capa que llegan sin dato">
+                {cob.conDato} de {cob.total} con dato
+              </span>
+            )}
+          </div>
+
+          {filas.length === 0 ? (
+            <div className="inv-nota">Esta capa no trae ninguna característica rellenada.</div>
+          ) : (
+            <table className="inv-ficha-tabla">
+              <tbody>
+                {filas.map(r => (
+                  <tr key={r.clave}>
+                    <th>{r.etiqueta}</th>
+                    <td>{r.valor}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          <GaleriaFotos tipo={f.tipo} fid={f.fid} nombre={nombre} />
+
+          {ev && (
+            <>
+              <div className="inv-modal-sep">Evaluación de campaña</div>
+              <div className="inv-pop-eval" style={{ '--e': COLOR_ESTADO[ev.estado_cons] }}>
+                <div className="inv-pop-eval-tit">
+                  Campaña {ev.campania_anio || inv.campania?.anio} · evaluado el {ev.fecha}
+                  {ev.evaluador && ` · ${ev.evaluador}`}
+                </div>
+                <div className="inv-pop-eval-estado">
+                  {ETIQUETA_ESTADO[ev.estado_cons] || ev.estado_cons}
+                  {ev.requiere_mant && <span className="inv-pop-mant">requiere mantenimiento</span>}
+                </div>
+                {ev.observaciones && <div className="inv-pop-eval-obs">{ev.observaciones}</div>}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="inv-ficha-pie">
+          <button className="inv-btn-sec" onClick={inv.cerrarFicha}>Cerrar</button>
+          {evaluable && (
+            <button className="inv-btn-pri"
+              onClick={() => { inv.cerrarFicha(); inv.abrirEvaluacion(f.tipo, f.fid, f.props); }}>
+              {ev ? 'Editar evaluación' : 'Evaluar'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

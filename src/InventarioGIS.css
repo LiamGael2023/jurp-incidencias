@@ -1160,3 +1160,202 @@
   background: rgba(15, 23, 42, 0.94);
   backdrop-filter: blur(12px);
 }
+
+/* ══════════════════════════════════════════════════════════
+   Ficha del activo: características y fotos
+   ══════════════════════════════════════════════════════════ */
+
+/* Más ancha que el formulario de evaluación: aquí la tabla tiene dos
+   columnas de texto y las miniaturas necesitan sitio para que se vea qué
+   hay en cada foto. */
+.inv-ficha { width: 520px; }
+
+.inv-btn-ficha {
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #cfe3f2;
+  background: rgba(76, 110, 245, .22);
+  border: 1px solid rgba(76, 110, 245, .5);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.inv-btn-ficha:hover { background: rgba(76, 110, 245, .34); }
+
+.inv-cob {
+  margin-left: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 9.5px;
+  color: #ffd8a8;
+}
+
+.inv-ficha-tabla { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.inv-ficha-tabla th,
+.inv-ficha-tabla td {
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  vertical-align: top;
+}
+.inv-ficha-tabla th {
+  width: 40%;
+  text-align: left;
+  font-weight: 600;
+  color: #8fb4cd;
+  text-transform: capitalize;
+}
+.inv-ficha-tabla td { color: #e3eef7; }
+.inv-ficha-tabla tr:last-child th,
+.inv-ficha-tabla tr:last-child td { border-bottom: none; }
+
+/* ── miniaturas ──
+   Cuadradas y recortadas: las fotos de campo vienen en vertical y en
+   horizontal mezcladas, y una rejilla con alturas distintas se lee peor que
+   el recorte, aunque el recorte pierda bordes. La foto entera está a un clic. */
+.inv-fotos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.inv-foto {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .05);
+  cursor: pointer;
+}
+.inv-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.inv-foto:hover { border-color: rgba(76, 110, 245, .75); }
+
+.inv-foto-lupa {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: #fff;
+  background: rgba(5, 12, 20, .62);
+  opacity: 0;
+  transition: opacity .12s;
+}
+.inv-foto:hover .inv-foto-lupa { opacity: 1; }
+
+/* ── zona de subida ── */
+.inv-subir {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px dashed rgba(255, 255, 255, .22);
+  border-radius: 6px;
+}
+.inv-subir.encima {
+  border-color: rgba(76, 110, 245, .9);
+  background: rgba(76, 110, 245, .14);
+}
+
+.inv-btn-foto {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #e9f2f9;
+  background: rgba(255, 255, 255, .11);
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.inv-btn-foto:hover { background: rgba(255, 255, 255, .18); }
+
+.inv-subir-pista { font-size: 10.5px; color: #7ba7c7; }
+
+.inv-subiendo { list-style: none; margin: 8px 0 0; padding: 0; font-size: 10.5px; }
+.inv-subiendo li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  color: #8fb4cd;
+}
+.inv-subiendo li.ok { color: #8ce99a; }
+.inv-subiendo li.error { color: #ff8787; }
+.inv-subiendo-nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+.inv-subiendo-nota { color: #7ba7c7; font-size: 10px; }
+
+/* ── visor a pantalla completa ──
+   Por encima del modal (1200) porque se abre desde dentro de él. */
+.inv-visor {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  background: rgba(3, 8, 14, .9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px 72px;
+}
+.inv-visor img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.inv-visor-barra {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(10, 20, 32, .92);
+  border: 1px solid rgba(255, 255, 255, .14);
+  color: #cfe3f2;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.inv-visor-barra button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  color: #cfe3f2;
+  background: rgba(255, 255, 255, .1);
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.inv-visor-barra button:hover { background: rgba(255, 255, 255, .18); }
+.inv-visor-barra button:disabled { opacity: .35; cursor: default; }
+.inv-visor-borrar { color: #ffa8a8 !important; }
+.inv-visor-borrar:hover { background: rgba(224, 49, 49, .3) !important; }
+
+.inv-ficha-pie {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(255, 255, 255, .09);
+}
+
+@media (max-width: 580px) {
+  .inv-ficha { width: 100%; }
+  .inv-ficha-tabla th { width: 45%; }
+}

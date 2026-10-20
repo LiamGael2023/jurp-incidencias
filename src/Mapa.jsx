@@ -23,7 +23,7 @@ import { BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa } from
 import { TeselasBase, SelectorBase, capaBase } from './capasBase';
 import { NIVELES_LLUVIA } from './umbralesLluvia';
 import './MapaHerramientas.css';
-import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion, FaClipboardCheck } from './InventarioGIS';
+import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion, FichaActivo, FaClipboardCheck } from './InventarioGIS';
 import { useRuta, CapaRuta, fmtDistancia, fmtTiempo } from './RutaGIS';
 import Mapa3D from './Mapa3D';
 import { leerTodas as leerInnova, horaDeLectura } from './InnovaWeather';
@@ -1858,6 +1858,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       {/* Formulario de evaluación. Se monta aquí y no dentro del popup
           porque los popups de Leaflet no admiten un modal a pantalla completa. */}
       <ModalEvaluacion inv={inv} />
+      <FichaActivo inv={inv} />
 
       {/* ══════════════ FORMATOS ANA ══════════════ */}
       {verReportes && (

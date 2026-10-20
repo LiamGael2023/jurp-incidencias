@@ -27,7 +27,7 @@
 
 // Sin barra al final: todo lo de abajo la pone, y dos seguidas rompen
 // algunas rutas de Django.
-const BASE = (import.meta.env.VITE_API_BASE || 'https://api.192.81.132.87.nip.io')
+const BASE = (import.meta.env?.VITE_API_BASE || 'https://api.192.81.132.87.nip.io')
   .replace(/\/+$/, '');
 
 /** El host, a secas. Para las imágenes y los PDF, que cuelgan de la raíz. */
