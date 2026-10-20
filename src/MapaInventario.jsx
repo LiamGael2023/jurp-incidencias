@@ -62,7 +62,8 @@ function IrA({ pos }) {
   return null;
 }
 
-function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }) {
+function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app,
+                         activoAbrir = null, onActivoAbierto = null }) {
   const [base, setBase] = useState(CAPA_POR_DEFECTO);
   const [opacidad, setOpacidad] = useState(1);
   const [herramienta, setHerramienta] = useState(null);
@@ -76,6 +77,17 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app }
 
   // El panel del inventario es la razón de esta vista: se abre al entrar.
   useEffect(() => { if (!inv.abierto) inv.alternar(); }, []);   // solo al montar
+
+  /* Llegada desde la tabla de Campañas: encender la capa, volar y destacar la
+   * estructura. Se espera a que el inventario haya terminado de iniciarse,
+   * porque irA necesita el catálogo de capas para saber a cuál pertenece.
+   * Se avisa al padre para que lo olvide: si no, volver a esta vista por el
+   * menú repetiría el vuelo sin que nadie lo haya pedido. */
+  useEffect(() => {
+    if (!activoAbrir || inv.iniciando) return;
+    inv.irA(activoAbrir);
+    onActivoAbierto?.();
+  }, [activoAbrir, inv.iniciando]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="gis">

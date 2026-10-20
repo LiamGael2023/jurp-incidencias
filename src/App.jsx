@@ -19,8 +19,9 @@ import Maquinaria from './Maquinaria';
 import Partes from './Partes';
 import MapaInventario from './MapaInventario';
 import ReportesInventario from './ReportesInventario';
+import CampaniasInventario from './CampaniasInventario';
 import MapaTematico from './MapaTematico';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen } from 'react-icons/fa';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 
 const URL_HYDROMETRIX = 'http://sistema.jriegopresurizado.org.pe/';
@@ -50,6 +51,9 @@ const MENU = [
   // Inventario: rótulo de sección y sus dos vistas, al final del menú.
   { clave: 'sec-inventario', seccion: true, modulo: 'inventario', apps: ['pluvira'] },
   { clave: 'inv-mapa',     titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,   apps: ['pluvira'] },
+  // Campañas va pegada al mapa porque es su contracara: el mapa enseña dónde
+  // está cada estructura, ésta enseña qué se evaluó y cuánto falta del año.
+  { clave: 'inv-campanias', titulo: 'Campañas',     icono: <FaCalendarAlt />,    apps: ['pluvira'] },
   { clave: 'inv-laminas',  titulo: 'Mapas temáticos', icono: <FaDraftingCompass />, apps: ['pluvira'] },
   { clave: 'inv-reportes', titulo: 'Reportes',      icono: <FaClipboardCheck />, apps: ['pluvira'] },
 ];
@@ -91,6 +95,8 @@ function App() {
   // ID del incidente que se debe abrir automáticamente al entrar a la vista
   // Incidentes (usado por el enlace desde el Panel de Maquinaria).
   const [incidenteAbrir, setIncidenteAbrir] = useState(null);
+  // Activo del inventario a abrir al entrar al mapa: { tipo, fid, lat, lng }.
+  const [activoAbrir, setActivoAbrir] = useState(null);
 
   // Opciones visibles segun la app elegida.
   const menuVisible = MENU.filter((m) => m.apps.includes(appElegida));
@@ -136,6 +142,14 @@ function App() {
   const irAIncidente = (incidenteId) => {
     setIncidenteAbrir(incidenteId);
     setVistaActual('lista');
+  };
+
+  // Lo mismo para el inventario: desde la tabla de evaluaciones se salta al
+  // mapa y se abre esa estructura. El objetivo viaja en estado, no en la URL,
+  // porque el visor no tiene rutas propias.
+  const irAActivo = (activo) => {
+    setActivoAbrir(activo);
+    setVistaActual('inv-mapa');
   };
 
   // 1) Intro NEXHIDRO
@@ -184,7 +198,17 @@ function App() {
   // ── Módulo Inventario ───────────────────────────────────────────────
   // El visor trae su propio RailGIS: se monta a pantalla completa.
   if (vistaActual === 'inv-mapa') {
-    return <MapaInventario {...propsRail} />;
+    return <MapaInventario {...propsRail} activoAbrir={activoAbrir}
+      onActivoAbierto={() => setActivoAbrir(null)} />;
+  }
+
+  if (vistaActual === 'inv-campanias') {
+    return (
+      <div className="maq">
+        <RailGIS {...propsRail} />
+        <div className="maq-main"><CampaniasInventario irAActivo={irAActivo} /></div>
+      </div>
+    );
   }
 
   // La lámina trae su propio Rail, como el visor: ocupa la pantalla entera

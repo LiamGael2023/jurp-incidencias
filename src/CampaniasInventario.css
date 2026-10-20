@@ -1,0 +1,339 @@
+/* Campañas del inventario.
+ *
+ * Pantalla completa y tema claro, como Maquinaria y Partes Diarios: es una
+ * tabla de trabajo que se lee mucho rato y, a diferencia del panel del mapa,
+ * no tiene detrás una imagen satelital que obligue a oscurecerla.
+ */
+
+.cmp-wrap {
+  height: 100%;
+  overflow: auto;
+  padding: 16px 20px 28px;
+  background: #f4f7fb;
+  color: #1d273b;
+}
+
+/* ── cabecera: el año y sus acciones ── */
+.cmp-cab {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  background: #fff;
+  border: 1px solid #e2ecf6;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(11, 42, 91, .06);
+}
+.cmp-cab-izq { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cmp-cab-der { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+.cmp-rotulo {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #51688a;
+}
+
+.cmp-anio {
+  font-size: 19px;
+  font-weight: 800;
+  color: #0B2A5B;
+  background: #fff;
+  border: 1px solid #cbd9e8;
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.cmp-anio-vacio { font-size: 17px; font-weight: 700; color: #8295ad; }
+
+.cmp-estado {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.cmp-estado.est-en_proceso { color: #0b7a56; background: #e3faf0; border: 1px solid #a7e8cd; }
+.cmp-estado.est-cerrada { color: #51688a; background: #eef2f7; border: 1px solid #d3dfeb; }
+
+.cmp-fechas { font-size: 12px; color: #51688a; }
+
+.cmp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1268C3;
+  background: #fff;
+  border: 1px solid #cbd9e8;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.cmp-btn:hover:not(:disabled) { background: #e8f3fd; border-color: #9fc9ec; }
+.cmp-btn:disabled { opacity: .5; cursor: not-allowed; }
+.cmp-btn-pri {
+  color: #fff;
+  background: #1268C3;
+  border-color: #1268C3;
+  box-shadow: 0 2px 6px rgba(18, 104, 195, .26);
+}
+.cmp-btn-pri:hover:not(:disabled) { background: #0f579f; border-color: #0f579f; }
+
+/* ── avisos ── */
+.cmp-error,
+.cmp-aviso {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cmp-error { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; }
+.cmp-error button,
+.cmp-aviso button {
+  margin-left: auto;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  color: inherit;
+  background: rgba(255, 255, 255, .7);
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cmp-aviso { color: #0b7a56; background: #e3faf0; border: 1px solid #a7e8cd; }
+.cmp-aviso.mal { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+.cmp-aviso span { flex: 1; }
+
+.cmp-cargando,
+.cmp-vacio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 34px 16px;
+  color: #51688a;
+  font-size: 13.5px;
+  background: #fff;
+  border: 1px solid #e2ecf6;
+  border-radius: 10px;
+}
+
+/* ── abrir año nuevo ── */
+.cmp-nueva {
+  padding: 15px 17px;
+  margin-bottom: 14px;
+  background: #fff;
+  border: 1px solid #9fc9ec;
+  border-left: 3px solid #1268C3;
+  border-radius: 10px;
+}
+.cmp-nueva-tit {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0B2A5B;
+  margin-bottom: 12px;
+}
+.cmp-nueva-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+.cmp-nueva-campos label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #48617c;
+}
+.cmp-nueva-campos input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 11px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: #1d273b;
+  background: #f7fafd;
+  border: 1px solid #cbd9e8;
+  border-radius: 8px;
+}
+.cmp-nueva-campos input:focus { outline: none; border-color: #1268C3; background: #fff; }
+
+.cmp-nueva-nota {
+  margin: 13px 0 0;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #48617c;
+  background: #f1f7fd;
+  border-radius: 8px;
+}
+.cmp-nueva-nota b { color: #0B2A5B; }
+
+.cmp-nueva-pie { display: flex; justify-content: flex-end; gap: 9px; margin-top: 13px; }
+
+/* ── cifras ── */
+.cmp-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.cmp-kpi {
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid #e2ecf6;
+  border-radius: 10px;
+}
+.cmp-kpi b { display: block; font-size: 23px; font-weight: 800; color: #0B2A5B; line-height: 1.1; }
+.cmp-kpi span { display: block; margin-top: 3px; font-size: 11.5px; color: #51688a; }
+
+.cmp-barra { margin-top: 9px; height: 5px; border-radius: 3px; background: #e2ecf6; overflow: hidden; }
+.cmp-barra i { display: block; height: 100%; background: #1268C3; transition: width .3s; }
+
+/* ── filtros ── */
+.cmp-filtros {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  margin-bottom: 12px;
+  background: #fff;
+  border: 1px solid #e2ecf6;
+  border-radius: 10px;
+}
+.cmp-buscar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 230px;
+  padding: 7px 11px;
+  background: #f7fafd;
+  border: 1px solid #cbd9e8;
+  border-radius: 8px;
+  color: #51688a;
+}
+.cmp-buscar input {
+  flex: 1;
+  border: none;
+  background: none;
+  outline: none;
+  font-size: 13px;
+  font-family: inherit;
+  color: #1d273b;
+}
+.cmp-buscar button { border: none; background: none; cursor: pointer; color: #8295ad; }
+
+.cmp-filtros select {
+  padding: 8px 11px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: #1d273b;
+  background: #f7fafd;
+  border: 1px solid #cbd9e8;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.cmp-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1d273b;
+  background: #f7fafd;
+  border: 1px solid #cbd9e8;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.cmp-check input { width: 16px; height: 16px; accent-color: #1268C3; cursor: pointer; margin: 0; }
+
+.cmp-descargas { margin-left: auto; display: flex; gap: 8px; }
+
+/* ── tabla ── */
+.cmp-tabla-wrap {
+  background: #fff;
+  border: 1px solid #e2ecf6;
+  border-radius: 10px;
+  overflow: auto;
+}
+.cmp-tabla { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+
+/* La cabecera se queda al desplazar: una campaña son cientos de filas y a la
+   mitad ya no se sabe qué columna es cuál. */
+.cmp-tabla thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 11px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #fff;
+  background: #0B2A5B;
+  white-space: nowrap;
+}
+.cmp-tabla td {
+  padding: 9px 11px;
+  border-bottom: 1px solid #eef3f8;
+  color: #1d273b;
+  vertical-align: middle;
+}
+.cmp-tabla tbody tr:hover td { background: #f6fafe; }
+.cmp-tabla tbody tr:last-child td { border-bottom: none; }
+
+.cmp-punto {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  margin-right: 7px;
+  vertical-align: baseline;
+}
+.cmp-nombre { font-weight: 700; }
+.cmp-no { color: #9db2c7; }
+
+.cmp-mant {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: capitalize;
+  color: #b45309;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+
+.cmp-ir {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px; height: 27px;
+  color: #1268C3;
+  background: #f1f7fd;
+  border: 1px solid #cbd9e8;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.cmp-ir:hover { background: #1268C3; color: #fff; border-color: #1268C3; }
+
+@media (max-width: 760px) {
+  .cmp-wrap { padding: 12px; }
+  .cmp-cab-der { margin-left: 0; width: 100%; }
+  .cmp-descargas { margin-left: 0; }
+}
