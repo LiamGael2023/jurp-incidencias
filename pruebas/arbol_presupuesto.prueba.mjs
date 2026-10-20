@@ -10,7 +10,7 @@
  * vienen SIN rellenar ("1", "1.02") y los de abajo rellenos ("01.02.01"),
  * que es justo lo que rompe la comparación por texto.
  */
-import { construirArbol, totalesDe, destinosDe, ordenDe, padreDe, nivelDe }
+import { construirArbol, totalesDe, destinosDe, dondeVa, ordenDe, padreDe, nivelDe }
   from '../src/arbolPresupuesto.js';
 
 const r = [];
@@ -113,15 +113,30 @@ ok(suTitulo.id === 77 && suTitulo.descripcion === 'CAPITULO A MANO',
    `${suTitulo.id} ${suTitulo.descripcion}`);
 ok(Math.abs(suTitulo.importe - 20) < 0.01, 'y suma igual', `${suTitulo.importe}`);
 
-// Solo los títulos con id se pueden elegir como destino: a uno
-// reconstruido desde la ruta no se le puede colgar nada, porque no existe.
+/* LOS DESTINOS SE IDENTIFICAN POR CODIGO, NO POR ID.
+ *
+ * Antes esta lista descartaba los títulos sin id, y en un presupuesto
+ * importado eso los descarta TODOS: ninguno es una fila. En Obras10_6 eso
+ * dejaba 39 capítulos y ni un sitio donde colgar nada. */
 const dest = destinosDe(conPropio);
-ok(dest.length === 2 && dest[0].id === '' && dest[1].id === '77',
-   'los destinos son la raíz y los títulos que existen de verdad',
-   dest.map(d => d.id).join('|'));
-ok(destinosDe(a).length === 1,
-   'un presupuesto importado no ofrece títulos donde colgar: no son filas',
-   `${destinosDe(a).length}`);
+ok(dest.length === 2 && dest[0].valor === '' && dest[1].valor === '01',
+   'el destino va por código', dest.map(d => d.valor).join('|'));
+ok(destinosDe(a).length === 4,
+   'un presupuesto importado SI ofrece sus capítulos, aunque no sean filas',
+   destinosDe(a).map(d => d.valor).join('|'));
+
+// Lo que se manda al servidor: el id si lo hay, y el código siempre.
+const d1 = dondeVa(destinosDe(conPropio), '01');
+ok(d1.padre === 77 && d1.padre_codigo === '01',
+   'un título que es fila manda su id y su código', JSON.stringify(d1));
+const d2 = dondeVa(destinosDe(a), '01.01');
+ok(d2.padre === null && d2.padre_codigo === '01.01',
+   'uno reconstruido manda solo el código', JSON.stringify(d2));
+const d3 = dondeVa(destinosDe(a), '');
+ok(d3.padre === null && d3.padre_codigo === null,
+   'y la raíz no manda ninguno', JSON.stringify(d3));
+ok(dondeVa(destinosDe(a), 'no-existe').padre_codigo === null,
+   'un destino que no está no inventa un padre');
 
 const mal = r.filter(x => !x).length;
 console.log(`\n${r.length - mal} de ${r.length} en orden${mal ? `, ${mal} MAL` : ''}.`);

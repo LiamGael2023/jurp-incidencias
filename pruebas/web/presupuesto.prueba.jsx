@@ -63,9 +63,13 @@ window.fetch = async (u, opc = {}) => {
       window.__POST = c;
       if (!c.descripcion) return json({ descripcion: ['Hace falta.'] }, 400);
       if (c.tipo !== 'titulo' && !c.unidad) return json({ unidad: ['Hace falta.'] }, 400);
-      const padre = c.padre ? partidas.find(p => String(p.id) === String(c.padre)) : null;
-      const prefijo = padre ? `${padre.codigo}.` : '';
-      const hondo = prefijo ? prefijo.split('.').filter(Boolean).length + 1 : 1;
+      /* Por id si lo hay, y si no por código: en un presupuesto importado
+         los capítulos no son filas y solo tienen código. */
+      const padre = c.padre
+        ? partidas.find(p => String(p.id) === String(c.padre)) : null;
+      const codPadre = padre ? padre.codigo : (c.padre_codigo || '');
+      const prefijo = codPadre ? `${codPadre}.` : '';
+      const hondo = codPadre ? codPadre.split('.').filter(Boolean).length + 1 : 1;
       const mayor = partidas
         .filter(p => p.codigo.startsWith(prefijo)
                   && p.codigo.split('.').filter(Boolean).length === hondo)
@@ -77,7 +81,7 @@ window.fetch = async (u, opc = {}) => {
         es_titulo: c.tipo === 'titulo',
         unidad: c.unidad || '', metrado: c.metrado || 0, precio: c.precio || 0,
         ejecutado: 0,
-        ruta: padre ? ruta([padre.codigo, padre.descripcion]) : '[]',
+        ruta: codPadre ? ruta([codPadre, (padre || {}).descripcion || codPadre]) : '[]',
       }];
       return json({ ok: true }, 201);
     }

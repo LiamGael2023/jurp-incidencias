@@ -28,7 +28,7 @@ import {
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { API_OPS } from './api';
-import { construirArbol, totalesDe, destinosDe } from './arbolPresupuesto';
+import { construirArbol, totalesDe, destinosDe, dondeVa } from './arbolPresupuesto';
 import TablaPresupuesto from './TablaPresupuesto';
 import FormaPartida from './FormaPartida';
 import './GestionCosteo.css';
@@ -129,10 +129,10 @@ export default function PresupuestoProyecto({ proyecto, abierto, onCerrar, onCam
     if (tipo !== 'titulo' && !nueva.unidad.trim()) faltan.unidad = 'Hace falta.';
     if (Object.keys(faltan).length) { setErrores(faltan); return; }
 
+    const donde = dondeVa(destinosDe(filas), nueva.padre);
     const cuerpo = tipo === 'titulo'
-      ? { tipo: 'titulo', padre: nueva.padre || null,
-          descripcion: nueva.descripcion.trim() }
-      : { tipo: 'partida', padre: nueva.padre || null,
+      ? { tipo: 'titulo', ...donde, descripcion: nueva.descripcion.trim() }
+      : { tipo: 'partida', ...donde,
           descripcion: nueva.descripcion.trim(),
           unidad: nueva.unidad.trim(),
           metrado: Number(nueva.metrado) || 0,

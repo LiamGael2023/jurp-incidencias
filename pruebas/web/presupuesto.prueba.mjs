@@ -78,10 +78,35 @@ await ir('importado');
 await p.waitForTimeout(300);
 
 // ── al colgar algo, solo se ofrecen títulos que existen ──
+/* COLGAR DE UN CAPITULO DEL EXCEL. Ninguno de los 39 capítulos de un
+ * presupuesto importado es una fila: existen dentro de la ruta de sus
+ * partidas. Si para colgar algo hiciera falta un id, no se podría añadir
+ * nada a un presupuesto importado, que es justo cuando hace falta. */
 await btn('Partida');
 await p.waitForTimeout(300);
-ok(await p.locator('.cos-prog-forma select').count() === 0,
-   'sin títulos propios no hay "dónde va": todo iría a la raíz');
+const dest = await p.locator('.cos-prog-forma select option').allInnerTexts();
+ok(dest.length === 1 + E.titulos,
+   'se ofrecen los capítulos del Excel, aunque no sean filas',
+   dest.join(' | '));
+ok(/TRABAJOS PRELIMINARES/.test(dest.join('|')),
+   'con su nombre, el de la ruta', dest.join(' | '));
+
+await p.locator('.cos-prog-forma select').selectOption(
+  { label: dest.find(x => /TRABAJOS PRELIMINARES/.test(x)) });
+await p.locator('.cos-prog-forma input').nth(0).fill('Partida nueva en el capitulo');
+await p.locator('.cos-prog-forma input').nth(1).fill('und');
+await p.locator('.cos-prog-forma input').nth(2).fill('2');
+await p.locator('.cos-prog-forma input').nth(3).fill('150');
+await p.locator('.cos-prog-ok').click();
+await p.waitForTimeout(700);
+const postCap = await p.evaluate(() => window.__POST);
+ok(postCap && postCap.padre === null && postCap.padre_codigo === '01.01',
+   'se manda el CODIGO del capítulo, sin id, que no lo tiene',
+   JSON.stringify(postCap));
+const codsCap = (await p.locator('.cos-prog-tabla td.cod').allInnerTexts()).map(x => x.trim());
+ok(codsCap.includes('01.01.03'),
+   'y el servidor le da el código que sigue dentro de ese capítulo',
+   codsCap.join(' | '));
 
 // ══════════ SIN PRESUPUESTO ══════════
 await ir('vacio');

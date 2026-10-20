@@ -296,6 +296,42 @@ def _ruta_bajo(padre):
     return base + [[padre.codigo, padre.descripcion]]
 
 
+def _ruta_hasta(pro, codigo):
+    """La ruta que le toca a un hijo de ese codigo, EXISTA O NO como fila.
+
+    En un presupuesto importado los titulos no son filas: existen solo dentro
+    de la `ruta` de sus partidas, que es como los guardo el importador.
+    Obras10_6 tiene 39 capitulos y ni uno es una fila. Si para colgar algo
+    hiciera falta un id, no se podria anadir nada a un presupuesto importado,
+    que es justo cuando hace falta.
+
+    Pero la informacion esta: se busca cualquier partida que lleve ese codigo
+    en su ruta y se corta la ruta ahi mismo, incluyendolo. Eso es exactamente
+    la ruta que debe llevar un hermano de esa partida.
+
+    Devuelve None si ese codigo no aparece en ninguna ruta ni como fila: no
+    existe, y colgar algo de un capitulo inventado dejaria una rama suelta
+    que la escalera del parte no sabria recorrer.
+    """
+    fila = pro.partidas.filter(codigo=codigo).first()
+    if fila is not None:
+        return _ruta_bajo(fila)
+
+    for r in pro.partidas.values_list("ruta", flat=True):
+        if not r:
+            continue
+        try:
+            camino = json.loads(r)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(camino, list):
+            continue
+        for i, tramo in enumerate(camino):
+            if isinstance(tramo, list) and tramo and tramo[0] == codigo:
+                return camino[:i + 1]
+    return None
+
+
 def _fila(p):
     return {
         "id": p.id, "codigo": p.codigo, "descripcion": p.descripcion,
@@ -322,7 +358,12 @@ def presupuesto_alta(request, pk):
                         status=status.HTTP_400_BAD_REQUEST)
     es_titulo = tipo == "titulo"
 
+    # ── de quien cuelga ──
+    # Por id cuando lo hay -un titulo escrito a mano es una fila- y por
+    # codigo cuando no -los del Excel no lo son-. El codigo basta: de el sale
+    # el correlativo del hijo y de el sale su ruta.
     padre = None
+    padre_cod = None
     padre_id = request.data.get("padre")
     if padre_id not in (None, "", "null"):
         padre = pro.partidas.filter(pk=padre_id).first()
@@ -334,6 +375,28 @@ def presupuesto_alta(request, pk):
                 {"padre": ["Solo se puede colgar de un titulo. '%s' es una "
                            "partida." % padre.codigo]},
                 status=status.HTTP_400_BAD_REQUEST)
+        padre_cod = padre.codigo
+        ruta_hijo = _ruta_bajo(padre)
+    else:
+        cod = (request.data.get("padre_codigo") or "").strip()
+        if cod:
+            ruta_hijo = _ruta_hasta(pro, cod)
+            if ruta_hijo is None:
+                return Response(
+                    {"padre": ["No encuentro el capitulo '%s' en este "
+                               "presupuesto." % cod]},
+                    status=status.HTTP_400_BAD_REQUEST)
+            # Una PARTIDA con ese codigo no es un capitulo: colgarle algo la
+            # dejaria con metrado propio y ademas hijos que suman.
+            suya = pro.partidas.filter(codigo=cod).first()
+            if suya is not None and not getattr(suya, "es_titulo", False):
+                return Response(
+                    {"padre": ["Solo se puede colgar de un titulo. '%s' es "
+                               "una partida." % cod]},
+                    status=status.HTTP_400_BAD_REQUEST)
+            padre_cod = cod
+        else:
+            ruta_hijo = []
 
     errores = {}
     campos = _lee_campos(request.data, errores, titulo=es_titulo)
@@ -344,13 +407,13 @@ def presupuesto_alta(request, pk):
         proyecto_ref=pro,
         obra=pro.codigo,
         proyecto=(pro.nombre or "")[:300],
-        codigo=_siguiente_codigo(pro, padre.codigo if padre else None),
+        codigo=_siguiente_codigo(pro, padre_cod),
         es_titulo=es_titulo,
         unidad=campos.get("unidad", ""),
         metrado=campos.get("metrado", 0),
         precio=campos.get("precio", 0),
         descripcion=campos["descripcion"],
-        ruta=json.dumps(_ruta_bajo(padre)),
+        ruta=json.dumps(ruta_hijo),
         activo=True)
     return Response(_fila(p), status=status.HTTP_201_CREATED)
 

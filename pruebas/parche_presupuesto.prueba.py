@@ -190,6 +190,59 @@ t("los hermanos de otra rama no cuentan",
 t("ni los nietos", cod(["01", "01.01", "01.01.09"], "01") == "01.02",
   cod(["01", "01.01", "01.01.09"], "01"))
 
+# ── _ruta_hasta: colgar de un capitulo QUE NO ES FILA ────────────────────
+#
+# Es el caso real de Obras10_6: 39 capitulos y ni uno es una fila. Si para
+# colgar algo hiciera falta un id, no se podria anadir nada a un presupuesto
+# importado, que es justo cuando hace falta.
+class _QS(list):
+    def values_list(self, campo, flat=False):
+        return [getattr(x, campo) for x in self]
+
+    def filter(self, **kw):
+        out = [x for x in self
+               if all(getattr(x, k, None) == w for k, w in kw.items())]
+        return _QS(out)
+
+    def first(self):
+        return self[0] if self else None
+
+
+def entorno_ruta(filas):
+    ns = {"re": re, "json": json}
+    for f in ("_tramos", "_nivel", "_ruta_bajo", "_ruta_hasta"):
+        exec(saca(v, f), ns)
+    return ns, _Obj(partidas=_QS(filas))
+
+
+CAMINO = json.dumps([["01", "ESTRUCTURAS"], ["01.02", "OBRAS PROVISIONALES"]])
+IMPORTADAS = [
+    _Obj(codigo="01.02.01", descripcion="Almacen", ruta=CAMINO, es_titulo=False),
+    _Obj(codigo="01.02.02", descripcion="Seguridad", ruta=CAMINO, es_titulo=False),
+]
+ns_r, pro_r = entorno_ruta(IMPORTADAS)
+r = ns_r["_ruta_hasta"](pro_r, "01.02")
+t("se puede colgar de un capitulo que NO es fila",
+  r == [["01", "ESTRUCTURAS"], ["01.02", "OBRAS PROVISIONALES"]], str(r))
+r2 = ns_r["_ruta_hasta"](pro_r, "01")
+t("y de uno de mas arriba, cortando la ruta ahi",
+  r2 == [["01", "ESTRUCTURAS"]], str(r2))
+t("un capitulo inventado no cuela",
+  ns_r["_ruta_hasta"](pro_r, "07") is None)
+
+# Si el capitulo SI es fila -escrito a mano-, manda la fila.
+PROPIO = [_Obj(codigo="05", descripcion="A MANO", ruta="[]", es_titulo=True)]
+ns_p, pro_p = entorno_ruta(PROPIO)
+t("si el capitulo es fila, la ruta sale de el",
+  ns_p["_ruta_hasta"](pro_p, "05") == [["05", "A MANO"]],
+  str(ns_p["_ruta_hasta"](pro_p, "05")))
+
+# Una ruta rota en una fila no puede tumbar el alta de otra.
+ROTAS = [_Obj(codigo="01.01", descripcion="X", ruta="{roto", es_titulo=False)] + IMPORTADAS
+ns_x, pro_x = entorno_ruta(ROTAS)
+t("una ruta rota se salta, no tumba la busqueda",
+  ns_x["_ruta_hasta"](pro_x, "01.02") is not None)
+
 ns = {"re": re, "json": json}
 exec(saca(v, "_ruta_bajo"), ns)
 t("la ruta de la raiz esta vacia", ns["_ruta_bajo"](None) == [])

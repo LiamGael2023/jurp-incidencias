@@ -40,7 +40,7 @@ import { rutaDe, cuelgaDe, bajarSolo } from './arbolPartidas';
 import EscaleraPartida from './SelectorPartida';
 import FormaPartida from './FormaPartida';
 import TablaPresupuesto from './TablaPresupuesto';
-import { destinosDe } from './arbolPresupuesto';
+import { destinosDe, dondeVa } from './arbolPresupuesto';
 import { imgToBase64 } from './costeo/imagen';
 import './GestionCosteo.css';
 import {
@@ -474,10 +474,10 @@ export default function GestionCosteo({
      * sería decirle al servidor que esa fila tiene precio propio, y una fila
      * que suma a sus hijos y además tiene precio no significa una cosa
      * sola. */
+    const donde = dondeVa(destinosDe(progDetalle), progNueva.padre);
     const cuerpo = progTipo === 'titulo'
-      ? { tipo: 'titulo', padre: progNueva.padre || null,
-          descripcion: progNueva.descripcion.trim() }
-      : { tipo: 'partida', padre: progNueva.padre || null,
+      ? { tipo: 'titulo', ...donde, descripcion: progNueva.descripcion.trim() }
+      : { tipo: 'partida', ...donde,
           descripcion: progNueva.descripcion.trim(),
           unidad: progNueva.unidad.trim(),
           metrado: Number(progNueva.metrado) || 0,

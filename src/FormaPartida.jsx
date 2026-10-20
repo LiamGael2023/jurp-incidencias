@@ -88,8 +88,11 @@ export default function FormaPartida({
             <span>Dónde va</span>
             <select value={valor.padre ?? ''} onChange={pon('padre')}
               className={errores.padre ? 'mal' : ''}>
+              {/* El valor es el CODIGO, no el id: en un presupuesto
+                  importado los títulos no son filas y no tienen id, pero
+                  código sí tienen, y es lo único que hace falta. */}
               {padres.map(d => (
-                <option key={d.id} value={d.id}>{d.etiqueta}</option>
+                <option key={d.valor} value={d.valor}>{d.etiqueta}</option>
               ))}
             </select>
             {errores.padre && <em>{errores.padre}</em>}

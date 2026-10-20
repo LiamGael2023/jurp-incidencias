@@ -188,11 +188,32 @@ export function totalesDe(filas = []) {
   };
 }
 
-/** Los títulos donde se puede colgar algo, con su sangría, más la raíz. */
+/**
+ * Los títulos donde se puede colgar algo, con su sangría, más la raíz.
+ *
+ * SE IDENTIFICAN POR CODIGO, NO POR ID. Antes esta lista descartaba los
+ * títulos sin id, y en un presupuesto importado eso los descarta TODOS:
+ * ninguno es una fila, existen dentro de la ruta de sus partidas. En
+ * Obras10_6 eso dejaba 39 capítulos y ni un sitio donde colgar nada.
+ *
+ * Y el id no hacía falta. Lo único que se necesita del padre es su código:
+ * de ahí sale el correlativo del hijo —01.02 → 01.02.07— y de ahí sale su
+ * ruta, que ya está copiada en la de cualquier partida que cuelgue de él.
+ * El id se manda igual cuando lo hay, para que el servidor no tenga que
+ * buscar lo que ya sabe.
+ */
 export const destinosDe = (filas = []) => [
-  { id: '', etiqueta: '— En la raíz —' },
-  ...filas.filter(f => f.es_titulo && f.id != null).map(f => ({
-    id: String(f.id),
+  { valor: '', id: null, codigo: null, etiqueta: '— En la raíz —' },
+  ...filas.filter(f => f.es_titulo).map(f => ({
+    valor: f.codigo,
+    id: f.id ?? null,
+    codigo: f.codigo,
     etiqueta: `${' '.repeat(Math.max(0, (f.nivel || 1) - 1) * 4)}${f.codigo} · ${f.descripcion}`,
   })),
 ];
+
+/** Lo que hay que mandar al servidor para colgar algo de ese destino. */
+export const dondeVa = (destinos = [], valor) => {
+  const d = destinos.find(x => String(x.valor) === String(valor ?? ''));
+  return { padre: (d && d.id) ?? null, padre_codigo: (d && d.codigo) || null };
+};
