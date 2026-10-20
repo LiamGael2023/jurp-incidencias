@@ -88,6 +88,21 @@ ok(/parche_partidas_de_incidencia/.test(falta),
 ok(await p.locator('.cos-prog-add').count() === 0,
    'y no se ofrece un botón que no puede funcionar');
 
+// ══════════ LA OTRA RAMA: ACTIVIDAD DE OBRA ══════════
+// Pedía /actividades/<id>/, el catálogo, en vez de /actividades-obra/<id>/.
+// No daba 404: daba 200 sin `partidas`, y el bloque culpaba al servidor.
+await ir('actividad');
+const urls = await p.evaluate(() => window.__URLS);
+const detalleAct = urls.filter(u => /\/actividades(-obra)?\/\d+\/$/.test(u));
+ok(detalleAct.some(u => /\/actividades-obra\/\d+\/$/.test(u)),
+   'la actividad se pide a actividades-obra/', detalleAct.join(' | ').slice(0, 120));
+ok(!detalleAct.some(u => /\/actividades\/\d+\/$/.test(u)),
+   'y NUNCA al catálogo actividades/<id>/', detalleAct.join(' | ').slice(0, 120));
+ok(await p.locator('.cos-prog-falta').count() === 0,
+   'así que no sale el aviso de "no soportado"');
+ok(await p.locator('.cos-prog-tabla tbody tr').count() === E.programadas,
+   'y se ven sus partidas programadas');
+
 ok(errs.length === 0, 'sin errores de JavaScript', errs.join(' | ').slice(0, 150));
 
 await b.close();

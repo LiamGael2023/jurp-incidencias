@@ -2,12 +2,23 @@
  *
  * Tres estados, que se eligen por la URL:
  *
- *   ?v=sin      el servidor responde pero la incidencia no tiene partidas
- *   ?v=con      tiene tres programadas, una pasada de saldo
- *   ?v=viejo    el servidor todavía no lleva el campo (parche sin aplicar)
+ *   ?v=sin        el servidor responde pero la incidencia no tiene partidas
+ *   ?v=con        tiene tres programadas, una pasada de saldo
+ *   ?v=viejo      el servidor todavía no lleva el campo (parche sin aplicar)
+ *   ?v=actividad  la OTRA rama del modal: una actividad de obra
  *
  * El tercero importa tanto como los otros: es el estado real hasta que
  * alguien corra el parche, y tiene que decirlo en vez de salir vacío.
+ *
+ * EL CUARTO EXISTE POR UN FALLO QUE NO SE VEÍA. El modal pedía
+ * /operations/actividades/<id>/, que es el CATÁLOGO operations.Actividad —los
+ * tipos de trabajo—, no operations.ActividadObra, que es la actividad
+ * programada y la que lleva las partidas. No daba 404: devolvía 200 con un
+ * objeto sin `partidas`, así que el bloque se declaraba «no soportado» y
+ * echaba la culpa al servidor. Aquí el doble responde las DOS rutas, y el
+ * catálogo contesta justo lo que contestaba de verdad: un objeto sin
+ * partidas. Si alguien vuelve al nombre corto, el bloque sale vacío y la
+ * prueba lo dice.
  */
 import { createRoot } from 'react-dom/client';
 import GestionCosteo from '../../src/GestionCosteo';
@@ -37,16 +48,40 @@ const DETALLE = [
 window.__ESPERADO = { partidas: PARTIDAS.length, programadas: DETALLE.length,
                       pasada: '01.02.01.02' };
 window.__PATCH = null;
+/* Todas las URL pedidas, para poder afirmar a QUÉ ruta fue el modal. Sin
+ * esto, "el bloque se ve" no distingue entre pedir la ruta correcta y pedir
+ * otra que casualmente responda. */
+window.__URLS = [];
 
 const json = (d, s = 200) => new Response(JSON.stringify(d),
   { status: s, headers: { 'Content-Type': 'application/json' } });
 
-let detalle = v === 'con' ? [...DETALLE] : [];
+let detalle = (v === 'con' || v === 'actividad') ? [...DETALLE] : [];
 
 const real = window.fetch;
 window.fetch = async (u, opc = {}) => {
   const url = String(u);
   const metodo = (opc.method || 'GET').toUpperCase();
+  window.__URLS.push(`${metodo} ${url}`);
+
+  /* ── LA ACTIVIDAD DE OBRA: la ruta buena y la trampa ──
+   * El orden importa: actividades-obra/ se mira ANTES, porque
+   * /actividades/\d+/$ también casaría con ella si se probara primero. */
+  if (/\/actividades-obra\/\d+\/$/.test(url)) {
+    if (metodo === 'PATCH') {
+      const ids = JSON.parse(opc.body).partidas;
+      window.__PATCH = ids;
+      detalle = ids.map(id => DETALLE.find(d => d.id === id));
+      return json({ id: 7, partidas: ids, partidas_detalle: detalle });
+    }
+    return json({ id: 7, obra: 'CANAL LATERAL 10', nombre: 'Protección de canoa',
+                  partidas: detalle.map(d => d.id), partidas_detalle: detalle });
+  }
+  /* El catálogo. Responde 200 y NO trae partidas: exactamente lo que hacía
+   * de verdad cuando el modal pedía la ruta equivocada. */
+  if (/\/actividades\/\d+\/$/.test(url)) {
+    return json({ id: 7, nombre: 'Excavación', activo: true });
+  }
 
   if (/\/incidentes\/\d+\/$/.test(url)) {
     if (v === 'viejo') return json({ id: 7, codigo: 'INCIDENTE-002' });  // sin el campo
@@ -72,7 +107,7 @@ createRoot(document.getElementById('app')).render(
     sujeto={{ id: 7, titulo: 'INCIDENTE-002-14082026',
               subtitulo: 'Otros (Proteccion de Canoa 8) en CANAL LATERAL 10',
               detalle: 'C-08' }}
-    campoVinculo="incident_report"
+    campoVinculo={v === 'actividad' ? 'actividad_obra' : 'incident_report'}
     onCerrar={() => {}}
     onCambio={() => {}}
   />

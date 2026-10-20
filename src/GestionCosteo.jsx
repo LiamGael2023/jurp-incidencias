@@ -332,8 +332,23 @@ export default function GestionCosteo({
     } catch (e) { console.error(e); }
   };
   /* Las dos pantallas que usan este modal guardan en sitios distintos, y es
-   * lo único que cambia entre ellas. */
-  const rutaSujeto = campoVinculo === 'actividad_obra' ? 'actividades' : 'incidentes';
+   * lo único que cambia entre ellas.
+   *
+   * ES 'actividades-obra' Y NO 'actividades'. Decía 'actividades', que es el
+   * CATÁLOGO operations.Actividad —los tipos de trabajo— y no
+   * operations.ActividadObra, que es el trabajo programado y el que lleva las
+   * partidas. El error no daba 404 ni se veía: /actividades/<id>/ existe y
+   * responde 200 con un objeto del catálogo, que no trae `partidas`, así que
+   * el bloque se declaraba «no soportado» y echaba la culpa al servidor.
+   * Salió al volcar el árbol de rutas con pruebas/ver_api_incidentes.py:
+   *
+   *   /operations/^actividades/(?P<pk>…)/$   -> operations.Actividad
+   *   /operations/actividades-obra/<int:pk>/ -> operations.ActividadObra
+   *
+   * Dos rutas parecidas, dos modelos, y el nombre corto es el equivocado. */
+  const rutaSujeto = campoVinculo === 'actividad_obra'
+    ? 'actividades-obra'
+    : 'incidentes';
 
   /* EL SUJETO NO TRAE SUS PARTIDAS. La incidencia que llega aquí viene del
    * padrón de PLUVIRA, y las partidas viven del lado de operaciones; la
@@ -368,9 +383,11 @@ export default function GestionCosteo({
       if (!r.ok) {
         /* Se dicen por su nombre: un 405 lo arregla quien toca el backend y
          * un 403 quien da permisos. Un "error" a secas no manda a nadie. */
+        /* El nombre del fichero a secas, sin la carpeta del repo: quien lee
+         * esto está en el servidor, donde ese `pruebas/` no existe. */
         setProgAviso({ mal: true, txt: r.status === 405
           ? 'El servidor no admite guardar partidas aquí todavía: falta aplicar '
-            + 'pruebas/parche_partidas_de_incidencia.py.'
+            + 'parche_partidas_de_incidencia.py en el servidor.'
           : r.status === 403 ? 'Tu usuario no tiene permiso para cambiar esto.'
           : `El servidor respondió ${r.status}.` });
         return false;
