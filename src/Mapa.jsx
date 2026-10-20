@@ -21,6 +21,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 // ── Herramientas del visor ───────────────────────────────────────────────────
 import { BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
 import { TeselasBase, SelectorBase, capaBase } from './capasBase';
+import { NIVELES_LLUVIA } from './umbralesLluvia';
 import './MapaHerramientas.css';
 import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion, FaClipboardCheck } from './InventarioGIS';
 import { useRuta, CapaRuta, fmtDistancia, fmtTiempo } from './RutaGIS';
@@ -97,11 +98,16 @@ const COLORS = ['#0ea5e9','#22c55e','#f59f00','#ef4444','#a855f7','#ec4899','#f9
 // Niveles de contingencia. Los colores son el código estándar de alerta
 // meteorológica (amarilla / naranja / roja): no se cambian por los de marca,
 // porque el operario los lee para saber la gravedad.
+//
+// Salen de umbralesLluvia.js, que es de donde los lee también el gemelo 3D.
+// Estaban escritos a mano en los dos sitios, cada uno con un comentario
+// diciendo que eran "los mismos": un comentario no sincroniza nada.
+const POR_CODIGO = Object.fromEntries(NIVELES_LLUVIA.map(n => [n.nivel, n]));
 const NIVELES_ALERTA = {
-  nor: { texto: 'Normalidad',     color: '#2fb344', marco: false },
-  ama: { texto: 'Alerta amarilla', color: '#FFF200', marco: true },
-  nar: { texto: 'Alerta naranja',  color: '#F37021', marco: true },
-  roj: { texto: 'Alerta roja',     color: '#ED1C24', marco: true },
+  nor: { texto: 'Normalidad',      color: '#2fb344',            marco: false },
+  ama: { texto: 'Alerta amarilla', color: POR_CODIGO.ama.color, marco: true },
+  nar: { texto: 'Alerta naranja',  color: POR_CODIGO.nar.color, marco: true },
+  roj: { texto: 'Alerta roja',     color: POR_CODIGO.roj.color, marco: true },
 };
 
 const COLORS_USUARIO = ['#e8590c','#7048e8','#12b886','#f03e3e','#1098ad','#ae3ec9','#f59f00','#4c6ef5'];
@@ -1245,11 +1251,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   // gravedad. Naranja y roja quedan a ΔE 12.5 en visión normal — por debajo
   // del piso de 15, o sea que cuestan de distinguir incluso con vista normal.
   // Lo que las separa es el número escrito en la propia etiqueta.
-  const UMBRALES_LLUVIA = [
-    { desde: 0.21, nivel: 'ama', fill: NIVELES_ALERTA.ama.color, texto: '#0b2545' },
-    { desde: 0.63, nivel: 'nar', fill: NIVELES_ALERTA.nar.color, texto: '#0b2545' },
-    { desde: 1.06, nivel: 'roj', fill: NIVELES_ALERTA.roj.color, texto: '#ffffff' },
-  ];
+  const UMBRALES_LLUVIA = NIVELES_LLUVIA.map(n => ({
+    desde: n.desde, nivel: n.nivel, fill: n.color, texto: n.texto,
+  }));
 
   // El texto va oscuro o blanco según el nivel, porque el amarillo oficial no
   // sostiene texto blanco y el rojo oficial no sostiene texto oscuro.

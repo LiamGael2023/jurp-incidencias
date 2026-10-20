@@ -83,8 +83,28 @@ Instalación:
 cp /var/www/envs/front/repo/deploy/backend-vigilantes/pronostico_lluvia.py \
    /var/www/envs/vigilantes/operations/management/commands/
 touch /var/www/envs/vigilantes/estado_pronostico.json
-sudo chown 33:33 /var/www/envs/vigilantes/estado_pronostico.json
+mkdir -p /var/www/envs/vigilantes/archivo_pronostico
+sudo chown 33:33 /var/www/envs/vigilantes/estado_pronostico.json \
+                 /var/www/envs/vigilantes/archivo_pronostico
 ```
+
+### El archivo de corridas
+
+Cada pasada guarda en `archivo_pronostico/AAAA-MM.ndjson` lo que el modelo
+predijo, con alerta o sin ella: una línea por estación y alcance (1, 6, 12, 24
+y 48 horas), con los milímetros, la probabilidad y **la altura de la celda del
+modelo**, que casi nunca es la del pluviómetro y es lo que explica la mayor
+parte del error en lluvia orográfica.
+
+Esto no se puede recuperar después. La consulta de hoy, mañana devuelve otra
+cosa: un pronóstico que no se archivó no se puede evaluar nunca más, y sin
+evaluarlo no hay forma de corregirlo por estación. Por eso se archiva aunque
+todavía no se vaya a usar.
+
+Ocupa poco —unas 145 líneas por pasada, del orden de 10 MB al mes— porque se
+guardan cinco alcances y no las 48 horas enteras. Si hiciera falta recortar,
+se comprimen los meses viejos; borrarlos es tirar la única medición que existe
+de cuánto se equivoca el modelo en este valle.
 
 Necesita salida a internet desde el contenedor (`api.open-meteo.com`), igual
 que la consulta a InnovaWeather.

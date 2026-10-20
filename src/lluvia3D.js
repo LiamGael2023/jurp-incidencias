@@ -15,18 +15,17 @@
  * Las estaciones InnovaWeather no tienen serie (su widget solo da la lectura
  * del momento), así que en la reproducción salen como "sin historial".
  */
-import { fmtFecha } from './lluviaEstacion';
+import { fmtFecha } from './lluviaEstacion.js';
+import { NIVELES_LLUVIA, nivelDe, unidadCorta } from './umbralesLluvia.js';
 
 export const SLOTS = 96;              // 24 h × 4 cuartos de hora
 export const MIN_SLOT = 15;
 
-// Mismo código oficial que NIVELES_ALERTA / UMBRALES_LLUVIA del mapa 2D.
-export const NIVELES = [
-  { desde: 0.21, nivel: 'ama', color: '#FFF200', texto: '#0b2545', nombre: 'Amarilla' },
-  { desde: 0.63, nivel: 'nar', color: '#F37021', texto: '#0b2545', nombre: 'Naranja' },
-  { desde: 1.06, nivel: 'roj', color: '#ED1C24', texto: '#ffffff', nombre: 'Roja' },
-];
-export const nivelDe = (mm) => NIVELES.filter(n => mm >= n.desde).pop() || null;
+// Los umbrales y sus colores viven en umbralesLluvia.js, que es de donde los
+// lee también el mapa 2D. Aquí solo se reexportan para no tocar a quien ya
+// los importaba de este módulo.
+export const NIVELES = NIVELES_LLUVIA;
+export { nivelDe };
 
 export const COLOR_SIN_DATOS = '#64748b';
 export const COLOR_LLOVIO = '#35B6E9';   // llovió antes, ahora no
@@ -169,9 +168,14 @@ export async function cargarPronostico(estaciones, dias = 3) {
   const clave = `pron3d:${dias}:${lat}:${lng}`;
 
   let crudo = null;
+  // Cuándo se pidió de verdad. Un pronóstico sin su hora no se puede juzgar:
+  // el mismo número vale distinto recién traído que seis horas después, y con
+  // la caché de una hora lo que se ve en pantalla casi nunca es de ahora
+  // mismo. Se devuelve para que el panel lo diga.
+  let consultado = Date.now();
   try {
     const c = JSON.parse(localStorage.getItem(clave) || 'null');
-    if (c && Date.now() - c.t < CACHE_PRON_MS) crudo = c.d;
+    if (c && Date.now() - c.t < CACHE_PRON_MS) { crudo = c.d; consultado = c.t; }
   } catch { /* sin almacenamiento: se consulta */ }
 
   if (!crudo) {
@@ -181,7 +185,8 @@ export async function cargarPronostico(estaciones, dias = 3) {
     const r = await fetch(url);
     if (!r.ok) throw new Error(`El servicio de pronóstico respondió ${r.status}`);
     crudo = await r.json();
-    try { localStorage.setItem(clave, JSON.stringify({ t: Date.now(), d: crudo })); } catch { /* lleno */ }
+    consultado = Date.now();
+    try { localStorage.setItem(clave, JSON.stringify({ t: consultado, d: crudo })); } catch { /* lleno */ }
   }
 
   // Con una sola coordenada la respuesta es un objeto; con varias, una lista.
@@ -199,16 +204,31 @@ export async function cargarPronostico(estaciones, dias = 3) {
   pts.forEach((e, i) => {
     const h = lista[i]?.hourly;
     if (!h) return;
-    const s = new Float32Array(nSlots), p = new Uint8Array(nSlots);
+    // La probabilidad va en Int16 y no en Uint8 para poder guardar -1 = no se
+    // sabe. No todos los modelos la publican, y antes un hueco se escribía
+    // como 0 %: la píldora decía "1.2 mm · 0 %", que es una contradicción en
+    // cuatro caracteres. Ausente no es cero.
+    const s = new Float32Array(nSlots), p = new Int16Array(nSlots);
     for (let k = 0; k < nSlots; k++) {
       s[k] = Math.max(0, h.precipitation?.[ini + k] ?? 0);
-      p[k] = Math.max(0, Math.min(100, h.precipitation_probability?.[ini + k] ?? 0));
+      const pb = h.precipitation_probability?.[ini + k];
+      p[k] = pb == null ? -1 : Math.max(0, Math.min(100, pb));
     }
     series[e.id] = s; prob[e.id] = p;
   });
 
-  return { series, prob, t0: new Date(horas[ini]), nSlots, minSlot: 60 };
+  return {
+    series, prob, nSlots, minSlot: 60,
+    t0: new Date(horas[ini]),
+    consultado: new Date(consultado),
+  };
 }
+
+/** Probabilidad en un instante, o null si el modelo no la publica. */
+export const probDe = (d, id, slot) => {
+  const v = d?.prob?.[id]?.[slot];
+  return v == null || v < 0 ? null : v;
+};
 
 /**
  * Los umbrales de alerta están en mm por cuarto de hora. Una lluvia horaria
@@ -217,6 +237,61 @@ export async function cargarPronostico(estaciones, dias = 3) {
  * siempre dice qué unidad está mostrando.
  */
 export const equivalente15 = (mm, minSlot) => mm * MIN_SLOT / minSlot;
+
+// ── Qué dice la etiqueta de una estación ───────────────────────────────
+/**
+ * Decide qué muestra la marca de una estación en un instante.
+ *
+ * DOS COSAS QUE ARREGLA.
+ *
+ * 1. Antes la píldora salía siempre, y en un día seco —que en la costa es
+ *    casi todo el año— eran veinticinco etiquetas diciendo "0.0 mm" apiladas
+ *    unas sobre otras, tapando el valle entero para no contar nada. Las
+ *    marcas son elementos del DOM y MapLibre no las descarta por colisión
+ *    como haría con una capa 'symbol', así que el amontonamiento no se
+ *    resuelve solo. Cero es el fondo, no una noticia: donde no hay nada que
+ *    decir queda el punto, que sigue diciendo dónde está la estación y de qué
+ *    color.
+ *
+ * 2. El número y el color hablaban de variables distintas: el texto era el
+ *    acumulado y el fondo el nivel de la intensidad del instante. Se llegaba
+ *    a una píldora amarilla diciendo "0.0 mm" —llueve ahora, todavía no ha
+ *    acumulado nada—, que se lee como un fallo. Ahora, si hay nivel, el
+ *    número es la intensidad que lo provoca; si no lo hay, es el acumulado y
+ *    el fondo es neutro.
+ *
+ * @param inten  false si la estación no tiene serie en este periodo
+ * @param cerca  si la cámara está lo bastante cerca como para que quepan las
+ *               etiquetas de las estaciones sin datos
+ * @returns { pill, texto, fondo, color, borde, punto, tenue }
+ */
+export function etiquetaEstacion({ inten, iv = 0, av = 0, p = null, minSlot = MIN_SLOT, cerca = false }) {
+  if (!inten) {
+    return {
+      pill: cerca, texto: 'sin datos', fondo: 'transparente',
+      color: '#94a3b8', borde: 'rgba(148,163,184,.35)',
+      punto: COLOR_SIN_DATOS, tenue: false,
+    };
+  }
+  const nv = nivelDe(equivalente15(iv, minSlot));
+  if (nv) {
+    const prob = p != null ? ` · ${p}%` : '';
+    return {
+      pill: true,
+      texto: `${iv.toFixed(iv < 10 ? 1 : 0)} ${unidadCorta(minSlot)}${prob}`,
+      fondo: nv.color, color: nv.texto, borde: 'rgba(255,255,255,.4)',
+      punto: nv.color, tenue: false,
+    };
+  }
+  if (av > 0 || iv > 0) {
+    return {
+      pill: true, texto: `${av.toFixed(1)} mm`,
+      fondo: 'rgba(8,22,40,.82)', color: '#dbeafe', borde: 'rgba(255,255,255,.28)',
+      punto: av > 0 ? COLOR_LLOVIO : COLOR_SECO, tenue: false,
+    };
+  }
+  return { pill: false, texto: '', punto: COLOR_SECO, tenue: true };
+}
 
 // ── Derivados ──────────────────────────────────────────────────────────
 /** → { intensidad, acumulado, maxSlot: Float32Array con el máximo por slot } */
@@ -268,9 +343,45 @@ export function bboxEstaciones(estaciones, margen = 0.18) {
 }
 
 // ── Manto interpolado (IDW) ────────────────────────────────────────────
-// Rampa secuencial azul→violeta, distinta del código de alerta a propósito:
-// el manto dice "cuánta agua", los colores de alerta los llevan las columnas.
-const RAMPA = [
+//
+// DOS RAMPAS, porque el manto muestra dos variables distintas.
+//
+// INTENSIDAD va por los umbrales de alerta. Antes usaba una rampa azul→rosa
+// normalizada al tope de la escala, y eso hacía que la misma lluvia saliera
+// de dos colores a la vez: una estación en alerta roja pintaba su columna de
+// rojo mientras el manto a su alrededor salía violeta, porque el rosa de la
+// rampa no llegaba hasta 1.4 mm/15 min —por encima del umbral rojo—. Dos
+// escalas para una variable, y la leyenda abajo enseñaba las dos.
+//
+// Las bandas son planas a propósito: el nivel de alerta es discreto. Un
+// degradado entre el amarillo y el naranja produciría un color que no
+// significa nada, y aquí el color es lo que se lee para decidir.
+//
+// Por debajo del umbral amarillo el manto sigue siendo azul translúcido: hay
+// que ver dónde está cayendo agua aunque no haya alerta, que es casi siempre.
+//
+// ACUMULADO no tiene umbrales —son milímetros desde las 00:00, no una
+// intensidad—, así que conserva la rampa secuencial de toda la vida.
+
+const AZUL_SUAVE = [125, 211, 252];
+
+const hexARGB = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+
+/**
+ * Color por umbral. Recibe el valor YA en mm/15 min (quien llama lo convierte
+ * con equivalente15), así que no depende del tope de la escala: 0.21 es
+ * amarillo siempre, se esté mirando un día real o un pronóstico horario.
+ */
+export function colorManto(mm) {
+  const nv = nivelDe(mm);
+  if (nv) return [...hexARGB(nv.color), 225];
+  // Llueve, pero por debajo de alerta: azul que gana cuerpo hacia el umbral.
+  if (mm <= 0) return [...AZUL_SUAVE, 0];
+  const k = Math.min(1, mm / NIVELES[0].desde);
+  return [...AZUL_SUAVE, 40 + 110 * k];
+}
+
+const RAMPA_ACU = [
   [0.00, [125, 211, 252, 0]],
   [0.06, [125, 211, 252, 110]],
   [0.30, [56, 152, 236, 170]],
@@ -278,28 +389,65 @@ const RAMPA = [
   [0.85, [124, 58, 237, 215]],
   [1.00, [219, 39, 119, 225]],
 ];
-function colorRampa(t) {
+function colorAcumulado(t) {
   t = Math.max(0, Math.min(1, t));
-  for (let i = 1; i < RAMPA.length; i++) {
-    if (t <= RAMPA[i][0]) {
-      const [t0, c0] = RAMPA[i - 1], [t1, c1] = RAMPA[i];
+  for (let i = 1; i < RAMPA_ACU.length; i++) {
+    if (t <= RAMPA_ACU[i][0]) {
+      const [t0, c0] = RAMPA_ACU[i - 1], [t1, c1] = RAMPA_ACU[i];
       const k = (t - t0) / (t1 - t0);
       return c0.map((v, j) => v + (c1[j] - v) * k);
     }
   }
-  return RAMPA[RAMPA.length - 1][1];
+  return RAMPA_ACU[RAMPA_ACU.length - 1][1];
 }
-export const gradienteCSS = () =>
-  `linear-gradient(90deg, ${RAMPA.map(([t, c]) => `rgba(${c[0]},${c[1]},${c[2]},${Math.max(c[3], 60) / 255}) ${t * 100}%`).join(', ')})`;
+
+const rgba = (c, aMin = 0) => `rgba(${c[0]},${c[1]},${c[2]},${Math.max(c[3], aMin) / 255})`;
+
+/**
+ * La barra de la leyenda, con la MISMA escala que pinta el manto. Si saliera
+ * de una lista aparte volveríamos al problema de arriba por otra puerta.
+ *
+ * @param vista 'int' | 'acu'
+ * @param tope  valor del extremo derecho (solo se usa en 'int', para situar
+ *              los umbrales dentro de la barra)
+ */
+export const gradienteCSS = (vista = 'acu', tope = 1.4) => {
+  if (vista !== 'int') {
+    return `linear-gradient(90deg, ${RAMPA_ACU
+      .map(([t, c]) => `${rgba(c, 60)} ${t * 100}%`).join(', ')})`;
+  }
+  // Bandas duras: cada umbral corta en seco, como en el manto. La primera es
+  // el tramo sin alerta; después, una por nivel, hasta donde empieza el
+  // siguiente.
+  const bandas = [
+    { hasta: NIVELES[0].desde / tope, color: [...AZUL_SUAVE, 120] },
+    ...NIVELES.map((n, i) => ({
+      hasta: i + 1 < NIVELES.length ? NIVELES[i + 1].desde / tope : 1,
+      color: [...hexARGB(n.color), 225],
+    })),
+  ];
+  const paradas = [];
+  let desde = 0;
+  for (const b of bandas) {
+    const hasta = Math.min(1, b.hasta);
+    if (hasta <= desde) continue;   // tope por debajo de este umbral
+    paradas.push(`${rgba(b.color, 60)} ${desde * 100}%`,
+                 `${rgba(b.color, 60)} ${hasta * 100}%`);
+    desde = hasta;
+  }
+  return `linear-gradient(90deg, ${paradas.join(', ')})`;
+};
 
 /**
  * Pinta el manto sobre un canvas que MapLibre usa como fuente 'canvas'.
  * @param puntos  [{lng, lat, v}] solo estaciones con dato
- * @param tope    valor que corresponde al extremo de la rampa
+ * @param tope    valor que corresponde al extremo de la rampa (solo 'acu')
+ * @param vista   'int' pinta por umbrales de alerta; 'acu', rampa continua
  * @param alcance grados: más allá de esta distancia a la estación más
  *                cercana el manto se desvanece (no se inventa lluvia lejos).
  */
-export function pintarManto(canvas, bbox, puntos, tope, alcance = 0.2) {
+export function pintarManto(canvas, bbox, puntos, tope, vista = 'acu', alcance = 0.2) {
+  const color = vista === 'int' ? colorManto : (v) => colorAcumulado(v / tope);
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   const img = ctx.createImageData(W, H);
@@ -319,7 +467,7 @@ export function pintarManto(canvas, bbox, puntos, tope, alcance = 0.2) {
         }
         const v = exacto ?? num / den;
         const fade = exacto != null ? 1 : Math.max(0, 1 - Math.sqrt(dmin) / alcance);
-        const c = colorRampa(v / tope);
+        const c = color(v);
         const i = (y * W + x) * 4;
         img.data[i] = c[0]; img.data[i + 1] = c[1]; img.data[i + 2] = c[2];
         img.data[i + 3] = c[3] * Math.sqrt(fade);

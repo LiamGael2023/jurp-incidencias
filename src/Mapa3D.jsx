@@ -19,7 +19,7 @@ import {
   MIN_SLOT, NIVELES, nivelDe, horaDeMinuto,
   COLOR_SIN_DATOS, COLOR_LLOVIO, COLOR_SECO,
   cargarDia, simularDia, preparar, hayLluvia,
-  cargarPronostico, equivalente15, HORAS_CONFIABLES,
+  cargarPronostico, equivalente15, HORAS_CONFIABLES, probDe, etiquetaEstacion,
   circulo, bboxEstaciones, pintarManto, gradienteCSS,
 } from './lluvia3D';
 
@@ -79,6 +79,20 @@ const BASE_COLUMNA = 150;
 // El radio se achica al acercarse: a la vista de conjunto una columna de
 // 1,1 km se ve; de cerca esa misma columna tapa a las vecinas.
 const radioColumna = (z) => Math.max(180, Math.min(1100, 1100 * 2 ** (9.5 - z)));
+// A partir de este zoom se considera que la cámara está "cerca": aparecen los
+// nombres y también las píldoras de las estaciones sin datos, que de lejos
+// solo serían ruido.
+const ZOOM_NOMBRES = 10.2;
+
+// ACENTOS DE LA VISTA, no niveles de alerta. Son los mismos tonos del código
+// meteorológico, pero usados como color de marca del modo lluvia —el icono,
+// el distintivo de SIMULACIÓN, el borde del botón activo—, donde no
+// significan "naranja" ni "amarilla". Salen de la paleta oficial en lugar de
+// repetir el hexadecimal para que un cambio allí no deje la pantalla con dos
+// naranjas parecidos pero distintos.
+const ACENTO = NIVELES[1].color;         // el naranja del código
+const ACENTO_AVISO = NIVELES[0].color;   // el amarillo del código
+const SOMBRA_PILL = '0 2px 8px rgba(0,0,0,.45)';
 const LADO_MANTO = 160;               // píxeles del lienzo interpolado
 const TOPE_INTENSIDAD = 1.4;          // mm/15 min en el extremo de la rampa
 const MAX_GOTAS = 3200;
@@ -167,6 +181,9 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
   const reproRef = useRef(false);
   const velRef = useRef(900);
   const vistaRef = useRef('int');
+  // Si la cámara está cerca. En un ref porque pintarSlot lo consulta en cada
+  // cuadro y no debe rehacerse cada vez que cambia el zoom.
+  const cercaRef = useRef(false);
   const slotPintado = useRef(-1);
   const lienzoManto = useRef(null);
   const lienzoGotas = useRef(null);
@@ -409,25 +426,45 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
       const inten = d.intensidad[e.id];
       const iv = inten ? inten[slot] : 0;
       const av = inten ? d.acumulado[e.id][slot] : 0;
-      const p = d.prob?.[e.id]?.[slot];
+      const p = probDe(d, e.id, slot);
       if (inten) puntos.push({ lng: e.lng, lat: e.lat, v: vistaRef.current === 'int' ? eq15(d, iv) : av });
 
       const mk = marcasEst.current[i];
       if (!mk) return;
       const nv = inten ? nivelDe(eq15(d, iv)) : null;
       const pill = mk.querySelector('.l3d-pill');
-      pill.textContent = !inten ? 'sin datos'
-        : (p != null ? `${av.toFixed(1)} mm · ${p}%` : `${av.toFixed(1)} mm`);
-      pill.style.background = !inten ? 'rgba(71,85,105,.85)' : (nv ? nv.color : 'rgba(8,22,40,.82)');
-      pill.style.color = nv ? nv.texto : '#fff';
+      const punto = mk.querySelector('.l3d-punto');
+
+      // Qué se escribe y de qué color lo decide etiquetaEstacion, en
+      // lluvia3D.js, para poder comprobarlo sin montar el mapa entero.
+      const et = etiquetaEstacion({ inten: !!inten, iv, av, p, minSlot: d.minSlot, cerca: cercaRef.current });
+
+      punto.style.background = et.punto;
+      punto.style.opacity = et.tenue ? '.5' : '1';
+      pill.style.display = et.pill ? 'block' : 'none';
+      if (et.pill) {
+        // Propiedad a propiedad, no cssText: esto corre en cada cuadro de la
+        // reproducción y un `cssText +=` iría alargando la cadena sin fin.
+        const s = pill.style;
+        pill.textContent = et.texto;
+        s.background = et.fondo === 'transparente' ? 'transparent' : et.fondo;
+        s.color = et.color;
+        s.borderColor = et.borde;
+        s.boxShadow = et.fondo === 'transparente' ? 'none' : SOMBRA_PILL;
+        s.fontWeight = inten ? '700' : '600';
+      }
+
+      const probTxt = p != null ? ` (prob. ${p}%)` : ' (el modelo no publica probabilidad)';
       mk.title = `${e.name}\n${!inten
         ? 'Sin lecturas en ese periodo'
-        : `${d.t0 ? 'Prevista' : 'Ahora'}: ${iv.toFixed(2)} ${unidad(d)}${p != null ? ` (prob. ${p}%)` : ''}\nAcumulado${d.t0 ? ' previsto' : ''}: ${av.toFixed(2)} mm`}`;
+        : `${d.t0 ? 'Prevista' : 'Ahora'}: ${iv.toFixed(2)} ${unidad(d)}${d.t0 ? probTxt : ''}`
+          + `\nAcumulado${d.t0 ? ' previsto' : ''}: ${av.toFixed(2)} mm`
+          + `\nNivel: ${nv ? nv.nombre : 'sin alerta'}`}`;
     });
 
     if (lienzoManto.current && bbox) {
       const tope = vistaRef.current === 'int' ? TOPE_INTENSIDAD : acuMax;
-      pintarManto(lienzoManto.current, bbox, puntos, tope);
+      pintarManto(lienzoManto.current, bbox, puntos, tope, vistaRef.current);
     }
     // Más allá de las horas confiables el manto se atenúa: es tendencia.
     if (m.getLayer('lluvia-manto')) {
@@ -459,9 +496,13 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
     ests.forEach(e => {
       const el = document.createElement('div');
       el.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:auto;cursor:default';
+      // El punto va SIEMPRE, la píldora solo cuando hay algo que decir. Así la
+      // estación nunca desaparece —siempre se sabe dónde está y de qué color—
+      // pero deja de aportar una etiqueta que no dice nada.
       el.innerHTML = `
-        <div class="l3d-pill" style="font:700 10.5px/1 system-ui;padding:4px 7px;border-radius:6px;border:1px solid rgba(255,255,255,.4);box-shadow:0 2px 8px rgba(0,0,0,.45);white-space:nowrap;color:#fff;background:rgba(8,22,40,.82)">—</div>
-        <div class="l3d-nom" style="font:600 9.5px/1 system-ui;color:#e2eef8;text-shadow:0 1px 3px #000,0 0 6px #000;white-space:nowrap">${e.name}</div>`;
+        <div class="l3d-pill" style="display:none;font:700 10.5px/1 system-ui;padding:4px 7px;border-radius:6px;border:1px solid rgba(255,255,255,.4);box-shadow:${SOMBRA_PILL};white-space:nowrap;color:#fff;background:rgba(8,22,40,.82)">—</div>
+        <div class="l3d-punto" style="width:9px;height:9px;border-radius:50%;border:1.5px solid rgba(8,22,40,.75);box-shadow:0 1px 4px rgba(0,0,0,.5);background:${COLOR_SECO}"></div>
+        <div class="l3d-nom" style="display:none;font:600 9.5px/1 system-ui;color:#e2eef8;text-shadow:0 1px 3px #000,0 0 6px #000;white-space:nowrap">${e.name}</div>`;
       el._marcador = new maplibregl.Marker({ element: el, anchor: 'top', offset: [0, 6] }).setLngLat([e.lng, e.lat]).addTo(m);
       marcasEst.current.push(el);
     });
@@ -475,13 +516,24 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
   // Nombres solo de cerca (desde lejos se amontonan) y columnas más finas
   // conforme se acerca la cámara.
   const zoomEscalon = Math.round(zoom * 4) / 4;
+  const cerca = zoomEscalon >= ZOOM_NOMBRES;
   useEffect(() => {
+    // El ref se escribe aquí y no en el render: durante el render React puede
+    // descartar el resultado, y pintarSlot leería un valor que nunca llegó a
+    // pintarse.
+    cercaRef.current = cerca;
     marcasEst.current.forEach(el => {
       const n = el.querySelector('.l3d-nom');
-      if (n) n.style.display = zoomEscalon >= 10.2 ? 'block' : 'none';
+      if (n) n.style.display = cerca ? 'block' : 'none';
     });
-    if (modoLluvia && datosRef.current) pintarColumnas(slotDe(datosRef.current, minutoRef.current));
-  }, [zoomEscalon, modoLluvia, pintarColumnas]);
+    if (modoLluvia && datosRef.current) {
+      pintarColumnas(slotDe(datosRef.current, minutoRef.current));
+      // Repintar, no solo las columnas: cruzar el umbral de cercanía cambia
+      // qué estaciones muestran píldora de "sin datos".
+      slotPintado.current = -1;
+      pintarSlot(slotDe(datosRef.current, minutoRef.current));
+    }
+  }, [cerca, zoomEscalon, modoLluvia, pintarColumnas, pintarSlot]);
 
   // Carga de datos según la fuente.
   useEffect(() => {
@@ -653,8 +705,8 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
       if (s[slotUI] > 0) conLluvia++;
       if (s[slotUI] > maxI) { maxI = s[slotUI]; estI = e.name; }
       if (a[slotUI] > maxA) { maxA = a[slotUI]; estA = e.name; }
-      const p = datos.prob?.[e.id]?.[slotUI] ?? 0;
-      if (p > maxP) { maxP = p; estP = e.name; }
+      const p = probDe(datos, e.id, slotUI);
+      if (p != null && p > maxP) { maxP = p; estP = e.name; }
       ranking.push({ id: e.id, name: e.name, a: a[slotUI], i: s[slotUI] });
     }
     ranking.sort((x, y) => y.a - x.a);
@@ -807,16 +859,21 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
     : esPron ? `Pronóstico · próximos ${diasPron} días`
       : new Date(fecha + 'T12:00').toLocaleDateString('es-PE', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
 
+  // Dos denominadores seguidos ("0 de 27" junto a "2 de 29") hacen tropezar
+  // aunque los dos sean correctos: 27 son las que tienen serie, 29 el total.
+  // Se dice cuál es cuál en vez de dejar que el lector lo deduzca.
+  const conSerie = resumen ? resumen.total - resumen.sinDatos : 0;
+
   const kpis = !resumen ? [] : esPron ? [
     ['Máx. prevista', resumen.maxI.toFixed(1), 'mm/h', resumen.estI, nivelDe(eq15(datos, resumen.maxI))],
     ['Acum. previsto', resumen.maxA.toFixed(1), 'mm', resumen.estA, null],
-    ['Prob. máxima', `${resumen.maxP}`, '%', resumen.estP, null],
-    ['Con lluvia', `${resumen.conLluvia}`, `de ${resumen.total - resumen.sinDatos}`, null, null],
+    ['Prob. máxima', resumen.estP ? `${resumen.maxP}` : '—', resumen.estP ? '%' : 'sin dato del modelo', resumen.estP, null],
+    ['Con lluvia', `${resumen.conLluvia}`, `de ${conSerie} con pronóstico`, null, null],
   ] : [
     ['Intensidad máx.', resumen.maxI.toFixed(2), 'mm/15 min', resumen.estI, nivelDe(resumen.maxI)],
     ['Acumulado máx.', resumen.maxA.toFixed(1), 'mm', resumen.estA, null],
-    ['Lloviendo ahora', `${resumen.conLluvia}`, `de ${resumen.total - resumen.sinDatos}`, null, null],
-    ['Sin datos', `${resumen.sinDatos}`, `de ${resumen.total}`, null, null],
+    ['Lloviendo ahora', `${resumen.conLluvia}`, `de ${conSerie} con serie`, null, null],
+    ['Sin datos', `${resumen.sinDatos}`, `de ${resumen.total} estaciones`, null, null],
   ];
 
   return (
@@ -838,12 +895,12 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
 
       {/* Cabecera */}
       <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 10, display: 'flex', alignItems: 'center', gap: 12, ...vidrio, padding: '10px 16px' }}>
-        {modoLluvia ? <FaCloudRain size={20} color="#F37021" /> : <FaGlobeAmericas size={20} color="#35B6E9" />}
+        {modoLluvia ? <FaCloudRain size={20} color={ACENTO} /> : <FaGlobeAmericas size={20} color="#35B6E9" />}
         <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '.04em' }}>
           {modoLluvia ? 'PLUVIRA · GEMELO DE LLUVIA' : 'VISTA 3D'}
         </div>
         {modoLluvia && fuente === 'sim' && (
-          <span style={{ fontSize: 10, fontWeight: 800, color: '#04101f', background: '#FFF200', padding: '3px 7px', borderRadius: 5 }}>SIMULACIÓN</span>
+          <span style={{ fontSize: 10, fontWeight: 800, color: '#04101f', background: ACENTO_AVISO, padding: '3px 7px', borderRadius: 5 }}>SIMULACIÓN</span>
         )}
         {modoLluvia && esPron && (
           <span style={{ fontSize: 10, fontWeight: 800, color: '#04101f', background: '#8fd0f5', padding: '3px 7px', borderRadius: 5 }}>PRONÓSTICO</span>
@@ -854,7 +911,7 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
       <div style={{ position: 'absolute', top: 16, right: 60, zIndex: 10, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <button onClick={() => { if (modoLluvia) setReproduciendo(false); else pararGiro(); setModoLluvia(!modoLluvia); }} disabled={!ests.length}
           title={ests.length ? 'Reproducir la lluvia sobre el terreno' : 'No hay estaciones con ubicación'}
-          style={{ ...btn(modoLluvia), ...(modoLluvia ? { borderColor: '#F37021', background: 'rgba(243,112,33,.3)' } : {}) }}>
+          style={{ ...btn(modoLluvia), ...(modoLluvia ? { borderColor: ACENTO, background: 'rgba(243,112,33,.3)' } : {}) }}>
           <FaCloudRain size={13} /> Lluvia 3D
         </button>
         {!modoLluvia && (
@@ -1000,6 +1057,13 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
             <div style={{ fontSize: 9.5, color: '#7fa5c0', marginTop: 12, lineHeight: 1.45 }}>
               Pronóstico: Open-Meteo (modelos ECMWF, GFS, ICON y otros) para la coordenada de cada estación.
               Los colores comparan la lluvia horaria en su equivalente por 15 min. Lo oficial son los avisos de SENAMHI.
+              {/* La hora de consulta no es decoración: con una hora de caché,
+                  lo que se está mirando casi nunca es de este momento. */}
+              {datos?.consultado && (
+                <div style={{ marginTop: 4, color: '#9fb3c8', fontWeight: 700 }}>
+                  Consultado {datos.consultado.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1048,9 +1112,13 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
               <button onClick={() => setVistaManto('int')} style={chip(vistaManto === 'int')}>Intensidad</button>
               <button onClick={() => setVistaManto('acu')} style={chip(vistaManto === 'acu')}>Acumulado</button>
             </div>
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#9fb3c8' }}>
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#9fb3c8' }}
+                 title={vistaManto === 'int'
+                   ? 'El manto usa los mismos umbrales de alerta que las columnas'
+                   : 'Milímetros acumulados en el periodo: no tiene umbrales de alerta'}>
               <span>{vistaManto === 'int' ? '0' : '0 mm'}</span>
-              <span style={{ width: 90, height: 8, borderRadius: 4, background: gradienteCSS(), display: 'inline-block' }} />
+              {/* La barra se dibuja con la MISMA escala que pinta el manto. */}
+              <span style={{ width: 90, height: 8, borderRadius: 4, background: gradienteCSS(vistaManto, TOPE_INTENSIDAD), display: 'inline-block' }} />
               <span>{vistaManto === 'int' ? (esPron ? `${(TOPE_INTENSIDAD * 4).toFixed(1)} mm/h` : `${TOPE_INTENSIDAD} mm/15′`) : 'máx. del periodo'}</span>
             </div>
           </div>

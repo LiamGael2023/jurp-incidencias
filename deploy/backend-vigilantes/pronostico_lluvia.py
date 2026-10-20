@@ -30,6 +30,25 @@ por cuarto de hora, pasados a su equivalente horario (x4):
 Es una aproximación: la lluvia real cae a ráfagas y el modelo da totales
 horarios. Por eso el aviso dice "prevista" y nunca sustituye a SENAMHI.
 
+ADEMAS, ARCHIVA LO QUE EL MODELO DIJO
+-------------------------------------
+Cada pasada guarda el pronóstico emitido en `--archivo` (NDJSON, un fichero
+por mes). No es un registro de lo que se avisó: es el pronóstico en sí, con
+alerta o sin ella.
+
+Sirve para lo único que de verdad puede mejorar la precisión aquí. Open-Meteo
+da el valor de una celda de unos 10 km con su propia altura, y en este valle
+hay pluviómetros desde el nivel del mar hasta la sierra: la celda puede estar
+mil metros por encima o por debajo del aparato, y en lluvia orográfica eso
+explica casi todo el error. Se corrige con un factor por estación, pero ese
+factor solo se puede calcular comparando lo previsto con lo medido, y para eso
+hay que haber guardado lo previsto ANTES. Un pronóstico no archivado no se
+puede evaluar nunca más: la consulta de hoy, mañana ya devuelve otra cosa.
+
+Nadie más tiene 27 pluviómetros en Moche-Virú-Chao. Ese archivo es el único
+sitio donde se puede saber cuánto vale un modelo global en este valle, y de
+paso cuál de ellos conviene pedir.
+
 UNA VEZ POR EVENTO
 ------------------
 Se guarda en un archivo qué se avisó (estación, nivel y día del evento). Solo
@@ -42,7 +61,8 @@ USO
 
     --usuarios  A quién avisar, separados por coma. Por defecto, los del
                 grupo supervisor_group que tengan dispositivo registrado.
-    --dry-run   No manda push ni guarda estado; solo informa.
+    --archivo   Carpeta del archivo de corridas. Vacío para no archivar.
+    --dry-run   No manda push, no archiva y no guarda estado; solo informa.
 """
 
 import json
@@ -71,7 +91,22 @@ NIVELES = [  # de menor a mayor
 ORDEN = {n: i for i, (n, _) in enumerate(NIVELES)}
 
 ESTADO_POR_DEFECTO = "/app/estado_pronostico.json"
+ARCHIVO_POR_DEFECTO = "/app/archivo_pronostico"
 DIAS_SEM = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+
+# Alcances que se archivan, en horas. No se guarda el pronóstico entero: con
+# 29 estaciones y 48 horas serían 1.400 filas por corrida y 33.000 al día, un
+# giga al año para medir algo que no necesita tanta resolución.
+#
+# Estos cinco bastan para la pregunta que importa —¿cuánto se equivoca el
+# modelo en CADA estación, y a cuánta antelación?— porque el cron pasa cada
+# hora: la hora T acaba teniendo su previsión hecha con 1, 6, 12, 24 y 48
+# horas de antelación, guardadas por cinco corridas distintas.
+#
+# Las 24 h son el alcance que de verdad se usa para decidir (mover gente,
+# revisar alcantarillas); las 48, el aviso temprano; la de 1 h es la que mide
+# el techo del modelo, porque es lo mejor que puede hacer.
+ALCANCES_ARCHIVO = (1, 6, 12, 24, 48)
 
 
 def nivel_de(mm_h):
@@ -108,6 +143,10 @@ class Command(BaseCommand):
         )
         parser.add_argument("--usuarios", default="")
         parser.add_argument("--estado", default=ESTADO_POR_DEFECTO)
+        parser.add_argument(
+            "--archivo", default=ARCHIVO_POR_DEFECTO,
+            help="Carpeta donde se guarda cada corrida. Vacío para no archivar.",
+        )
         parser.add_argument("--dry-run", action="store_true")
 
     # ── Datos ──────────────────────────────────────────────────────────────
@@ -165,6 +204,93 @@ class Command(BaseCommand):
                 json.dump(estado, f, indent=1)
         except IOError as e:
             self.stderr.write(f"No pude guardar el estado en {ruta}: {e}")
+
+    # ── Archivo de corridas ────────────────────────────────────────────────
+
+    def _archivar(self, carpeta, estaciones, pron, ahora):
+        """Guarda lo que este modelo acaba de predecir, para poder medirlo.
+
+        POR QUE ESTO ES LO PRIMERO Y NO LO ULTIMO. Open-Meteo entrega el valor
+        de una celda de unos 10 km con su propia altura, y aqui hay
+        pluviometros desde el nivel del mar hasta la sierra: la celda puede
+        estar mil metros por encima o por debajo del aparato, y en lluvia
+        orografica eso es casi todo el error. Corregirlo es facil -un factor
+        por estacion- pero solo se puede calcular comparando lo previsto con
+        lo medido, y para eso hay que haber guardado lo previsto ANTES de que
+        llegue el dia. Un pronostico no archivado no se puede evaluar nunca
+        mas: la consulta de hoy, manana ya devuelve otra cosa.
+
+        Nadie mas tiene 27 pluviometros en Moche-Viru-Chao. Ese archivo es el
+        unico sitio del mundo donde se puede saber cuanto vale un modelo
+        global en este valle.
+
+        FORMATO: NDJSON, un fichero por mes, una linea por
+        (estacion, corrida, alcance). Se escribe a lo que ya hay -nunca se
+        reescribe- asi que una corrida a medias no estropea las anteriores, y
+        se lee con cualquier cosa, de pandas a grep.
+        """
+        if not carpeta:
+            return 0
+        try:
+            os.makedirs(carpeta, exist_ok=True)
+        except OSError as e:
+            self.stderr.write(f"No pude crear {carpeta}: {e}")
+            return 0
+
+        corrida = ahora.replace(minute=0, second=0, microsecond=0)
+        ruta = os.path.join(carpeta, corrida.strftime("%Y-%m") + ".ndjson")
+        lineas = []
+
+        for (sid, nombre, lat, lng), p in zip(estaciones, pron):
+            h = p.get("hourly") or {}
+            tiempos = h.get("time") or []
+            lluvia = h.get("precipitation") or []
+            probs = h.get("precipitation_probability") or []
+            # La altura de la CELDA del modelo, que casi nunca es la del
+            # pluviometro. Es el primer numero a mirar cuando una estacion
+            # pronostica raro, y no cuesta nada guardarlo.
+            alt = num(p.get("elevation"))
+
+            porhora = {}
+            for i, t in enumerate(tiempos):
+                try:
+                    porhora[datetime.fromisoformat(t)] = i
+                except ValueError:
+                    continue
+
+            for alcance in ALCANCES_ARCHIVO:
+                objetivo = corrida + timedelta(hours=alcance)
+                i = porhora.get(objetivo)
+                if i is None:
+                    continue
+                mm = num(lluvia[i] if i < len(lluvia) else None)
+                if mm is None:
+                    continue
+                pr = num(probs[i] if i < len(probs) else None)
+                lineas.append(json.dumps({
+                    "corrida": corrida.isoformat(timespec="minutes"),
+                    "objetivo": objetivo.isoformat(timespec="minutes"),
+                    "alcance_h": alcance,
+                    "est": sid,
+                    "nombre": nombre,
+                    "lat": round(lat, 5),
+                    "lng": round(lng, 5),
+                    "alt_modelo": alt,
+                    "mm": round(mm, 2),
+                    # Ausente NO es cero: no todos los modelos la publican, y
+                    # escribir 0 aqui falsearia la medicion mas adelante.
+                    "prob": None if pr is None else int(pr),
+                }, ensure_ascii=False))
+
+        if not lineas:
+            return 0
+        try:
+            with open(ruta, "a") as f:
+                f.write("\n".join(lineas) + "\n")
+        except IOError as e:
+            self.stderr.write(f"No pude archivar en {ruta}: {e}")
+            return 0
+        return len(lineas)
 
     # ── Aviso ──────────────────────────────────────────────────────────────
 
@@ -228,6 +354,19 @@ class Command(BaseCommand):
 
         ahora = timezone.localtime(timezone.now()).replace(tzinfo=None)
         hasta = ahora + timedelta(hours=horas)
+
+        # Archivar ANTES de decidir avisos. Lo que se guarda es lo que el
+        # modelo dijo, independientemente de si hoy cruza algún umbral: un
+        # archivo que solo recogiera los días de alerta no serviría para medir
+        # el error, porque el modelo también se equivoca anunciando lluvia que
+        # no llega, y eso es justo lo que hay que poder contar.
+        if simulacro:
+            self.stdout.write("  [simulacro] no se archiva la corrida")
+        else:
+            n = self._archivar(opts["archivo"], estaciones, pron, ahora)
+            if n:
+                self.stdout.write(f"  archivadas {n} fila(s) de esta corrida")
+
         estado = self._leer_estado(ruta_estado)
 
         # Limpieza: lo avisado para días ya pasados no hace falta guardarlo.
