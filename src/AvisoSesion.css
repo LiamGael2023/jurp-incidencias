@@ -1,0 +1,67 @@
+/* El cartel de "no hay datos, y por esto".
+ *
+ * Fijo arriba y por encima de todo: el mapa ocupa la pantalla entera y un
+ * aviso dentro del contenido se queda debajo de sus capas. El z-index va
+ * por encima del de los modales de esta app (120000) porque un fallo de
+ * sesión también hay que poder leerlo con un modal abierto. */
+
+.avs {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(760px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border-radius: 9px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .22);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Ámbar para la sesión -hay que hacer algo, pero no se ha roto nada- y rojo
+ * para lo demás, que es el servidor o la red. Colores distintos porque la
+ * acción es distinta: entrar de nuevo frente a esperar y reintentar. */
+.avs-sesion { background: #fffbeb; border: 1px solid #fcd34d; color: #78350f; }
+.avs-otro   { background: #fef2f2; border: 1px solid #fecaca; color: #7f1d1d; }
+
+.avs-ico { flex: none; }
+.avs-txt { flex: 1; min-width: 0; }
+.avs-txt b { font-weight: 700; }
+
+/* El dato que convierte el susto en evidencia: cuánto llevaba abierta. */
+.avs-dato { font-weight: 400; opacity: .85; }
+
+.avs-botones { display: flex; align-items: center; gap: 6px; flex: none; }
+
+.avs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.avs-btn-ok { color: #fff; background: #b45309; border: 1px solid #b45309; }
+.avs-otro .avs-btn-ok { background: #b91c1c; border-color: #b91c1c; }
+.avs-btn-ok:hover { filter: brightness(1.08); }
+
+.avs-cerrar {
+  padding: 6px 8px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  opacity: .6;
+}
+.avs-cerrar:hover { opacity: 1; }
+
+@media (max-width: 640px) {
+  .avs { flex-wrap: wrap; }
+  .avs-botones { width: 100%; justify-content: flex-end; }
+}

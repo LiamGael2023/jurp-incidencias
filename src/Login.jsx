@@ -2,6 +2,7 @@ import { useState } from 'react';
 import './Login.css';
 import logo from './assets/logo1.png';
 import portadaPortada from './assets/Portada-Pagina-Web-Julio.png';
+import { marcarEntrada } from './sesion';
 
 /*
  * CADA APP TIENE SU PROPIO PADRÓN DE USUARIOS, y no son el mismo.
@@ -60,6 +61,11 @@ function Login({ onLoginSuccess, app }) {
         if(token) {
             // 1. Guardamos el token
             localStorage.setItem('userToken', token);
+            // Cuando empezo esta sesion. Si algun dia el servidor la
+            // rechaza, el aviso puede decir cuanto llevaba abierta: si el
+            // token caduca ese numero se repite, y si es el servidor que
+            // falla a ratos sale cualquiera.
+            marcarEntrada();
             // 2. GUARDAMOS EL NOMBRE DE USUARIO
             localStorage.setItem('userName', username); 
             // 3. GUARDAMOS LOS GRUPOS DEL USUARIO (para permisos, ej. subir reportes)

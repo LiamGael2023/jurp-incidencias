@@ -31,6 +31,7 @@ import { imgToBase64 } from './costeo/imagen';
 import GestionCosteo from './GestionCosteo';
 import VisorImagen from './VisorImagen';
 import { API_OPS } from './api';
+import { pedir } from './sesion';
 // ── Imágenes de referencia metrado por actividad ─────────────────────────────
 
 // Los modales se cuelgan del <body>, no del árbol de la página.
@@ -168,14 +169,17 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   // ── Gestionar unidades de medida ────────────────────────────────────────
 
   const obtenerIncidentes = async () => {
-    const token = localStorage.getItem('userToken'); 
-    if (!token) return;
+    /* ANTES ESTO SE CALLABA. Era `if (!token) return;` y luego
+     * `if (res.ok) {...}` sin else: un 401, un 504 y un corte de red
+     * dejaban la lista vacia sin una sola pista de por que, y los tres se
+     * arreglan de forma distinta. Ahora el fallo llega al aviso de arriba,
+     * que dice cual de los tres fue. */
+    const { ok: llego, res } = await pedir('/api/v1/mobile/hi-incidents/list/',
+                                           { json: false });
+    if (!llego) { setCargando(false); return; }
     setCargando(true);
     try {
-      const res = await fetch('/api/v1/mobile/hi-incidents/list/', { 
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` } 
-      });
-      if (res.ok) {
+      if (res && res.ok) {
         const data = await res.json();
         const tiposMapa = {
           '1': 'Rebose y/o Colapso de canoa o alcantarilla',

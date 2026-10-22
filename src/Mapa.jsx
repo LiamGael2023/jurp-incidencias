@@ -80,6 +80,7 @@ import geoViaAuxiliar from './data/garitas/VIA_AUXILIAR.json';
 import geoRedNacional from './data/garitas/RED_NACIONAL.json';
 import PanelReportes from './ReportesANA';
 import { API_OPS, API_BASE } from './api';
+import { pedir, avisar } from './sesion';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const crearIconoSimbologia = (url, sz = 28) => L.icon({ iconUrl: url, iconSize: [sz, sz], iconAnchor: [sz/2, sz/2], popupAnchor: [0, -(sz/2)] });
@@ -723,10 +724,21 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
   // ── APIs ───────────────────────────────────────────────────────────────
   const obtenerDatosDeApis = async () => {
-    const token = localStorage.getItem('userToken'); if (!token) return; setCargandoAPIs(true);
+    /* ANTES: `if (!token) return;` y luego `if (resInc.ok) {...}` sin else.
+     * El mapa se quedaba sin incidencias y sin estaciones, y no habia forma
+     * de saber si fue la sesion, el servidor o la red. `pedir` lo clasifica
+     * y lo cuenta; el aviso de arriba lo enseña una sola vez aunque fallen
+     * las cinco peticiones de esta funcion. */
+    const token = localStorage.getItem('userToken');
+    if (!token) { avisar('sesion', { sinToken: true }); return; }
+    setCargandoAPIs(true);
     try {
-      const resInc = await fetch('/api/v1/mobile/hi-incidents/list/', { headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` } });
-      if (resInc.ok) { const dataInc = await resInc.json(); const tm = { '1': 'Rebose y/o Colapso de canoa o alcantarilla', '2': 'Ingreso de sedimentos al Canal Madre', '3': 'Desborde Canal Madre', '4': 'Desborde Lateral 10', '5': 'Rotura de Canal', '6': 'Interrupción del flujo en el canal en tramos con retenciones', '7': 'Presencia de palizada en canal Madre', '8': 'Corte de camino de acceso y/o servicio', '9': 'Rotura de embalse de usuario', '10': 'Incremento de caudal', '11': 'Erosión de obras de defensa ribereña', '12': 'Desborde e inundación', '13': 'Lluvia', '14': 'Otros' };
+      /* Cada pieza del mapa falla por su cuenta. Cortar aqui cuando fallan
+       * las incidencias se llevaria tambien las estaciones, que puede que
+       * si esten: un 504 de un endpoint no dice nada de los otros. */
+      const { res: resInc } = await pedir(
+        '/api/v1/mobile/hi-incidents/list/', { json: false });
+      if (resInc && resInc.ok) { const dataInc = await resInc.json(); const tm = { '1': 'Rebose y/o Colapso de canoa o alcantarilla', '2': 'Ingreso de sedimentos al Canal Madre', '3': 'Desborde Canal Madre', '4': 'Desborde Lateral 10', '5': 'Rotura de Canal', '6': 'Interrupción del flujo en el canal en tramos con retenciones', '7': 'Presencia de palizada en canal Madre', '8': 'Corte de camino de acceso y/o servicio', '9': 'Rotura de embalse de usuario', '10': 'Incremento de caudal', '11': 'Erosión de obras de defensa ribereña', '12': 'Desborde e inundación', '13': 'Lluvia', '14': 'Otros' };
         setIncidentesAPI((dataInc.results || []).map(inc => { const lat = parseFloat(inc.latitude_marker || inc.latitude), lng = parseFloat(inc.longitude_marker || inc.longitude); let tp = tm[inc.type?.toString()] || 'Incidente'; const at = inc.another_type; if (at && at.trim() && (tp === 'Otro' || tp === 'Otros')) tp = `Otro (${at.trim()})`; const f = new Date(inc.created_at); const codigoIncidente = `INCIDENTE-${String(inc.id).padStart(3,'0')}-${String(f.getDate()).padStart(2,'0')}${String(f.getMonth()+1).padStart(2,'0')}${f.getFullYear()}`; return { id: inc.id, codigoIncidente, lat, lng, tipo: tp, estado: inc.status || 'pat', gravedad: inc.severity || 'lev', descripcion: inc.description || '', usuario: inc.user?.username || '', lugar: inc.location_text || '', fecha: new Date(inc.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }), timestamp: new Date(inc.created_at).getTime(), imagenUrl: inc.thumbnail || inc.image || null, codigo: inc.code || 'Sin Código' }; }).filter(i => !isNaN(i.lat) && !isNaN(i.lng) && i.lat !== 0)); }
       // Pluviómetros y estaciones Davis: las dos alimentan el mapa.
       const [resPlu, resDav] = await Promise.all([
