@@ -108,6 +108,11 @@ export default function GestionCosteo({
   const [partidas, setPartidas] = useState([]);             // presupuesto de obra
   const [modalAvance, setModalAvance] = useState(false);
   const [casRuta, setCasRuta] = useState([]);
+  /* La escalera de la partida en los formularios de mano de obra e insumo.
+   * Aparte de casRuta, que es la del parte de maquinaria: los dos pueden
+   * estar abiertos en momentos distintos y compartir el camino haria que
+   * uno apareciera a medio bajar por lo que hizo el otro. */
+  const [recRuta, setRecRuta] = useState([]);
 
   /* ── LO PROGRAMADO: qué partidas del presupuesto ejecuta este sujeto ──
    *
@@ -720,6 +725,7 @@ export default function GestionCosteo({
         const descripcion = (i.description || '').split('\n')[0].trim();
         return {
           idLocal: `db-pers-${i.id}`, dbId: i.id, endpoint: 'incident-personnels', tipo: 'Personal',
+          partidaId: i.partida || '',
           fechaRecurso: i.date || '',
           descripcion,
           numPersonas: i.num_personas ?? 1,
@@ -731,7 +737,7 @@ export default function GestionCosteo({
           total: round2(parseFloat(i.quantity_hours) * parseFloat(i.unit_price)), guardadoEnDB: true
         };
       });
-      const formatMat = listMat.filter(i => String(i[campoVinculo]) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', fechaRecurso: i.date || '', descripcionResumen: i.description, unidad: i.unit || 'und', cantidad: round4(i.quantity), precioUnitario: parseFloat(i.unit_price), total: round2(parseFloat(i.quantity) * parseFloat(i.unit_price)), guardadoEnDB: true }));
+      const formatMat = listMat.filter(i => String(i[campoVinculo]) === idStr).map(i => ({ idLocal: `db-mat-${i.id}`, dbId: i.id, endpoint: 'incident-materials', tipo: 'Insumo', partidaId: i.partida || '', fechaRecurso: i.date || '', descripcionResumen: i.description, unidad: i.unit || 'und', cantidad: round4(i.quantity), precioUnitario: parseFloat(i.unit_price), total: round2(parseFloat(i.quantity) * parseFloat(i.unit_price)), guardadoEnDB: true }));
       const formatMaq = listMaq.filter(i => String(i[campoVinculo]) === idStr).map(i => {
         // Resuelve la máquina del catálogo para poder agregarle más partes luego.
         const mp = (i.model_plate || '').trim();
@@ -913,6 +919,14 @@ export default function GestionCosteo({
     return sub.length ? sub : partidas;
   }, [partidas, progDetalle]);
 
+  /* ¿La lista de partidas está ACOTADA a lo programado, o es el presupuesto
+   * entero? Lo usan los dos formularios que ofrecen partida -el parte de
+   * maquinaria y los de mano de obra e insumo- para decir de dónde salen las
+   * opciones. Vive aquí y no dentro de uno de ellos porque, estando dentro,
+   * el otro reventaba con un ReferenceError al abrirse. */
+  const acotado = progDetalle.length > 0
+    && partidasDelParte.length < partidas.length;
+
   const partidaDeLaLinea = partidas.find(
     x => String(x.id) === String(actForm.partidaId));
   const unidadDePartida = partidaDeLaLinea ? partidaDeLaLinea.unidad : '';
@@ -990,6 +1004,7 @@ export default function GestionCosteo({
       return;
     }
     setNuevoRecurso({ ...estadoInicialRecurso, tipo, numeroParte: generarCorrelativo() });
+    setRecRuta(bajarSolo(partidasDelParte, []));
     setFormTipo(tipo);
   };
   const ultimoHmFinDeMaquina = (codigo) => {
@@ -1183,7 +1198,14 @@ export default function GestionCosteo({
       tipo: grupo.tipo,
       fechaRecurso: entrada.fechaRecurso || '',
       precioUnitario: entrada.precioUnitario ?? 0,
+      partidaId: entrada.partidaId || '',
     };
+    /* La escalera tiene que abrirse DONDE ESTA la partida guardada, no en la
+     * raiz. Si no, al editar un registro que ya tenia partida se ve un
+     * "— Elegir —" vacio y parece que no tenia ninguna; guardar entonces la
+     * perderia sin que nadie lo notara. */
+    const suPartida = partidas.find(x => String(x.id) === String(entrada.partidaId));
+    setRecRuta(suPartida ? rutaDe(suPartida).map(n => n[0]) : []);
     if (grupo.tipo === 'Personal') {
       setNuevoRecurso({
         ...base,
@@ -1715,6 +1737,10 @@ export default function GestionCosteo({
           formData.append('horas_normales', parseFloat(r.horasTrabajo)||0);
           formData.append('horas_extras', parseFloat(r.horasExtras)||0);
           formData.append('origin', r.origen || 'JURP');
+          // Vacio NO se manda: FormData convierte todo a texto, y un
+          // 'partida=""' llega como la cadena vacia y revienta el
+          // ForeignKey en vez de dejarlo en NULL.
+          if (r.partidaId) formData.append('partida', r.partidaId);
         } else if (r.tipo === 'Insumo') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-materials/`;
           if (r.fechaRecurso) formData.append('date', r.fechaRecurso);
@@ -1722,6 +1748,7 @@ export default function GestionCosteo({
           formData.append('quantity', r.cantidad);
           formData.append('unit_price', r.precioUnitario);
           formData.append('unit', r.unidad || 'und');
+          if (r.partidaId) formData.append('partida', r.partidaId);
         } else if (r.tipo === 'Maquinaria') {
           endpoint = `${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`;
           formData.append('part_number', r.numeroParte); formData.append('date', /^\d{4}-\d{2}-\d{2}$/.test(r.fechaParte) ? r.fechaParte : getFechaHoy());
@@ -2123,6 +2150,19 @@ export default function GestionCosteo({
                                           {r.tipo === 'Personal'
                                             ? `${e.numPersonas} pers × ${e.horasTrabajo}h${parseFloat(e.horasExtras) > 0 ? ` + ${e.horasExtras}h ext` : ''}`
                                             : `Entrada ${idx + 1}`}
+                                          {/* A QUE PARTIDA SE CARGO. Sin esto el campo
+                                              se guarda y no se ve en ningún sitio, y un
+                                              dato que no se puede comprobar de un vistazo
+                                              se queda mal puesto para siempre. */}
+                                          {e.partidaId && (() => {
+                                            const pt = partidas.find(x => String(x.id) === String(e.partidaId));
+                                            return (
+                                              <span className="cos-etq-partida"
+                                                title={pt ? `${pt.codigo} · ${pt.descripcion}` : 'Partida no encontrada en este presupuesto'}>
+                                                {pt ? pt.codigo : '?'}
+                                              </span>
+                                            );
+                                          })()}
                                         </td>
                                         <td className="tbl-text-end">{fmtCant(e.cantidad)} <span style={{fontSize:'10px', color:'#94a3b8'}}>{r.tipo === 'Personal' ? 'HH' : e.unidad}</span></td>
                                         <td className="tbl-text-end">S/ {fmtCant(e.precioUnitario)}</td>
@@ -2650,6 +2690,50 @@ export default function GestionCosteo({
                   </div>
                 )}
 
+                {/* ── A QUE PARTIDA SE CARGA ESTE GASTO ──────────────────
+                    OJO CON LO QUE SIGNIFICA AQUI, que no es lo mismo que en
+                    el parte de maquinaria. A un equipo se le imputa METRADO
+                    -120 m3 excavados- y eso adelanta la partida. A una
+                    persona y a un saco de cemento no se les puede imputar
+                    metrado: no lo tienen. Lo que se les imputa es COSTO.
+
+                    Por eso el aviso de abajo no dice "no entra en el
+                    avance" como el del parte: ese gasto no entra en el
+                    avance ni eligiendo partida. Lo que se pierde al no
+                    elegirla es saber cuanto costo cada partida. */}
+                {formTipo !== 'Maquinaria' && (
+                  <div data-prueba="partida-recurso"
+                    style={{ background:'#f8fafc', border:'1px solid #e2e8f0',
+                    borderRadius:'6px', padding:'12px', marginTop:'4px' }}>
+                    <div style={{ fontSize:'12.5px', fontWeight:700, color:'#334155', marginBottom:'8px' }}>
+                      Partida del presupuesto
+                      <small style={{ color:'#94a3b8', fontWeight:400 }}> · opcional</small>
+                      {acotado ? (
+                        <div style={{ fontSize:'11.5px', fontWeight:600, color:'#0b7a56', marginTop:'3px' }}>
+                          Solo las {partidasDelParte.length} programadas para esta incidencia
+                        </div>
+                      ) : partidas.length > 0 && (
+                        <div style={{ fontSize:'11.5px', fontWeight:400, color:'#b45309', marginTop:'3px' }}>
+                          Las {partidas.length} del presupuesto — prográmalas arriba
+                          y aquí saldrán solo las de esta incidencia
+                        </div>
+                      )}
+                    </div>
+                    <EscaleraPartida
+                      partidas={partidasDelParte}
+                      camino={recRuta}
+                      onCamino={setRecRuta}
+                      valor={nuevoRecurso.partidaId || ''}
+                      onElegir={(id) => setNuevoRecurso({ ...nuevoRecurso, partidaId: id || '' })}
+                    />
+                    <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'6px' }}>
+                      {nuevoRecurso.partidaId
+                        ? 'Su costo se sumará al de esta partida. El avance sigue saliendo del metrado de los partes.'
+                        : 'Sin partida: se guarda igual, pero su costo no se reparte por partidas.'}
+                    </div>
+                  </div>
+                )}
+
               </div>
               <div className="tbl-modal-footer" style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
                 <button className="tbl-btn tbl-btn-link" onClick={cerrarFormulario}>Cancelar</button>
@@ -3094,9 +3178,6 @@ export default function GestionCosteo({
                   const choca = sel && uAct && norm(sel.unidad) !== uAct;
                   // De lo programado arriba, o del presupuesto entero si no
                   // hay nada programado.
-                  const acotado = progDetalle.length > 0
-                    && partidasDelParte.length < partidas.length;
-
                   const candidatas = partidasDelParte.filter(p => cuelgaDe(p, casRuta));
 
                   // Un peldaño por cada nivel del camino, más el siguiente.

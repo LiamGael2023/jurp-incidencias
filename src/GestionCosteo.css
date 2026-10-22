@@ -434,3 +434,20 @@
   border: 1px solid #fcd34d;
   color: #78350f;
 }
+
+/* El código de la partida a la que se cargó un gasto de mano de obra o de
+ * material. Pequeño y en monoespaciada: es un código, se compara de un
+ * vistazo con la tabla de arriba, y alineado cuesta menos. */
+.cos-etq-partida {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  vertical-align: 1px;
+}

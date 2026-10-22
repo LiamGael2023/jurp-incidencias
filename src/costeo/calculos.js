@@ -53,6 +53,10 @@ export const generarCorrelativo = () => {
 
 export const estadoInicialRecurso = {
   tipo: 'Personal', descripcion: '', cantidad: 1, precioUnitario: 0, unidad: 'und',
+  // A que partida del presupuesto se carga este gasto. Vacio = ninguna, que
+  // es valido: hay gasto que no cuelga de ninguna partida. A mano de obra e
+  // insumos se les imputa COSTO, no metrado; el avance no lo toca.
+  partidaId: '',
   // Día en que se hizo el trabajo / se usó el insumo. No es la fecha de
   // carga: sirve para costear por periodo aunque se registre días después.
   fechaRecurso: getFechaHoy(),

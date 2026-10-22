@@ -87,6 +87,8 @@ window.__PATCH = null;
 window.__URLS = [];
 window.__POST = null;
 window.__PATCH_PARTIDA = null;
+window.__ALTA = null;
+window.__GUARDADOS = [];
 
 const json = (d, s = 200) => new Response(JSON.stringify(d),
   { status: s, headers: { 'Content-Type': 'application/json' } });
@@ -206,6 +208,22 @@ window.fetch = async (u, opc = {}) => {
     return json({ id: 7, partidas: detalle.map(d => d.id), partidas_detalle: detalle });
   }
   if (url.includes('/partidas/')) return json(PARTIDAS);
+  // Sin cargos, el alta de mano de obra se niega y nunca llega al POST.
+  if (url.includes('/cargos/')) return json([{ id: 1, nombre: 'PEON' },
+                                             { id: 2, nombre: 'OPERARIO' }]);
+
+  /* Mano de obra e insumos: el doble guarda lo que llega y lo devuelve, que
+   * es lo unico que la pantalla necesita para ensenar su etiqueta. */
+  if (/\/incident-(personnels|materials)\/$/.test(url)) {
+    if (metodo === 'POST') {
+      const fd = opc.body;
+      const campos = {};
+      if (fd && typeof fd.forEach === 'function') fd.forEach((v, k) => { campos[k] = v; });
+      window.__ALTA = campos;
+      return json({ id: 500, ...campos }, 201);
+    }
+    return json({ results: window.__GUARDADOS || [] });
+  }
   if (url.includes('/incidentes-cerrados/')) return json([]);
   // Lo demás: listas vacías, que el costeo no es lo que se prueba aquí.
   if (url.includes(real ? '/api/' : '/api/')) return json([]);

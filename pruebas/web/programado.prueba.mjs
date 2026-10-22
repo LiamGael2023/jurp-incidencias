@@ -489,6 +489,68 @@ const flojos2 = (await medir2('.cos-ejec-tit, .cos-ejec-tot, .cos-ejec-tot i'))
 ok(flojos2.length === 0, 'y su cabecera pasa AA',
    flojos2.map(f => `"${f.texto}" ${f.ratio}:1`).join(' | '));
 
+// ══════ LA PARTIDA EN MANO DE OBRA Y EN MATERIALES ══════
+/* El parte de maquinaria elegia partida; la mano de obra y los insumos no
+ * tenian donde. Al valorizar, la maquinaria se repartia por partidas y el
+ * resto quedaba en un monton suelto. */
+await ir('con');
+for (const [cat, etiqueta] of [['MANO DE OBRA', 'mano de obra'],
+                               ['MATERIALES', 'materiales']]) {
+  await p.locator(`tr:has-text("${cat}") button:has-text("Añadir")`).first().click();
+  await p.waitForSelector('[data-prueba="partida-recurso"]', { timeout: 8000 });
+  const txt = await p.locator('[data-prueba="partida-recurso"]').innerText();
+  ok(/partida del presupuesto/i.test(txt),
+     `el formulario de ${etiqueta} ofrece la partida`, txt.slice(0, 70).replace(/\n/g, ' '));
+  /* Y NO dice "no entra en el avance", que es el texto del parte de
+   * maquinaria: a una persona no se le imputa metrado, se le imputa costo,
+   * asi que ese gasto no entra en el avance ni eligiendo partida. */
+  ok(/su costo no se reparte/i.test(txt),
+     'diciendo que lo que se imputa es el COSTO, no el metrado',
+     (txt.match(/Sin partida[^\n]*/) || [''])[0]);
+  ok(!/metrado no entra en el avance/i.test(txt),
+     'y no el aviso del parte de maquinaria, que aqui seria falso');
+  ok(await p.locator('[data-prueba="partida-recurso"] select').count() > 0,
+     `y la escalera para elegirla en ${etiqueta}`);
+  await p.locator('.tbl-btn-link:has-text("Cancelar")').last().click();
+  await p.waitForTimeout(300);
+}
+
+/* ── LO QUE SE MANDA AL GUARDAR ──
+ * FormData convierte todo a texto. Un partida='' llega como la cadena
+ * vacia y revienta el ForeignKey en vez de dejarlo en NULL, asi que cuando
+ * no se elige partida el campo NO se manda. Es un fallo que solo aparece
+ * en el caso sin partida, que es el mas comun. */
+await ir('con');
+await p.locator('tr:has-text("MANO DE OBRA") button').first().click();
+await p.waitForSelector('[data-prueba="partida-recurso"]', { timeout: 8000 });
+await p.locator('select').filter({ hasText: 'Seleccionar' }).first()
+  .selectOption({ label: 'PEON' });
+await p.locator('.tbl-modal-footer .tbl-btn-success').last().click();
+await p.waitForTimeout(500);
+await p.locator('button:has-text("Guardar Costeos")').click();
+await p.waitForTimeout(1200);
+const alta1 = await p.evaluate(() => window.__ALTA);
+ok(alta1 && !('partida' in alta1),
+   'sin elegir partida, el campo NO se manda: un "" rompe el ForeignKey',
+   JSON.stringify(alta1 || {}).slice(0, 120));
+
+// Y eligiendo una, sí se manda, con su id.
+await ir('con');
+await p.locator('tr:has-text("MANO DE OBRA") button').first().click();
+await p.waitForSelector('[data-prueba="partida-recurso"]', { timeout: 8000 });
+await p.locator('select').filter({ hasText: 'Seleccionar' }).first()
+  .selectOption({ label: 'PEON' });
+const combos = p.locator('[data-prueba="partida-recurso"] select');
+await combos.last().selectOption({ index: 1 });
+await p.waitForTimeout(300);
+await p.locator('.tbl-modal-footer .tbl-btn-success').last().click();
+await p.waitForTimeout(500);
+await p.locator('button:has-text("Guardar Costeos")').click();
+await p.waitForTimeout(1200);
+const alta2 = await p.evaluate(() => window.__ALTA);
+ok(alta2 && alta2.partida && String(Number(alta2.partida)) === String(alta2.partida),
+   'y al elegirla se manda su id', JSON.stringify(alta2 || {}).slice(0, 120));
+
 ok(errs.length === 0, 'sin errores de JavaScript', errs.join(' | ').slice(0, 150));
 
 await b.close();
