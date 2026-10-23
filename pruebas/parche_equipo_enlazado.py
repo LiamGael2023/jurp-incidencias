@@ -300,18 +300,66 @@ def registrar_ingreso(usuario, device_id, equipo='', plataforma=''):
     # CORTADO. El mensaje de cada caso manda a un sitio distinto: actualizar
     # la app no es lo mismo que pedir que te liberen, y un texto unico
     # mandaria a la mitad de la gente al sitio equivocado.
+    return False, motivo_del_corte(codigo, enlace)
+
+
+def motivo_del_corte(codigo, enlace):
+    """El cuerpo del 403. Lo comparten las dos puertas de entrada.
+
+    Se mandan `detail` Y `error` con el mismo texto a proposito: la vista del
+    login normal responde {'ok': False, 'detail': ...} y la de operadores
+    {'ok': False, 'error': ...}. Cada app lee el campo de su puerta, y asi
+    ninguna de las dos necesita cambiar para enseñar el motivo.
+    """
     if codigo == 'falta_device_id':
-        return False, {
-            'detail': 'Actualiza la aplicacion para poder entrar.',
+        texto = 'Actualiza la aplicacion para poder entrar.'
+        cuerpo = {'codigo': codigo}
+    else:
+        texto = ('Esta cuenta esta enlazada a otro equipo. '
+                 'Pide a administracion que la libere.')
+        cuerpo = {
             'codigo': codigo,
+            'equipo_enlazado': (enlace.equipo if enlace else '') or 'otro equipo',
+            'desde': enlace.creado if enlace else None,
         }
-    return False, {
-        'detail': 'Esta cuenta esta enlazada a otro equipo. '
-                  'Pide a administracion que la libere.',
-        'codigo': codigo,
-        'equipo_enlazado': enlace.equipo or 'otro equipo',
-        'desde': enlace.creado,
-    }
+    cuerpo['detail'] = texto
+    cuerpo['error'] = texto
+    return cuerpo
+
+
+def registrar_ingreso_otra_puerta(usuario, device_id, equipo='', plataforma=''):
+    """La segunda puerta: /api/v1/mobile/operators/auth/login/.
+
+    POR QUE NO ES LA MISMA FUNCION. Esa vista entrega EL MISMO token -los
+    tokens de DRF son uno por usuario-, asi que quien entre por ahi puede
+    usarlo contra toda la API. Si no se mirara, seria una puerta lateral al
+    enlace de equipos.
+
+    PERO NO PUEDE ENLAZAR NADA. Esa puerta la cruza hoy una sola cuenta, de
+    una app que no manda identificador de equipo. Atarla al primer celular
+    que entre dejaria fuera a los demas, y contarla como "sin identificar"
+    dejaria clavado por encima de cero el numero que abre el bloqueo. Es el
+    mismo razonamiento que con el navegador.
+
+    ASI QUE LA REGLA ES AL REVES: esta puerta no enlaza, no cuenta y no toca
+    nada. Solo mira. Y solo tiene algo que mirar cuando la cuenta YA esta
+    enlazada por la puerta principal -es decir, cuando es un usuario de campo
+    con su celular-, que es justo el caso que esto viene a impedir.
+
+    Lo bueno de atarlo al enlace y no a una lista de usuarios: el dia que
+    alguien meta a un usuario de campo en admin_operators, la puerta se le
+    cierra sola. Una lista habria que acordarse de actualizarla, y nadie se
+    acuerda.
+    """
+    enlace = enlace_de(usuario)
+    if enlace is None:
+        return True, None
+
+    que, codigo = decidir(enlace, (device_id or '').strip(), exigir_equipo(),
+                          es_navegador(plataforma))
+    if que == CORTADO:
+        return False, motivo_del_corte(codigo, enlace)
+    return True, None
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -597,6 +645,53 @@ COMPROBACION = '''        # ── UNA CUENTA, UN CELULAR ──
 
 IMPORT_LOGIN = "from src.apps.core.equipo_enlazado import registrar_ingreso\n"
 
+# ── 4b. la segunda puerta ────────────────────────────────────────────────
+# /api/v1/mobile/operators/auth/login/ entrega EL MISMO token, asi que sin
+# esto seria una puerta lateral al enlace. Va en el mismo sitio: despues de
+# la clave y del perfil, antes del token. Esta vista responde con 'error' y
+# no con 'detail', y por eso motivo_del_corte manda los dos campos.
+
+ANCLA_OPER = "        token, _ = Token.objects.get_or_create(user=user)"
+
+COMPROBACION_OPER = '''        # ── UNA CUENTA, UN CELULAR (la segunda puerta) ──
+        # No enlaza ni cuenta: solo mira, y solo si la cuenta YA esta
+        # enlazada por la puerta principal. Asi la unica cuenta que usa hoy
+        # esta entrada -que no manda identificador- sigue entrando igual, y
+        # el dia que alguien meta aqui a un usuario de campo, se le cierra
+        # sola.
+        ok_equipo, error_equipo = registrar_ingreso_otra_puerta(
+            user,
+            request.data.get('device_id', ''),
+            request.data.get('equipo', ''),
+            request.data.get('plataforma', ''),
+        )
+        if not ok_equipo:
+            error_equipo['ok'] = False
+            return Response(error_equipo, status=status.HTTP_403_FORBIDDEN)
+
+'''
+
+IMPORT_OPER = ("from src.apps.core.equipo_enlazado import "
+               "registrar_ingreso_otra_puerta\n")
+
+
+def paso_login_operadores(texto):
+    """Como paso_login, pero tolerante: este fichero puede no existir."""
+    if "registrar_ingreso_otra_puerta" in texto:
+        return texto, "ya estaba: la comprobacion en el login de operadores"
+    if texto.count(ANCLA_OPER) != 1:
+        return None, ("en mobile_operators_auth.py esperaba UNA linea %r y "
+                      "hay %d; dime como quedo"
+                      % (ANCLA_OPER.strip(), texto.count(ANCLA_OPER)))
+    i = texto.index(ANCLA_OPER)
+    texto = texto[:i] + COMPROBACION_OPER + texto[i:]
+
+    m = re.search(r"^from rest_framework\.views import APIView$\n", texto, re.M)
+    if m is None:
+        return None, "no se donde poner el import en mobile_operators_auth.py"
+    return (texto[:m.end()] + IMPORT_OPER + texto[m.end():],
+            "anadida la comprobacion al login de operadores")
+
 
 def paso_login(texto):
     if "registrar_ingreso" in texto:
@@ -758,6 +853,8 @@ def principal():
     d_cmd = os.path.join(base, "src", "apps", "core", "management", "commands")
     f_cmd = os.path.join(d_cmd, "botar_a_todos.py")
     d_mig = os.path.join(base, "src", "apps", "core", "migrations")
+    f_oper = os.path.join(base, "src", "apps", "api", "views",
+                          "mobile_operators_auth.py")
 
     print("proyecto: %s" % base)
     print("modo    : %s" % ("APLICAR" if APLICAR else "solo mostrar"))
@@ -779,6 +876,13 @@ def principal():
     n_mig, av_mig = paso_migracion(d_mig)
     f_mig = os.path.join(d_mig, n_mig) if n_mig else None
 
+    # La segunda puerta puede no existir en todos los despliegues, y no
+    # haberla no es un fallo: es que ese proyecto no la tiene.
+    hay_oper = os.path.isfile(f_oper)
+    txt_o = io.open(f_oper, encoding="utf-8").read() if hay_oper else ""
+    nuevo_o, av_o = (paso_login_operadores(txt_o) if hay_oper
+                     else ("", "no existe en este proyecto; nada que hacer"))
+
     print("1. core/models.py          %s" % av_m)
     print("2. core/equipo_enlazado.py %s" % (
         "se reescribe" if os.path.isfile(f_mod) else "se crea"))
@@ -788,13 +892,15 @@ def principal():
         "se reescribe" if os.path.isfile(f_cmd) else "se crea"))
     print("6. la migracion            %s" % (
         av_mig if not n_mig else "se crea %s" % n_mig))
+    print("7. .../operators_auth.py   %s" % av_o)
     print("")
 
     fallos = []
     for quien, nuevo, av in (("core/models.py", nuevo_m, av_m),
                              ("api/urls.py", nuevo_u, av_u),
                              ("mobile_auth.py", nuevo_l, av_l),
-                             ("core/migrations", n_mig, av_mig)):
+                             ("core/migrations", n_mig, av_mig),
+                             ("mobile_operators_auth.py", nuevo_o, av_o)):
         if nuevo is None:
             fallos.append("%s: %s" % (quien, av))
     if fallos:
@@ -824,9 +930,25 @@ def principal():
     # fichero partido por la mitad no se nota hasta que el proyecto no
     # arranca. Solo se culpa al parche de lo que el parche rompio: si el
     # original ya no parseaba, no es cosa nuestra.
+    comprobaciones_oper = (
+        ("mobile_operators_auth.py", nuevo_o, "registrar_ingreso_otra_puerta("),
+        ("mobile_operators_auth.py", nuevo_o, "HTTP_403_FORBIDDEN"),
+    ) if hay_oper else ()
+    for quien, txt, falta in comprobaciones_oper:
+        if falta not in txt:
+            print("NO SE ESCRIBE NADA: en %s no salio %r." % (quien, falta))
+            return 1
+    # Y tambien ahi: antes del token, no despues.
+    if hay_oper and (nuevo_o.index("registrar_ingreso_otra_puerta(")
+                     > nuevo_o.index(ANCLA_OPER.strip())):
+        print("NO SE ESCRIBE NADA: en operadores la comprobacion quedo")
+        print("DESPUES de crear el token.")
+        return 1
+
     for quien, viejo, nuevo in (("core/models.py", txt_m, nuevo_m),
                                 ("api/urls.py", txt_u, nuevo_u),
-                                ("mobile_auth.py", txt_l, nuevo_l)):
+                                ("mobile_auth.py", txt_l, nuevo_l)) + (
+            (("mobile_operators_auth.py", txt_o, nuevo_o),) if hay_oper else ()):
         try:
             ast.parse(viejo)
         except SyntaxError:
@@ -857,7 +979,7 @@ def principal():
         return d or "/"
 
     sin_permiso = []
-    for f in (f_models, f_urls, f_login):
+    for f in (f_models, f_urls, f_login) + ((f_oper,) if hay_oper else ()):
         if not os.access(f, os.W_OK):
             sin_permiso.append(f)
         elif not os.access(os.path.dirname(f), os.W_OK):
@@ -889,7 +1011,9 @@ def principal():
     for ruta, viejo, nuevo, nombre in (
             (f_models, txt_m, nuevo_m, "core/models.py"),
             (f_urls, txt_u, nuevo_u, "api/urls.py"),
-            (f_login, txt_l, nuevo_l, "mobile_auth.py")):
+            (f_login, txt_l, nuevo_l, "mobile_auth.py")) + (
+            ((f_oper, txt_o, nuevo_o, "mobile_operators_auth.py"),)
+            if hay_oper else ()):
         if nuevo != viejo:
             print("respaldo %s" % respaldo(ruta))
             io.open(ruta, "w", encoding="utf-8").write(nuevo)

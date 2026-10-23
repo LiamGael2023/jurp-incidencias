@@ -98,6 +98,56 @@ urlpatterns = [
 ]
 '''
 
+# La SEGUNDA puerta, copiada de la de verdad: la misma forma de respuesta
+# -usa 'error' y no 'detail'-, el mismo orden -clave, perfil, token- y el
+# mismo permiso AllowAny. Importa que sea la de verdad: un molde inventado
+# prueba el molde, no el servidor.
+OPER = '''from __future__ import unicode_literals
+
+from django.contrib.auth import authenticate
+
+from rest_framework import authentication, permissions, status
+from rest_framework.authtoken.models import Token
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+OPERATOR_ADMIN_GROUP = 'admin_operators'
+
+
+def _build_operator_admin_profile(user):
+    if not user.groups.filter(name=OPERATOR_ADMIN_GROUP).exists():
+        return None
+    return {'user': {'id': user.id}, 'operator_admin_panels': []}
+
+
+class MobileOperatorsAuthLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        username = request.data.get('username', '')
+        password = request.data.get('password', '')
+
+        user = authenticate(username=username, password=password)
+        if user is None:
+            return Response(
+                {'ok': False, 'error': 'Credenciales inv\\u00e1lidas.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        profile = _build_operator_admin_profile(user)
+        if profile is None:
+            return Response(
+                {'ok': False, 'error': 'El usuario no tiene permisos.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response(
+            {'ok': True, 'token': token.key, 'user': profile['user']},
+            status=status.HTTP_200_OK,
+        )
+'''
+
 MODELS = '''from django.db import models
 
 
@@ -116,7 +166,8 @@ def t(etiqueta, ok, extra=""):
     print("MAL  %s%s" % (etiqueta, ("   [%s]" % extra) if extra else ""))
 
 
-def monta(base, login=LOGIN, urls=URLS, models=MODELS, migraciones=True):
+def monta(base, login=LOGIN, urls=URLS, models=MODELS, migraciones=True,
+          oper=OPER):
     for d in ("src/apps/core", "src/apps/api/views"):
         os.makedirs(os.path.join(base, d))
     esc = lambda p, x: io.open(os.path.join(base, p), "w",
@@ -124,6 +175,8 @@ def monta(base, login=LOGIN, urls=URLS, models=MODELS, migraciones=True):
     esc("src/apps/core/models.py", models)
     esc("src/apps/api/urls.py", urls)
     esc("src/apps/api/views/mobile_auth.py", login)
+    if oper is not None:
+        esc("src/apps/api/views/mobile_operators_auth.py", oper)
     # La migracion la escribe el parche, porque en ese servidor
     # makemigrations no puede: /app esta montado en solo lectura. Necesita
     # saber de cual cuelga, asi que la carpeta tiene que existir.
@@ -265,8 +318,10 @@ else:
 
 
 class Enlace(object):
-    def __init__(self, device_id):
+    def __init__(self, device_id, equipo='Samsung SM-A135M', creado=None):
         self.device_id = device_id
+        self.equipo = equipo
+        self.creado = creado
 
 
 E = Enlace("abc123")
@@ -353,6 +408,111 @@ cU, sU = corre(tmpU)
 t("sin la ruta del login en urls.py, falla", cU != 0, sU.strip()[-200:])
 t("y no toca el login", "registrar_ingreso" not in
   lee(tmpU, "src/apps/api/views/mobile_auth.py"))
+
+# ── 1c. LA SEGUNDA PUERTA ────────────────────────────────────────────────
+# /api/v1/mobile/operators/auth/login/ entrega EL MISMO token -los de DRF son
+# uno por usuario-, asi que sin mirar ahi el enlace tendria una puerta
+# lateral: entras por operadores, sacas el token, y vale para toda la API.
+op = lee(tmp, "src/apps/api/views/mobile_operators_auth.py")
+t("la segunda puerta tambien se comprueba",
+  "registrar_ingreso_otra_puerta(" in op)
+t("ANTES de crear el token",
+  antes(op, "registrar_ingreso_otra_puerta(", "Token.objects.get_or_create"),
+  "despues, el token ya estaria entregado cuando se rechaza")
+t("y DESPUES de comprobar la clave",
+  antes(op, "authenticate(username", "registrar_ingreso_otra_puerta("))
+t("y despues del perfil",
+  antes(op, "_build_operator_admin_profile(user)",
+        "registrar_ingreso_otra_puerta("))
+t("responde 403", "HTTP_403_FORBIDDEN" in
+  (op.split("registrar_ingreso_otra_puerta(") + [""])[1][:400])
+t("el import entra una sola vez",
+  op.count("from src.apps.core.equipo_enlazado import") == 1)
+try:
+    ast.parse(op); t("y sigue siendo Python valido", True)
+except SyntaxError as e:
+    t("y sigue siendo Python valido", False, str(e))
+
+# ESTA PUERTA NO ENLAZA NI CUENTA, y eso es la mitad del diseño: la cuenta
+# que la usa hoy no manda identificador, asi que atarla al primer celular
+# dejaria fuera a los demas, y contarla dejaria clavado por encima de cero el
+# numero que abre el bloqueo.
+if "def registrar_ingreso_otra_puerta(" in mod:
+    cuerpo = saca(mod, "registrar_ingreso_otra_puerta")
+    t("no crea enlaces", "DispositivoAutorizado.objects.create" not in cuerpo)
+    t("no cuenta ingresos sin equipo", "IngresoSinEquipo" not in cuerpo)
+    t("no guarda nada", ".save(" not in cuerpo)
+    t("y solo mira si la cuenta YA esta enlazada",
+      "if enlace is None:" in cuerpo and "return True, None" in cuerpo)
+    # Y CORRIENDOLA, que leer el cuerpo no prueba que decida bien. Se le
+    # ponen delante las piezas que toca la base de datos; lo que se ejecuta
+    # de verdad es la regla.
+    nsO = dict(ns)
+    nsO.update({
+        'decidir': decidir,
+        'es_navegador': es_navegador,
+        'exigir_equipo': lambda: nsO['_EXIGE'],
+        'motivo_del_corte': lambda codigo, enlace: {'codigo': codigo},
+        'enlace_de': lambda u: nsO['_ENLACE'],
+        '_EXIGE': False,
+        '_ENLACE': None,
+    })
+    exec(cuerpo, nsO)
+    puerta2 = nsO["registrar_ingreso_otra_puerta"]
+
+    nsO['_ENLACE'] = None
+    t("sin enlace, la segunda puerta deja pasar",
+      puerta2('u', '')[0] is True,
+      "es la cuenta de operadores de hoy, que no manda identificador")
+    nsO['_EXIGE'] = True
+    t("y sigue pasando aunque se exija equipo", puerta2('u', '')[0] is True,
+      "si no, el dia del encendido se cae la app de operadores")
+
+    nsO['_ENLACE'] = Enlace("abc123")
+    t("con enlace y el MISMO equipo, pasa", puerta2('u', 'abc123')[0] is True)
+    t("con enlace y OTRO equipo, se corta",
+      puerta2('u', 'zzz999')[0] is False,
+      "es la puerta lateral: aqui es donde se cerraria el bypass")
+    t("diciendo cual es el motivo",
+      puerta2('u', 'zzz999')[1].get('codigo') == 'equipo_distinto')
+    nsO['_EXIGE'] = False
+    t("sin exigir todavia, una app vieja YA enlazada pasa",
+      puerta2('u', '')[0] is True,
+      "cortarla antes del encendido seria adelantar el corte")
+    nsO['_EXIGE'] = True
+    t("y al encender, esa misma se corta", puerta2('u', '')[0] is False)
+else:
+    for x in ("no crea enlaces", "no cuenta ingresos sin equipo",
+              "no guarda nada", "y solo mira si la cuenta YA esta enlazada"):
+        t(x, False, "no se escribio la funcion")
+
+# El cuerpo del 403 lo comparten las dos puertas, y cada vista usa un campo
+# distinto: la normal 'detail', la de operadores 'error'. Si faltara uno, esa
+# app enseñaria un error vacio justo cuando mas importa el texto.
+if "def motivo_del_corte(" in mod:
+    mc = {}
+    exec(saca(mod, "motivo_del_corte"), mc)
+    cuerpo403 = mc["motivo_del_corte"]('falta_device_id', None)
+    t("el 403 trae 'detail' (login normal)", 'detail' in cuerpo403)
+    t("y 'error' (login de operadores)", 'error' in cuerpo403)
+    t("con el mismo texto", cuerpo403.get('detail') == cuerpo403.get('error'))
+    t("y manda a ACTUALIZAR, no a soporte",
+      'ctualiza' in cuerpo403.get('detail', ''))
+    otro = mc["motivo_del_corte"]('equipo_distinto', Enlace("x"))
+    t("y el otro caso manda a administracion",
+      'dministracion' in otro.get('detail', ''), otro.get('detail', '')[:60])
+else:
+    t("hay cuerpo de 403 compartido", False)
+
+# Si el proyecto NO tiene esa vista, no es un fallo: es que no la tiene.
+tmpSO = monta(tempfile.mkdtemp(), oper=None)
+cSO, sSO = corre(tmpSO)
+t("sin la vista de operadores, el parche sigue adelante", cSO == 0,
+  sSO.strip()[-200:])
+t("y lo dice", "no existe en este proyecto" in sSO)
+t("y lo demas se aplica igual",
+  "registrar_ingreso(" in lee(tmpSO, "src/apps/api/views/mobile_auth.py"))
+
 
 # ── 2b. La migracion ─────────────────────────────────────────────────────
 # Se escribe a mano porque makemigrations no puede: escribe el fichero en la
@@ -556,7 +716,7 @@ t("y no escribe nada",
   "registrar_ingreso" not in lee(tmpD, "src/apps/api/views/mobile_auth.py")
   and not os.path.isfile(os.path.join(tmpD, "src/apps/core/equipo_enlazado.py")))
 
-for d in [tmp, tmpO, tmpU, tmpD, tmpM] + sucios:
+for d in [tmp, tmpO, tmpU, tmpD, tmpM, tmpSO] + sucios:
     shutil.rmtree(d, ignore_errors=True)
 
 print("\n%d comprobacion(es) en orden%s." % (bien[0], ", %d MAL" % mal[0] if mal[0] else ""))
