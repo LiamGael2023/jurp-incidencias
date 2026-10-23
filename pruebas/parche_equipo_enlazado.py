@@ -583,6 +583,128 @@ def paso_login(texto):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# 6. la migracion, escrita a mano
+# ══════════════════════════════════════════════════════════════════════════
+#
+# POR QUE NO `makemigrations`. El codigo esta montado en solo lectura dentro
+# del contenedor, y makemigrations escribe el fichero de la migracion EN esa
+# carpeta: falla igual que falla el parche. Y en el host no hay Django.
+#
+# Asi que se escribe aqui. No es adivinar: los dos modelos los escribe este
+# mismo parche, campo por campo. Lo que no se adivina es si quedo bien, y
+# para eso esta la comprobacion de despues:
+#
+#     manage.py makemigrations core --dry-run
+#
+# Si dice "No changes detected", la migracion y los modelos dicen lo mismo.
+# Si dice que faltan cambios, entonces si hay que mirarla.
+
+MIGRACION = '''# -*- coding: utf-8 -*-
+# Lo escribe parche_equipo_enlazado.py, campo por campo, porque en este
+# proyecto makemigrations no puede: el codigo esta montado en solo lectura.
+# Para comprobar que dice lo mismo que los modelos:
+#     manage.py makemigrations core --dry-run    ->  "No changes detected"
+from __future__ import unicode_literals
+
+from django.conf import settings
+from django.db import migrations, models
+import django.db.models.deletion
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+        ('core', '%(anterior)s'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='DispositivoAutorizado',
+            fields=[
+                ('id', models.AutoField(auto_created=True, primary_key=True,
+                                        serialize=False, verbose_name='ID')),
+                ('device_id', models.CharField(
+                    db_index=True, max_length=128,
+                    verbose_name='Identificador del equipo')),
+                ('equipo', models.CharField(blank=True, default='',
+                                            max_length=120,
+                                            verbose_name='Equipo')),
+                ('plataforma', models.CharField(blank=True, default='',
+                                                max_length=20,
+                                                verbose_name='Plataforma')),
+                ('creado', models.DateTimeField(auto_now_add=True,
+                                                verbose_name='Enlazado el')),
+                ('ultimo_uso', models.DateTimeField(
+                    blank=True, null=True, verbose_name='Ultimo uso')),
+                ('activo', models.BooleanField(db_index=True, default=True,
+                                               verbose_name='Vigente')),
+                ('liberado_en', models.DateTimeField(
+                    blank=True, null=True, verbose_name='Liberado el')),
+                ('liberado_por', models.ForeignKey(
+                    blank=True, null=True,
+                    on_delete=django.db.models.deletion.SET_NULL,
+                    related_name='liberaciones', to=settings.AUTH_USER_MODEL,
+                    verbose_name='Liberado por')),
+                ('usuario', models.ForeignKey(
+                    on_delete=django.db.models.deletion.CASCADE,
+                    related_name='dispositivos', to=settings.AUTH_USER_MODEL,
+                    verbose_name='Usuario')),
+            ],
+            options={
+                'ordering': ['-activo', '-ultimo_uso', '-creado'],
+                'verbose_name': 'Equipo enlazado',
+                'verbose_name_plural': 'Equipos enlazados',
+            },
+        ),
+        migrations.CreateModel(
+            name='IngresoSinEquipo',
+            fields=[
+                ('id', models.AutoField(auto_created=True, primary_key=True,
+                                        serialize=False, verbose_name='ID')),
+                ('ultima_vez', models.DateTimeField(auto_now=True)),
+                ('veces', models.PositiveIntegerField(default=0)),
+                ('usuario', models.OneToOneField(
+                    on_delete=django.db.models.deletion.CASCADE,
+                    related_name='ingreso_sin_equipo',
+                    to=settings.AUTH_USER_MODEL)),
+            ],
+            options={
+                'verbose_name': 'Ingreso sin equipo',
+                'verbose_name_plural': 'Ingresos sin equipo',
+            },
+        ),
+    ]
+'''
+
+
+def migraciones_de_core(d):
+    if not os.path.isdir(d):
+        return []
+    return sorted(x[:-3] for x in os.listdir(d)
+                  if re.match(r"^[0-9]{4}_.*\.py$", x))
+
+
+def paso_migracion(d):
+    """Devuelve (nombre_del_fichero, texto) o (None, aviso)."""
+    hechas = migraciones_de_core(d)
+    if not hechas:
+        return None, ("core/migrations esta vacio o no existe; no se de que "
+                      "migracion colgar esta")
+    for m in hechas:
+        ruta = os.path.join(d, m + ".py")
+        try:
+            if "DispositivoAutorizado" in io.open(ruta, encoding="utf-8").read():
+                return "", "ya estaba: la migracion (%s)" % m
+        except (IOError, OSError):
+            pass
+    ultima = hechas[-1]
+    n = int(ultima[:4]) + 1
+    nombre = "%04d_equipo_enlazado.py" % n
+    return nombre, MIGRACION % {"anterior": ultima}
+
+
+# ══════════════════════════════════════════════════════════════════════════
 
 def respaldo(ruta):
     sello = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -599,6 +721,7 @@ def principal():
     f_login = os.path.join(base, "src", "apps", "api", "views", "mobile_auth.py")
     d_cmd = os.path.join(base, "src", "apps", "core", "management", "commands")
     f_cmd = os.path.join(d_cmd, "botar_a_todos.py")
+    d_mig = os.path.join(base, "src", "apps", "core", "migrations")
 
     print("proyecto: %s" % base)
     print("modo    : %s" % ("APLICAR" if APLICAR else "solo mostrar"))
@@ -617,6 +740,8 @@ def principal():
     nuevo_m, av_m = paso_modelos(txt_m)
     nuevo_u, av_u = paso_urls(txt_u)
     nuevo_l, av_l = paso_login(txt_l)
+    n_mig, av_mig = paso_migracion(d_mig)
+    f_mig = os.path.join(d_mig, n_mig) if n_mig else None
 
     print("1. core/models.py          %s" % av_m)
     print("2. core/equipo_enlazado.py %s" % (
@@ -625,12 +750,15 @@ def principal():
     print("4. api/.../mobile_auth.py  %s" % av_l)
     print("5. botar_a_todos.py        %s" % (
         "se reescribe" if os.path.isfile(f_cmd) else "se crea"))
+    print("6. la migracion            %s" % (
+        av_mig if not n_mig else "se crea %s" % n_mig))
     print("")
 
     fallos = []
     for quien, nuevo, av in (("core/models.py", nuevo_m, av_m),
                              ("api/urls.py", nuevo_u, av_u),
-                             ("mobile_auth.py", nuevo_l, av_l)):
+                             ("mobile_auth.py", nuevo_l, av_l),
+                             ("core/migrations", n_mig, av_mig)):
         if nuevo is None:
             fallos.append("%s: %s" % (quien, av))
     if fallos:
@@ -649,7 +777,8 @@ def principal():
         ("api/urls.py", nuevo_u, "liberar/$"),
         ("mobile_auth.py", nuevo_l, "registrar_ingreso("),
         ("mobile_auth.py", nuevo_l, "HTTP_403_FORBIDDEN"),
-    )
+    ) + ((("la migracion", MIGRACION, "DispositivoAutorizado"),
+          ("la migracion", MIGRACION, "IngresoSinEquipo")) if n_mig else ())
     for quien, txt, falta in comprobaciones:
         if falta not in txt:
             print("NO SE ESCRIBE NADA: en %s no salio %r." % (quien, falta))
@@ -677,6 +806,42 @@ def principal():
     if nuevo_l.index("registrar_ingreso(") > nuevo_l.index(ANCLA_LOGIN.strip()):
         print("NO SE ESCRIBE NADA: la comprobacion quedo DESPUES de crear el")
         print("token. Asi el token ya estaria entregado cuando se rechaza.")
+        return 1
+
+    # ¿SE PUEDE ESCRIBIR? Se pregunta por los CINCO antes de tocar el
+    # primero. En jurp_web, /app esta montado en solo lectura: el primer
+    # respaldo se estrello y no se escribio nada, pero fue suerte -si el que
+    # no se pudiera escribir hubiera sido el tercero, los dos primeros ya
+    # estarian cambiados y eso es exactamente lo que este parche promete no
+    # hacer-. Hace falta permiso en el fichero Y en su carpeta: el respaldo
+    # se crea al lado.
+    def primer_padre(d):
+        while d and not os.path.isdir(d):
+            d = os.path.dirname(d)
+        return d or "/"
+
+    sin_permiso = []
+    for f in (f_models, f_urls, f_login):
+        if not os.access(f, os.W_OK):
+            sin_permiso.append(f)
+        elif not os.access(os.path.dirname(f), os.W_OK):
+            sin_permiso.append("%s (la carpeta, para el respaldo)"
+                               % os.path.dirname(f))
+    for f in [f_mod, f_cmd] + ([f_mig] if f_mig else []):
+        d = primer_padre(os.path.dirname(f))
+        if not os.access(d, os.W_OK):
+            sin_permiso.append("%s (donde va %s)" % (d, os.path.basename(f)))
+    if sin_permiso:
+        print("NO SE ESCRIBE NADA: no puedo escribir en")
+        for f in sorted(set(sin_permiso)):
+            print("   - %s" % f)
+        print("")
+        print("Si esto corre dentro del contenedor, el codigo seguramente")
+        print("esta montado en solo lectura. Entonces se parchea EN EL HOST,")
+        print("sobre la carpeta que el contenedor monta:")
+        print("    docker inspect jurp_web --format '{{json .Mounts}}'")
+        print("    sudo python3 %s --base /la/carpeta/del/host --aplicar"
+              % os.path.basename(__file__))
         return 1
 
     if not APLICAR:
@@ -707,13 +872,23 @@ def principal():
     io.open(f_cmd, "w", encoding="utf-8").write(COMANDO)
     escritos.append("botar_a_todos.py")
 
+    if f_mig:
+        io.open(f_mig, "w", encoding="utf-8").write(av_mig)
+        escritos.append(os.path.basename(f_mig))
+
     print("")
     print("escrito: %s" % ", ".join(escritos))
     print("")
-    print("Hay migracion -dos tablas nuevas-:")
-    print("    docker exec -it jurp_web python manage.py makemigrations core")
-    print("    docker exec -it jurp_web python manage.py migrate")
+    print("Ahora, dentro del contenedor -la BD si se puede escribir-:")
+    print("    docker exec -w /app -i jurp_web python manage.py migrate core")
     print("    docker restart jurp_web")
+    print("")
+    print("Y la comprobacion de que la migracion dice lo mismo que los")
+    print("modelos. Esta escrita a mano, porque makemigrations no puede")
+    print("escribir en una carpeta montada en solo lectura:")
+    print("    docker exec -w /app -i jurp_web python manage.py \\")
+    print("        makemigrations core --dry-run")
+    print("    -> tiene que decir 'No changes detected'.")
     print("")
     print("TODAVIA NO RECHAZA A NADIE: EXIGIR_DISPOSITIVO nace apagado, y")
     print("quien no mande device_id entra igual y queda apuntado. Eso es lo")

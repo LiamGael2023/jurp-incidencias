@@ -116,7 +116,7 @@ def t(etiqueta, ok, extra=""):
     print("MAL  %s%s" % (etiqueta, ("   [%s]" % extra) if extra else ""))
 
 
-def monta(base, login=LOGIN, urls=URLS, models=MODELS):
+def monta(base, login=LOGIN, urls=URLS, models=MODELS, migraciones=True):
     for d in ("src/apps/core", "src/apps/api/views"):
         os.makedirs(os.path.join(base, d))
     esc = lambda p, x: io.open(os.path.join(base, p), "w",
@@ -124,6 +124,16 @@ def monta(base, login=LOGIN, urls=URLS, models=MODELS):
     esc("src/apps/core/models.py", models)
     esc("src/apps/api/urls.py", urls)
     esc("src/apps/api/views/mobile_auth.py", login)
+    # La migracion la escribe el parche, porque en ese servidor
+    # makemigrations no puede: /app esta montado en solo lectura. Necesita
+    # saber de cual cuelga, asi que la carpeta tiene que existir.
+    if migraciones:
+        os.makedirs(os.path.join(base, "src/apps/core/migrations"))
+        esc("src/apps/core/migrations/__init__.py", "")
+        # Dos, no una: con una sola, colgar de la primera y de la ultima es
+        # lo mismo y el fallo no se ve.
+        esc("src/apps/core/migrations/0001_initial.py", "# vacio\n")
+        esc("src/apps/core/migrations/0003_algo.py", "# vacio\n")
     return base
 
 
@@ -308,6 +318,34 @@ t("sin la ruta del login en urls.py, falla", cU != 0, sU.strip()[-200:])
 t("y no toca el login", "registrar_ingreso" not in
   lee(tmpU, "src/apps/api/views/mobile_auth.py"))
 
+# ── 2b. La migracion ─────────────────────────────────────────────────────
+# Se escribe a mano porque makemigrations no puede: escribe el fichero en la
+# misma carpeta montada en solo lectura. Que diga lo mismo que los modelos lo
+# comprueba migracion_equipo.prueba.py campo por campo; aqui solo que salga,
+# con el numero siguiente y colgando de la ultima.
+mg = lee(tmp, "src/apps/core/migrations/0004_equipo_enlazado.py")
+t("la migracion se escribe con el numero siguiente", bool(mg))
+t("y cuelga de la ultima que habia", "('core', '0003_algo')" in mg)
+t("y crea las dos tablas",
+  "name='DispositivoAutorizado'" in mg and "name='IngresoSinEquipo'" in mg)
+try:
+    ast.parse(mg); t("la migracion es Python valido", True)
+except SyntaxError as e:
+    t("la migracion es Python valido", False, str(e))
+t("en la segunda pasada no escribe otra",
+  not os.path.isfile(os.path.join(tmp,
+      "src/apps/core/migrations/0005_equipo_enlazado.py")))
+
+# Sin carpeta de migraciones no se inventa de donde cuelga: una migracion
+# colgada de la nada no se aplica, y eso se descubre migrando.
+tmpM = monta(tempfile.mkdtemp(), migraciones=False)
+cM, sM = corre(tmpM)
+t("sin core/migrations, se niega", cM != 0, sM.strip()[-200:])
+t("y no toca nada", "registrar_ingreso" not in
+  lee(tmpM, "src/apps/api/views/mobile_auth.py")
+  and "DispositivoAutorizado" not in lee(tmpM, "src/apps/core/models.py"))
+
+
 # ── 4b. urls.py, como venga ──────────────────────────────────────────────
 # POR QUE ESTA SECCION. La primera version buscaba `urlpatterns = [` para
 # meter el import encima, y en el servidor se nego: ese fichero no lo tiene.
@@ -405,6 +443,75 @@ t("y no escribe nada",
   "dispositivos" not in lee(dS, "src/apps/api/urls.py")
   and "registrar_ingreso" not in lee(dS, "src/apps/api/views/mobile_auth.py"))
 
+# ── 4d. Montado en solo lectura ──────────────────────────────────────────
+# LO QUE PASO DE VERDAD. En jurp_web, /app esta montado read-only. El parche
+# se estrello en el primer respaldo con OSError: Read-only file system. No
+# escribio nada, pero por el orden del bucle: si el fichero sin permiso
+# hubiera sido el tercero, los dos primeros ya estarian cambiados, y eso es
+# justo lo que este parche promete no hacer.
+#
+# chmod no sirve para probarlo: estas pruebas corren como root y W_OK
+# devuelve True sobre un 0444. Se finge con os.access, que es la pregunta
+# que hace el parche.
+ENVOLTORIO = '''
+import io, os, sys
+victima = sys.argv[1]
+real = os.access
+os.access = lambda p, m=os.F_OK: False if p.endswith(victima) else real(p, m)
+sys.argv = [sys.argv[2]] + sys.argv[3:]
+try:
+    exec(compile(io.open(sys.argv[0], encoding="utf-8").read(),
+                 sys.argv[0], "exec"),
+         {"__name__": "__main__", "__file__": sys.argv[0]})
+    codigo = 0
+except SystemExit as e:
+    codigo = e.code or 0
+sys.exit(codigo)
+'''
+dE = tempfile.mkdtemp()
+env = os.path.join(dE, "env.py")
+io.open(env, "w", encoding="utf-8").write(ENVOLTORIO)
+sucios.append(dE)
+
+for victima, etiqueta in (("models.py", "el primero de la lista"),
+                          ("mobile_auth.py", "el ULTIMO de la lista"),
+                          ("views", "la carpeta, no el fichero")):
+    dRO = monta(tempfile.mkdtemp())
+    sucios.append(dRO)
+    rR = subprocess.run([sys.executable, "-I", env, victima, PARCHE,
+                         "--base", dRO, "--aplicar"],
+                        capture_output=True, text=True)
+    sR = rR.stdout + rR.stderr
+    t("solo lectura (%s): se niega" % etiqueta, rR.returncode != 0,
+      sR.strip()[-200:])
+    t("solo lectura (%s): sin estrellarse" % etiqueta,
+      "Traceback" not in sR, sR.strip()[-300:])
+    t("solo lectura (%s): dice que se parchea en el host" % etiqueta,
+      "EN EL HOST" in sR, sR.strip()[-200:])
+    # Lo que de verdad importa: que NINGUNO quedo a medias.
+    t("solo lectura (%s): models.py intacto" % etiqueta,
+      "DispositivoAutorizado" not in lee(dRO, "src/apps/core/models.py"))
+    t("solo lectura (%s): urls.py intacto" % etiqueta,
+      "dispositivos" not in lee(dRO, "src/apps/api/urls.py"))
+    t("solo lectura (%s): el login intacto" % etiqueta,
+      "registrar_ingreso" not in lee(dRO, "src/apps/api/views/mobile_auth.py"))
+    t("solo lectura (%s): ni el modulo nuevo" % etiqueta,
+      not os.path.isfile(os.path.join(dRO, "src/apps/core/equipo_enlazado.py")))
+    t("solo lectura (%s): ni respaldos a medias" % etiqueta,
+      not [x for x in os.listdir(os.path.join(dRO, "src/apps/core"))
+           if ".bak-" in x])
+
+# Y en seco tambien avisa: un ensayo que dice "verde" donde el real no puede
+# escribir no sirve de nada -fue lo que paso-.
+dSec = monta(tempfile.mkdtemp())
+sucios.append(dSec)
+rSec = subprocess.run([sys.executable, "-I", env, "models.py", PARCHE,
+                       "--base", dSec],
+                      capture_output=True, text=True)
+t("en seco tambien avisa de que no podra escribir",
+  rSec.returncode != 0 and "EN EL HOST" in (rSec.stdout + rSec.stderr),
+  (rSec.stdout + rSec.stderr).strip()[-200:])
+
 # ── 5. Sin --aplicar no escribe ──────────────────────────────────────────
 tmpD = monta(tempfile.mkdtemp())
 cD, sD = corre(tmpD, aplicar=False)
@@ -413,7 +520,7 @@ t("y no escribe nada",
   "registrar_ingreso" not in lee(tmpD, "src/apps/api/views/mobile_auth.py")
   and not os.path.isfile(os.path.join(tmpD, "src/apps/core/equipo_enlazado.py")))
 
-for d in [tmp, tmpO, tmpU, tmpD] + sucios:
+for d in [tmp, tmpO, tmpU, tmpD, tmpM] + sucios:
     shutil.rmtree(d, ignore_errors=True)
 
 print("\n%d comprobacion(es) en orden%s." % (bien[0], ", %d MAL" % mal[0] if mal[0] else ""))
