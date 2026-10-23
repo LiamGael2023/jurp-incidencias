@@ -51,7 +51,7 @@ const MENU = [
   { clave: 'obra',         titulo: 'Avance de Obra', icono: <FaChartLine />,     apps: ['pluvira'] },
   // Va al final de PLUVIRA porque no es una pantalla de trabajo diario: se
   // entra cuando alguien cambio de celular o se le perdio, no todos los dias.
-  { clave: 'equipos',      titulo: 'Equipos enlazados', icono: <FaMobileAlt />,  apps: ['pluvira'] },
+  { clave: 'equipos',      titulo: 'Equipos enlazados', icono: <FaMobileAlt />,  apps: ['pluvira'], soloAdmin: true },
   // Inventario: rótulo de sección y sus dos vistas, al final del menú.
   { clave: 'sec-inventario', seccion: true, modulo: 'inventario', apps: ['pluvira'] },
   { clave: 'inv-mapa',     titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,   apps: ['pluvira'] },
@@ -102,8 +102,18 @@ function App() {
   // Activo del inventario a abrir al entrar al mapa: { tipo, fid, lat, lng }.
   const [activoAbrir, setActivoAbrir] = useState(null);
 
-  // Opciones visibles segun la app elegida.
-  const menuVisible = MENU.filter((m) => m.apps.includes(appElegida));
+  // Opciones visibles segun la app elegida, y las de administrador solo a
+  // quien lo sea. El endpoint ya las protege -responde 403-, pero ofrecer en
+  // el menu algo que va a fallar hace que el usuario crea que el sistema
+  // esta roto. Solo se esconde cuando se SABE que no es administrador: si el
+  // login no lo dijo, se deja a la vista, que es lo de hoy.
+  const menuVisible = MENU.filter((m) => {
+    if (!m.apps.includes(appElegida)) return false;
+    if (!m.soloAdmin) return true;
+    let marca = null;
+    try { marca = localStorage.getItem('userEsAdmin'); } catch { marca = null; }
+    return marca !== 'no';
+  });
 
   // Sale de la intro y deja una entrada en el historial, para que el boton
   // "atras" del navegador regrese a NEXHIDRO.

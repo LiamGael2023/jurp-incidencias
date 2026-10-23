@@ -82,10 +82,18 @@ export default function EquiposEnlazados() {
        * servidor—. */
       if (res && res.status === 404) { setSoporte('no-soportado'); return; }
       setSoporte('ok');
-      setFallo(motivo === 'sesion'
-        ? 'El servidor no aceptó tu sesión.'
-        : res ? `El servidor respondió ${res.status}.`
-              : 'No se pudo consultar.');
+      /* UN 403 AQUI NO ES LA SESION. El servidor pide 401 cuando no sabe
+       * quién eres y 403 cuando lo sabe y no te deja: esta pantalla es solo
+       * para administradores. Decirle "vuelve a entrar" a quien tiene la
+       * sesión perfectamente bien lo manda a salir y entrar para nada —y en
+       * un sistema donde ya se sospecha de tokens que caducan, añade ruido
+       * justo al dato que se está intentando limpiar. */
+      setFallo(res && res.status === 403
+        ? 'Tu usuario no es administrador, así que esta pantalla no te muestra nada. Pídele a administración que te dé el permiso.'
+        : motivo === 'sesion'
+          ? 'El servidor no aceptó tu sesión.'
+          : res ? `El servidor respondió ${res.status}.`
+                : 'No se pudo consultar.');
       return;
     }
     setSoporte('ok');

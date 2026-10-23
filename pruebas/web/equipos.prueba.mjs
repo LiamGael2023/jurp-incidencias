@@ -119,6 +119,28 @@ ok(/cualquiera que tenga la clave/i.test(falta),
    'y qué significa eso mientras tanto, que es lo que importa',
    falta.replace(/\n/g, ' ').slice(0, 130));
 
+// ══════════ UN USUARIO SIN PERMISO ══════════
+// El menu ofrece esta pantalla, y el endpoint es solo para administradores.
+// Lo que ve el de campo que la abre tiene que decirle la verdad: no es que
+// su sesion se haya caido —mandarlo a volver a entrar lo hace salir y entrar
+// para nada, y en un sistema donde ya se sospecha de tokens que caducan, eso
+// ensucia justo el dato que se intenta limpiar.
+await ir('sinpermiso');
+ok(await p.locator('.eqe-falta').count() === 0,
+   'un 403 no se confunde con "el servidor no lo tiene"');
+ok(await p.locator('.eqe-fallo').count() === 1, 'sale un aviso');
+const noPerm = await p.locator('.eqe-fallo').count()
+  ? await p.locator('.eqe-fallo').innerText() : '';
+ok(/no es administrador|no eres administrador/i.test(noPerm),
+   'y dice que es cuestion de permisos', noPerm.replace(/\n/g, ' ').slice(0, 110));
+ok(!/sesi[oó]n/i.test(noPerm),
+   'sin mandarlo a volver a entrar, que no arreglaria nada',
+   noPerm.replace(/\n/g, ' ').slice(0, 110));
+const flojosP = (await medidorDe(p)('.eqe-fallo'))
+  .filter(f => f.visible && f.texto && f.ratio < MINIMO);
+ok(flojosP.length === 0, 'y el aviso se lee',
+   flojosP.map(f => `"${f.texto}" ${f.ratio}:1`).join(' | '));
+
 // ══════════ QUE SE LEA ══════════
 await ir('mezcla');
 const flojos = (await medidorDe(p)(

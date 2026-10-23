@@ -86,6 +86,19 @@ function Login({ onLoginSuccess, app }) {
             if (resultado.user?.id != null) {
               localStorage.setItem('userId', String(resultado.user.id));
             }
+            /* 4b. SI ES ADMINISTRADOR, CUANDO EL SERVIDOR LO DIGA. Sirve
+             * para no ofrecer en el menú pantallas que van a responder 403.
+             * Se guardan tres estados y no dos: 'si', 'no', y la ausencia
+             * —que es "el servidor no lo dijo"—. Tomar la ausencia por 'no'
+             * esconderia el panel a los administradores de verdad si algún
+             * día el login deja de mandar el campo; tomarla por 'si' deja
+             * el menú como está hoy, que es lo malo conocido. */
+            const adm = resultado.user?.is_staff ?? resultado.user?.is_superuser;
+            if (adm === true || adm === false) {
+              localStorage.setItem('userEsAdmin', adm ? 'si' : 'no');
+            } else {
+              localStorage.removeItem('userEsAdmin');
+            }
             // 5. De qué padrón salió el token. Las pantallas que llaman a los
             //    dos servidores lo necesitan: el token de uno no vale en el
             //    otro, y sin esta marca no hay manera de saber cuál es cuál.

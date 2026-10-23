@@ -3,6 +3,7 @@
  *   ?v=mezcla   enlazados y liberados, y gente con la app vieja
  *   ?v=limpio   todos identifican su equipo: ya se puede bloquear
  *   ?v=viejo    el servidor todavía no tiene esta parte
+ *   ?v=sinpermiso  usuario normal: el servidor responde 403
  */
 import { createRoot } from 'react-dom/client';
 import EquiposEnlazados from '../../src/EquiposEnlazados';
@@ -41,6 +42,13 @@ window.fetch = async (u, opc = {}) => {
   window.__URLS.push(`${metodo} ${url}`);
 
   if (v === 'viejo') return json({ detail: 'Not found.' }, 404);
+  /* Lo que ve un usuario de campo que abre esta pantalla: el servidor sabe
+   * quién es y no le deja. Eso NO es la sesión, y el mensaje tiene que
+   * decirlo —mandarlo a volver a entrar lo hace salir y entrar para nada. */
+  if (v === 'sinpermiso') {
+    return json({ detail: 'No tiene permiso para realizar esta acción.',
+                  codigo: 'permission_denied' }, 403);
+  }
 
   const mLib = url.match(/\/dispositivos\/(\d+)\/liberar\/$/);
   if (mLib && metodo === 'POST') {
