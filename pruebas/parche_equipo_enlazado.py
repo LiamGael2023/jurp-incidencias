@@ -51,6 +51,7 @@ habria ventana para que la gente actualice.
 
 from __future__ import print_function
 
+import ast
 import datetime
 import io
 import os
@@ -472,6 +473,41 @@ IMPORT_URLS = ("from src.apps.core.equipo_enlazado import (\n"
                ")\n")
 
 
+def fin_de_imports(texto, limite):
+    """Donde acaba el ultimo import de arriba, antes de `limite`.
+
+    POR QUE NO SE ANCLA EN urlpatterns. La primera version buscaba
+    `urlpatterns = [` para meter el import justo encima, y en este proyecto
+    no existe: Django 1.8 todavia admite `urlpatterns = patterns('', ...)`,
+    y hay mas formas -`+= [`, `format_suffix_patterns(...)`-. Anclar ahi era
+    adivinar una de ellas. El ultimo import de arriba esta en cualquier
+    fichero de urls, venga como venga.
+
+    Cuenta parentesis porque `from x import (\\n a,\\n b,\\n)` ocupa varias
+    lineas: meter algo detras de la primera parte el import en dos y el
+    proyecto no arranca.
+    """
+    fin = 0
+    pos = 0
+    abierto = 0
+    dentro = False
+    for linea in texto.splitlines(True):
+        ini = pos
+        pos += len(linea)
+        if ini >= limite:
+            break
+        if not dentro:
+            if not re.match(r"^(from|import)\s", linea):
+                continue
+            dentro = True
+            abierto = 0
+        abierto += linea.count("(") - linea.count(")")
+        if abierto <= 0:
+            dentro = False
+            fin = pos
+    return fin
+
+
 def paso_urls(texto):
     if "equipo_enlazado" in texto:
         return texto, "ya estaban: las rutas del panel"
@@ -488,15 +524,15 @@ def paso_urls(texto):
     if "url(" not in texto:
         return None, "api/urls.py no usa url(); no lo reconozco"
 
-    # El import va antes de urlpatterns, no pegado a los otros: asi no hay
-    # que adivinar como estan ordenados.
-    u = re.search(r"^urlpatterns\s*=\s*\[", texto, re.M)
-    if u is None:
-        return None, "no encuentro urlpatterns = [ en api/urls.py"
+    i = fin_de_imports(texto, m.start())
+    if i <= 0:
+        return None, "api/urls.py no tiene imports arriba; no lo reconozco"
 
-    texto = texto[:m.end()] + RUTAS + texto[m.end():]
-    u = re.search(r"^urlpatterns\s*=\s*\[", texto, re.M)
-    texto = texto[:u.start()] + IMPORT_URLS + "\n" + texto[u.start():]
+    # Primero el import, luego las rutas: al reves, meter el import mueve
+    # las rutas de sitio y m.end() ya no vale.
+    texto = texto[:i] + "\n" + IMPORT_URLS + texto[i:]
+    texto = (texto[:m.end() + len(IMPORT_URLS) + 1] + RUTAS
+             + texto[m.end() + len(IMPORT_URLS) + 1:])
     return texto, "anadidas las dos rutas del panel"
 
 
@@ -618,6 +654,25 @@ def principal():
         if falta not in txt:
             print("NO SE ESCRIBE NADA: en %s no salio %r." % (quien, falta))
             return 1
+    # Y que siga siendo Python. Se inserta en ficheros cuya forma exacta no
+    # se ve desde aqui -un import de varias lineas, por ejemplo-, y un
+    # fichero partido por la mitad no se nota hasta que el proyecto no
+    # arranca. Solo se culpa al parche de lo que el parche rompio: si el
+    # original ya no parseaba, no es cosa nuestra.
+    for quien, viejo, nuevo in (("core/models.py", txt_m, nuevo_m),
+                                ("api/urls.py", txt_u, nuevo_u),
+                                ("mobile_auth.py", txt_l, nuevo_l)):
+        try:
+            ast.parse(viejo)
+        except SyntaxError:
+            continue
+        try:
+            ast.parse(nuevo)
+        except SyntaxError as e:
+            print("NO SE ESCRIBE NADA: %s quedaria roto (%s)." % (quien, e))
+            print("Mandame esta salida y lo ajusto.")
+            return 1
+
     # La comprobacion tiene que quedar ANTES de crear el token, no despues.
     if nuevo_l.index("registrar_ingreso(") > nuevo_l.index(ANCLA_LOGIN.strip()):
         print("NO SE ESCRIBE NADA: la comprobacion quedo DESPUES de crear el")

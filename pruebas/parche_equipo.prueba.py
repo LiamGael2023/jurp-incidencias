@@ -162,17 +162,24 @@ for n, txt in (("models.py", m), ("equipo_enlazado.py", mod),
         t("%s es Python valido" % n, False, str(e))
 
 # ── EL ORDEN DENTRO DEL LOGIN: lo que mas duele si falla ─────────────────
+# `antes` en vez de .index(): si el parche se niega, lg viene vacio y un
+# .index crudo revienta la prueba entera y se pierden las otras 80. Una
+# prueba que se estrella tapa las demas; una que dice MAL, no.
+def antes(txt, a, b):
+    return a in txt and b in txt and txt.index(a) < txt.index(b)
+
+
 t("la comprobacion entra en el login", "registrar_ingreso(" in lg)
 t("ANTES de crear el token",
-  lg.index("registrar_ingreso(") < lg.index("Token.objects.get_or_create"),
+  antes(lg, "registrar_ingreso(", "Token.objects.get_or_create"),
   "despues, el token ya estaria entregado cuando se rechaza")
 t("y DESPUES de comprobar la clave",
-  lg.index("authenticate(username") < lg.index("registrar_ingreso("),
+  antes(lg, "authenticate(username", "registrar_ingreso("),
   "antes, le diria 'equipo distinto' a quien escribio mal la clave")
 t("y despues del perfil, que ya decide quien puede entrar",
-  lg.index("_build_mobile_profile(user)") < lg.index("registrar_ingreso("))
+  antes(lg, "_build_mobile_profile(user)", "registrar_ingreso("))
 t("responde 403, no 401: la clave era correcta",
-  "HTTP_403_FORBIDDEN" in lg.split("registrar_ingreso(")[1][:400])
+  "HTTP_403_FORBIDDEN" in (lg.split("registrar_ingreso(") + [""])[1][:400])
 t("y mantiene la forma de la respuesta -{ok: False}-",
   "error_equipo['ok'] = False" in lg)
 t("el logout no se toca",
@@ -188,7 +195,7 @@ t("las rutas se escriben con url(), no con path()",
 t("la de liberar lleva su grupo nombrado",
   "(?P<pk>[0-9]+)/liberar/$" in u)
 t("la de liberar va DESPUES de la del listado",
-  u.index("dispositivos/$") < u.index("liberar/$"))
+  antes(u, "dispositivos/$", "liberar/$"))
 t("sin perder las rutas que ya estaban",
   "mobile_auth_login" in u and "mobile_auth_logout" in u)
 t("y el modulo tampoco usa path()", "path(" not in mod)
@@ -233,8 +240,15 @@ ns = {}
 for nombre in ("CORTADO", "ENLAZA", "SIGUE", "SIN_ID"):
     mm = re.search(r"^%s = '([^']+)'" % nombre, mod, re.M)
     ns[nombre] = mm.group(1) if mm else nombre.lower()
-exec(saca(mod, "decidir"), ns)
-decidir = ns["decidir"]
+
+# Si el parche se nego, mod viene vacio y no hay regla que correr. Se apunta
+# como MAL y se sigue: once comprobaciones menos, pero las demas se ven.
+if "def decidir(" in mod:
+    exec(saca(mod, "decidir"), ns)
+    decidir = ns["decidir"]
+else:
+    t("hay una regla que correr", False, "equipo_enlazado.py no se escribio")
+    decidir = lambda *a, **k: (None, None)
 
 
 class Enlace(object):
@@ -294,6 +308,103 @@ t("sin la ruta del login en urls.py, falla", cU != 0, sU.strip()[-200:])
 t("y no toca el login", "registrar_ingreso" not in
   lee(tmpU, "src/apps/api/views/mobile_auth.py"))
 
+# ── 4b. urls.py, como venga ──────────────────────────────────────────────
+# POR QUE ESTA SECCION. La primera version buscaba `urlpatterns = [` para
+# meter el import encima, y en el servidor se nego: ese fichero no lo tiene.
+# Django 1.8 admite varias formas, y el parche no puede exigir una. Lo que
+# se comprueba aqui no es que el texto aparezca, sino que el fichero
+# resultante PARSEA y que la ruta del login sigue en su sitio.
+FORMAS = {
+    "patterns('', ...) -- la forma vieja de Django 1.8": '''from django.conf.urls import patterns, url
+
+from src.apps.api.views.mobile_auth import MobileAuthLoginView
+
+urlpatterns = patterns('',
+    url(r'^v1/mobile/auth/login/$', MobileAuthLoginView.as_view(), name='mobile_auth_login'),
+)
+''',
+    "urlpatterns += [": '''from django.conf.urls import url
+
+from src.apps.api.views.mobile_auth import MobileAuthLoginView
+
+urlpatterns = []
+urlpatterns += [
+    url(r'^v1/mobile/auth/login/$', MobileAuthLoginView.as_view(), name='mobile_auth_login'),
+]
+''',
+    # El caso que de verdad puede partir un fichero: si el import nuevo cae
+    # dentro del parentesis de otro, el fichero deja de ser Python.
+    "import de varias lineas justo antes": '''from django.conf.urls import url
+from src.apps.api.views.mobile_auth import (
+    MobileAuthLoginView,
+    MobileAuthLogoutView,
+)
+from src.apps.api.views import otros
+
+urlpatterns = [
+    url(r'^v1/mobile/auth/login/$', MobileAuthLoginView.as_view(), name='mobile_auth_login'),
+]
+''',
+    "la ruta en dos lineas": '''from django.conf.urls import url
+from src.apps.api.views.mobile_auth import MobileAuthLoginView
+
+urlpatterns = [
+    url(r'^v1/mobile/auth/login/$',
+        MobileAuthLoginView.as_view(), name='mobile_auth_login'),
+]
+''',
+    "sin salto final": "from django.conf.urls import url\n"
+                       "from src.apps.api.views.mobile_auth import MobileAuthLoginView\n"
+                       "\n"
+                       "urlpatterns = [\n"
+                       "    url(r'^v1/mobile/auth/login/$', MobileAuthLoginView.as_view(),"
+                       " name='mobile_auth_login'),\n"
+                       "]",
+}
+
+sucios = []
+for nombre, forma in sorted(FORMAS.items()):
+    d = monta(tempfile.mkdtemp(), urls=forma)
+    sucios.append(d)
+    cf, sf = corre(d)
+    t("urls.py %s: aplica" % nombre, cf == 0, sf.strip()[-220:])
+    r = lee(d, "src/apps/api/urls.py")
+    try:
+        ast.parse(r); ok_py = True
+    except SyntaxError as e:
+        ok_py = False; detalle = str(e)
+    t("urls.py %s: sigue siendo Python" % nombre, ok_py,
+      "" if ok_py else detalle)
+    t("urls.py %s: entra la ruta del panel" % nombre,
+      r.count("dispositivos/$") == 1)
+    t("urls.py %s: y la del login sigue" % nombre,
+      r.count("mobile_auth_login") == 1)
+    t("urls.py %s: el import no queda suelto dentro de otro" % nombre,
+      "equipo_enlazado import (" in r)
+
+# ── 4c. El sabotaje: que el guardia de sintaxis muerda de verdad ─────────
+# Se rompe el parche para que meta el import encima del PRIMER import en vez
+# de debajo del ultimo. Con un import de varias lineas eso lo parte, y es
+# justo el fallo que no se nota hasta que el proyecto no arranca.
+fuente = io.open(PARCHE, encoding="utf-8").read()
+t("el guardia de sintaxis esta en el parche", "ast.parse(nuevo)" in fuente)
+
+roto = fuente.replace("    i = fin_de_imports(texto, m.start())",
+                      "    i = texto.index('from src.apps.api.views') + 30")
+t("el sabotaje cambia algo", roto != fuente)
+pr = os.path.join(tempfile.mkdtemp(), "roto.py")
+io.open(pr, "w", encoding="utf-8").write(roto)
+dS = monta(tempfile.mkdtemp(), urls=FORMAS["import de varias lineas justo antes"])
+sucios += [dS, os.path.dirname(pr)]
+rS = subprocess.run([sys.executable, "-I", pr, "--base", dS, "--aplicar"],
+                    capture_output=True, text=True)
+sS = rS.stdout + rS.stderr
+t("partiendo un import, el parche se niega", rS.returncode != 0, sS.strip()[-220:])
+t("y lo dice por su nombre", "urls.py quedaria roto" in sS, sS.strip()[-220:])
+t("y no escribe nada",
+  "dispositivos" not in lee(dS, "src/apps/api/urls.py")
+  and "registrar_ingreso" not in lee(dS, "src/apps/api/views/mobile_auth.py"))
+
 # ── 5. Sin --aplicar no escribe ──────────────────────────────────────────
 tmpD = monta(tempfile.mkdtemp())
 cD, sD = corre(tmpD, aplicar=False)
@@ -302,7 +413,7 @@ t("y no escribe nada",
   "registrar_ingreso" not in lee(tmpD, "src/apps/api/views/mobile_auth.py")
   and not os.path.isfile(os.path.join(tmpD, "src/apps/core/equipo_enlazado.py")))
 
-for d in (tmp, tmpO, tmpU, tmpD):
+for d in [tmp, tmpO, tmpU, tmpD] + sucios:
     shutil.rmtree(d, ignore_errors=True)
 
 print("\n%d comprobacion(es) en orden%s." % (bien[0], ", %d MAL" % mal[0] if mal[0] else ""))
