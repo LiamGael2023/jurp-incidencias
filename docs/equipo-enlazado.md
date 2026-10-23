@@ -59,9 +59,36 @@ fábrica, y el de iOS se borra si se desinstalan todas las apps del
 fabricante. **Por eso el panel de liberación no es un extra: es parte de que
 esto funcione.**
 
+## El navegador va exento, y no es un detalle
+
 La web manda `plataforma: "web"` y ningún `device_id`: un navegador no tiene
-un identificador que valga la pena enlazar. Ahí la regla es otra —una sesión
-a la vez— y se trata aparte.
+un identificador que valga la pena enlazar. El servidor la deja pasar sin
+enlazarla **y sin contarla**.
+
+Sin esa exención pasan dos cosas, las dos malas:
+
+- `sin_identificar` no llega a cero nunca, porque la web siempre va a entrar
+  sin `device_id`. Y ese número es el que decide cuándo se puede encender el
+  bloqueo, así que nunca se encendería.
+- El día que se encendiera de todas formas, **la web dejaría de entrar para
+  todos de golpe**.
+
+La exención es por un `"web"` explícito, nunca por la ausencia de
+`plataforma`. Si la ausencia contara, la app vieja —que tampoco la manda—
+quedaría exenta también y el bloqueo no mordería a nadie: la medida entera se
+queda en nada sin que salte ningún error.
+
+Lo que se paga: una app modificada que mande `plataforma: "web"` se salta el
+enlace. Es el mismo nivel que falsear el `device_id` —esto disuade, no
+blinda— y es el precio de que la web siga entrando. Se puede vigilar: en el
+panel, un usuario de campo entrando como `web` se ve.
+
+**Son dos mitades y hacen falta las dos.** El servidor exime a quien dice
+`web`; la web tiene que decirlo (`src/Login.jsx`). Si una cambia sin la otra,
+esto se rompe en silencio y no se nota hasta el día del encendido. Por eso
+`pruebas/parche_equipo.prueba.py` mira los dos ficheros.
+
+Para la web la regla es otra —una sesión a la vez— y se trata aparte.
 
 ## Qué responde
 
@@ -117,8 +144,9 @@ Solo para administradores. Admite `?q=` para buscar por usuario o equipo y
 }
 ```
 
-`sin_identificar` es cuántos usuarios entraron sin mandar `device_id`. Es el
-número que hay que ver en cero antes de encender el interruptor.
+`sin_identificar` es cuántos usuarios entraron sin mandar `device_id` **desde
+una app** —los que entran por el navegador no cuentan—. Es el número que hay
+que ver en cero antes de encender el interruptor.
 
 `device_id` va recortado a propósito: en el panel sirve para distinguir dos
 equipos, y completo es un dato que no hace falta enseñar.

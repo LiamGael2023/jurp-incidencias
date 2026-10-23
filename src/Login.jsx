@@ -41,7 +41,18 @@ function Login({ onLoginSuccess, app }) {
 
     const datosLogin = {
       username: username,
-      password: password
+      password: password,
+      /* QUE ES LA WEB, Y POR QUE HAY QUE DECIRLO. En PLUVIRA cada cuenta
+       * queda atada al celular desde el que entra, para que prestar la clave
+       * no sirva. El navegador no tiene un identificador de equipo que valga
+       * la pena enlazar, asi que va exento —pero el servidor solo exime a
+       * quien dice 'web' de forma explicita: si la ausencia contara, la app
+       * vieja, que tampoco manda plataforma, quedaria exenta tambien y el
+       * bloqueo no morderia a nadie.
+       *
+       * Sin esta linea, el dia que se encienda el bloqueo la web deja de
+       * entrar para todos. */
+      plataforma: 'web',
     };
 
     try {

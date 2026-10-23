@@ -246,19 +246,22 @@ def saca(fuente, nombre):
     return resto[:corte]
 
 
-ns = {}
-for nombre in ("CORTADO", "ENLAZA", "SIGUE", "SIN_ID"):
+ns = {"WEB": "web"}
+for nombre in ("CORTADO", "ENLAZA", "SIGUE", "SIN_ID", "EXENTO"):
     mm = re.search(r"^%s = '([^']+)'" % nombre, mod, re.M)
     ns[nombre] = mm.group(1) if mm else nombre.lower()
 
 # Si el parche se nego, mod viene vacio y no hay regla que correr. Se apunta
-# como MAL y se sigue: once comprobaciones menos, pero las demas se ven.
+# como MAL y se sigue: unas comprobaciones menos, pero las demas se ven.
 if "def decidir(" in mod:
     exec(saca(mod, "decidir"), ns)
+    exec(saca(mod, "es_navegador"), ns)
     decidir = ns["decidir"]
+    es_navegador = ns["es_navegador"]
 else:
     t("hay una regla que correr", False, "equipo_enlazado.py no se escribio")
     decidir = lambda *a, **k: (None, None)
+    es_navegador = lambda *a, **k: None
 
 
 class Enlace(object):
@@ -278,6 +281,39 @@ t("la app vieja pasa mientras no se exija",
 t("y se corta cuando se exige", decidir(E, "", True)[0] == ns["CORTADO"])
 t("mandando a ACTUALIZAR, no a soporte",
   decidir(E, "", True)[1] == "falta_device_id")
+
+# ── EL NAVEGADOR VA EXENTO ───────────────────────────────────────────────
+# Lo que esto evita, y es lo que mas duele si se olvida: la web no manda ni
+# va a mandar identificador de equipo. Contandola, el numero de "sin
+# identificar" -el que decide cuando se puede encender el bloqueo- no llega
+# a cero nunca. Y el dia del encendido, la web deja de entrar para TODOS.
+t("el navegador no se enlaza aunque no tenga equipo",
+  decidir(None, "", False, True)[0] == ns["EXENTO"])
+t("ni aun exigiendo equipo", decidir(None, "", True, True)[0] == ns["EXENTO"],
+  "es el dia del encendido: aqui es donde la web se caeria")
+t("ni se corta por venir de otro equipo",
+  decidir(E, "zzz999", True, True)[0] == ns["EXENTO"])
+t("y no devuelve codigo de error", decidir(None, "", True, True)[1] is None)
+
+# Pero SOLO un 'web' explicito. Si la ausencia contara como navegador, la app
+# vieja -que tampoco manda plataforma- quedaria exenta y el bloqueo no
+# morderia a nadie: la medida entera se queda en nada sin que salte un error.
+for dice, deberia in (("web", True), ("WEB", True), (" web ", True),
+                      ("Web", True), ("android", False), ("ios", False),
+                      ("", False), (None, False), ("webapp", False),
+                      ("mobile-web", False)):
+    t("es_navegador(%r) -> %s" % (dice, deberia),
+      es_navegador(dice) == deberia)
+
+# LAS DOS MITADES. El servidor exime a quien dice 'web'; la web tiene que
+# decirlo. Si una de las dos cambia sin la otra, esto se rompe en silencio
+# hasta el dia del encendido, asi que la prueba mira las dos.
+LOGIN_WEB = io.open(os.path.join(os.path.dirname(AQUI), "src", "Login.jsx"),
+                    encoding="utf-8").read() if os.path.isfile(
+    os.path.join(os.path.dirname(AQUI), "src", "Login.jsx")) else ""
+t("la web existe y se puede leer", bool(LOGIN_WEB))
+t("y se identifica como 'web' al entrar", "plataforma: 'web'" in LOGIN_WEB,
+  "sin esto, el dia del encendido la web no entra")
 
 # El agujero que se abre solo: enlazar un identificador vacio. A partir de
 # ahi, cualquier otra app vieja coincidiria con el.

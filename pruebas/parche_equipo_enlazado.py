@@ -185,26 +185,44 @@ CORTADO = 'cortado'
 ENLAZA = 'enlaza'
 SIGUE = 'sigue'
 SIN_ID = 'sin_id'
+EXENTO = 'exento'
+
+WEB = 'web'
 
 
-def decidir(enlace_activo, device_id, exigir):
+def decidir(enlace_activo, device_id, exigir, es_web=False):
     """Que hacer con este ingreso. Funcion pura: se prueba sin base de datos.
 
     → (que_hacer, codigo_de_error)
 
+      EXENTO   es el navegador: ni se enlaza ni se cuenta
       ENLAZA   no tenia equipo: este queda enlazado
       SIGUE    es el mismo equipo: pasa
       CORTADO  es otro equipo, o falta el identificador y se exige
       SIN_ID   no mando identificador (app vieja) y todavia no se exige
 
+    POR QUE EL NAVEGADOR VA APARTE, Y ES LO MAS IMPORTANTE DE AQUI. La web
+    no tiene ni tendra un identificador de equipo que valga la pena enlazar.
+    Si contara como "sin identificar", ese numero -el que decide cuando se
+    puede encender el bloqueo- no llegaria a cero nunca, porque la web
+    siempre va a entrar sin el. Y el dia que se encendiera el bloqueo, la web
+    dejaria de funcionar para TODOS de golpe.
+
+    Lo que paga: una app modificada que mande plataforma='web' se salta el
+    enlace. Es el mismo nivel que falsear el identificador -esto disuade, no
+    blinda- y es el precio de que la web siga entrando. Se puede vigilar: en
+    el panel, un usuario de campo entrando como 'web' se ve.
+
     EL ORDEN IMPORTA Y ES PARTE DE LA REGLA. Mirar si falta el identificador
-    va PRIMERO. Comparando antes, una app vieja sin enlace previo quedaria
-    ENLAZADA con un identificador vacio, y a partir de ahi cualquier otra app
-    vieja coincidiria con el: un agujero que se abre solo.
+    va antes de comparar. Comparando antes, una app vieja sin enlace previo
+    quedaria ENLAZADA con un identificador vacio, y a partir de ahi cualquier
+    otra app vieja coincidiria con el: un agujero que se abre solo.
 
     El .strip() tampoco es adorno: una cadena de espacios es verdadera en
     Python, asi que sin el, un "   " pasaria por identificador valido.
     """
+    if es_web:
+        return (EXENTO, None)
     device_id = (device_id or '').strip()
     if not device_id:
         return (CORTADO, 'falta_device_id') if exigir else (SIN_ID, None)
@@ -213,6 +231,15 @@ def decidir(enlace_activo, device_id, exigir):
     if enlace_activo.device_id == device_id:
         return (SIGUE, None)
     return (CORTADO, 'equipo_distinto')
+
+
+def es_navegador(plataforma):
+    """Solo un 'web' explicito. Que no mande nada NO es la web.
+
+    Si la ausencia contara como navegador, la app vieja -que tampoco manda
+    plataforma- quedaria exenta tambien, y el bloqueo no morderia a nadie.
+    """
+    return (plataforma or '').strip().lower() == WEB
 
 
 def enlace_de(usuario):
@@ -236,8 +263,17 @@ def registrar_ingreso(usuario, device_id, equipo='', plataforma=''):
     → (ok, dict_de_error_o_None)
     """
     device_id = (device_id or '').strip()
+    if es_navegador(plataforma):
+        # Ni se enlaza ni se cuenta: la web no tiene equipo que enlazar, y
+        # contarla dejaria el numero que abre el bloqueo clavado por encima
+        # de cero para siempre.
+        return True, None
+
     enlace = enlace_de(usuario)
     que, codigo = decidir(enlace, device_id, exigir_equipo())
+
+    if que == EXENTO:
+        return True, None
 
     if que == SIN_ID:
         fila, _ = IngresoSinEquipo.objects.get_or_create(usuario=usuario)
