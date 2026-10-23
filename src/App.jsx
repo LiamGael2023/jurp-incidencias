@@ -21,8 +21,9 @@ import MapaInventario from './MapaInventario';
 import ReportesInventario from './ReportesInventario';
 import CampaniasInventario from './CampaniasInventario';
 import MapaTematico from './MapaTematico';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt } from 'react-icons/fa';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt, FaMobileAlt } from 'react-icons/fa';
 import logo from './assets/logo1.png';
+import EquiposEnlazados from './EquiposEnlazados';
 
 const URL_HYDROMETRIX = 'http://sistema.jriegopresurizado.org.pe/';
 
@@ -48,6 +49,9 @@ const MENU = [
   { clave: 'proyectos',    titulo: 'Proyectos',      icono: <FaFolderOpen />,    apps: ['pluvira'] },
   { clave: 'actividades',  titulo: 'Actividades',    icono: <FaHardHat />,       apps: ['pluvira'] },
   { clave: 'obra',         titulo: 'Avance de Obra', icono: <FaChartLine />,     apps: ['pluvira'] },
+  // Va al final de PLUVIRA porque no es una pantalla de trabajo diario: se
+  // entra cuando alguien cambio de celular o se le perdio, no todos los dias.
+  { clave: 'equipos',      titulo: 'Equipos enlazados', icono: <FaMobileAlt />,  apps: ['pluvira'] },
   // Inventario: rótulo de sección y sus dos vistas, al final del menú.
   { clave: 'sec-inventario', seccion: true, modulo: 'inventario', apps: ['pluvira'] },
   { clave: 'inv-mapa',     titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,   apps: ['pluvira'] },
@@ -242,6 +246,15 @@ function App() {
       <div className="maq">
         <RailGIS {...propsRail} />
         <div className="maq-main"><Partes irAIncidente={irAIncidente} /></div>
+      </div>
+    );
+  }
+
+  if (vistaActual === 'equipos') {
+    return (
+      <div className="maq">
+        <RailGIS {...propsRail} />
+        <div className="maq-main"><EquiposEnlazados /></div>
       </div>
     );
   }
