@@ -51,7 +51,7 @@ const MENU = [
   { clave: 'obra',         titulo: 'Avance de Obra', icono: <FaChartLine />,     apps: ['pluvira'] },
   // Va al final de PLUVIRA porque no es una pantalla de trabajo diario: se
   // entra cuando alguien cambio de celular o se le perdio, no todos los dias.
-  { clave: 'equipos',      titulo: 'Equipos enlazados', icono: <FaMobileAlt />,  apps: ['pluvira'], soloAdmin: true },
+  { clave: 'equipos',      titulo: 'Usuarios y equipos', icono: <FaMobileAlt />,  apps: ['pluvira'], soloAdmin: true },
   // Inventario: rótulo de sección y sus dos vistas, al final del menú.
   { clave: 'sec-inventario', seccion: true, modulo: 'inventario', apps: ['pluvira'] },
   { clave: 'inv-mapa',     titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,   apps: ['pluvira'] },

@@ -208,3 +208,63 @@
 @media (max-width: 900px) {
   .eqe { padding-left: 22px; }
 }
+
+/* ── Gestion de usuarios ───────────────────────────────────────────────
+   Las acciones viven en la fila de cada persona. Son cuatro y algunas son
+   destructivas, asi que llevan texto ademas de icono: un icono solo, en una
+   fila donde una pulsacion equivocada cierra la sesion de alguien en campo,
+   se presta a confusion. */
+
+.eqe-nuevo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: #15803d;
+  color: #fff;
+  font-size: .82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.eqe-nuevo:hover:not(:disabled) { background: #166534; }
+.eqe-nuevo:disabled { opacity: .55; cursor: default; }
+
+.eqe-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.eqe-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #334155;
+  font-size: .74rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.eqe-mini:hover:not(:disabled) { background: #f1f5f9; border-color: #94a3b8; }
+.eqe-mini:disabled { opacity: .5; cursor: default; }
+
+/* Desactivar es el unico que deja a alguien fuera: va en rojo para que no
+   se pulse por inercia al lado de los otros. */
+.eqe-mini-mal { color: #b91c1c; border-color: #fecaca; }
+.eqe-mini-mal:hover:not(:disabled) { background: #fef2f2; border-color: #f87171; }
+.eqe-mini-ok  { color: #15803d; border-color: #bbf7d0; }
+.eqe-mini-ok:hover:not(:disabled)  { background: #f0fdf4; border-color: #4ade80; }
+
+.eqe-tag-rol {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}

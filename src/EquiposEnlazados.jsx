@@ -1,18 +1,36 @@
 /**
- * Equipos enlazados: qué celular tiene cada cuenta, y cómo soltarlo.
+ * Usuarios y equipos: quién tiene cuenta, con qué rol, y desde qué celular.
  *
- * POR QUE EXISTE. La cuenta queda atada al teléfono desde el que se entró la
- * primera vez, para que prestar la clave no sirva. Pero un celular se
- * pierde, se cambia o se restaura de fábrica —y los identificadores de
- * Android e iOS no sobreviven a eso—, así que sin un sitio donde liberar el
- * enlace la medida se convierte en llamadas diarias. Esta pantalla no es un
- * extra del enlace: es la mitad que lo hace viable.
+ * POR QUE ESTAN JUNTOS. Antes esta pantalla listaba solo equipos enlazados,
+ * y la gestión de usuarios vivía únicamente en la app móvil. Pero las dos
+ * cosas se hacen en el mismo momento y sobre la misma persona: se crea la
+ * cuenta, se le da un rol, y cuando cambia de celular hay que liberarla.
+ * Tenerlas en pantallas distintas -o en aplicaciones distintas- obligaba a
+ * saltar de una a otra para una sola gestión.
  *
- * EL NUMERO QUE MANDA ES «sin identificar». Son los usuarios que entraron
- * sin mandar el identificador, es decir, los que siguen con la app vieja.
- * Mientras ese número no sea cero, encender el bloqueo deja fuera a esa
- * gente, que además es la de campo. Por eso va arriba y en grande, y no
- * escondido en una esquina.
+ * LA LISTA ES DE USUARIOS, NO DE EQUIPOS. Es el cambio importante. Antes la
+ * fila era el enlace, así que quien todavía no había entrado desde un
+ * celular sencillamente no existía en la pantalla: se creaba un usuario y no
+ * aparecía por ningún lado. Ahora la fila es la persona y el equipo es una
+ * columna, que puede estar vacía.
+ *
+ * DOS PERMISOS DISTINTOS, A PROPOSITO DEL SERVIDOR. Gestionar usuarios lo
+ * autoriza el grupo mobile_gerencia; ver los equipos enlazados exige
+ * is_staff. No son el mismo permiso y no se pueden fusionar desde aquí, así
+ * que la pantalla carga las dos cosas por separado y funciona con lo que
+ * tenga: si falta el permiso de equipos, se muestran los usuarios igual y se
+ * dice por qué falta la columna. Lo contrario -no mostrar nada porque una de
+ * las dos llamadas falló- escondía la mitad útil de la pantalla.
+ *
+ * LA CLAVE NO SE ELIGE, SE GENERA. El servidor crea una aleatoria y la
+ * devuelve UNA SOLA VEZ, en la respuesta de crear o de resetear. No hay
+ * forma de volver a verla. Por eso aparece en un diálogo que hay que cerrar
+ * a conciencia y con un botón de copiar: si se pierde, el único remedio es
+ * resetear otra vez.
+ *
+ * RESETEAR Y CAMBIAR DE ROL CIERRAN SESION. El servidor borra el token de
+ * esa persona. Se avisa antes, porque hacerlo a alguien que está en campo
+ * llenando un parte le tira el trabajo.
  *
  * LIBERAR NO BORRA. Desactiva el enlace y queda firmado quién lo hizo y
  * cuándo. Un campo en el usuario solo sabría dónde está ahora; la tabla sabe
@@ -22,13 +40,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FaMobileAlt, FaSearch, FaSyncAlt, FaUnlock, FaExclamationTriangle,
-  FaCheckCircle, FaHistory,
+  FaCheckCircle, FaHistory, FaUserPlus, FaKey, FaUserSlash, FaUserCheck,
+  FaUserTag,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { pedir } from './sesion';
 import './EquiposEnlazados.css';
 
-const API = '/api/v1/mobile/auth/dispositivos/';
+const API_EQUIPOS = '/api/v1/mobile/auth/dispositivos/';
+const API_USUARIOS = '/api/v1/mobile/users/';
 
 const fecha = (iso) => {
   if (!iso) return '—';
@@ -55,71 +75,313 @@ const desdeHace = (iso) => {
   return `hace ${m} meses`;
 };
 
-const ESTADOS = [
-  { clave: 'activos', texto: 'Enlazados' },
-  { clave: 'liberados', texto: 'Liberados' },
+const FILTROS = [
   { clave: 'todos', texto: 'Todos' },
+  { clave: 'activos', texto: 'Activos' },
+  { clave: 'inactivos', texto: 'Inactivos' },
+  { clave: 'enlazados', texto: 'Con equipo' },
+  { clave: 'sinequipo', texto: 'Sin equipo' },
 ];
 
+/* Escapar antes de meter nada en el html de un diálogo. Los nombres los
+ * teclea una persona, y un apellido con un `<` no debería poder inyectar
+ * marcado en la pantalla de quien administra. */
+const esc = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
+
+/**
+ * Enseña la credencial recién generada. Es la única vez que se puede ver.
+ */
+async function mostrarCredenciales(cred, titulo) {
+  const usuario = esc(cred.username);
+  const clave = esc(cred.password);
+  await Swal.fire({
+    icon: 'success',
+    title: titulo,
+    html:
+      `<div style="text-align:left;line-height:1.7">
+         <div><b>Usuario:</b> <code>${usuario}</code></div>
+         <div><b>Clave:</b> <code id="eqe-clave">${clave}</code></div>
+         ${cred.role_label ? `<div><b>Rol:</b> ${esc(cred.role_label)}</div>` : ''}
+       </div>
+       <p style="margin-top:14px;font-size:.9em;color:#b45309">
+         Esta clave no se vuelve a mostrar. Cópiala y entrégasela ahora;
+         si se pierde, habrá que generar otra.
+       </p>`,
+    confirmButtonText: 'Ya la copié',
+    showCancelButton: true,
+    cancelButtonText: 'Copiar al portapapeles',
+    cancelButtonColor: '#2563eb',
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    preConfirm: () => true,
+  }).then((r) => {
+    if (r.dismiss === Swal.DismissReason.cancel) {
+      try {
+        navigator.clipboard.writeText(`${cred.username} / ${cred.password}`);
+      } catch (e) { /* sin portapapeles: queda el texto a la vista */ }
+      /* Se vuelve a abrir: copiar no es cerrar, y cerrar sin querer es
+       * perder la clave para siempre. */
+      return mostrarCredenciales(cred, titulo);
+    }
+    return null;
+  });
+}
+
 export default function EquiposEnlazados() {
-  const [filas, setFilas] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
+  const [equipos, setEquipos] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [sinIdentificar, setSinIdentificar] = useState(null);
   const [cargando, setCargando] = useState(false);
   const [fallo, setFallo] = useState('');
-  const [soporte, setSoporte] = useState('probando');  // 'ok' | 'no-soportado'
+  const [sinEquipos, setSinEquipos] = useState('');     // por qué falta la columna
+  const [soporte, setSoporte] = useState('probando');   // 'ok' | 'no-soportado'
   const [busca, setBusca] = useState('');
-  const [estado, setEstado] = useState('activos');
-  const [liberando, setLiberando] = useState(null);
+  const [filtro, setFiltro] = useState('todos');
+  const [ocupado, setOcupado] = useState(null);         // id de la fila en curso
 
   const cargar = useCallback(async () => {
-    setCargando(true); setFallo('');
-    const { ok, res, datos, motivo } = await pedir(`${API}?estado=${estado}`);
+    setCargando(true); setFallo(''); setSinEquipos('');
+
+    /* Las dos llamadas van en paralelo y se juzgan por separado: tienen
+     * permisos distintos en el servidor y una puede fallar sin la otra. */
+    const [u, e, r] = await Promise.all([
+      pedir(`${API_USUARIOS}list/`),
+      pedir(`${API_EQUIPOS}?estado=todos`),
+      pedir(`${API_USUARIOS}roles/`),
+    ]);
     setCargando(false);
-    if (!ok) {
+
+    if (!u.ok) {
       /* Un 404 aquí no es un fallo: es que el servidor todavía no tiene esta
        * parte. Se distingue de un error de verdad porque la respuesta es
        * distinta y el remedio también —aplicar el parche frente a mirar el
        * servidor—. */
-      if (res && res.status === 404) { setSoporte('no-soportado'); return; }
+      if (u.res && u.res.status === 404) { setSoporte('no-soportado'); return; }
       setSoporte('ok');
-      /* UN 403 AQUI NO ES LA SESION. El servidor pide 401 cuando no sabe
-       * quién eres y 403 cuando lo sabe y no te deja: esta pantalla es solo
-       * para administradores. Decirle "vuelve a entrar" a quien tiene la
-       * sesión perfectamente bien lo manda a salir y entrar para nada —y en
-       * un sistema donde ya se sospecha de tokens que caducan, añade ruido
-       * justo al dato que se está intentando limpiar. */
-      setFallo(res && res.status === 403
-        ? 'Tu usuario no es administrador, así que esta pantalla no te muestra nada. Pídele a administración que te dé el permiso.'
-        : motivo === 'sesion'
+      setFallo(u.res && u.res.status === 403
+        ? 'Tu usuario no pertenece a Gerencia, así que no puede administrar cuentas. Pídele el permiso a administración.'
+        : u.motivo === 'sesion'
           ? 'El servidor no aceptó tu sesión.'
-          : res ? `El servidor respondió ${res.status}.`
-                : 'No se pudo consultar.');
+          : u.res ? `El servidor respondió ${u.res.status}.`
+                  : 'No se pudo consultar.');
       return;
     }
+
     setSoporte('ok');
-    setFilas(Array.isArray(datos) ? datos : (datos.resultados || []));
-    setSinIdentificar(datos && typeof datos.sin_identificar === 'number'
-      ? datos.sin_identificar : null);
-  }, [estado]);
+    setUsuarios(u.datos && Array.isArray(u.datos.results) ? u.datos.results : []);
+    setRoles(r.ok && r.datos && Array.isArray(r.datos.results) ? r.datos.results : []);
+
+    if (e.ok) {
+      const d = e.datos || {};
+      setEquipos(Array.isArray(d) ? d : (d.resultados || []));
+      setSinIdentificar(typeof d.sin_identificar === 'number' ? d.sin_identificar : null);
+    } else {
+      setEquipos([]); setSinIdentificar(null);
+      /* No es motivo para vaciar la pantalla: los usuarios se ven igual. */
+      setSinEquipos(e.res && e.res.status === 403
+        ? 'No tienes permiso de administrador del servidor, así que no se muestra desde qué celular entra cada uno.'
+        : 'No se pudo consultar los equipos enlazados.');
+    }
+  }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  /* El enlace de cada persona. Se prefiere el activo: una cuenta puede tener
+   * varios registros históricos y el que importa es el vigente. */
+  const equipoDe = useMemo(() => {
+    const m = new Map();
+    for (const q of equipos) {
+      const k = String(q.usuario || '').toLowerCase();
+      const previo = m.get(k);
+      if (!previo || (q.activo && !previo.activo)) m.set(k, q);
+    }
+    return m;
+  }, [equipos]);
+
   const visibles = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    if (!q) return filas;
-    return filas.filter(f =>
-      [f.usuario, f.nombre_usuario, f.equipo, f.plataforma]
-        .some(v => String(v || '').toLowerCase().includes(q)));
-  }, [filas, busca]);
+    return usuarios.filter((u) => {
+      const eq = equipoDe.get(String(u.username).toLowerCase());
+      if (filtro === 'activos' && !u.is_active) return false;
+      if (filtro === 'inactivos' && u.is_active) return false;
+      if (filtro === 'enlazados' && !(eq && eq.activo)) return false;
+      if (filtro === 'sinequipo' && eq && eq.activo) return false;
+      if (!q) return true;
+      return [u.username, u.first_name, u.last_name, u.role_label,
+              eq && eq.equipo]
+        .some(v => String(v || '').toLowerCase().includes(q));
+    });
+  }, [usuarios, equipoDe, busca, filtro]);
 
-  const liberar = async (f) => {
+  const nombreDe = (u) => `${u.first_name || ''} ${u.last_name || ''}`.trim();
+
+  /* ── Acciones ──────────────────────────────────────────────────────── */
+
+  const crear = async () => {
+    if (!roles.length) {
+      Swal.fire('Sin roles', 'El servidor no devolvió los roles disponibles, '
+        + 'así que no se puede elegir uno. Actualiza y vuelve a intentarlo.', 'warning');
+      return;
+    }
+    const opciones = roles
+      .map(r => `<option value="${esc(r.code)}">${esc(r.label)}</option>`).join('');
+
+    const { value: datos } = await Swal.fire({
+      title: 'Nuevo usuario',
+      html:
+        `<input id="f-user" class="swal2-input" placeholder="Usuario (sin espacios)" maxlength="30">
+         <input id="f-nom"  class="swal2-input" placeholder="Nombre" maxlength="30">
+         <input id="f-ape"  class="swal2-input" placeholder="Apellido" maxlength="30">
+         <input id="f-mail" class="swal2-input" placeholder="Correo (opcional)" type="email">
+         <select id="f-rol" class="swal2-input">${opciones}</select>
+         <p style="font-size:.85em;color:#64748b;margin-top:10px">
+           La clave la genera el servidor y se muestra una sola vez.
+         </p>`,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Crear',
+      cancelButtonText: 'Cancelar',
+      preConfirm: () => {
+        const v = (id) => (document.getElementById(id).value || '').trim();
+        const username = v('f-user');
+        /* Se valida aquí con la misma regla del servidor, para que el error
+         * salga antes de viajar y diga qué se admite, no un 400 seco. */
+        if (!/^[\w.@+-]{3,30}$/.test(username)) {
+          Swal.showValidationMessage(
+            'Usuario inválido: de 3 a 30 caracteres, sin espacios (letras, números, . @ + - _).');
+          return false;
+        }
+        return {
+          username,
+          first_name: v('f-nom'),
+          last_name: v('f-ape'),
+          email: v('f-mail'),
+          role: document.getElementById('f-rol').value,
+        };
+      },
+    });
+    if (!datos) return;
+
+    setOcupado('nuevo');
+    const { ok, res, datos: resp } = await pedir(API_USUARIOS,
+      { method: 'POST', body: JSON.stringify(datos) });
+    setOcupado(null);
+
+    if (!ok) {
+      let detalle = res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.';
+      try { const j = await res.clone().json(); if (j.detail) detalle = j.detail; }
+      catch (err) { /* se queda el genérico */ }
+      Swal.fire('No se pudo crear', detalle, 'error');
+      return;
+    }
+    await cargar();
+    if (resp && resp.credentials) {
+      await mostrarCredenciales(resp.credentials, 'Usuario creado');
+    }
+  };
+
+  const resetear = async (u) => {
+    const r = await Swal.fire({
+      icon: 'warning',
+      title: `¿Generar clave nueva para ${esc(u.username)}?`,
+      html: 'El servidor crea una clave aleatoria y te la muestra una sola vez.'
+        + '<br><br><b>Se cerrará su sesión</b>: si está en campo con un parte '
+        + 'a medias, lo pierde.',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, generar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#b45309',
+      focusCancel: true,
+    });
+    if (!r.isConfirmed) return;
+
+    setOcupado(u.id);
+    const { ok, res, datos } = await pedir(`${API_USUARIOS}${u.id}/reset-password/`,
+      { method: 'POST' });
+    setOcupado(null);
+
+    if (!ok) {
+      Swal.fire('No se pudo cambiar la clave',
+        res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.', 'error');
+      return;
+    }
+    if (datos && datos.credentials) {
+      await mostrarCredenciales(datos.credentials, 'Clave nueva');
+    }
+    await cargar();
+  };
+
+  const alternarActivo = async (u) => {
+    const apagando = u.is_active;
+    const r = await Swal.fire({
+      icon: 'warning',
+      title: apagando ? `¿Desactivar a ${esc(u.username)}?` : `¿Reactivar a ${esc(u.username)}?`,
+      html: apagando
+        ? 'No podrá entrar hasta que se le reactive, y se cierra su sesión ahora mismo.'
+        : 'Volverá a poder entrar con su clave actual.',
+      showCancelButton: true,
+      confirmButtonText: apagando ? 'Sí, desactivar' : 'Sí, reactivar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: apagando ? '#b91c1c' : '#15803d',
+      focusCancel: apagando,
+    });
+    if (!r.isConfirmed) return;
+
+    setOcupado(u.id);
+    const { ok, res } = await pedir(`${API_USUARIOS}${u.id}/toggle-active/`,
+      { method: 'POST' });
+    setOcupado(null);
+    if (!ok) {
+      Swal.fire('No se pudo cambiar',
+        res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.', 'error');
+      return;
+    }
+    await cargar();
+  };
+
+  const cambiarRol = async (u) => {
+    if (!roles.length) return;
+    const opciones = roles.map(r =>
+      `<option value="${esc(r.code)}"${r.code === u.role ? ' selected' : ''}>${esc(r.label)}</option>`
+    ).join('');
+
+    const { value: rol } = await Swal.fire({
+      title: `Rol de ${esc(u.username)}`,
+      html: `<select id="f-rol2" class="swal2-input">${opciones}</select>
+             <p style="font-size:.85em;color:#b45309;margin-top:10px">
+               Al cambiar el rol se cierra su sesión, para que entre con los
+               permisos nuevos.
+             </p>`,
+      showCancelButton: true,
+      confirmButtonText: 'Cambiar',
+      cancelButtonText: 'Cancelar',
+      preConfirm: () => document.getElementById('f-rol2').value,
+    });
+    if (!rol || rol === u.role) return;
+
+    setOcupado(u.id);
+    const { ok, res } = await pedir(`${API_USUARIOS}${u.id}/role/`,
+      { method: 'POST', body: JSON.stringify({ role: rol }) });
+    setOcupado(null);
+    if (!ok) {
+      Swal.fire('No se pudo cambiar el rol',
+        res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.', 'error');
+      return;
+    }
+    await cargar();
+  };
+
+  const liberar = async (u, eq) => {
     /* Se pregunta con el nombre del equipo delante. Liberar al usuario
      * equivocado no da error: le deja entrar desde cualquier celular, y eso
      * es justo lo que esta pantalla existe para impedir. */
     const r = await Swal.fire({
       icon: 'warning',
-      title: `¿Liberar a ${f.usuario}?`,
-      html: `Su cuenta dejará de estar atada a <b>${f.equipo || 'ese equipo'}</b>.`
+      title: `¿Liberar a ${esc(u.username)}?`,
+      html: `Su cuenta dejará de estar atada a <b>${esc(eq.equipo || 'ese equipo')}</b>.`
         + '<br><br>El próximo celular desde el que entre quedará enlazado.',
       showCancelButton: true,
       confirmButtonText: 'Sí, liberar',
@@ -129,10 +391,10 @@ export default function EquiposEnlazados() {
     });
     if (!r.isConfirmed) return;
 
-    setLiberando(f.id);
-    const { ok, res } = await pedir(`${API}${f.id}/liberar/`,
+    setOcupado(u.id);
+    const { ok, res } = await pedir(`${API_EQUIPOS}${eq.id}/liberar/`,
       { method: 'POST', json: false });
-    setLiberando(null);
+    setOcupado(null);
     if (!ok) {
       Swal.fire('No se pudo liberar',
         res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.', 'error');
@@ -141,6 +403,8 @@ export default function EquiposEnlazados() {
     await cargar();
   };
 
+  /* ── Pintar ────────────────────────────────────────────────────────── */
+
   if (soporte === 'no-soportado') {
     return (
       <div className="eqe">
@@ -148,17 +412,18 @@ export default function EquiposEnlazados() {
         <div className="eqe-falta">
           <FaExclamationTriangle size={15} />
           <div>
-            <b>Este servidor todavía no enlaza cuentas con equipos.</b>
+            <b>Este servidor todavía no administra usuarios desde la web.</b>
             <p>
               Se habilita en el backend de PLUVIRA, que es quien emite el
-              token. Mientras tanto, cualquiera que tenga la clave puede
-              entrar desde cualquier celular.
+              token. Mientras tanto, las cuentas se gestionan desde la app.
             </p>
           </div>
         </div>
       </div>
     );
   }
+
+  const hayEquipos = !sinEquipos;
 
   return (
     <div className="eqe">
@@ -182,19 +447,30 @@ export default function EquiposEnlazados() {
         </div>
       )}
 
+      {sinEquipos && (
+        <div className="eqe-aviso eqe-aviso-mal">
+          <FaExclamationTriangle size={14} />
+          <div>{sinEquipos}</div>
+        </div>
+      )}
+
       <div className="eqe-barra">
         <div className="eqe-busca">
           <FaSearch size={12} />
-          <input type="text" value={busca} placeholder="Buscar usuario o equipo…"
+          <input type="text" value={busca} placeholder="Buscar usuario, nombre o equipo…"
             onChange={e => setBusca(e.target.value)} />
         </div>
         <div className="eqe-estados">
-          {ESTADOS.map(x => (
+          {FILTROS.map(x => (
             <button key={x.clave} type="button"
-              className={`eqe-chip${estado === x.clave ? ' act' : ''}`}
-              onClick={() => setEstado(x.clave)}>{x.texto}</button>
+              className={`eqe-chip${filtro === x.clave ? ' act' : ''}`}
+              onClick={() => setFiltro(x.clave)}>{x.texto}</button>
           ))}
         </div>
+        <button type="button" className="eqe-nuevo" onClick={crear}
+          disabled={cargando || ocupado === 'nuevo'}>
+          <FaUserPlus size={12} /> Nuevo usuario
+        </button>
         <button type="button" className="eqe-btn" onClick={cargar} disabled={cargando}>
           <FaSyncAlt size={11} /> Actualizar
         </button>
@@ -205,10 +481,9 @@ export default function EquiposEnlazados() {
 
       {!cargando && !fallo && visibles.length === 0 && (
         <div className="eqe-nota">
-          {busca ? 'Ningún usuario coincide con la búsqueda.'
-                 : estado === 'activos'
-                   ? 'Todavía no hay ninguna cuenta enlazada a un equipo.'
-                   : 'No hay nada en esta lista.'}
+          {busca || filtro !== 'todos'
+            ? 'Ningún usuario coincide con el filtro.'
+            : 'Todavía no hay usuarios con rol móvil.'}
         </div>
       )}
 
@@ -218,62 +493,101 @@ export default function EquiposEnlazados() {
             <thead>
               <tr>
                 <th>Usuario</th>
-                <th>Equipo</th>
-                <th>Enlazado</th>
-                <th>Último uso</th>
+                <th>Rol</th>
+                {hayEquipos && <th>Equipo</th>}
+                {hayEquipos && <th>Último uso</th>}
                 <th>Estado</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {visibles.map(f => (
-                <tr key={f.id} className={f.activo ? undefined : 'eqe-libre'}>
-                  <td>
-                    <b>{f.usuario}</b>
-                    {f.nombre_usuario && <div className="eqe-sub">{f.nombre_usuario}</div>}
-                  </td>
-                  <td>
-                    <span className="eqe-equipo">
-                      <FaMobileAlt size={11} /> {f.equipo || 'sin nombre'}
-                    </span>
-                    <div className="eqe-sub eqe-id">{f.plataforma} · {f.device_id}</div>
-                  </td>
-                  <td>{fecha(f.desde)}</td>
-                  <td>
-                    {fecha(f.ultimo_uso)}
-                    {desdeHace(f.ultimo_uso) && (
-                      <div className="eqe-sub">{desdeHace(f.ultimo_uso)}</div>
-                    )}
-                  </td>
-                  <td>
-                    {f.activo ? (
-                      <span className="eqe-tag eqe-tag-act">Enlazado</span>
-                    ) : (
-                      <>
-                        <span className="eqe-tag eqe-tag-lib">Liberado</span>
+              {visibles.map((u) => {
+                const eq = equipoDe.get(String(u.username).toLowerCase());
+                const enlazado = eq && eq.activo;
+                const trabajando = ocupado === u.id;
+                return (
+                  <tr key={u.id} className={u.is_active ? undefined : 'eqe-libre'}>
+                    <td>
+                      <b>{u.username}</b>
+                      {nombreDe(u) && <div className="eqe-sub">{nombreDe(u)}</div>}
+                      {u.email && <div className="eqe-sub eqe-id">{u.email}</div>}
+                    </td>
+
+                    <td>
+                      <span className="eqe-tag eqe-tag-rol">{u.role_label || '—'}</span>
+                      <div className="eqe-sub">
+                        {u.last_login ? `entró ${desdeHace(u.last_login)}` : 'nunca entró'}
+                      </div>
+                    </td>
+
+                    {hayEquipos && (
+                      <td>
+                        {enlazado ? (<>
+                          <span className="eqe-equipo">
+                            <FaMobileAlt size={11} /> {eq.equipo || 'sin nombre'}
+                          </span>
+                          <div className="eqe-sub eqe-id">{eq.plataforma} · {eq.device_id}</div>
+                        </>) : (
+                          <span className="eqe-sub">sin equipo enlazado</span>
+                        )}
                         {/* LA FIRMA. Sin ella, "¿quién liberó esta cuenta
                             tres veces este mes?" no tiene respuesta. */}
-                        {(f.liberado_por || f.liberado_en) && (
+                        {eq && !eq.activo && (eq.liberado_por || eq.liberado_en) && (
                           <div className="eqe-sub eqe-firma">
                             <FaHistory size={9} />{' '}
-                            {f.liberado_por || 'alguien'} · {fecha(f.liberado_en)}
+                            liberado por {eq.liberado_por || 'alguien'} · {fecha(eq.liberado_en)}
                           </div>
                         )}
-                      </>
+                      </td>
                     )}
-                  </td>
-                  <td className="eqe-acc">
-                    {f.activo && (
-                      <button type="button" className="eqe-liberar"
-                        disabled={liberando === f.id}
-                        onClick={() => liberar(f)}>
-                        <FaUnlock size={11} />
-                        {liberando === f.id ? ' Liberando…' : ' Liberar'}
-                      </button>
+
+                    {hayEquipos && (
+                      <td>
+                        {enlazado ? (<>
+                          {fecha(eq.ultimo_uso)}
+                          {desdeHace(eq.ultimo_uso) && (
+                            <div className="eqe-sub">{desdeHace(eq.ultimo_uso)}</div>
+                          )}
+                        </>) : '—'}
+                      </td>
                     )}
-                  </td>
-                </tr>
-              ))}
+
+                    <td>
+                      {u.is_active
+                        ? <span className="eqe-tag eqe-tag-act">Activo</span>
+                        : <span className="eqe-tag eqe-tag-lib">Desactivado</span>}
+                    </td>
+
+                    <td className="eqe-acc">
+                      <div className="eqe-acciones">
+                        <button type="button" className="eqe-mini" disabled={trabajando}
+                          title="Generar una clave nueva" onClick={() => resetear(u)}>
+                          <FaKey size={10} /> Clave
+                        </button>
+                        <button type="button" className="eqe-mini" disabled={trabajando || !roles.length}
+                          title="Cambiar el rol" onClick={() => cambiarRol(u)}>
+                          <FaUserTag size={10} /> Rol
+                        </button>
+                        <button type="button"
+                          className={`eqe-mini${u.is_active ? ' eqe-mini-mal' : ' eqe-mini-ok'}`}
+                          disabled={trabajando}
+                          title={u.is_active ? 'Desactivar la cuenta' : 'Reactivar la cuenta'}
+                          onClick={() => alternarActivo(u)}>
+                          {u.is_active ? <FaUserSlash size={10} /> : <FaUserCheck size={10} />}
+                          {u.is_active ? ' Desactivar' : ' Reactivar'}
+                        </button>
+                        {enlazado && (
+                          <button type="button" className="eqe-liberar" disabled={trabajando}
+                            onClick={() => liberar(u, eq)}>
+                            <FaUnlock size={11} />
+                            {trabajando ? ' …' : ' Liberar'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -284,11 +598,12 @@ export default function EquiposEnlazados() {
 
 const Cabecera = () => (
   <div className="eqe-cab">
-    <h2><FaMobileAlt /> Equipos enlazados</h2>
+    <h2><FaMobileAlt /> Usuarios y equipos</h2>
     <p>
-      Cada cuenta queda atada al celular desde el que se entró la primera vez.
-      Desde otro equipo el ingreso se rechaza, aunque la clave sea correcta.
-      Si alguien cambia de celular o lo pierde, libéralo aquí.
+      Las cuentas de la app, con su rol y el celular al que están atadas. Cada
+      cuenta queda enlazada al primer equipo desde el que se entró; si alguien
+      cambia de celular o lo pierde, libérala aquí. Las claves las genera el
+      servidor y solo se ven una vez.
     </p>
   </div>
 );
