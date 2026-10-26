@@ -64,6 +64,21 @@ const MENU = [
 
 const vistaInicial = (app) => (app === 'sentria' ? 'vigilancia' : 'mapa');
 
+/* Las vistas validas salen del propio menu: lo que no este aqui no se acepta
+   desde la URL, para que un hash cualquiera no deje la pantalla en blanco. */
+const VISTAS = new Set(MENU.filter((m) => !m.seccion).map((m) => m.clave));
+
+/* La pantalla abierta va en el hash (#equipos).
+
+   Antes la vista vivia solo en memoria: recargar desde cualquier pantalla
+   devolvia al mapa. Molesto siempre, y peor cuando lo que se queria era
+   justamente recargar para ver un cambio recien desplegado. Tambien hacia
+   imposible compartir el enlace de una pantalla concreta. */
+const vistaDeURL = () => {
+  const v = (window.location.hash || '').replace(/^#\/?/, '');
+  return VISTAS.has(v) ? v : null;
+};
+
 /* Lee ?app=pluvira | ?app=sentria de la URL. Sirve para abrir cada login
    directo en una pestaña nueva, saltando la intro. */
 const appDeURL = () => {
@@ -88,7 +103,8 @@ function App() {
   const [menuPerfilAbierto, setMenuPerfilAbierto] = useState(false);
   const [menuLateralAbierto, setMenuLateralAbierto] = useState(true);
   const [vistaActual, setVistaActual] = useState(
-    () => vistaInicial(appDeURL() || localStorage.getItem('appElegida') || 'pluvira')
+    () => vistaDeURL()
+      || vistaInicial(appDeURL() || localStorage.getItem('appElegida') || 'pluvira')
   );
 
   // Si se entro por URL directa, dejamos la eleccion guardada.
@@ -124,6 +140,21 @@ function App() {
     window.history.pushState({ nexhidra: app }, '');
     setMostrarIntro(false);
   };
+
+  /* El hash sigue a la pantalla abierta.
+
+     Va con replaceState y no asignando location.hash: asignarlo apila una
+     entrada de historial por cada clic del menu, y entonces el boton "atras"
+     dejaria de volver a la intro para ir recorriendo pantallas hacia atras
+     una por una. */
+  useEffect(() => {
+    if (mostrarIntro) return;
+    const actual = (window.location.hash || '').replace(/^#\/?/, '');
+    if (actual === vistaActual) return;
+    window.history.replaceState(
+      window.history.state, '',
+      `${window.location.pathname}${window.location.search}#${vistaActual}`);
+  }, [vistaActual, mostrarIntro]);
 
   // El boton "atras" vuelve a mostrar la intro.
   useEffect(() => {
