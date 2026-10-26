@@ -41,7 +41,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FaMobileAlt, FaSearch, FaSyncAlt, FaUnlock, FaExclamationTriangle,
   FaCheckCircle, FaHistory, FaUserPlus, FaKey, FaUserSlash, FaUserCheck,
-  FaUserTag,
+  FaUserTag, FaPen,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { pedir } from './sesion';
@@ -286,6 +286,74 @@ export default function EquiposEnlazados() {
     if (resp && resp.credentials) {
       await mostrarCredenciales(resp.credentials, 'Usuario creado');
     }
+  };
+
+  const editar = async (u) => {
+    const { value: datos } = await Swal.fire({
+      title: `Editar ${esc(u.username)}`,
+      html:
+        `<input id="e-user" class="swal2-input" placeholder="Usuario" maxlength="30"
+                value="${esc(u.username)}">
+         <input id="e-nom"  class="swal2-input" placeholder="Nombre" maxlength="30"
+                value="${esc(u.first_name || '')}">
+         <input id="e-ape"  class="swal2-input" placeholder="Apellido" maxlength="30"
+                value="${esc(u.last_name || '')}">
+         <input id="e-mail" class="swal2-input" placeholder="Correo" type="email"
+                value="${esc(u.email || '')}">
+         <p style="font-size:.85em;color:#64748b;margin-top:10px">
+           Cambiar el nombre de usuario no cierra su sesión, pero la próxima
+           vez tendrá que entrar con el nombre nuevo. Avísale.
+         </p>`,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+      preConfirm: () => {
+        const v = (id) => (document.getElementById(id).value || '').trim();
+        const username = v('e-user');
+        /* Misma regla que el servidor, para que el aviso diga qué se admite
+         * en vez de llegar un 400 seco despues del viaje. */
+        if (!/^[\w.@+-]{3,30}$/.test(username)) {
+          Swal.showValidationMessage(
+            'Usuario inválido: de 3 a 30 caracteres, sin espacios (letras, números, . @ + - _).');
+          return false;
+        }
+        return {
+          username,
+          first_name: v('e-nom'),
+          last_name: v('e-ape'),
+          email: v('e-mail'),
+        };
+      },
+    });
+    if (!datos) return;
+
+    const sinCambios = datos.username === u.username
+      && datos.first_name === (u.first_name || '')
+      && datos.last_name === (u.last_name || '')
+      && datos.email === (u.email || '');
+    if (sinCambios) return;
+
+    setOcupado(u.id);
+    const { ok, res } = await pedir(`${API_USUARIOS}${u.id}/update/`,
+      { method: 'POST', body: JSON.stringify(datos) });
+    setOcupado(null);
+
+    if (!ok) {
+      /* Un 404 aqui significa que el servidor todavia no tiene el parche de
+       * edicion, y el remedio es otro: aplicarlo, no mirar los datos. */
+      if (res && res.status === 404) {
+        Swal.fire('Este servidor no permite editar todavía',
+          'Falta aplicar el parche de edición de usuarios en PLUVIRA.', 'info');
+        return;
+      }
+      let detalle = res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.';
+      try { const j = await res.clone().json(); if (j.detail) detalle = j.detail; }
+      catch (err) { /* se queda el genérico */ }
+      Swal.fire('No se pudo guardar', detalle, 'error');
+      return;
+    }
+    await cargar();
   };
 
   const resetear = async (u) => {
@@ -575,6 +643,11 @@ export default function EquiposEnlazados() {
 
                     <td className="eqe-acc">
                       <div className="eqe-acciones">
+                        <button type="button" className="eqe-mini" disabled={trabajando}
+                          title="Corregir nombre, apellido, correo o usuario"
+                          onClick={() => editar(u)}>
+                          <FaPen size={10} /> Editar
+                        </button>
                         <button type="button" className="eqe-mini" disabled={trabajando}
                           title="Generar una clave nueva" onClick={() => resetear(u)}>
                           <FaKey size={10} /> Clave
