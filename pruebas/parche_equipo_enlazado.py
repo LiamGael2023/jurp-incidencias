@@ -175,10 +175,36 @@ from django.utils import timezone
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
 from .models import DispositivoAutorizado, IngresoSinEquipo
+from .permission import IsMobileRoleUser
+
+
+GRUPO_GERENCIA = 'mobile_gerencia'
+
+
+class EsGerencia(IsMobileRoleUser):
+    """Quien administra usuarios tambien administra sus equipos.
+
+    Estas dos vistas pedian IsAdminUser, o sea is_staff, mientras que crear
+    usuarios, resetear claves y cambiar roles lo autoriza el grupo
+    mobile_gerencia. La puerta menos peligrosa tenia la cerradura mas dura.
+
+    Repartir is_staff para abrirla tenia dos efectos que nadie queria: da
+    entrada al admin de Django, y ademas ESCONDE a esa persona de la propia
+    gestion de usuarios, porque MobileUserListView filtra is_staff=False.
+    Quien se daba el permiso para ver los equipos se quedaba sin poder ser
+    gestionado.
+
+    Se alinean las dos puertas con el mismo grupo.
+    """
+    message = 'Solo Gerencia puede ver y liberar los equipos enlazados.'
+
+    def has_permission(self, request, view):
+        if not super(EsGerencia, self).has_permission(request, view):
+            return False
+        return request.user.groups.filter(name=GRUPO_GERENCIA).exists()
 
 
 CORTADO = 'cortado'
@@ -399,7 +425,7 @@ def _fila(d):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([EsGerencia])
 def dispositivos(request):
     """Los equipos enlazados, para el panel.
 
@@ -430,7 +456,7 @@ def dispositivos(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([EsGerencia])
 def liberar(request, pk):
     """Suelta la cuenta de su equipo. Queda firmado quien y cuando."""
     d = DispositivoAutorizado.objects.filter(pk=pk).first()
