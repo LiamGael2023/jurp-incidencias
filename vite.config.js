@@ -10,7 +10,11 @@ import react from '@vitejs/plugin-react'
 //
 // Todo va contra nexhydro, que es el host que ya sabe repartir: /api al
 // contenedor de PLUVIRA y /vigapi al de vigilantes.
-const SERVIDOR = 'https://nexhydro.192.81.132.87.nip.io'
+//
+// El nombre de nip.io que había aquí sigue funcionando en el servidor —se
+// dejó en el server_name a propósito—, pero el dominio propio es el que va a
+// durar, y es el único que no delata la IP en cada petición de desarrollo.
+const SERVIDOR = 'https://nexhydro.jriegopresurizado.org.pe'
 
 export default defineConfig({
   plugins: [react()],

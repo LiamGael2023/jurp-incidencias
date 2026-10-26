@@ -91,19 +91,45 @@ tail -20 /var/www/envs/front/deploy.log
 
 ---
 
-## Cuando se migre el Linode viejo
+## El dominio propio
 
-El dominio definitivo es `nexhydro.jriegopresurizado.org.pe`. Créalo en tu panel
-de DNS apuntando a `192.81.132.87`, agrégalo al `server_name` de
-`nginx-front.conf` junto al de nip.io, y pide el certificado para los dos:
+El definitivo es `nexhydro.jriegopresurizado.org.pe`, registro **A** hacia
+`192.81.132.87`.
+
+**Cuidado con el comodín.** La zona `jriegopresurizado.org.pe` tiene un `*` que
+apunta al Linode viejo, con A y AAAA. Mientras no exista un registro explícito,
+`nexhydro` resuelve por ahí y certbot valida contra el servidor equivocado —que
+es como se perdió una tarde con el dominio raíz—. Al crear el registro
+explícito, el comodín deja de aplicarse a ese nombre **para todos los tipos**,
+así que el AAAA heredado desaparece solo. No hay que crear ningún AAAA.
+
+Antes de pedir el certificado, comprobar que ya propagó:
 
 ```bash
-sudo certbot --nginx -d nexhydro.192.81.132.87.nip.io -d nexhydro.jriegopresurizado.org.pe
+dig +short A    nexhydro.jriegopresurizado.org.pe   # -> 192.81.132.87
+dig +short AAAA nexhydro.jriegopresurizado.org.pe   # -> vacio
 ```
 
-Conviene dejar los dos nombres activos un tiempo: quien tenga guardado el de
-nip.io sigue entrando mientras el nuevo propaga. Después se puede quitar el de
-nip.io del `server_name`.
+Si el A todavía devuelve `45.33.106.197`, es el comodín: esperar. Bajar el TTL
+del registro a 30 s mientras se trabaja ahorra esperas.
+
+El nombre va en tres sitios más, aparte del `server_name` de este vhost:
+
+- `/var/www/envs/prod/.env` -> `ALLOWED_HOSTS` y `CSRF_TRUSTED_ORIGINS`, porque
+  `/api/` pasa `Host $host` al contenedor de PLUVIRA.
+- `/var/www/envs/vigilantes/config/settings.py` -> lo mismo para `/vigapi/`.
+- `vite.config.js` -> solo afecta a `npm run dev`.
+
+Y después:
+
+```bash
+sudo certbot --nginx --expand \
+  -d nexhydro.192.81.132.87.nip.io \
+  -d nexhydro.jriegopresurizado.org.pe
+```
+
+`--expand` amplía el certificado que ya existe en vez de crear otro. Los dos
+nombres se quedan activos: quien tenga guardado el de nip.io sigue entrando.
 
 Ahí ya puedes apagar el proyecto en Vercel.
 
