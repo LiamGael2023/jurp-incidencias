@@ -152,8 +152,8 @@ export default function EquiposEnlazados() {
     /* Las dos llamadas van en paralelo y se juzgan por separado: tienen
      * permisos distintos en el servidor y una puede fallar sin la otra. */
     const [u, e, r] = await Promise.all([
-      pedir(`${API_USUARIOS}list/`),
-      pedir(`${API_EQUIPOS}?estado=todos`),
+      pedir(`${API_USUARIOS}list/`, { callar: [403, 404] }),
+      pedir(`${API_EQUIPOS}?estado=todos`, { callar: [403, 404] }),
       pedir(`${API_USUARIOS}roles/`),
     ]);
     setCargando(false);
@@ -336,7 +336,7 @@ export default function EquiposEnlazados() {
 
     setOcupado(u.id);
     const { ok, res } = await pedir(`${API_USUARIOS}${u.id}/update/`,
-      { method: 'POST', body: JSON.stringify(datos) });
+      { method: 'POST', body: JSON.stringify(datos), callar: [404] });
     setOcupado(null);
 
     if (!ok) {

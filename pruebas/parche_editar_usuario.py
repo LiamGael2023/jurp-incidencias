@@ -166,10 +166,10 @@ def main():
             fallo = True
 
     if fallo:
-        print('\\nNO se aplico todo. Revisa lo marcado como MAL antes de reiniciar.')
+        print('\nNO se aplico todo. Revisa lo marcado como MAL antes de reiniciar.')
         sys.exit(1)
     if args.dry_run:
-        print('\\nSimulacro: no se escribio nada.')
+        print('\nSimulacro: no se escribio nada.')
     else:
         print('\\nListo. Reinicia jurp_web para que gunicorn lea el codigo nuevo.')
 

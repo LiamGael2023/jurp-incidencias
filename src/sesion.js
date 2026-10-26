@@ -132,10 +132,21 @@ export const TEXTOS = {
  * Devuelve { ok, res, datos, motivo }. `datos` solo viene si se pidió JSON
  * y llegó bien; así quien llama no tiene que repetir el try del .json(),
  * que es donde se escondía otro fallo mudo: un 200 con cuerpo roto.
+ *
+ * Opciones propias, además de las de fetch:
+ *   json    pedir y devolver JSON (por defecto, sí)
+ *   callar  códigos que quien llama ya explica, para no avisar dos veces
  */
 export async function pedir(url, opciones = {}) {
   const token = tokenActual();
-  const { json = true, ...resto } = opciones;
+  /* `callar` es una lista de codigos que quien llama ya trata por su cuenta.
+   * Sin esto salian dos mensajes para un solo hecho: la pantalla explicando
+   * con precision que pasa -"este servidor todavia no permite editar"- y
+   * encima el cartel generico de "respondio algo inesperado", que asusta y
+   * no aporta. Avisar de lo que nadie recoge es util; avisar de lo que ya
+   * esta recogido es ruido, y el ruido hace que se deje de mirar el cartel
+   * cuando por fin dice algo. */
+  const { json = true, callar = [], ...resto } = opciones;
 
   if (!token) {
     // Antes esto era `if (!token) return;` y la pantalla se quedaba vacía
@@ -159,7 +170,7 @@ export async function pedir(url, opciones = {}) {
 
   const motivo = clasificar(res, true);
   if (motivo !== 'ok') {
-    avisar(motivo, { url, status: res.status });
+    if (!callar.includes(res.status)) avisar(motivo, { url, status: res.status });
     return { ok: false, res, datos: null, motivo };
   }
 
