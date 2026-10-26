@@ -96,8 +96,8 @@ export const olvidarAvisos = () => ultimo.clear();
  * De una respuesta -o de la ausencia de ella-, qué pasó.
  *
  *   'ok'        llegó y vale
- *   'sesion'    el servidor no aceptó quién eres (401, o 403 con token)
- *   'permiso'   te conoce pero no te deja (403 sin token: no es la sesión)
+ *   'sesion'    el servidor no aceptó quién eres (401, o 403 sin token)
+ *   'permiso'   te conoce pero no te deja (403 con token: no es la sesión)
  *   'servidor'  el servidor está mal (5xx, incluido el 504 del proxy)
  *   'red'       no se llegó a hablar con él
  *   'raro'      cualquier otro código
@@ -106,7 +106,12 @@ export function clasificar(res, hayToken) {
   if (!res) return 'red';
   if (res.ok) return 'ok';
   if (res.status === 401) return 'sesion';
-  if (res.status === 403) return hayToken ? 'sesion' : 'permiso';
+  /* El 403 iba al reves. Con token, el servidor SABE quien eres y te niega
+   * el recurso: eso es permiso, no sesion. Sin token es DRF diciendo que no
+   * sabe quien eres, que sí es la sesion. Invertido, la pantalla de equipos
+   * enlazados mostraba a la vez "no eres administrador" y "vuelve a entrar",
+   * y mandaba a cerrar sesion a quien la tenia perfectamente bien. */
+  if (res.status === 403) return hayToken ? 'permiso' : 'sesion';
   if (res.status >= 500) return 'servidor';
   return 'raro';
 }
