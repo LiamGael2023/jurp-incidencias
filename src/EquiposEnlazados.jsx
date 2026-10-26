@@ -140,6 +140,10 @@ export default function EquiposEnlazados() {
   const [soporte, setSoporte] = useState('probando');   // 'ok' | 'no-soportado'
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState('todos');
+  /* El rol va en desplegable y no en chips como los demas filtros: los roles
+   * los define el servidor y pueden crecer, y cuatro chips mas en esa barra
+   * la parten en dos lineas. */
+  const [rol, setRol] = useState('');
   const [ocupado, setOcupado] = useState(null);         // id de la fila en curso
 
   const cargar = useCallback(async () => {
@@ -205,6 +209,7 @@ export default function EquiposEnlazados() {
     const q = busca.trim().toLowerCase();
     return usuarios.filter((u) => {
       const eq = equipoDe.get(String(u.username).toLowerCase());
+      if (rol && u.role !== rol) return false;
       if (filtro === 'activos' && !u.is_active) return false;
       if (filtro === 'inactivos' && u.is_active) return false;
       if (filtro === 'enlazados' && !(eq && eq.activo)) return false;
@@ -214,7 +219,7 @@ export default function EquiposEnlazados() {
               eq && eq.equipo]
         .some(v => String(v || '').toLowerCase().includes(q));
     });
-  }, [usuarios, equipoDe, busca, filtro]);
+  }, [usuarios, equipoDe, busca, filtro, rol]);
 
   const nombreDe = (u) => `${u.first_name || ''} ${u.last_name || ''}`.trim();
 
@@ -467,6 +472,16 @@ export default function EquiposEnlazados() {
               onClick={() => setFiltro(x.clave)}>{x.texto}</button>
           ))}
         </div>
+        {roles.length > 0 && (
+          <select className="eqe-rolsel" value={rol}
+            onChange={e => setRol(e.target.value)}
+            title="Filtrar por rol">
+            <option value="">Todos los roles</option>
+            {roles.map(r => (
+              <option key={r.code} value={r.code}>{r.label}</option>
+            ))}
+          </select>
+        )}
         <button type="button" className="eqe-nuevo" onClick={crear}
           disabled={cargando || ocupado === 'nuevo'}>
           <FaUserPlus size={12} /> Nuevo usuario
@@ -481,7 +496,7 @@ export default function EquiposEnlazados() {
 
       {!cargando && !fallo && visibles.length === 0 && (
         <div className="eqe-nota">
-          {busca || filtro !== 'todos'
+          {busca || filtro !== 'todos' || rol
             ? 'Ningún usuario coincide con el filtro.'
             : 'Todavía no hay usuarios con rol móvil.'}
         </div>
