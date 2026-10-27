@@ -36,6 +36,11 @@ const MENU = [
   { clave: 'mapa',         titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,  apps: ['pluvira'] },
   { clave: 'lista',        titulo: 'Incidentes',    icono: <FaListUl />,        apps: ['pluvira'] },
   { clave: 'vigilancia',   titulo: 'Vigilancia',    icono: <FaShieldAlt />,     apps: ['sentria'] },
+  // SENTRIA tiene su propio padrón: no comparte cuentas con el sistema de
+  // riego. Por eso es otra entrada de menú y no la misma pantalla con los
+  // mismos usuarios —son dos listas de personas distintas, aunque algunas
+  // sean la misma persona.
+  { clave: 'usuarios-sentria', titulo: 'Usuarios', icono: <FaUserTag />,        apps: ['sentria'], soloAdmin: true },
   { clave: 'estadisticas', titulo: 'Estadísticas',  icono: <FaChartPie />,      apps: ['pluvira'] },
   { clave: 'reportes',     titulo: 'Reportes',      icono: <FaFilePdf />,       apps: ['pluvira'] },
   { clave: 'maquinaria',   titulo: 'Maquinaria',    icono: <FaTruck />,         apps: ['pluvira'] },
@@ -296,6 +301,24 @@ function App() {
       <div className="maq">
         <RailGIS {...propsRail} />
         <div className="maq-main"><EquiposEnlazados /></div>
+      </div>
+    );
+  }
+
+  if (vistaActual === 'usuarios-sentria') {
+    return (
+      <div className="maq">
+        <RailGIS {...propsRail} />
+        <div className="maq-main">
+          {/* Mismo contrato, otro servidor. `apiEquipos={null}` no es «no
+              tengo permiso»: SENTRIA no ata cuentas a celulares, así que
+              esas columnas no existen aquí. */}
+          <EquiposEnlazados
+            apiUsuarios="/vigapi/mobile/users/"
+            apiEquipos={null}
+            sistema="SENTRIA"
+          />
+        </div>
       </div>
     );
   }

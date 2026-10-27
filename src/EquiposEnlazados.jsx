@@ -47,8 +47,19 @@ import Swal from 'sweetalert2';
 import { pedir } from './sesion';
 import './EquiposEnlazados.css';
 
-const API_EQUIPOS = '/api/v1/mobile/auth/dispositivos/';
-const API_USUARIOS = '/api/v1/mobile/users/';
+/* POR QUE ESTO SON PROPIEDADES Y NO CONSTANTES. La misma pantalla sirve a
+ * PLUVIRA y a SENTRIA. Son dos backends distintos —el de riego y el de
+ * vigilancia— con padrones separados, pero el servidor de vigilancia
+ * responde al MISMO contrato a propósito, así que lo único que cambia es
+ * la dirección y si hay equipos enlazados que enseñar.
+ *
+ * Duplicar el fichero habría costado menos hoy y más cada vez: dos sitios
+ * donde arreglar el mismo error, y dos maneras de crear una cuenta que se
+ * van separando sin que nadie lo decida. */
+const POR_DEFECTO = {
+  usuarios: '/api/v1/mobile/users/',
+  equipos: '/api/v1/mobile/auth/dispositivos/',
+};
 
 const fecha = (iso) => {
   if (!iso) return '—';
@@ -129,7 +140,16 @@ async function mostrarCredenciales(cred, titulo) {
   });
 }
 
-export default function EquiposEnlazados() {
+export default function EquiposEnlazados({
+  apiUsuarios = POR_DEFECTO.usuarios,
+  /* null significa «este sistema no enlaza equipos», que no es lo mismo que
+   * «no tienes permiso para verlos»: uno es cómo está hecho el sistema y el
+   * otro es un problema que se arregla pidiendo el permiso. Confundirlos
+   * dejaría un aviso permanente en SENTRIA diciendo que falta un permiso
+   * que no existe. */
+  apiEquipos = POR_DEFECTO.equipos,
+  sistema = 'PLUVIRA',
+} = {}) {
   const [usuarios, setUsuarios] = useState([]);
   const [equipos, setEquipos] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -152,9 +172,10 @@ export default function EquiposEnlazados() {
     /* Las dos llamadas van en paralelo y se juzgan por separado: tienen
      * permisos distintos en el servidor y una puede fallar sin la otra. */
     const [u, e, r] = await Promise.all([
-      pedir(`${API_USUARIOS}list/`, { callar: [403, 404] }),
-      pedir(`${API_EQUIPOS}?estado=todos`, { callar: [403, 404] }),
-      pedir(`${API_USUARIOS}roles/`),
+      pedir(`${apiUsuarios}list/`, { callar: [403, 404] }),
+      apiEquipos ? pedir(`${apiEquipos}?estado=todos`, { callar: [403, 404] })
+                 : Promise.resolve(null),
+      pedir(`${apiUsuarios}roles/`),
     ]);
     setCargando(false);
 
@@ -178,7 +199,11 @@ export default function EquiposEnlazados() {
     setUsuarios(u.datos && Array.isArray(u.datos.results) ? u.datos.results : []);
     setRoles(r.ok && r.datos && Array.isArray(r.datos.results) ? r.datos.results : []);
 
-    if (e.ok) {
+    if (e === null) {
+      /* Este sistema no enlaza equipos. No hay nada que avisar: las columnas
+       * sencillamente no van. */
+      setEquipos([]); setSinIdentificar(null); setSinEquipos('');
+    } else if (e.ok) {
       const d = e.datos || {};
       setEquipos(Array.isArray(d) ? d : (d.resultados || []));
       setSinIdentificar(typeof d.sin_identificar === 'number' ? d.sin_identificar : null);
@@ -189,7 +214,7 @@ export default function EquiposEnlazados() {
         ? 'No tienes permiso de administrador del servidor, así que no se muestra desde qué celular entra cada uno.'
         : 'No se pudo consultar los equipos enlazados.');
     }
-  }, []);
+  }, [apiUsuarios, apiEquipos]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -231,8 +256,16 @@ export default function EquiposEnlazados() {
         + 'así que no se puede elegir uno. Actualiza y vuelve a intentarlo.', 'warning');
       return;
     }
-    const opciones = roles
-      .map(r => `<option value="${esc(r.code)}">${esc(r.label)}</option>`).join('');
+    /* LA PRIMERA OPCION ESTA VACIA A PROPOSITO. Sin ella el desplegable
+     * nace con el primer rol seleccionado, y quien rellene los nombres y
+     * pulse Crear sin mirarlo le asigna ese rol sin haberlo decidido. En
+     * SENTRIA eso era grave: el servidor devuelve los grupos por nombre y el
+     * primero alfabéticamente es `mobile_gerencia`, así que un descuido
+     * creaba una cuenta capaz de administrar a todas las demás. */
+    const opciones =
+      '<option value="" disabled selected>— Elige el rol —</option>'
+      + roles.map(r => `<option value="${esc(r.code)}">${esc(r.label)}</option>`)
+             .join('');
 
     const { value: datos } = await Swal.fire({
       title: 'Nuevo usuario',
@@ -259,6 +292,13 @@ export default function EquiposEnlazados() {
             'Usuario inválido: de 3 a 30 caracteres, sin espacios (letras, números, . @ + - _).');
           return false;
         }
+        /* El rol se elige, no se hereda del orden de la lista. Dejarlo en
+         * blanco y que el servidor decida sería lo mismo que preseleccionar
+         * el primero, que es justo lo que esto viene a impedir. */
+        if (!document.getElementById('f-rol').value) {
+          Swal.showValidationMessage('Elige el rol que tendrá esta persona.');
+          return false;
+        }
         return {
           username,
           first_name: v('f-nom'),
@@ -271,7 +311,7 @@ export default function EquiposEnlazados() {
     if (!datos) return;
 
     setOcupado('nuevo');
-    const { ok, res, datos: resp } = await pedir(API_USUARIOS,
+    const { ok, res, datos: resp } = await pedir(apiUsuarios,
       { method: 'POST', body: JSON.stringify(datos) });
     setOcupado(null);
 
@@ -335,7 +375,7 @@ export default function EquiposEnlazados() {
     if (sinCambios) return;
 
     setOcupado(u.id);
-    const { ok, res } = await pedir(`${API_USUARIOS}${u.id}/update/`,
+    const { ok, res } = await pedir(`${apiUsuarios}${u.id}/update/`,
       { method: 'POST', body: JSON.stringify(datos), callar: [404] });
     setOcupado(null);
 
@@ -372,7 +412,7 @@ export default function EquiposEnlazados() {
     if (!r.isConfirmed) return;
 
     setOcupado(u.id);
-    const { ok, res, datos } = await pedir(`${API_USUARIOS}${u.id}/reset-password/`,
+    const { ok, res, datos } = await pedir(`${apiUsuarios}${u.id}/reset-password/`,
       { method: 'POST' });
     setOcupado(null);
 
@@ -404,7 +444,7 @@ export default function EquiposEnlazados() {
     if (!r.isConfirmed) return;
 
     setOcupado(u.id);
-    const { ok, res } = await pedir(`${API_USUARIOS}${u.id}/toggle-active/`,
+    const { ok, res } = await pedir(`${apiUsuarios}${u.id}/toggle-active/`,
       { method: 'POST' });
     setOcupado(null);
     if (!ok) {
@@ -436,7 +476,7 @@ export default function EquiposEnlazados() {
     if (!rol || rol === u.role) return;
 
     setOcupado(u.id);
-    const { ok, res } = await pedir(`${API_USUARIOS}${u.id}/role/`,
+    const { ok, res } = await pedir(`${apiUsuarios}${u.id}/role/`,
       { method: 'POST', body: JSON.stringify({ role: rol }) });
     setOcupado(null);
     if (!ok) {
@@ -465,7 +505,7 @@ export default function EquiposEnlazados() {
     if (!r.isConfirmed) return;
 
     setOcupado(u.id);
-    const { ok, res } = await pedir(`${API_EQUIPOS}${eq.id}/liberar/`,
+    const { ok, res } = await pedir(`${apiEquipos}${eq.id}/liberar/`,
       { method: 'POST', json: false });
     setOcupado(null);
     if (!ok) {
@@ -481,13 +521,13 @@ export default function EquiposEnlazados() {
   if (soporte === 'no-soportado') {
     return (
       <div className="eqe">
-        <Cabecera />
+        <Cabecera conEquipos={!!apiEquipos} />
         <div className="eqe-falta">
           <FaExclamationTriangle size={15} />
           <div>
             <b>Este servidor todavía no administra usuarios desde la web.</b>
             <p>
-              Se habilita en el backend de PLUVIRA, que es quien emite el
+              Se habilita en el backend de {sistema}, que es quien emite el
               token. Mientras tanto, las cuentas se gestionan desde la app.
             </p>
           </div>
@@ -496,11 +536,11 @@ export default function EquiposEnlazados() {
     );
   }
 
-  const hayEquipos = !sinEquipos;
+  const hayEquipos = !!apiEquipos && !sinEquipos;
 
   return (
     <div className="eqe">
-      <Cabecera />
+      <Cabecera conEquipos={!!apiEquipos} />
 
       {/* EL NUMERO QUE DECIDE SI SE PUEDE ENCENDER EL BLOQUEO. Son los que
           siguen con la app vieja; con el bloqueo activo, esos no entran. */}
@@ -530,7 +570,9 @@ export default function EquiposEnlazados() {
       <div className="eqe-barra">
         <div className="eqe-busca">
           <FaSearch size={12} />
-          <input type="text" value={busca} placeholder="Buscar usuario, nombre o equipo…"
+          <input type="text" value={busca}
+            placeholder={hayEquipos ? 'Buscar usuario, nombre o equipo…'
+                                    : 'Buscar usuario o nombre…'}
             onChange={e => setBusca(e.target.value)} />
         </div>
         <div className="eqe-estados">
@@ -684,14 +726,19 @@ export default function EquiposEnlazados() {
   );
 }
 
-const Cabecera = () => (
+const Cabecera = ({ conEquipos = true }) => (
   <div className="eqe-cab">
-    <h2><FaMobileAlt /> Usuarios y equipos</h2>
+    <h2>
+      {conEquipos ? <FaMobileAlt /> : <FaUserTag />}{' '}
+      {conEquipos ? 'Usuarios y equipos' : 'Usuarios'}
+    </h2>
     <p>
-      Las cuentas de la app, con su rol y el celular al que están atadas. Cada
-      cuenta queda enlazada al primer equipo desde el que se entró; si alguien
-      cambia de celular o lo pierde, libérala aquí. Las claves las genera el
-      servidor y solo se ven una vez.
+      Las cuentas de la app, con su rol.{' '}
+      {conEquipos && (
+        <>Cada cuenta queda enlazada al primer equipo desde el que se entró;
+        si alguien cambia de celular o lo pierde, libérala aquí.{' '}</>
+      )}
+      Las claves las genera el servidor y solo se ven una vez.
     </p>
   </div>
 );

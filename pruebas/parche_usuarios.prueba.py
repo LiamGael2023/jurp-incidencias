@@ -308,6 +308,29 @@ t("y la clave es larga", ns.get("LARGO_CLAVE", 0) >= 10,
   str(ns.get("LARGO_CLAVE")))
 
 
+# ── 4b. EL ORDEN DE LOS ROLES ────────────────────────────────────────────
+# Gerencia va ultima. El desplegable de la web arranca sin nada elegido, pero
+# si alguien quita esa opcion vacia, el primero queda preseleccionado: por
+# orden alfabetico seria mobile_gerencia, y un descuido crearia una cuenta
+# capaz de administrar a todas las demas.
+rx2 = __import__("re")
+m = rx2.search(r"key=lambda g: \((.+?)\)", mod)
+t("los roles no van en orden alfabetico a secas", m is not None)
+if m:
+    clave = eval("lambda g: (%s)" % m.group(1),
+                 {"GRUPO_GERENCIA": GER},
+                 {})
+    class G(object):
+        def __init__(self, n): self.name = n
+    nombres = [GER, 'operador_group', 'ssoma_group', 'supervisor_group',
+               'vigilante_group']
+    ordenados = [g.name for g in sorted([G(n) for n in nombres], key=clave)]
+    t("Gerencia queda al final", ordenados[-1] == GER, " ".join(ordenados))
+    t("y el primero es un rol sin poder", ordenados[0] != GER, ordenados[0])
+    t("los demas siguen en orden alfabetico",
+      ordenados[:-1] == sorted(ordenados[:-1]), " ".join(ordenados))
+
+
 # ── 5. urls.py ───────────────────────────────────────────────────────────
 t("entran las siete rutas",
   urls.count("_path_uw('mobile/users") == 7,

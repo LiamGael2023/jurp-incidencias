@@ -275,7 +275,15 @@ def usuarios_roles(request):
         return _negado()
     # Los grupos que existen, no una lista escrita a mano: si mañana se crea
     # otro rol en el admin, aparece solo.
-    grupos = Group.objects.all().order_by('name')
+    #
+    # GERENCIA VA ULTIMA, y no es cosmetica. El desplegable de la pantalla
+    # arranca sin nada elegido, pero si algun dia alguien quita esa opcion
+    # vacia, el primero de la lista queda preseleccionado: por orden
+    # alfabetico seria `mobile_gerencia`, y un descuido crearia una cuenta
+    # capaz de administrar a todas las demas. Que el rol mas poderoso no sea
+    # el primero es la segunda capa de esa misma defensa.
+    grupos = sorted(Group.objects.all(),
+                    key=lambda g: (g.name == GRUPO_GERENCIA, g.name))
     return Response({'results': [
         {'code': g.name, 'label': etiqueta_de(g.name)} for g in grupos]})
 

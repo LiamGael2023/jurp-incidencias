@@ -33,9 +33,22 @@ const res = (status, cuerpo = {}, ok_ = null) => ({
 // ── clasificar: cada caso tiene su nombre ────────────────────────────────
 ok(clasificar(res(200), true) === 'ok', '200 es ok');
 ok(clasificar(res(401), true) === 'sesion', '401 es la sesión');
-ok(clasificar(res(403), true) === 'sesion', '403 CON token también: te conoce y la rechaza');
-ok(clasificar(res(403), false) === 'permiso',
-   '403 SIN token no es la sesión, es permiso');
+/* EL 403 VA ASI, Y ESTA PRUEBA AFIRMABA LO CONTRARIO. Antes decía que un 403
+ * con token era la sesión, y por eso la pantalla de usuarios mandaba a volver
+ * a entrar a quien tenía la sesión perfectamente bien y solo le faltaba el
+ * permiso.
+ *
+ * Lo que manda es cómo responde el servidor, y se comprobó contra el de
+ * verdad: una llamada sin credenciales a /api/v1/mobile/auth/dispositivos/
+ * devolvió 401 con `codigo: not_authenticated`. Así que en estos backends el
+ * 401 es "no sé quién eres" y el 403 es "sé quién eres y no te dejo".
+ *
+ * Sin token un 403 sí es la sesión: es DRF con SessionAuthentication, que no
+ * manda WWW-Authenticate y responde 403 donde TokenAuthentication daría 401. */
+ok(clasificar(res(403), true) === 'permiso',
+   '403 CON token es permiso: te conoce y te niega el recurso');
+ok(clasificar(res(403), false) === 'sesion',
+   '403 SIN token sí es la sesión');
 ok(clasificar(res(500), true) === 'servidor', '500 es el servidor');
 ok(clasificar(res(504), true) === 'servidor',
    'y 504 también: es el proxy, no tu sesión');

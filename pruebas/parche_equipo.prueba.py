@@ -275,9 +275,18 @@ t("el enlace se borra si se borra el usuario, pero la firma no",
   "related_name='liberaciones'" in m and "SET_NULL" in m)
 
 # ── el panel ──
-t("el panel es solo para administradores",
-  mod.count("@permission_classes([IsAdminUser])") == 2,
-  str(mod.count("@permission_classes([IsAdminUser])")))
+# ANTES PEDIA IsAdminUser -is_staff- y ahora pide Gerencia. El cambio no es
+# aflojar: crear usuarios, que es mas peligroso, ya lo autorizaba
+# mobile_gerencia, mientras que ver y liberar equipos exigia ser
+# administrador del servidor. La puerta menos peligrosa tenia la cerradura
+# mas dura, y quien administraba cuentas no podia liberar un celular.
+t("el panel es solo para Gerencia",
+  mod.count("@permission_classes([EsGerencia])") == 2,
+  str(mod.count("@permission_classes([EsGerencia])")))
+t("y Gerencia se define por el grupo, no por is_staff",
+  "GRUPO_GERENCIA = 'mobile_gerencia'" in mod and "class EsGerencia" in mod)
+t("sigue sin ser abierto a cualquiera",
+  "AllowAny" not in mod and "@permission_classes([])" not in mod)
 t("el identificador va recortado", "def _corto" in mod)
 t("liberar dos veces no borra la primera firma",
   "ya_liberado" in mod and "HTTP_409_CONFLICT" in mod)
