@@ -1860,10 +1860,19 @@ export default function GestionCosteo({
                   <div className="tbl-text-muted">{detalle}</div>
                 </div>
                 {/* ══════════ PROGRAMADO ══════════
-                     Qué partidas del presupuesto ejecuta este sujeto. Se
-                     eligen aquí una vez y el parte diario elige solo entre
-                     ellas, en vez de entre las ochenta y tres de cinco obras
-                     distintas. */}
+                     Que partidas del presupuesto ejecuta este sujeto.
+
+                     SOLO PARA INCIDENCIAS. Una incidencia no tiene proyecto,
+                     asi que escribe aqui su propio presupuesto. Una actividad
+                     de obra si lo tiene: sus partidas se registran en
+                     Proyectos, y ofrecer aqui un "Anadir partida" invitaba a
+                     escribirlas dos veces en sitios distintos.
+
+                     Si una actividad ya tiene partidas elegidas de antes, se
+                     siguen viendo —en solo lectura— para no esconder lo que
+                     alguien configuro. Lo que desaparece es la invitacion a
+                     seguir anadiendo. */}
+                {(esIncidencia || progDetalle.length > 0) && (
                 <div className="cos-prog">
                   <div className="cos-prog-cab">
                     <span className="cos-prog-tit">
@@ -1890,17 +1899,6 @@ export default function GestionCosteo({
                           </button>
                         ))}
                       </span>
-                    )}
-                    {progSoporte === 'ok' && !bloqueado && !esIncidencia && (
-                      <button type="button" className="cos-prog-add"
-                        onClick={() => {
-                          setProgAbierto(a => !a);
-                          setProgErr({});
-                          setProgRuta(bajarSolo(partidas, []));
-                        }}>
-                        {progAbierto ? <><FaTimes size={10} /> Cancelar</>
-                                     : <><FaPlus size={10} /> Añadir partida</>}
-                      </button>
                     )}
                   </div>
 
@@ -1942,27 +1940,14 @@ export default function GestionCosteo({
                   )}
 
                   {progSoporte === 'ok' && !bloqueado
-                   && progDetalle.length === 0 && !progAbierto && (
+                   && progDetalle.length === 0 && !progAbierto
+                   && esIncidencia && (
                     <div className="cos-prog-nota">
-                      {/* LAS DOS RAMAS NO DICEN LO MISMO, Y NO ES UN MATIZ.
-                          Una incidencia no tiene proyecto, así que el
-                          selector del parte carga el presupuesto de TODAS
-                          las obras: avisar de eso es el motivo de este
-                          bloque. Una actividad de obra sí lo tiene y su
-                          selector filtra por obra, así que decirle "incluidas
-                          las de otras obras" era falso y asustaba sin
-                          motivo. */}
-                      {esIncidencia ? <>
-                        Sin partidas. Escribe aquí las que haga falta para
-                        atender este incidente; el parte diario solo ofrecerá
-                        esas. Mientras no haya ninguna, ofrece las{' '}
-                        {partidas.length} del presupuesto entero — incluidas
-                        las de otras obras.
-                      </> : <>
-                        Sin partidas. Mientras no elijas ninguna, el parte
-                        diario ofrece las {partidas.length} de esta obra. Elige
-                        aquí las de esta actividad y solo ofrecerá esas.
-                      </>}
+                      Sin partidas. Escribe aquí las que haga falta para
+                      atender este incidente; el parte diario solo ofrecerá
+                      esas. Mientras no haya ninguna, ofrece las{' '}
+                      {partidas.length} del presupuesto entero — incluidas
+                      las de otras obras.
                     </div>
                   )}
 
@@ -2027,24 +2012,8 @@ export default function GestionCosteo({
                     />
                   )}
 
-                  {progAbierto && !esIncidencia && (
-                    <div className="cos-prog-escalera">
-                      <EscaleraPartida
-                        partidas={partidas}
-                        camino={progRuta}
-                        onCamino={setProgRuta}
-                        valor=""
-                        ocultar={progDetalle.map(p => p.id)}
-                        onElegir={async (id) => {
-                          if (!id) return;
-                          const ok = await guardarProgramado(
-                            [...progDetalle.map(p => p.id), Number(id)]);
-                          if (ok) { setProgAbierto(false); setProgRuta([]); }
-                        }}
-                      />
-                    </div>
-                  )}
                 </div>
+                )}
 
                 {/* Rango de fechas: acota el costeo a un periodo concreto.
                     Útil para el informe semanal o de quincena. */}
