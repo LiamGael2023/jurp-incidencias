@@ -3792,6 +3792,34 @@ export default function GestionCosteo({
                 })()}
                 </>)}
 
+                {/* Solo en actividades de obra. Marca que la máquina llegó ya
+                    con combustible, es decir que estas horas se trabajaron con
+                    lo que traía y no hubo carga.
+                    Hace falta para no confundir dos cosas que en la hoja se
+                    ven igual: una línea sin carga porque nadie la apuntó, y
+                    una línea sin carga porque no hizo falta. La primera es un
+                    dato que falta; la segunda, un dato. */}
+                {!esIncidencia && (
+                  <div className="tbl-row tbl-mb-3">
+                    <div className="tbl-col">
+                      <label style={{ display:'flex', alignItems:'center', gap:'9px',
+                        fontSize:'13px', color:'#334155', fontWeight:600,
+                        cursor:'pointer', userSelect:'none', padding:'10px 12px',
+                        background: actForm.combustibleAbastecido ? '#f0fdf4' : '#f8fafc',
+                        border:'1px solid ' + (actForm.combustibleAbastecido ? '#bbf7d0' : '#e2e8f0'),
+                        borderRadius:'6px' }}>
+                        <input type="checkbox" checked={!!actForm.combustibleAbastecido}
+                          onChange={e => setActForm({ ...actForm, combustibleAbastecido: e.target.checked })}
+                          style={{ width:'15px', height:'15px', cursor:'pointer' }} />
+                        Combustible abastecido
+                        <span style={{ fontWeight:400, fontSize:'11.5px', color:'#64748b' }}>
+                          · la máquina ya venía con combustible para esta tarea
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
                 <div className="tbl-row tbl-mb-3">
                   <div className="tbl-col">
                     <label className="tbl-form-label">Observación de esta actividad <span style={{color:'#94a3b8', fontSize:'11px'}}>· opcional</span></label>

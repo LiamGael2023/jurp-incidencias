@@ -179,6 +179,11 @@ export const estadoInicialActividad = {
   // Numero del comprobante, solo en las unidades que lo piden (combustible).
   // Va en `medidas`, que es texto libre: sin columna nueva ni migracion.
   vale: '',
+  /* La maquina llego ya con combustible: estas horas se trabajaron con lo
+   * que traia y no hubo carga. Distingue dos cosas que en la hoja se ven
+   * igual: una linea sin carga porque nadie la apunto -un dato que falta- y
+   * una linea sin carga porque no hizo falta -un dato-. */
+  combustibleAbastecido: false,
   // Lo que sale de la grilla, ya calculado. Se guarda en la línea porque la
   // grilla necesita el catálogo de unidades para saber qué casillas cuentan,
   // y el PDF, los reportes y el avance no lo tienen a mano: así siguen
@@ -402,6 +407,7 @@ export const actividadesParaBackend = (lista) => (lista || []).map((a, i) => {
       cantidad: a.cantidad, largo: a.largo, ancho: a.ancho, area: a.area,
       coeficiente: a.coeficiente, nEstruc: a.nEstruc,
       metradoValor: a.metradoValor, vale: a.vale || '',
+      combustibleAbastecido: !!a.combustibleAbastecido,
     }),
   };
 });
