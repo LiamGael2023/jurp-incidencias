@@ -21,24 +21,39 @@ const TOMAS = [
   { id: 7, nombre: '10.6/7' },
 ];
 
-/* El resumen, copiado de su captura: la 10.2 muy baja, la 10.6/7 baja y el
+/* El resumen, CON LOS NOMBRES DE CAMPO DE VERDAD —copiados de una respuesta
+ * del servidor, no inventados—. Durante un rato estuvieron adivinados y
+ * los tres que importan fallaban: el caudal es `caudal_salida_reciente`, la
+ * turbidez lleva `_poza` detrás y la fecha es `last_timestamp`. Con los
+ * nombres de mentira esta prueba pasaba y la pantalla no funcionaba.
+ *
+ * Los valores son los de su captura: la 10.2 muy baja, la 10.6/7 baja y el
  * resto en su nivel. Los caudales en l/s, que es como se guardan. */
+const resumen = (toma, estado, caudal, nivel, turbidez, cuando, extra) => ({
+  toma,
+  estado_poza: estado,
+  caudal_salida_reciente: caudal,
+  nivel_poza: nivel,
+  turbidez_salida_poza: turbidez,
+  last_timestamp: cuando,
+  turno: 'Diurno',
+  nombre_operario: 'José Paredes',
+  completion: { expected: 23, percentage: 100, received: 23 },
+  missing_fields: [],
+  ...(extra || {}),
+});
+
 const RESUMEN = [
-  { id: 1, nombre: '10.2', estado_poza: 'Muy bajo', caudal_salida: '130.00',
-    desnivel_sedimentador: '5.00', turbidez_salida: '197.00',
-    ultima_lectura: '2026-10-26T16:00:00' },
-  { id: 2, nombre: '10.3 A', estado_poza: 'En su nivel', caudal_salida: '60.00',
-    desnivel_sedimentador: '0.00', turbidez_salida: '8.23',
-    ultima_lectura: '2026-10-26T16:00:00' },
-  { id: 3, nombre: '10.4', estado_poza: 'En su nivel', caudal_salida: '100.00',
-    desnivel_sedimentador: '0.00', turbidez_salida: '25.80',
-    ultima_lectura: '2026-10-27T04:00:00' },
-  { id: 5, nombre: '10.5', estado_poza: 'En su nivel', caudal_salida: '200.00',
-    desnivel_sedimentador: '0.00', turbidez_salida: '15.50',
-    ultima_lectura: '2026-10-27T04:00:00' },
-  { id: 7, nombre: '10.6/7', estado_poza: 'Bajo', caudal_salida: '619.00',
-    desnivel_sedimentador: '0.80', turbidez_salida: '16.30',
-    ultima_lectura: '2026-10-27T04:00:00' },
+  resumen('10.2', 'Muy bajo', 130, 5, 197, '2026-10-26T16:00:00-05:00'),
+  resumen('10.3 A', 'En su nivel', 60, 0, 8.23, '2026-10-26T16:00:00-05:00'),
+  resumen('10.4', 'En su nivel', 100, 0, 25.8, '2026-10-27T04:00:00-05:00'),
+  resumen('10.5', 'En su nivel', 200, 0, 15.5, '2026-10-27T04:00:00-05:00'),
+  /* Esta trae el día a medias: es la que comprueba que la tarjeta lo diga
+   * en vez de enseñar los números como si estuvieran completos. */
+  resumen('10.6/7', 'Bajo', 619, 0.8, 16.3, '2026-10-27T04:00:00-05:00', {
+    completion: { expected: 23, percentage: 61, received: 14 },
+    missing_fields: ['caudal_salida_poza'],
+  }),
 ];
 
 /* Las series llegan en la forma (b) —una serie por toma, con sus puntos—,
@@ -56,21 +71,21 @@ const serieDe = (nombre, base) => ({
   ],
 });
 
+/* Las claves son los nombres que el servidor dijo aceptar al rechazar uno
+ * inventado. No hay «caudal_total»: por eso la captación y la entrega se
+ * suman en el navegador, y por eso esa suma se prueba aparte. */
 const SERIES = {
-  caudal_ingreso: TOMAS.map((t, i) => serieDe(t.nombre, 100 + i * 50)),
-  caudal_salida: TOMAS.map((t, i) => serieDe(t.nombre, 60 + i * 40)),
+  caudal_ingreso_poza: TOMAS.map((t, i) => serieDe(t.nombre, 100 + i * 50)),
+  caudal_salida_poza: TOMAS.map((t, i) => serieDe(t.nombre, 60 + i * 40)),
   caudal_excedencia: [serieDe('10.6/7', 200)],
-  caudal_total: [serieDe('Q. de captación', 1000), serieDe('Q. entrega al Usuario', 900),
-    serieDe('Excedencia 10.6/7', 100)],
   /* Calidad de Agua. El canal va muy por encima de las tomas —197 NTU
    * contra 8–26—, que es justo la diferencia que el gráfico viejo esconde
    * poniéndole un segundo eje. */
-  turbidez_salida: TOMAS.map((t, i) => serieDe(t.nombre, 8 + i * 3)),
+  turbidez_salida_poza: TOMAS.map((t, i) => serieDe(t.nombre, 8 + i * 3)),
   turbidez_canal: [serieDe('Canal L10', 190)],
-  dosaje_floculante: TOMAS.map((t, i) => serieDe(t.nombre, 1 + i * 0.3)),
-  dosaje_c_organico: TOMAS.map((t, i) => serieDe(t.nombre, 2 + i * 0.2)),
-  dosaje_sulfato_ferrico: TOMAS.map((t, i) => serieDe(t.nombre, 0.5 + i * 0.1)),
-
+  ppm_floculante: TOMAS.map((t, i) => serieDe(t.nombre, 1 + i * 0.3)),
+  ppm_c_organico: TOMAS.map((t, i) => serieDe(t.nombre, 2 + i * 0.2)),
+  ppm_sulfato_ferrico: TOMAS.map((t, i) => serieDe(t.nombre, 0.5 + i * 0.1)),
 };
 
 window.localStorage.setItem('userToken', 'ficticio');
@@ -91,7 +106,10 @@ window.fetch = async (u) => {
   }
   if (url.includes('operadores/series/')) {
     const q = new URL(url, 'http://x').searchParams;
-    const s = SERIES[q.get('metrica')];
+    /* `metric`, como lo pide el servidor. Si la pantalla volviera a mandar
+     * `metrica`, aquí no encontraria nada y los graficos saldrian vacios:
+     * es lo que paso de verdad, y asi se nota. */
+    const s = SERIES[q.get('metric')];
     if (!Array.isArray(s)) return json(s || { results: [] });
     /* EL FILTRO TIENE QUE FILTRAR DE VERDAD. Si este servidor de mentira
      * devolviera siempre las siete tomas, la comprobación de que el color

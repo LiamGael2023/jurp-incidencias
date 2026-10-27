@@ -24,7 +24,7 @@ import {
   convierteCaudal, numero, campo, listaDe, sinTildes,
   normalizaTomas, normalizaResumen, normalizaSeries, normalizaVolumen,
   clasificaEstado, colorDeToma, parametros, MESES, cifra, momentoLegible,
-  ordenaCategorias, explica,
+  ordenaCategorias, explica, METRICAS, sumaSeries,
 } from '../src/datosHydro.js';
 
 const r = [];
@@ -151,20 +151,56 @@ const resumenMudo = normalizaResumen({
 ok(resumenMudo.ok === false,
    'un resumen del que no se reconoce ni un caudal ni una turbidez es un fallo');
 
-const resumenBueno = normalizaResumen({
+/* LA RESPUESTA DE VERDAD, copiada de /api/operadores/tomas/status-summary/.
+ *
+ * Esto estuvo adivinado durante un rato y las tres que importan fallaron:
+ * el caudal no se llama `caudal_salida` sino `caudal_salida_reciente`, la
+ * turbidez lleva `_poza` detrás, y la fecha es `last_timestamp`. Con los
+ * nombres inventados, las tarjetas salían con rayas en todo —que se lee
+ * como «no hubo lecturas»— aunque el servidor las estaba mandando. */
+const REAL_RESUMEN = {
   results: [{
-    nombre: '10.6/7', estado_poza: 'Bajo', caudal_salida: '619.00',
-    desnivel_sedimentador: '0.80', turbidez_salida: '16.30',
-    ultima_lectura: '2026-10-27T04:00:00Z',
+    nivel_poza: 5,
+    turbidez_salida_poza: 197,
+    turno: 'Diurno',
+    toma: '10.2',
+    caudal_salida_reciente: 130,
+    last_timestamp: '2026-10-26T16:00:00-05:00',
+    nombre_operario: 'José Paredes',
+    estado_poza: 'Muy bajo',
+    completion: { expected: 23, percentage: 100, received: 23 },
+    missing_fields: [],
   }],
-});
-ok(resumenBueno.ok && resumenBueno.datos[0].caudalSalida === 619,
-   'un resumen de verdad sí se lee');
-ok(resumenBueno.datos[0].estado === 'bajo', 'y clasifica el estado');
+};
+const rr = normalizaResumen(REAL_RESUMEN);
+ok(rr.ok, 'la respuesta de verdad del resumen se lee');
+const t0 = rr.datos[0];
+ok(t0.toma === '10.2', 'la toma', t0.toma);
+ok(t0.caudalSalida === 130, 'el caudal de salida', String(t0.caudalSalida));
+ok(t0.desnivel === 5, 'el desnivel', String(t0.desnivel));
+ok(t0.turbidez === 197, 'la turbidez', String(t0.turbidez));
+ok(t0.estado === 'muy-bajo', 'el estado clasificado');
 /* El texto guardado se conserva aparte del que se clasifica: si mañana el
- * servidor escribe «Nivel bajo» en vez de «Bajo», la tarjeta sigue
- * enseñando lo que dice el servidor y no lo que creemos entender. */
-ok(resumenBueno.datos[0].estadoTexto === 'Bajo', 'y guarda el texto original');
+ * servidor escribe «Nivel muy bajo», la tarjeta sigue enseñando lo que
+ * dice el servidor y no lo que creemos entender. */
+ok(t0.estadoTexto === 'Muy bajo', 'y el texto original, sin tocar');
+ok(/^26\/10\/2026 1[0-9]:00$/.test(momentoLegible(t0.ultima)),
+   'la última lectura', momentoLegible(t0.ultima));
+ok(t0.turno === 'Diurno' && t0.operario === 'José Paredes',
+   'el turno y el operario', `${t0.turno} · ${t0.operario}`);
+ok(t0.completado === 100 && t0.recibidas === 23 && t0.esperadas === 23,
+   'y cuántas lecturas se esperaban');
+
+/* El día a medias. La tarjeta solo avisa cuando falta algo; si avisara
+ * siempre, el aviso dejaría de leerse en las siete. */
+const aMedias = normalizaResumen({
+  results: [{ ...REAL_RESUMEN.results[0],
+    completion: { expected: 23, percentage: 61, received: 14 },
+    missing_tes: null, missing_fields: ['caudal_salida_poza'] }],
+});
+ok(aMedias.datos[0].completado === 61, 'un día incompleto se detecta');
+ok(aMedias.datos[0].faltantes[0] === 'caudal_salida_poza',
+   'y se sabe qué falta');
 
 const vacio = normalizaTomas({ results: [] });
 ok(vacio.ok === false, 'un catálogo de tomas vacío también se declara');
@@ -219,12 +255,33 @@ ok(vt.ok && vt.datos.categorias[0] === '10.2', 'volumen por tomas');
 
 /* ── 8. los parámetros ─────────────────────────────────────────────────── */
 
-const p = parametros({ metrica: 'caudal_salida', tomas: [1, 2], periodo: 'dia', fecha: '2026-10-26' });
+const p = parametros({ metrica: METRICAS.caudalSalida, tomas: [1, 2], periodo: 'dia', fecha: '2026-10-26' });
 ok(p.get('periodo') === 'dia' && p.get('period') === 'day',
    'el periodo va en los dos idiomas');
 ok(p.get('fecha') === '2026-10-26' && p.get('date') === '2026-10-26', 'la fecha también');
 ok(p.get('tomas') === '1,2', 'las tomas van separadas por comas');
-ok(p.get('metrica') === 'caudal_salida', 'y la métrica');
+
+/* LA METRICA VA SOLA Y SE LLAMA `metric`. Se mandaban tres nombres a la
+ * vez mientras no se había visto una respuesta; el servidor contestó
+ * «metric inválida» y listó los valores que acepta, así que el andamio
+ * sobra. Dejarlo puesto sería arrastrar para siempre una duda ya resuelta. */
+ok(p.get('metric') === 'caudal_salida_poza', 'la métrica, con su nombre bueno');
+ok(!p.has('metrica') && !p.has('campo'), 'y sin los nombres que se probaban');
+
+/* Y que sean los nombres que el servidor dijo aceptar, no los que yo me
+ * había inventado -`caudal_ingreso`, `dosaje_floculante`...-. */
+const VALIDAS = ['area', 'caudal_excedencia', 'caudal_ingreso_poza',
+  'caudal_inyeccion_coagulante_organico', 'caudal_inyeccion_floculante',
+  'caudal_inyeccion_sulfato_ferrico', 'caudal_salida_poza', 'consumo_beggie',
+  'consumo_laredo', 'embalse', 'mira_canal_excedencia', 'mira_purpur',
+  'nivel_poza', 'ppm_c_organico', 'ppm_floculante', 'ppm_sulfato_ferrico',
+  'reservorio_viru_ingreso', 'turbidez_canal', 'turbidez_salida_poza'];
+const fuera = Object.values(METRICAS).filter((m) => !VALIDAS.includes(m));
+ok(fuera.length === 0, 'las ocho métricas que se piden están en la lista buena',
+   fuera.join(', '));
+/* Los dosajes tienen dos familias: `caudal_inyeccion_*` es cuánto producto
+ * se inyecta y `ppm_*` la concentración. Las pantallas rotulan ppm. */
+ok(METRICAS.floculante.startsWith('ppm_'), 'los dosajes son los de ppm');
 ok([...parametros({}).keys()].length === 0, 'sin filtros no se manda nada');
 /* Sin tomas elegidas NO se manda `tomas=`: una lista vacía podría leerse en
  * el servidor como «ninguna toma» y devolver cero filas, cuando lo que
@@ -277,6 +334,36 @@ ok(!explica(401, 'Token inválido.', 'tomas/').includes('token de la sesión'),
 ok(explica(404, '', 'tomas/').includes('/api/operadores/tomas/'),
    'el 404 nombra la ruta que falló');
 ok(explica(500, '', 'tomas/').includes('500'), 'el 500 se dice tal cual');
+
+/* ── 8c. la suma de las tomas ──────────────────────────────────────────── */
+
+/* «Q. de captación» y «Q. entrega al Usuario» no existen como métrica: se
+ * suman las tomas en el navegador. Y ahí hay una trampa concreta. */
+const S = (nombre, datos) => ({ nombre, datos });
+
+ok(JSON.stringify(sumaSeries([S('a', [1, 2, 3]), S('b', [10, 20, 30])]))
+   === JSON.stringify([11, 22, 33]), 'suma punto a punto');
+
+/* DONDE FALTA UNA LECTURA, EL TOTAL NO SE SABE. Si a las 02:00 una toma de
+ * dos no ha reportado, sumar solo la que sí da un número más bajo que el
+ * total de verdad, y el gráfico dibuja una caída de caudal que no ocurrió.
+ * Un hueco es más honrado que un número equivocado. */
+const conHueco = sumaSeries([S('a', [1, null, 3]), S('b', [10, 20, 30])]);
+ok(conHueco[1] === null, 'una hora con un hueco deja el total en blanco');
+ok(conHueco[1] !== 20, 'y NO suma a medias, que parecería una caída real',
+   String(conHueco[1]));
+ok(conHueco[0] === 11 && conHueco[2] === 33, 'las horas completas sí suman');
+
+/* Pero una toma que no mide NUNCA no es un hueco: es que no participa.
+ * Contarla dejaría el total entero en blanco por una serie que nunca iba a
+ * traer nada. */
+const conMuerta = sumaSeries([S('a', [1, 2]), S('nunca', [null, null])]);
+ok(JSON.stringify(conMuerta) === JSON.stringify([1, 2]),
+   'una serie entera vacía se ignora, no envenena el total');
+
+ok(sumaSeries([]).length === 0, 'sin series no hay suma');
+ok(sumaSeries([S('a', [null, null])]).length === 0,
+   'y si todas están vacías, tampoco');
 
 /* ── 9. rótulos ────────────────────────────────────────────────────────── */
 

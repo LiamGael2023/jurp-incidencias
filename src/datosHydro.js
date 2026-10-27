@@ -104,22 +104,34 @@ export function listaDe(resp) {
 
 /* ── Los nombres que se prueban ────────────────────────────────────────── */
 
+/*
+ * LOS PRIMEROS DE CADA LISTA SON LOS DE VERDAD, vistos en una respuesta
+ * del servidor. Los que van detrás son lo que quedaba del andamio de
+ * cuando no se había visto ninguna: se dejan porque no estorban y cubren
+ * las rutas cuya respuesta todavía no se ha mirado, pero el primero manda.
+ */
 const N = {
   idToma: ['id', 'toma_id', 'pk', 'codigo_toma'],
-  nombreToma: ['nombre', 'toma', 'name', 'codigo', 'label', 'titulo',
+  nombreToma: ['toma', 'nombre', 'name', 'codigo', 'label', 'titulo',
     'descripcion', 'toma_nombre', 'nombre_toma'],
 
   estado: ['estado_poza', 'estado', 'status', 'nivel_estado', 'estado_nivel'],
-  caudalSalida: ['caudal_salida', 'caudal_de_salida', 'q_salida', 'salida',
-    'caudal_out', 'caudal'],
-  caudalIngreso: ['caudal_ingreso', 'caudal_de_ingreso', 'q_ingreso',
-    'ingreso', 'caudal_in'],
-  desnivel: ['desnivel_sedimentador', 'desnivel', 'desnivel_poza',
-    'nivel_poza', 'nivel'],
-  turbidez: ['turbidez_salida', 'turbidez_de_salida', 'turbidez', 'ntu',
+  caudalSalida: ['caudal_salida_reciente', 'caudal_salida_poza',
+    'caudal_salida', 'q_salida', 'salida', 'caudal_out', 'caudal'],
+  desnivel: ['nivel_poza', 'desnivel_sedimentador', 'desnivel',
+    'desnivel_poza', 'nivel'],
+  turbidez: ['turbidez_salida_poza', 'turbidez_salida', 'turbidez', 'ntu',
     'turbidez_out'],
-  ultima: ['ultima_lectura', 'ultima', 'fecha_hora', 'last_reading',
-    'fecha_lectura', 'hora_lectura', 'fecha', 'actualizado'],
+  ultima: ['last_timestamp', 'ultima_lectura', 'ultima', 'fecha_hora',
+    'last_reading', 'fecha_lectura', 'hora_lectura', 'fecha', 'actualizado'],
+
+  /* Estos no estaban en el diseño del sistema viejo: los manda el servidor
+   * y contestan «quién tomó esta lectura» y «está completa», que es lo
+   * primero que se pregunta cuando una toma sale en rojo. */
+  turno: ['turno'],
+  operario: ['nombre_operario', 'operario', 'operador'],
+  completion: ['completion', 'completitud'],
+  faltantes: ['missing_fields', 'campos_faltantes'],
 
   // Series
   categorias: ['categorias', 'categories', 'labels', 'etiquetas', 'x',
@@ -180,16 +192,31 @@ export function normalizaTomas(resp) {
 export function normalizaResumen(resp) {
   const lista = listaDe(resp);
   if (!lista.length) return fallo(resp, clavesDe(resp));
-  const datos = lista.map((o, i) => ({
-    id: campo(o, N.idToma) ?? i,
-    toma: String(campo(o, N.nombreToma) ?? `Toma ${i + 1}`),
-    estadoTexto: campo(o, N.estado) ?? null,
-    estado: clasificaEstado(campo(o, N.estado)),
-    caudalSalida: numero(campo(o, N.caudalSalida)),
-    desnivel: numero(campo(o, N.desnivel)),
-    turbidez: numero(campo(o, N.turbidez)),
-    ultima: campo(o, N.ultima) ?? null,
-  }));
+  const datos = lista.map((o, i) => {
+    const c = campo(o, N.completion) || {};
+    const faltan = campo(o, N.faltantes);
+    return {
+      id: campo(o, N.idToma) ?? campo(o, N.nombreToma) ?? i,
+      toma: String(campo(o, N.nombreToma) ?? `Toma ${i + 1}`),
+      estadoTexto: campo(o, N.estado) ?? null,
+      estado: clasificaEstado(campo(o, N.estado)),
+      caudalSalida: numero(campo(o, N.caudalSalida)),
+      desnivel: numero(campo(o, N.desnivel)),
+      turbidez: numero(campo(o, N.turbidez)),
+      ultima: campo(o, N.ultima) ?? null,
+      turno: campo(o, N.turno) ?? null,
+      operario: campo(o, N.operario) ?? null,
+      /* Cuántas de las lecturas que se esperaban hoy han llegado. Cuando no
+       * están todas, los números de la tarjeta son de un día a medias, y
+       * eso cambia cómo se leen: un caudal bajo puede ser caudal bajo o
+       * puede ser que falten horas. */
+      esperadas: numero(c.expected ?? c.esperadas),
+      recibidas: numero(c.received ?? c.recibidas),
+      completado: numero(c.percentage ?? c.porcentaje),
+      faltantes: Array.isArray(faltan) ? faltan
+        : (faltan ? [String(faltan)] : []),
+    };
+  });
   /* Si no se reconoció NINGUN caudal en NINGUNA tarjeta, los nombres no son
    * los que creemos y lo que se pintaría son siete tarjetas con guiones. Eso
    * es indistinguible de «hoy no hubo lecturas», así que se declara fallo y
@@ -463,6 +490,67 @@ export function colorDeToma(nombre, catalogo) {
 
 /* ── Los filtros, y cómo se mandan ─────────────────────────────────────── */
 
+/*
+ * LAS METRICAS QUE ACEPTA /api/operadores/series/, tal y como las listó el
+ * propio servidor al rechazar una inventada. Están todas, no solo las que
+ * se usan, para que se vea qué más hay disponible sin volver a preguntar:
+ *
+ *   area · caudal_excedencia · caudal_ingreso_poza ·
+ *   caudal_inyeccion_coagulante_organico · caudal_inyeccion_floculante ·
+ *   caudal_inyeccion_sulfato_ferrico · caudal_salida_poza ·
+ *   consumo_beggie · consumo_laredo · embalse · mira_canal_excedencia ·
+ *   mira_purpur · nivel_poza · ppm_c_organico · ppm_floculante ·
+ *   ppm_sulfato_ferrico · reservorio_viru_ingreso · turbidez_canal ·
+ *   turbidez_salida_poza
+ *
+ * Ojo con los dosajes: hay dos familias. `caudal_inyeccion_*` es cuánto
+ * producto se inyecta, y `ppm_*` es la concentración resultante. Las
+ * pantallas del sistema viejo rotulan «ppm», así que son estas.
+ */
+export const METRICAS = {
+  caudalIngreso: 'caudal_ingreso_poza',
+  caudalSalida: 'caudal_salida_poza',
+  excedencia: 'caudal_excedencia',
+  turbidezSalida: 'turbidez_salida_poza',
+  turbidezCanal: 'turbidez_canal',
+  floculante: 'ppm_floculante',
+  organico: 'ppm_c_organico',
+  sulfato: 'ppm_sulfato_ferrico',
+};
+
+/**
+ * Suma varias series punto a punto.
+ *
+ * DONDE FALTA UNA LECTURA, EL TOTAL NO SE SABE. Si a las 02:00 tres tomas
+ * de siete no han reportado, sumar las cuatro que sí da un número más bajo
+ * que el total de verdad, y el gráfico dibuja una caída de caudal que no
+ * ocurrió. Un hueco es más honrado que un número equivocado, así que
+ * cualquier nulo en esa hora deja la suma en nulo.
+ *
+ * Las series enteras vacías se ignoran: una toma que no mide nada nunca no
+ * es un hueco, es que no participa, y contarla dejaría el total vacío
+ * entero.
+ */
+export function sumaSeries(series) {
+  const vivas = (series || []).filter(
+    (s) => s.datos.some((v) => v !== null && v !== undefined),
+  );
+  if (!vivas.length) return [];
+  const largo = Math.max(...vivas.map((s) => s.datos.length));
+  const salida = [];
+  for (let i = 0; i < largo; i += 1) {
+    let total = 0;
+    let completo = true;
+    for (const s of vivas) {
+      const v = s.datos[i];
+      if (v === null || v === undefined) { completo = false; break; }
+      total += v;
+    }
+    salida.push(completo ? total : null);
+  }
+  return salida;
+}
+
 export const PERIODOS = [
   { clave: 'dia', titulo: 'Día', ingles: 'day' },
   { clave: 'semana', titulo: 'Semana', ingles: 'week' },
@@ -483,11 +571,11 @@ export const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
 export function parametros({ tomas, periodo, fecha, anio, toma, metrica } = {}) {
   const p = new URLSearchParams();
   if (metrica) {
-    /* Qué se quiere ver. `series/` sirve caudales, turbideces y dosajes, así
-     * que sin esto la ruta no sabe cuál de los tres. */
-    p.set('metrica', metrica);
+    /* `metric`, y solo `metric`. Se mandaban tres nombres a la vez mientras
+     * no se había visto una respuesta; el servidor contestó
+     * «metric inválida» y de paso listó los valores que acepta, así que el
+     * andamio sobra. Los nombres válidos están en METRICAS. */
     p.set('metric', metrica);
-    p.set('campo', metrica);
   }
   if (Array.isArray(tomas) && tomas.length) {
     const v = tomas.join(',');

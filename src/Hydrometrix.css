@@ -158,6 +158,19 @@
 }
 .hm-dato b small { font-weight: 500; color: var(--tinta-3); margin-left: 3px; }
 
+/* El día a medias y quién lo tomó: debajo de los datos, en voz baja. */
+.hm-parcial, .hm-pie {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 9px; font-size: 11.5px; line-height: 1.4;
+}
+.hm-parcial {
+  padding: 5px 8px; border-radius: 4px;
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+}
+.hm-parcial svg { flex-shrink: 0; font-size: 10px; }
+.hm-pie { color: var(--tinta-3); padding-left: 1px; }
+.hm-pie svg { flex-shrink: 0; font-size: 10px; color: #94a3b8; }
+
 /* ---------- filtros ---------- */
 .hm-campo { display: flex; flex-direction: column; gap: 4px; position: relative; min-width: 0; }
 .hm-campo label {

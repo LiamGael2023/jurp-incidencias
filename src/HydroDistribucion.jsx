@@ -20,13 +20,14 @@
 import { useMemo, useState } from 'react';
 import {
   FaWater, FaSyncAlt, FaTachometerAlt, FaLayerGroup, FaTint,
-  FaRegCalendarAlt, FaChartBar, FaDatabase,
+  FaRegCalendarAlt, FaChartBar, FaDatabase, FaUserClock,
   FaExclamationTriangle, FaCircle, FaArrowUp, FaExchangeAlt,
 } from 'react-icons/fa';
 import './Hydrometrix.css';
 import {
-  normalizaTomas, normalizaResumen, normalizaVolumen, parametros,
-  COLOR_ESTADO, ROTULO_ESTADO, momentoLegible, cifra, MESES,
+  normalizaTomas, normalizaResumen, normalizaVolumen, normalizaSeries,
+  parametros, COLOR_ESTADO, ROTULO_ESTADO, momentoLegible, cifra, MESES,
+  METRICAS, sumaSeries, convierteCaudal,
 } from './datosHydro';
 import {
   Tarjeta, Bloque, Grafico, Aviso, Ampliado, BarraGrafico, descargaCSV,
@@ -81,6 +82,29 @@ function TarjetaToma({ t }) {
             valor={cifra(t.turbidez)} unidad="NTU" />
       <Dato icono={<FaRegCalendarAlt />} rotulo="Última lectura"
             valor={momentoLegible(t.ultima)} />
+
+      {/* EL DIA A MEDIAS. El servidor dice cuántas lecturas se esperaban y
+          cuántas llegaron. Cuando no están todas, estos números son de un
+          día incompleto, y eso cambia cómo se leen: un caudal bajo puede
+          ser caudal bajo o pueden ser horas que faltan. Solo se enseña
+          cuando falta algo; si está completo, decirlo sería ruido en las
+          siete tarjetas. */}
+      {t.completado !== null && t.completado < 100 && (
+        <div className="hm-parcial">
+          <FaExclamationTriangle />
+          <span>
+            Día incompleto: {t.recibidas} de {t.esperadas} lecturas
+            {t.faltantes.length > 0 && ` · falta ${t.faltantes.slice(0, 3).join(', ')}`}
+          </span>
+        </div>
+      )}
+
+      {(t.operario || t.turno) && (
+        <div className="hm-pie">
+          <FaUserClock />
+          <span>{[t.turno, t.operario].filter(Boolean).join(' · ')}</span>
+        </div>
+      )}
     </article>
   );
 }
@@ -153,10 +177,10 @@ export default function HydroDistribucion() {
         <Bloque titulo="Caudales" icono={<FaWater />}>
           <div className="hm-rejilla-2">
             <PanelSerie titulo="Caudal de ingreso" icono={<FaTachometerAlt />}
-                        metrica="caudal_ingreso" catalogo={catalogo}
+                        metrica={METRICAS.caudalIngreso} catalogo={catalogo}
                         tomas={catalogo} recarga={recarga} />
             <PanelSerie titulo="Caudal de salida" icono={<FaTachometerAlt />}
-                        metrica="caudal_salida" catalogo={catalogo}
+                        metrica={METRICAS.caudalSalida} catalogo={catalogo}
                         tomas={catalogo} recarga={recarga} />
           </div>
           <div className="hm-rejilla-2">
@@ -164,13 +188,10 @@ export default function HydroDistribucion() {
                 leyenda, que el título ya dice cuál es. */}
             <PanelSerie titulo="Caudal de excedencia (toma 10.6/7)"
                         icono={<FaChartBar />} tipo="bar"
-                        metrica="caudal_excedencia" catalogo={catalogo}
+                        metrica={METRICAS.excedencia} catalogo={catalogo}
                         tomas={catalogo} conTomas={false}
                         colorFijo="#eda100" recarga={recarga} />
-            <PanelSerie titulo="Caudal total vs Excedencia"
-                        icono={<FaExchangeAlt />}
-                        metrica="caudal_total" catalogo={catalogo}
-                        tomas={catalogo} conTomas={false} recarga={recarga} />
+            <TotalVsExcedencia recarga={recarga} />
           </div>
         </Bloque>
 
@@ -192,6 +213,115 @@ export default function HydroDistribucion() {
         )}
       </div>
     </div>
+  );
+}
+
+/* ── Caudal total contra excedencia ────────────────────────────────────── */
+
+/**
+ * Lo que capta el sistema, lo que entrega y lo que se va por la excedencia.
+ *
+ * ESTE ES EL UNICO PANEL QUE CALCULA ALGO EN EL NAVEGADOR, y conviene
+ * saberlo. `series/` no tiene una métrica de «total»: las que ofrece son
+ * por toma. Así que captación y entrega salen de SUMAR las tomas —ingreso
+ * y salida respectivamente—, y la excedencia viene tal cual de la 10.6/7.
+ *
+ * Es una reconstrucción de lo que hace el sistema viejo, no una copia de su
+ * cuenta: si allí la captación sale de un medidor propio y no de la suma,
+ * los números no coincidirán. Por eso el panel lo dice en voz alta en vez
+ * de presentarlo como un dato del servidor. Si no cuadra con el gráfico
+ * viejo, el aviso es lo que hace que se note en vez de pasar en silencio.
+ */
+function TotalVsExcedencia({ recarga }) {
+  const f = useFiltros();
+  const [unidad, setUnidad] = useState('m3/h');
+  const [ampliado, setAmpliado] = useState(false);
+
+  const pIng = useMemo(() => parametros({
+    metrica: METRICAS.caudalIngreso, periodo: f.periodo, fecha: f.fecha,
+  }), [f.periodo, f.fecha]);
+  const pSal = useMemo(() => parametros({
+    metrica: METRICAS.caudalSalida, periodo: f.periodo, fecha: f.fecha,
+  }), [f.periodo, f.fecha]);
+  const pExc = useMemo(() => parametros({
+    metrica: METRICAS.excedencia, periodo: f.periodo, fecha: f.fecha,
+  }), [f.periodo, f.fecha]);
+
+  const ing = useDatos('series/', pIng, normalizaSeries, recarga);
+  const sal = useDatos('series/', pSal, normalizaSeries, recarga);
+  const exc = useDatos('series/', pExc, normalizaSeries, recarga);
+
+  const cargando = ing.cargando || sal.cargando || exc.cargando;
+  const error = ing.error || sal.error || exc.error;
+  const diagnostico = ing.diagnostico || sal.diagnostico || exc.diagnostico;
+
+  const vista = useMemo(() => {
+    if (!ing.datos || !sal.datos || !exc.datos) return null;
+    const cat = ing.datos.categorias;
+    const aUnidad = (xs) => xs.map(
+      (v) => (v === null ? null : convierteCaudal(v, unidad)),
+    );
+    return {
+      categorias: cat,
+      series: [
+        { nombre: 'Q. de captación', datos: aUnidad(sumaSeries(ing.datos.series)) },
+        { nombre: 'Q. entrega al Usuario', datos: aUnidad(sumaSeries(sal.datos.series)) },
+        {
+          nombre: 'Excedencia 10.6/7',
+          datos: aUnidad(exc.datos.series[0] ? exc.datos.series[0].datos : []),
+        },
+      ],
+    };
+  }, [ing.datos, sal.datos, exc.datos, unidad]);
+
+  const lienzo = (altura) => (
+    <Grafico tipo="line" altura={altura} unidad={unidad}
+             categorias={vista ? vista.categorias : []}
+             series={vista ? vista.series : []}
+             colores={['#1268C3', '#1baf7a', '#eda100']}
+             cargando={cargando} error={error} diagnostico={diagnostico} />
+  );
+
+  return (
+    <>
+      <Tarjeta
+        titulo="Caudal total vs Excedencia"
+        icono={<FaExchangeAlt />}
+        filtros={(
+          <>
+            <SelectorPeriodo id="pe-total" valor={f.periodo}
+                             onCambio={f.setPeriodo} />
+            <SelectorFecha id="fe-total" valor={f.fecha} periodo={f.periodo}
+                           onCambio={f.setFecha} />
+          </>
+        )}
+      >
+        <BarraGrafico
+          unidad={unidad} onUnidad={setUnidad}
+          onDescargar={vista ? () => descargaCSV(
+            `Total vs excedencia ${rotuloPeriodo(f.periodo, f.fecha)}`,
+            vista.categorias, vista.series, unidad,
+          ) : undefined}
+          onAmpliar={() => setAmpliado(true)}
+        />
+        {lienzo(300)}
+        {vista && (
+          <Aviso tono="info"
+                 texto={'Captación y entrega son la suma de las tomas —el '
+                   + 'servidor no sirve un total ya hecho—. La excedencia sí '
+                   + 'viene de la 10.6/7. En las horas en que falte alguna '
+                   + 'toma, el total queda en blanco en vez de sumar a '
+                   + 'medias.'} />
+        )}
+      </Tarjeta>
+
+      {ampliado && (
+        <Ampliado titulo={`Caudal total vs Excedencia · ${rotuloPeriodo(f.periodo, f.fecha)}`}
+                  onCerrar={() => setAmpliado(false)}>
+          {lienzo(560)}
+        </Ampliado>
+      )}
+    </>
   );
 }
 

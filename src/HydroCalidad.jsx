@@ -31,7 +31,7 @@ import {
   FaFlask, FaSyncAlt, FaTint, FaWater, FaVial, FaFillDrip,
 } from 'react-icons/fa';
 import './Hydrometrix.css';
-import { normalizaTomas, parametros } from './datosHydro';
+import { normalizaTomas, parametros, METRICAS } from './datosHydro';
 import {
   Bloque, Aviso, PanelSerie, FilaFiltros, useDatos, useFiltros,
   useEscalaCompartida,
@@ -42,9 +42,9 @@ import {
  * la 10.4 es del mismo color en el floculante, en el sulfato y en los
  * caudales de la otra pantalla. */
 const DOSAJES = [
-  { metrica: 'dosaje_floculante', titulo: 'Floculante', icono: <FaVial /> },
-  { metrica: 'dosaje_c_organico', titulo: 'C. Orgánico', icono: <FaFillDrip /> },
-  { metrica: 'dosaje_sulfato_ferrico', titulo: 'Sulfato Férrico', icono: <FaVial /> },
+  { metrica: METRICAS.floculante, titulo: 'Floculante', icono: <FaVial /> },
+  { metrica: METRICAS.organico, titulo: 'C. Orgánico', icono: <FaFillDrip /> },
+  { metrica: METRICAS.sulfato, titulo: 'Sulfato Férrico', icono: <FaVial /> },
 ];
 
 export default function HydroCalidad() {
@@ -124,12 +124,12 @@ export default function HydroCalidad() {
           </FilaFiltros>
           <div className="hm-rejilla-2">
             <PanelSerie titulo="Turbidez de salida por toma" icono={<FaTint />}
-                        metrica="turbidez_salida" catalogo={catalogo}
+                        metrica={METRICAS.turbidezSalida} catalogo={catalogo}
                         tomas={catalogo} esCaudal={false} unidadFija="NTU"
                         filtrosExternos={fNtu} escala={escalaActiva}
                         recarga={recarga} />
             <PanelSerie titulo="Canal fijo L10 (10.2)" icono={<FaWater />}
-                        metrica="turbidez_canal" catalogo={catalogo}
+                        metrica={METRICAS.turbidezCanal} catalogo={catalogo}
                         tomas={catalogo} conTomas={false} esCaudal={false}
                         unidadFija="NTU" colorFijo="#eda100"
                         filtrosExternos={fNtu} escala={escalaActiva}

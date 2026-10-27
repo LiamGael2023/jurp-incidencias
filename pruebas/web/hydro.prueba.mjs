@@ -67,6 +67,24 @@ const colores = await tarjetas.evaluateAll(
 ok(new Set(colores).size >= 3, 'los estados se distinguen entre sí',
    `${new Set(colores).size} colores`);
 
+/* EL DIA A MEDIAS. El servidor dice cuántas lecturas se esperaban y
+ * cuántas llegaron. Cuando faltan, los números de la tarjeta son de un día
+ * incompleto y eso cambia cómo se leen: un caudal bajo puede ser caudal
+ * bajo o pueden ser horas que faltan. */
+const incompleta = p.locator('.hm-toma').filter({ hasText: '10.6/7' });
+const aviso = incompleta.locator('.hm-parcial');
+ok(await aviso.count() === 1, 'la toma con lecturas a medias lo dice');
+ok((await aviso.innerText()).includes('14 de 23'),
+   'y dice cuántas de cuántas', (await aviso.innerText()).trim());
+
+/* Pero SOLO cuando falta algo. Un aviso en las siete tarjetas deja de
+ * leerse, y entonces tampoco avisa el día que importa. */
+ok(await p.locator('.hm-toma .hm-parcial').count() === 1,
+   'y las completas no lo dicen');
+
+ok((await tarjetas.first().innerText()).includes('José Paredes'),
+   'cada tarjeta dice quién tomó la lectura');
+
 /* ══════════ 3. el eje se ordena ══════════ */
 /* Las series llegan con las horas desordenadas a propósito. Si el eje
  * saliera en orden de llegada, el gráfico dibujaría una línea que baja y
@@ -183,6 +201,33 @@ ok(!!trio && new Set(trio).size === 3,
    'los tres agregados llevan tres colores distintos',
    (trio || []).join(' · '));
 ok(totalIdx >= 0, 'y el panel existe');
+
+/* LA SUMA, Y QUE SE DIGA QUE ES UNA SUMA. `series/` no sirve un total:
+ * captación y entrega salen de sumar las tomas en el navegador. Es una
+ * reconstrucción de lo que hace el sistema viejo, no su misma cuenta, así
+ * que el panel tiene que decirlo: si no cuadra con el gráfico de allí, lo
+ * que hace que se note es este aviso. */
+const panelTotal = p.locator('.hm-tarjeta').filter({ hasText: 'Caudal total vs' }).first();
+const notaSuma = panelTotal.locator('.hm-aviso-info');
+ok(await notaSuma.count() === 1, 'el panel del total avisa de que suma');
+ok((await notaSuma.innerText()).includes('suma de las tomas'),
+   'y dice exactamente qué suma');
+
+/* Y que de verdad sume: el total tiene que quedar muy por encima de
+ * cualquier toma suelta. Si la suma no ocurriera, el eje se parecería al
+ * del gráfico de al lado. */
+const topeDe = async (filtro) => {
+  const n = await p.locator('.hm-tarjeta').filter({ hasText: filtro }).first()
+    .locator('.apexcharts-canvas')
+    .evaluate((c) => [...c.querySelectorAll('.apexcharts-yaxis text')]
+      .map((e) => parseFloat(((e.querySelector('tspan') || e).textContent || '')
+        .replace(/[^\d.-]/g, ''))).filter(Number.isFinite));
+  return Math.max(...n);
+};
+const topeUna = await topeDe('Caudal de ingreso');
+const topeTotal = await topeDe('Caudal total vs');
+ok(topeTotal > topeUna * 2, 'el total está muy por encima de una toma sola',
+   `una ${topeUna} · total ${topeTotal}`);
 
 /* ══════════ 7. ampliar ══════════ */
 await salida.locator('.hm-barra-der .hm-icono').last().click();
