@@ -525,7 +525,56 @@ export function parametros({ tomas, periodo, fecha, anio, toma, metrica } = {}) 
 export const BASE_HYDRO = '/api/operadores';
 
 /**
- * Pide una ruta y devuelve `{ ok, estado, cuerpo, error }`.
+ * Qué significa cada fallo, dicho de manera que lleve al arreglo.
+ *
+ * EL 403 DE DRF SON DOS COSAS DISTINTAS, y confundirlas cuesta horas:
+ *
+ *   · «No tienes permiso para realizar esta acción» → el token SE ACEPTO y
+ *     el usuario entró; lo que falla es la clase de permiso de la vista.
+ *     Se arregla en el servidor, dándole el permiso a esa cuenta.
+ *
+ *   · «No se proveyeron las credenciales» → el token NO se miró siquiera.
+ *     Pasa cuando la vista solo lleva SessionAuthentication, que es lo
+ *     normal en una vista escrita para las páginas del propio sistema: la
+ *     cabecera `Authorization: Token ...` se ignora y DRF responde 403 en
+ *     vez de 401 porque no hay esquema que pedir. No es un problema de
+ *     permisos y no se arregla tocando grupos: hay que añadir
+ *     TokenAuthentication a esas vistas.
+ *
+ * Por eso el mensaje del servidor se enseña SIEMPRE, pegado al nuestro.
+ */
+export function explica(estado, detalle, ruta) {
+  const d = sinTildes(detalle);
+  const sinCredenciales = d.includes('no se proveyeron')
+    || d.includes('not provided') || d.includes('no fueron proporcionadas');
+  /* Un token que el servidor mira y rechaza SI es sesión caducada, y eso se
+   * arregla volviendo a entrar. Mezclarlo con lo anterior mandaría a tocar
+   * el servidor por algo que se resuelve con un login. */
+  const tokenMalo = d.includes('invalid') || d.includes('invalido')
+    || d.includes('caduc') || d.includes('expir');
+
+  if (estado === 401 && tokenMalo) {
+    return 'La sesión caducó o el token ya no vale. Vuelve a entrar.';
+  }
+  if (estado === 401 || (estado === 403 && sinCredenciales)) {
+    return 'Esta ruta no está aceptando el token de la sesión. '
+      + 'Si acabas de entrar, lo más probable es que solo admita sesión de '
+      + 'navegador y haya que añadirle autenticación por token.';
+  }
+  if (estado === 403) {
+    return 'Tu cuenta entró, pero esta ruta no te deja ver sus datos.';
+  }
+  if (estado === 404) {
+    return `La ruta /api/operadores/${ruta} no existe en el servidor.`;
+  }
+  if (estado >= 500) {
+    return `El servidor falló al preparar estos datos (${estado}).`;
+  }
+  return `El servidor respondió ${estado}.`;
+}
+
+/**
+ * Pide una ruta y devuelve `{ ok, estado, cuerpo, detalle, error }`.
  *
  * No lanza: una pantalla con seis paneles no puede caerse entera porque uno
  * de los seis responda mal. Cada panel enseña lo suyo.
@@ -558,10 +607,9 @@ export async function pide(ruta, params) {
       ok: false,
       estado: r.status,
       cuerpo,
-      error: r.status === 401 ? 'La sesión caducó. Vuelve a entrar.'
-        : r.status === 403 ? 'Tu cuenta no tiene permiso para ver esto.'
-          : r.status === 404 ? `La ruta /api/operadores/${ruta} no existe en el servidor.`
-            : `El servidor respondió ${r.status}. ${detalle}`,
+      detalle,
+      error: `${explica(r.status, detalle, ruta)}${
+        detalle ? ` · El servidor dice: «${detalle}»` : ''}`,
     };
   }
   if (cuerpo === null) {

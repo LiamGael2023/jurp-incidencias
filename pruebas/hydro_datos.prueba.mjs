@@ -24,7 +24,7 @@ import {
   convierteCaudal, numero, campo, listaDe, sinTildes,
   normalizaTomas, normalizaResumen, normalizaSeries, normalizaVolumen,
   clasificaEstado, colorDeToma, parametros, MESES, cifra, momentoLegible,
-  ordenaCategorias,
+  ordenaCategorias, explica,
 } from '../src/datosHydro.js';
 
 const r = [];
@@ -230,6 +230,36 @@ ok([...parametros({}).keys()].length === 0, 'sin filtros no se manda nada');
  * el servidor como «ninguna toma» y devolver cero filas, cuando lo que
  * quiere decir la pantalla es «todas». */
 ok(!parametros({ tomas: [] }).has('tomas'), '«todas» no manda la lista vacía');
+
+/* ── 8b. qué significa cada fallo ──────────────────────────────────────── */
+
+/* LOS DOS 403. El de DRF significa cosas opuestas según lo que diga el
+ * detalle, y confundirlas manda a arreglar el sitio equivocado: uno se
+ * resuelve dándole un permiso a la cuenta y el otro añadiendo
+ * TokenAuthentication a la vista. Ningún grupo arregla el segundo. */
+const e403permiso = explica(403, 'No tiene permiso para realizar esta acción.', 'tomas/');
+ok(e403permiso.includes('entró'),
+   '403 con «no tiene permiso» habla de la cuenta', e403permiso.slice(0, 48));
+
+const e403sin = explica(403, 'Las credenciales de autenticación no se proveyeron.', 'tomas/');
+ok(e403sin.includes('token'),
+   '403 con «no se proveyeron» habla del token, no de la cuenta',
+   e403sin.slice(0, 48));
+ok(e403permiso !== e403sin, 'y los dos mensajes son distintos');
+
+const e403ingles = explica(403, 'Authentication credentials were not provided.', 'tomas/');
+ok(e403ingles === e403sin, 'da igual si el servidor responde en inglés');
+
+/* Un token mirado y rechazado SI es sesión caducada: eso se arregla
+ * volviendo a entrar, no tocando el servidor. */
+ok(explica(401, 'Token inválido.', 'tomas/').includes('Vuelve a entrar'),
+   '401 con «token inválido» manda a volver a entrar');
+ok(!explica(401, 'Token inválido.', 'tomas/').includes('token de la sesión'),
+   'y no manda a tocar el servidor');
+
+ok(explica(404, '', 'tomas/').includes('/api/operadores/tomas/'),
+   'el 404 nombra la ruta que falló');
+ok(explica(500, '', 'tomas/').includes('500'), 'el 500 se dice tal cual');
 
 /* ── 9. rótulos ────────────────────────────────────────────────────────── */
 
