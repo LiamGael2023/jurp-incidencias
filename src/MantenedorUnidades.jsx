@@ -51,13 +51,21 @@ const DIMS = [
   { campo: 'usa_coeficiente', corto: 'coef.',  largo: 'Coeficiente' },
 ];
 
+/* El horómetro NO es una casilla de medida: no multiplica nada. Dice si la
+ * línea de un parte de maquinaria lleva tramo de horómetro. El combustible
+ * no: no es trabajo de la máquina, es lo que se le echó. Va en su propio
+ * grupo para que no parezca un factor más de la fórmula. */
+const OTRAS = [
+  { campo: 'usa_horometro', corto: 'horóm.', largo: 'Lleva horómetro' },
+];
+
 /* Unidad recién nacida: sin dimensiones y con coeficiente, que es como está
  * el Excel para diecisiete de las veinte. Lo normal es que la nueva también
  * se cuente de a una. */
 const VACIA = {
   codigo: '', nombre: '',
   usa_largo: false, usa_ancho: false, usa_altura: false,
-  usa_area: false, usa_coeficiente: true,
+  usa_area: false, usa_coeficiente: true, usa_horometro: true,
 };
 
 export default function MantenedorUnidades({ onCerrar, onCambio }) {
@@ -120,7 +128,8 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
     return porDefecto;
   };
 
-  const soloDims = (o) => DIMS.reduce((a, d) => ({ ...a, [d.campo]: !!o[d.campo] }), {});
+  const soloDims = (o) => [...DIMS, ...OTRAS]
+    .reduce((a, d) => ({ ...a, [d.campo]: !!o[d.campo] }), {});
 
   const crear = async () => {
     const codigo = nueva.codigo.trim();
@@ -198,6 +207,16 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
     );
   };
 
+  /* Se marca la EXCEPCION, no la norma: casi todas llevan horómetro, y
+   * ponérselo a las diecinueve para que se vea la que no lo lleva es ruido
+   * que esconde justo el dato que importa. */
+  const SinHorometro = ({ u }) => (!u.usa_horometro ? (
+    <span style={{ ...pastilla, background:'#fef3c7', color:'#92400e' }}
+      title="Su línea en un parte de maquinaria no pide horómetro ni horas">
+      sin horómetro
+    </span>
+  ) : null);
+
   /* Las cinco casillas en modo edición. El mismo bloque sirve para el alta y
    * para corregir, que es lo que evita que se separen con el tiempo. */
   const Marcar = ({ valor, onMarcar }) => (
@@ -208,6 +227,16 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
       {DIMS.map(d => (
         <label key={d.campo} style={{ display:'inline-flex', alignItems:'center',
           gap:'5px', fontSize:'12.5px', color:'#475569', cursor:'pointer' }}>
+          <input type="checkbox" checked={!!valor[d.campo]}
+            onChange={e => onMarcar({ ...valor, [d.campo]: e.target.checked })} />
+          {d.largo}
+        </label>
+      ))}
+      <span style={{ borderLeft:'1px solid #e2e8f0', height:'18px' }} />
+      {OTRAS.map(d => (
+        <label key={d.campo} style={{ display:'inline-flex', alignItems:'center',
+          gap:'5px', fontSize:'12.5px', color:'#475569', cursor:'pointer' }}
+          title="En un parte de maquinaria, si la línea pide tramo de horómetro y horas">
           <input type="checkbox" checked={!!valor[d.campo]}
             onChange={e => onMarcar({ ...valor, [d.campo]: e.target.checked })} />
           {d.largo}
@@ -360,7 +389,9 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
                             {u.nombre || <span style={{ color:'#94a3b8' }}>sin nombre</span>}
                             {!u.activo && <span style={etiqueta}>desactivada</span>}
                           </td>
-                          <td style={td}><Casillas u={u} /></td>
+                          <td style={td}>
+                            <Casillas u={u} /> <SinHorometro u={u} />
+                          </td>
                           <td style={{ ...td, textAlign:'right', whiteSpace:'nowrap' }}>
                             <button
                               onClick={() => { setError(''); setEditando({ ...u }); }}
@@ -393,6 +424,11 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
               dimensiones a propósito: el volumen sale de largo × ancho ×
               altura o de área × altura, según lo que se haya medido en
               campo.
+              <br />
+              <b>Lleva horómetro</b> es aparte: no multiplica nada. Dice si, en
+              un parte de maquinaria, la línea pide tramo de horómetro y horas
+              efectivas. El combustible no las lleva —no es trabajo de la
+              máquina, es lo que se le echó—.
               <br />
               Desactivar no borra nada: la unidad deja de ofrecerse para lo
               nuevo y las partidas que ya la usan se siguen entendiendo. El

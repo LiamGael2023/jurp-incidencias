@@ -138,7 +138,6 @@ export default function GestionCosteo({
    * Se eligen UNA vez aquí arriba y a partir de ahí el parte elige solo entre
    * ellas. */
   const [progDetalle, setProgDetalle] = useState([]);   // del servidor
-  const [progRuta, setProgRuta] = useState([]);         // escalera del añadir
   const [progAbierto, setProgAbierto] = useState(false);
   const [progGuardando, setProgGuardando] = useState(false);
   const [progAviso, setProgAviso] = useState(null);
@@ -221,7 +220,7 @@ export default function GestionCosteo({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!abierto || !sujeto || !sujeto.id) return;
-    setProgDetalle([]); setProgRuta([]); setProgAbierto(false);
+    setProgDetalle([]); setProgAbierto(false);
     setProgAviso(null); setProgSoporte('cargando');
     cargarProgramado();
   }, [abierto, sujeto && sujeto.id]);
@@ -929,6 +928,19 @@ export default function GestionCosteo({
    * viene de Excel y ahí conviven «m3», «M3» y «m³» para lo mismo. Devuelve
    * null si no hay ninguna: esa partida usa una unidad que nadie dio de alta,
    * y la pantalla lo dice en vez de quedarse sin casillas. */
+  /* ¿Esta línea lleva tramo de horómetro? Lo dice la unidad de su partida.
+   *
+   * Sin partida elegida todavía se asume que sí: es el caso normal, y es
+   * mejor que los campos aparezcan al elegir la partida a que desaparezcan.
+   * Y una unidad que no está en el catálogo también lo lleva, porque lo
+   * contrario sería dejar de pedir horas por un dato que falta. */
+  const llevaHorometro = (() => {
+    if (!partidaDeLaLinea) return true;
+    const u = catUnidades.find(
+      x => normaUnidad(x.codigo) === normaUnidad(partidaDeLaLinea.unidad));
+    return u ? u.usa_horometro !== false : true;
+  })();
+
   const unidadDelCatalogo = (codigo) => {
     const c = normaUnidad(codigo);
     if (!c) return null;
@@ -937,8 +949,13 @@ export default function GestionCosteo({
   const abrirNuevaActividad = () => {
     // El horómetro encadena: la tarea siguiente arranca donde terminó la
     // anterior. La primera parte del HM Fin del último parte de la máquina.
-    const previo = actividades.length
-      ? actividades[actividades.length - 1].hmFin
+    /* La última que TENGA horómetro, no la última a secas: entre medias
+     * puede haber una carga de combustible, que no lo lleva, y encadenar
+     * desde ella dejaría el campo vacío y rompería la cadena. */
+    const ultimaConHm = [...actividades].reverse()
+      .find(x => x.hmFin !== '' && x.hmFin != null);
+    const previo = ultimaConHm
+      ? ultimaConHm.hmFin
       : (nuevoRecurso.hmInicio !== '' && nuevoRecurso.hmInicio != null ? String(nuevoRecurso.hmInicio) : '');
     // Hereda la zona del parte para no volver a escribirla en cada línea.
     setActForm({ ...estadoInicialActividad, zonaTrabajo: nuevoRecurso.zonaTrabajo || '', hmInicio: previo });
@@ -995,6 +1012,21 @@ export default function GestionCosteo({
       a = { ...a, modoMetrado: MODO_GRILLA, metradoValor: String(g.val),
         unidadMetrado: p.unidad || a.unidadMetrado };
     }
+    /* Línea sin horómetro —combustible y demás—: se limpia todo lo de horas
+     * y se guarda sin ellas. No basta con esconder los campos: si el usuario
+     * escribió un tramo antes de elegir la partida, ese tramo seguiría ahí,
+     * entraría al costo como horas trabajadas y además chocaría con el de
+     * otra línea por el control de solapes. */
+    if (!llevaHorometro) {
+      a = { ...a, hmInicio: '', hmFin: '', horasEfectivas: '', obsReduccion: '' };
+      const lista = [...actividades];
+      if (actEditando === null) lista.push(a); else lista[actEditando] = a;
+      setActividades(lista);
+      setModalActividad(false);
+      setActEditando(null);
+      return;
+    }
+
     // El tramo de horómetro es lo que se cobra: sin él la actividad no suma horas.
     if (a.hmInicio === '' || a.hmFin === '')
       return Swal.fire({ icon: 'warning', title: 'Atención', text: 'Completa el horómetro de inicio y fin de esta actividad.' });
@@ -3391,6 +3423,18 @@ export default function GestionCosteo({
                   );
                 })()}
 
+                {/* ── Horómetro y horas ────────────────────────────────────
+                     Solo si la unidad de la partida lo pide. El combustible,
+                     medido en galones, no es trabajo de la máquina: es lo que
+                     se le echó. No tiene tramo de horómetro, ni horas
+                     efectivas, ni horas muertas que justificar. Pedirlos
+                     obligaba a inventarse un tramo, y un tramo inventado entra
+                     al costo como horas trabajadas.
+
+                     Quién lo lleva y quién no lo dice el catálogo de unidades,
+                     no esta pantalla: así JURP puede hacer lo mismo con los
+                     litros o las bolsas sin tocar código. */}
+                {llevaHorometro && (<>
                 {/* Horómetro de esta actividad: de aquí salen sus horas y su costo. */}
                 <div className="tbl-row tbl-mb-3" style={{ marginTop:'12px' }}>
                   <div className="tbl-col">
@@ -3449,6 +3493,7 @@ export default function GestionCosteo({
                     </div>
                   );
                 })()}
+                </>)}
 
                 <div className="tbl-row tbl-mb-3">
                   <div className="tbl-col">
