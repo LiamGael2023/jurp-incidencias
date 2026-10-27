@@ -27,9 +27,11 @@
 import { useRef, useEffect } from 'react';
 import { FaCheck, FaTimes } from 'react-icons/fa';
 
-/* Las de siempre en estos presupuestos. Es una lista de ayuda, no una
- * jaula: el campo admite cualquier cosa, porque la unidad rara del día que
- * menos lo esperas existe y no vale bloquear el alta por ella. */
+/* Sugerencias de unidad para cuando no hay catálogo que ofrecer. Es una
+ * lista de ayuda, no una jaula: el campo admite cualquier cosa, porque la
+ * unidad rara del día que menos lo esperas existe y no vale bloquear el alta
+ * por ella. Lo normal es que el padre pase el catálogo del servidor en la
+ * prop `unidades`, que se mantiene en Proyectos → Unidades. */
 export const UNIDADES = ['m3', 'm2', 'ml', 'und', 'glb', 'gbl', 'kg', 'bls',
                          'p2', 'mes', 'día', 'hh', 'hm'];
 
@@ -51,7 +53,7 @@ export const destinos = (filas = []) => [
 
 export default function FormaPartida({
   valor, errores = {}, guardando = false, tipo = 'partida',
-  padres = [], titulo,
+  padres = [], titulo, unidades,
   onCambio, onGuardar, onCancelar,
 }) {
   const primero = useRef(null);
@@ -158,7 +160,8 @@ export default function FormaPartida({
       )}
 
       <datalist id="cos-unidades">
-        {UNIDADES.map(u => <option key={u} value={u} />)}
+        {(unidades && unidades.length ? unidades : UNIDADES)
+          .map(u => <option key={u} value={u} />)}
       </datalist>
 
       <div className="cos-prog-forma-pie">

@@ -85,7 +85,14 @@ export default function GestionCosteo({
   const [catMarcas, setCatMarcas] = useState([]);
   const [catModelos, setCatModelos] = useState([]);
   const [todosModelos, setTodosModelos] = useState([]);
-  const [catUnidades, setCatUnidades] = useState(['bol', 'm3', 'm2', 'und', 'kg', 'gln', 'rll']);
+  /* Las unidades vienen del catálogo del servidor, que se mantiene desde
+   * Proyectos. Antes eran estas siete escritas aquí, y el botón «gestionar»
+   * solo las cambiaba en la memoria del navegador: lo añadido desaparecía al
+   * recargar. La lista fija se queda únicamente como red de seguridad para un
+   * servidor que todavía no tenga el catálogo; así la pantalla no se queda sin
+   * unidades que ofrecer, pero ya no se edita desde aquí. */
+  const [catUnidades, setCatUnidades] = useState(
+    ['bol', 'm3', 'm2', 'und', 'kg', 'gln', 'rll'].map(c => ({ codigo: c, nombre: '' })));
   const [catCargos, setCatCargos] = useState([]);   // catálogo de cargos (backend)
   const [mantenedorAbierto, setMantenedorAbierto] = useState(false);
   const [recursos, setRecursos] = useState([]); 
@@ -219,7 +226,7 @@ export default function GestionCosteo({
     cargarProgramado();
   }, [abierto, sujeto && sujeto.id]);
 
-  useEffect(() => { cargarCargos(); }, []);
+  useEffect(() => { cargarCargos(); cargarUnidades(); }, []);
 
   useEffect(() => { cargarTodosModelos(); }, []);
 
@@ -589,6 +596,15 @@ export default function GestionCosteo({
       if (r.ok) setCatCargos(await r.json());
     } catch (e) { console.error(e); }
   };
+  const cargarUnidades = async () => {
+    try {
+      const r = await fetch(`${API_OPS}/unidades/?activo=true`);
+      if (!r.ok) return;                 // sin catálogo: se queda la lista fija
+      const d = await r.json();
+      const lista = Array.isArray(d) ? d : (d.results || []);
+      if (lista.length) setCatUnidades(lista);
+    } catch (e) { console.error(e); }
+  };
   const cargarTodosModelos = async () => {
     try {
       const r = await fetch(`${API_OPS}/modelos/`);
@@ -668,44 +684,9 @@ export default function GestionCosteo({
       }
     }
   };
-  const gestionarUnidades = async () => {
-    const html = `
-      <div style="text-align:left">
-        <div style="margin-bottom:10px;font-size:13px;color:#64748b">Unidades actuales:</div>
-        <div id="lista-unidades" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
-          ${catUnidades.map(u => `<span style="background:#e0f2fe;color:#0284c7;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px">${u}<button data-del="${u}" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;padding:0;line-height:1">×</button></span>`).join('')}
-        </div>
-        <input id="nueva-unidad" class="swal2-input" placeholder="Nueva unidad (ej. tn, m, pza)" style="margin:0;width:100%" />
-      </div>`;
-    const { value: nueva } = await Swal.fire({
-      title: 'Unidades de medida',
-      html,
-      showCancelButton: true,
-      confirmButtonText: 'Agregar',
-      cancelButtonText: 'Cerrar',
-      confirmButtonColor: '#206bc4',
-      didOpen: () => {
-        document.querySelectorAll('[data-del]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const u = btn.getAttribute('data-del');
-            setCatUnidades(prev => prev.filter(x => x !== u));
-            setNuevoRecurso(prev => prev.unidad === u ? { ...prev, unidad: 'und' } : prev);
-            btn.parentElement.remove();
-          });
-        });
-      },
-      preConfirm: () => {
-        const v = document.getElementById('nueva-unidad').value.trim().toLowerCase();
-        if (!v) { Swal.showValidationMessage('Escribe una unidad'); return false; }
-        if (catUnidades.includes(v)) { Swal.showValidationMessage('Esa unidad ya existe'); return false; }
-        return v;
-      },
-    });
-    if (nueva) {
-      setCatUnidades(prev => [...prev, nueva]);
-      setNuevoRecurso(prev => ({ ...prev, unidad: nueva }));
-    }
-  };
+  /* Aquí vivía gestionarUnidades(): una ventana que dejaba añadir y borrar
+   * unidades sin mandar nada al servidor. Se quitó. El catálogo se mantiene
+   * en Proyectos → Unidades, y desde allí sí se guarda. */
   const cargarCosteosGuardados = async (incidenteId) => {
     const BASE_URL = API_BASE;
     try {
@@ -1995,6 +1976,7 @@ export default function GestionCosteo({
                             metrado: Number(progEdit.metrado) || 0,
                             precio: Number(progEdit.precio) || 0,
                           })}
+                      unidades={catUnidades.map(u => u.codigo)}
                       onCancelar={() => { setProgEdit(null); setProgErr({}); }}
                     />
                   )}
@@ -2008,6 +1990,7 @@ export default function GestionCosteo({
                       guardando={progGuardando}
                       onCambio={setProgNueva}
                       onGuardar={crearPartida}
+                      unidades={catUnidades.map(u => u.codigo)}
                       onCancelar={() => { setProgAbierto(false); setProgErr({}); }}
                     />
                   )}
@@ -2650,9 +2633,13 @@ export default function GestionCosteo({
                     <div className="tbl-col"><label className="tbl-form-label">Descripción del Insumo</label><input type="text" className="tbl-form-control" placeholder="Ej. Piedra chancada, Cemento..." value={nuevoRecurso.descripcion} onChange={e => setNuevoRecurso({...nuevoRecurso, descripcion: e.target.value})} /></div>
                     <div className="tbl-col-2"><label className="tbl-form-label">Cant.</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.cantidad} onChange={e => setNuevoRecurso({...nuevoRecurso, cantidad: e.target.value})} /></div>
                     <div className="tbl-col-2">
-                      <label className="tbl-form-label">Unidad <button type="button" onClick={gestionarUnidades} title="Gestionar unidades" style={{ background:'none', border:'none', color:'#206bc4', cursor:'pointer', fontSize:'11px', padding:'0 0 0 4px' }}><FaPlus /> gestionar</button></label>
+                      <label className="tbl-form-label" title="El catálogo se mantiene en Proyectos → Unidades">Unidad</label>
                       <select className="tbl-form-select" value={nuevoRecurso.unidad} onChange={e => setNuevoRecurso({...nuevoRecurso, unidad: e.target.value})}>
-                        {catUnidades.map(u => <option key={u} value={u}>{u}</option>)}
+                        {catUnidades.map(u => (
+                          <option key={u.id || u.codigo} value={u.codigo}>
+                            {u.nombre ? `${u.codigo} · ${u.nombre}` : u.codigo}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="tbl-col-2"><label className="tbl-form-label">Precio Unit. (S/)</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.precioUnitario} onChange={e => setNuevoRecurso({...nuevoRecurso, precioUnitario: e.target.value})} /></div>

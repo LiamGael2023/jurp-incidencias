@@ -20,8 +20,9 @@ import { createPortal } from 'react-dom';
 import {
   FaPlus, FaSyncAlt, FaTimes, FaExclamationTriangle, FaCheckCircle,
   FaFolderOpen, FaFileExcel, FaTrash, FaEdit, FaSpinner,
-  FaMapMarkerAlt, FaSearch, FaListUl,
+  FaMapMarkerAlt, FaSearch, FaListUl, FaRulerCombined,
 } from 'react-icons/fa';
+import MantenedorUnidades from './MantenedorUnidades';
 import ModalImportarPresupuesto from './ImportarPresupuesto';
 import PresupuestoProyecto from './PresupuestoProyecto';
 import './PresupuestoProyecto.css';
@@ -64,6 +65,10 @@ export default function Proyectos() {
   const [editando, setEditando] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [borrando, setBorrando] = useState(null);
+  /* El catálogo de unidades de medida. Vive aquí porque la unidad es parte
+   * del vocabulario del presupuesto, y el presupuesto se configura desde
+   * esta pantalla. */
+  const [unidades, setUnidades] = useState(false);
 
   const cargar = useCallback(async () => {
     setCargando(true); setError('');
@@ -159,6 +164,10 @@ export default function Proyectos() {
               placeholder="Buscar proyecto…"
               style={ctrl({ paddingLeft:'32px', minWidth:'230px' })} />
           </div>
+          <button onClick={() => setUnidades(true)} style={btnSec}
+            title="Las unidades de medida que pueden elegir las partidas">
+            <FaRulerCombined size={11} /> Unidades
+          </button>
           <button onClick={cargar} disabled={cargando} style={btnSec}>
             <FaSyncAlt size={11} className={cargando ? 'icon-spin' : ''} /> Actualizar
           </button>
@@ -464,6 +473,9 @@ export default function Proyectos() {
           onCargado={() => { cargar(); }}
         />
       )}
+
+      {/* ── Catálogo de unidades de medida ──────────────────────────────── */}
+      {unidades && <MantenedorUnidades onCerrar={() => setUnidades(false)} />}
     </div>
   );
 }

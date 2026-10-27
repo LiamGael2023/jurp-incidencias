@@ -53,6 +53,9 @@ export default function PresupuestoProyecto({ proyecto, abierto, onCerrar, onCam
   const [errores, setErrores] = useState({});
   const [guardando, setGuardando] = useState(false);
   const [aviso, setAviso] = useState(null);
+  /* El catálogo de unidades, para sugerirlas en el formulario. Se mantiene
+   * en Proyectos → Unidades; aquí solo se lee. */
+  const [unidades, setUnidades] = useState([]);
 
   const cargar = useCallback(async () => {
     if (!proyecto) return;
@@ -94,6 +97,12 @@ export default function PresupuestoProyecto({ proyecto, abierto, onCerrar, onCam
     setAbiertoAlta(false); setEdit(null); setErrores({}); setAviso(null);
     setNueva(VACIA); setSoporte('probando');
     cargar(); probar();
+    /* Sin catálogo (servidor sin el módulo) se queda vacío y FormaPartida
+     * cae en su lista de sugerencias de siempre. */
+    fetch(`${API_OPS}/unidades/?activo=true`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(d => setUnidades((Array.isArray(d) ? d : (d.results || [])).map(u => u.codigo)))
+      .catch(() => setUnidades([]));
   }, [abierto, proyecto, cargar, probar]);
 
   if (!abierto || !proyecto) return null;
@@ -278,6 +287,7 @@ export default function PresupuestoProyecto({ proyecto, abierto, onCerrar, onCam
                 titulo={`Corregir ${edit.es_titulo ? 'el título' : 'la partida'} ${edit.codigo}`}
                 valor={edit} errores={errores} guardando={guardando}
                 onCambio={setEdit} onGuardar={editar}
+                unidades={unidades}
                 onCancelar={() => { setEdit(null); setErrores({}); }}
               />
             )}
@@ -288,6 +298,7 @@ export default function PresupuestoProyecto({ proyecto, abierto, onCerrar, onCam
                 padres={destinosDe(filas)}
                 valor={nueva} errores={errores} guardando={guardando}
                 onCambio={setNueva} onGuardar={crear}
+                unidades={unidades}
                 onCancelar={() => { setAbiertoAlta(false); setErrores({}); }}
               />
             )}
