@@ -17,6 +17,18 @@ CURRENT="$BASE/current"
 RAMA=main
 CONSERVAR=5          # cuántas versiones anteriores se guardan
 
+# --forzar: construir y publicar aunque el repo ya esté al día.
+#
+# Hace falta porque este script decide si hay trabajo comparando HEAD con
+# origin/main, y eso da un falso negativo en cuanto alguien hace `git pull` a
+# mano en el repo: HEAD ya está al día, el script dice "sin cambios" y sale
+# con 0 en silencio... mientras `current` sigue apuntando a la versión
+# anterior. Pasó, y desde fuera es indistinguible de un despliegue correcto.
+FORZAR=0
+if [ "${1:-}" = "--forzar" ]; then
+    FORZAR=1
+fi
+
 log() { echo "[$(date '+%F %T')] $*"; }
 
 cd "$REPO"
@@ -27,8 +39,12 @@ REMOTO=$(git rev-parse "origin/$RAMA")
 
 # Sin cambios: salir en silencio. Esto es lo que pasa el 99% de las veces,
 # y por eso el cron no ensucia el log.
-if [ "$LOCAL" = "$REMOTO" ]; then
+if [ "$LOCAL" = "$REMOTO" ] && [ "$FORZAR" -eq 0 ]; then
     exit 0
+fi
+
+if [ "$LOCAL" = "$REMOTO" ]; then
+    log "forzado: el repo ya está en ${LOCAL:0:7}, se reconstruye igual"
 fi
 
 log "cambio detectado: ${LOCAL:0:7} -> ${REMOTO:0:7}"
