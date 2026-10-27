@@ -1060,7 +1060,11 @@ export default function GestionCosteo({
        * grilla aquí, y deja de llamarse por su actividad: el aviso naranja
        * de arriba lo advierte antes. */
       a = { ...a, modoMetrado: MODO_GRILLA, metradoValor: String(g.val),
-        unidadMetrado: p.unidad || a.unidadMetrado };
+        unidadMetrado: p.unidad || a.unidadMetrado,
+        /* Si se marcó el check y DESPUÉS se cambió la partida a una de
+         * combustible, el check ya no se ve pero seguiría guardado, diciendo
+         * que no hizo falta cargar justo en la línea de la carga. */
+        combustibleAbastecido: pideVale ? false : !!a.combustibleAbastecido };
     }
     /* Línea sin horómetro —combustible y demás—: se limpia todo lo de horas
      * y se guarda sin ellas. No basta con esconder los campos: si el usuario
@@ -3798,8 +3802,11 @@ export default function GestionCosteo({
                     Hace falta para no confundir dos cosas que en la hoja se
                     ven igual: una línea sin carga porque nadie la apuntó, y
                     una línea sin carga porque no hizo falta. La primera es un
-                    dato que falta; la segunda, un dato. */}
-                {!esIncidencia && (
+                    dato que falta; la segunda, un dato.
+
+                    NO en una línea que ES la carga: ahí se estaría diciendo
+                    que no hizo falta cargar justo donde se está cargando. */}
+                {!esIncidencia && !pideVale && (
                   <div className="tbl-row tbl-mb-3">
                     <div className="tbl-col">
                       <label style={{ display:'flex', alignItems:'center', gap:'9px',
