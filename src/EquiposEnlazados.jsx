@@ -190,12 +190,28 @@ export default function EquiposEnlazados({
        * servidor—. */
       if (u.res && u.res.status === 404) { setSoporte('no-soportado'); return; }
       setSoporte('ok');
-      setFallo(u.res && u.res.status === 403
-        ? 'Tu usuario no pertenece a Gerencia, así que no puede administrar cuentas. Pídele el permiso a administración.'
-        : u.motivo === 'sesion'
+      /* EL TEXTO DEL 403 LO PONE EL SERVIDOR. Quién puede administrar
+       * cuentas no es lo mismo en los dos sistemas —en PLUVIRA es Gerencia y
+       * en SENTRIA son los supervisores, porque en vigilancia quien da de
+       * alta a un vigilante es su supervisor— y escribirlo aquí obligaría a
+       * recordar los dos y a tocar el front cada vez que cambie uno. El
+       * servidor ya manda un `detail` que lo dice; esto solo lo enseña. */
+      let porQue = '';
+      if (u.res && u.res.status === 403) {
+        try {
+          const j = await u.res.clone().json();
+          if (j && j.detail) porQue = j.detail;
+        } catch (err) { /* sin cuerpo útil: queda el genérico de abajo */ }
+        if (!porQue) {
+          porQue = 'Tu usuario no tiene permiso para administrar cuentas. '
+            + 'Pídeselo a administración.';
+        }
+      }
+      setFallo(porQue
+        || (u.motivo === 'sesion'
           ? 'El servidor no aceptó tu sesión.'
           : u.res ? `El servidor respondió ${u.res.status}.`
-                  : 'No se pudo consultar.');
+                  : 'No se pudo consultar.'));
       return;
     }
 

@@ -212,7 +212,7 @@ def saca(fuente, nombre):
 
 
 ns = {}
-for cte in ("GRUPO_GERENCIA", "LARGO_CLAVE"):
+for cte in ("GRUPO_ADMIN", "LARGO_CLAVE"):
     import re as _re
     m = _re.search(r"^%s = (.+)$" % cte, mod, _re.M)
     if m:
@@ -228,14 +228,21 @@ for fn in ("etiqueta_de", "puede_administrar", "decidir_cambio",
     else:
         t("existe %s" % fn, False)
 
-GER = ns.get("GRUPO_GERENCIA", "mobile_gerencia")
+# Quien administra en SENTRIA son los supervisores, no Gerencia: en
+# vigilancia quien da de alta a un vigilante es su supervisor.
+ADMIN = ns.get("GRUPO_ADMIN", "supervisor_group")
+t("quien administra es el supervisor, no Gerencia",
+  ADMIN == "supervisor_group", ADMIN)
 
 # ── las etiquetas ──
 if "etiqueta_de" in ns:
     eti = ns["etiqueta_de"]
     t("los grupos conocidos tienen su nombre",
-      eti("vigilante_group") == "Vigilante" and eti(GER) == "Gerencia",
-      "%s / %s" % (eti("vigilante_group"), eti(GER)))
+      eti("vigilante_group") == "Vigilante"
+      and eti("mobile_gerencia") == "Gerencia"
+      and eti(ADMIN) == "Supervisor",
+      "%s / %s / %s" % (eti("vigilante_group"), eti("mobile_gerencia"),
+                        eti(ADMIN)))
     # Lo que importa de verdad: un grupo que todavia no existe sale legible y
     # no en blanco. Si saliera vacio, el desplegable tendria una opcion muda.
     t("y uno nuevo se deduce solo",
@@ -247,11 +254,13 @@ if "etiqueta_de" in ns:
 # ── quien manda ──
 if "puede_administrar" in ns:
     pa = ns["puede_administrar"]
-    t("Gerencia administra", pa(False, [GER]) is True)
+    t("el supervisor administra", pa(False, [ADMIN]) is True)
     t("is_staff tambien", pa(True, []) is True,
       "sin esto, un despliegue nuevo se queda sin nadie que cree al primero")
     t("un vigilante NO administra", pa(False, ["vigilante_group"]) is False)
-    t("ni un supervisor", pa(False, ["supervisor_group"]) is False)
+    t("pero Gerencia NO, que aqui no es ese grupo",
+  pa(False, ["mobile_gerencia"]) is False,
+  "en SENTRIA mobile_gerencia es una cuenta de prueba, no un rol real")
     t("ni sin grupos", pa(False, []) is False)
     t("ni con grupos a None", pa(False, None) is False)
 
@@ -260,37 +269,37 @@ if "decidir_cambio" in ns:
     dc = ns["decidir_cambio"]
     # Hoy hay UNA cuenta en Gerencia. Que se quite el rol a si misma deja el
     # sistema sin quien administre, y el unico remedio es entrar al servidor.
-    t("el unico gerente no puede dejar de serlo",
-      dc(7, 7, GER, "vigilante_group", {7})[0] is False)
+    t("el unico que administra no puede dejar de hacerlo",
+      dc(7, 7, ADMIN, "vigilante_group", {7})[0] is False)
     t("y se dice por que",
-      "unica cuenta" in (dc(7, 7, GER, "vigilante_group", {7})[1] or ""),
-      dc(7, 7, GER, "vigilante_group", {7})[1])
-    t("tampoco si lo intenta otro gerente... que no existe",
-      dc(9, 7, GER, "vigilante_group", {7})[0] is False)
-    t("con DOS gerentes, uno puede dejar de serlo",
-      dc(9, 7, GER, "vigilante_group", {7, 9})[0] is True)
+      "unica cuenta" in (dc(7, 7, ADMIN, "vigilante_group", {7})[1] or ""),
+      dc(7, 7, ADMIN, "vigilante_group", {7})[1])
+    t("tampoco si lo intenta otro admin... que no existe",
+      dc(9, 7, ADMIN, "vigilante_group", {7})[0] is False)
+    t("con DOS, uno puede dejar de serlo",
+      dc(9, 7, ADMIN, "vigilante_group", {7, 9})[0] is True)
     t("pero no a si mismo, aunque haya otro",
-      dc(7, 7, GER, "vigilante_group", {7, 9})[0] is False,
+      dc(7, 7, ADMIN, "vigilante_group", {7, 9})[0] is False,
       "quitarse el propio permiso es el error que nadie quiere deshacer a mano")
     t("subir a alguien a Gerencia siempre se puede",
-      dc(7, 3, "vigilante_group", GER, {7})[0] is True)
+      dc(7, 3, "vigilante_group", ADMIN, {7})[0] is True)
     t("y cambiar entre roles que no son Gerencia, tambien",
       dc(7, 3, "vigilante_group", "operador_group", {7})[0] is True)
     t("un gerente que sigue de gerente no se bloquea",
-      dc(7, 7, GER, GER, {7})[0] is True)
+      dc(7, 7, ADMIN, ADMIN, {7})[0] is True)
 
 if "decidir_desactivar" in ns:
     dd = ns["decidir_desactivar"]
     t("nadie se desactiva a si mismo",
       dd(7, 7, True, "vigilante_group", {9})[0] is False)
-    t("no se desactiva al ultimo gerente",
-      dd(9, 7, True, GER, {7})[0] is False)
-    t("con dos gerentes si",
-      dd(9, 7, True, GER, {7, 9})[0] is True)
+    t("no se desactiva al ultimo que administra",
+      dd(9, 7, True, ADMIN, {7})[0] is False)
+    t("con dos si",
+      dd(9, 7, True, ADMIN, {7, 9})[0] is True)
     t("desactivar a un vigilante cualquiera se puede",
       dd(9, 3, True, "vigilante_group", {7})[0] is True)
     t("y REACTIVAR nunca se bloquea",
-      dd(7, 7, False, GER, set())[0] is True,
+      dd(7, 7, False, ADMIN, set())[0] is True,
       "bloquear la reactivacion dejaria cuentas apagadas para siempre")
 
 
@@ -309,24 +318,24 @@ t("y la clave es larga", ns.get("LARGO_CLAVE", 0) >= 10,
 
 
 # ── 4b. EL ORDEN DE LOS ROLES ────────────────────────────────────────────
-# Gerencia va ultima. El desplegable de la web arranca sin nada elegido, pero
+# El rol que administra va ultimo. El desplegable de la web arranca sin nada elegido, pero
 # si alguien quita esa opcion vacia, el primero queda preseleccionado: por
-# orden alfabetico seria mobile_gerencia, y un descuido crearia una cuenta
-# capaz de administrar a todas las demas.
+# un descuido crearia una cuenta capaz de administrar a todas las demas.
 rx2 = __import__("re")
 m = rx2.search(r"key=lambda g: \((.+?)\)", mod)
 t("los roles no van en orden alfabetico a secas", m is not None)
 if m:
     clave = eval("lambda g: (%s)" % m.group(1),
-                 {"GRUPO_GERENCIA": GER},
+                 {"GRUPO_ADMIN": ADMIN},
                  {})
     class G(object):
         def __init__(self, n): self.name = n
-    nombres = [GER, 'operador_group', 'ssoma_group', 'supervisor_group',
-               'vigilante_group']
+    nombres = ['mobile_gerencia', 'operador_group', 'ssoma_group',
+               ADMIN, 'vigilante_group']
     ordenados = [g.name for g in sorted([G(n) for n in nombres], key=clave)]
-    t("Gerencia queda al final", ordenados[-1] == GER, " ".join(ordenados))
-    t("y el primero es un rol sin poder", ordenados[0] != GER, ordenados[0])
+    t("el rol que administra queda al final",
+  ordenados[-1] == ADMIN, " ".join(ordenados))
+    t("y el primero es un rol sin poder", ordenados[0] != ADMIN, ordenados[0])
     t("los demas siguen en orden alfabetico",
       ordenados[:-1] == sorted(ordenados[:-1]), " ".join(ordenados))
 

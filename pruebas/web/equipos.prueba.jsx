@@ -86,7 +86,16 @@ window.fetch = async (u, opc = {}) => {
   if (url.includes('/users/')) {
     if (v === 'viejo') return json({ detail: 'Not found.' }, 404);
     if (v === 'sinpermiso') {
-      return json({ detail: 'Tu usuario no pertenece a Gerencia.',
+      /* El texto lo pone el servidor, y no es el mismo en los dos sistemas:
+       * en PLUVIRA administra Gerencia y en SENTRIA los supervisores. Por
+       * eso la pantalla lo enseña en vez de escribirlo. */
+      return json({ detail: 'Tu usuario no pertenece a Gerencia, así que no '
+                            + 'puede administrar cuentas.',
+                    codigo: 'sin_permiso' }, 403);
+    }
+    if (v === 'sinpermiso-sentria') {
+      return json({ detail: 'Tu usuario no es Supervisor, así que no puede '
+                            + 'administrar cuentas. Pídeselo a un supervisor.',
                     codigo: 'sin_permiso' }, 403);
     }
     if (url.endsWith('/roles/')) return json({ results: ROLES });
@@ -172,7 +181,7 @@ window.fetch = async (u, opc = {}) => {
 /* SENTRIA usa la misma pantalla con otro servidor y sin equipos. Que sea el
  * mismo componente es el punto: si se duplicara, esta prueba no diría nada
  * del otro. */
-const props = v === 'sentria'
+const props = (v === 'sentria' || v === 'sinpermiso-sentria')
   ? { apiUsuarios: '/vigapi/mobile/users/', apiEquipos: null,
       sistema: 'SENTRIA' }
   : {};

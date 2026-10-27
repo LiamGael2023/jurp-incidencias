@@ -14,6 +14,8 @@ ESTA ESCRITO CONTRA ESE PROYECTO, no contra uno generico. Se miro antes:
     el padron es auth.User -el de Django-, 59 cuentas, con set_password
     los roles son GRUPOS: vigilante_group 40, operador_group 10,
         supervisor_group 3, ssoma_group 1, mobile_gerencia 1
+    quien administra cuentas aqui es SUPERVISOR, no Gerencia: en vigilancia
+        quien da de alta a un vigilante es su supervisor
     las vistas viven en /app/auth_api/views.py
     hay /api/v1/operadores/ y /api/v1/vigilantes/, cada uno con su
         vocabulario, y ninguno expone ni asigna roles
@@ -112,9 +114,13 @@ from rest_framework.response import Response
 
 User = get_user_model()
 
-# Quien puede administrar cuentas. Es el mismo grupo que en PLUVIRA, para que
-# "pertenecer a Gerencia" signifique lo mismo en los dos sistemas.
-GRUPO_GERENCIA = 'mobile_gerencia'
+# QUIEN PUEDE ADMINISTRAR CUENTAS. En PLUVIRA es mobile_gerencia; aqui no,
+# aqui son los supervisores. No es un descuido de copiar: son dos
+# organizaciones distintas sobre dos padrones distintos, y en vigilancia
+# quien da de alta a un vigilante es su supervisor. Forzar el mismo grupo en
+# los dos habria obligado a meter a los tres supervisores en un grupo que en
+# este sistema no significa nada.
+GRUPO_ADMIN = 'supervisor_group'
 
 # Los nombres de grupo son tecnicos; esto es lo que lee una persona. Lo que no
 # este aqui se deduce, para que un grupo nuevo salga con una etiqueta
@@ -149,46 +155,48 @@ def puede_administrar(es_staff, nombres_de_grupos):
     """Si esta persona puede tocar cuentas. Funcion pura: se prueba sola.
 
     is_staff entra porque es quien administra el servidor, y si no entrara,
-    un despliegue nuevo -donde todavia no hay nadie en Gerencia- se quedaria
-    sin nadie capaz de crear al primero.
+    un despliegue nuevo -donde todavia no hay nadie con el rol que
+    administra- se quedaria sin nadie capaz de crear al primero.
     """
     if es_staff:
         return True
-    return GRUPO_GERENCIA in set(nombres_de_grupos or [])
+    return GRUPO_ADMIN in set(nombres_de_grupos or [])
 
 
-def decidir_cambio(actor_id, objetivo_id, rol_actual, rol_nuevo, gerentes):
+def decidir_cambio(actor_id, objetivo_id, rol_actual, rol_nuevo, admins):
     """Si se permite este cambio de rol. Funcion pura.
 
-    EL ENCIERRO ES EL FALLO QUE IMPORTA. Hoy hay UNA sola cuenta en Gerencia.
-    Si esa persona se cambia el rol a si misma -o se desactiva-, nadie puede
-    volver a administrar cuentas desde la web, y el unico remedio es entrar al
+    EL ENCIERRO ES EL FALLO QUE IMPORTA. Si los supervisores se quitan el
+    rol unos a otros -o el ultimo se lo quita a si mismo-, nadie puede volver
+    a administrar cuentas desde la web y el unico remedio es entrar al
     servidor. No es hipotetico: pasa la primera vez que alguien prueba la
     pantalla consigo mismo.
 
     → (se_permite, motivo)
     """
-    gerentes = set(gerentes or [])
-    sale_de_gerencia = (rol_actual == GRUPO_GERENCIA
-                        and rol_nuevo != GRUPO_GERENCIA)
-    if sale_de_gerencia and gerentes <= {objetivo_id}:
-        return False, ('Es la unica cuenta de Gerencia. Dale el rol a otra '
-                       'persona antes de quitarselo a esta, o nadie podra '
-                       'administrar cuentas.')
-    if sale_de_gerencia and actor_id == objetivo_id:
-        return False, ('No puedes quitarte a ti mismo el rol de Gerencia. '
-                       'Pideselo a otra persona de Gerencia.')
+    admins = set(admins or [])
+    sale_de_admin = (rol_actual == GRUPO_ADMIN
+                     and rol_nuevo != GRUPO_ADMIN)
+    if sale_de_admin and admins <= {objetivo_id}:
+        return False, ('Es la unica cuenta que puede administrar usuarios. '
+                       'Dale ese rol a otra persona antes de quitarselo a '
+                       'esta, o nadie podra crear ni editar cuentas.')
+    if sale_de_admin and actor_id == objetivo_id:
+        return False, ('No puedes quitarte a ti mismo el rol que te deja '
+                       'administrar usuarios. Pideselo a otra persona que '
+                       'tambien lo tenga.')
     return True, None
 
 
-def decidir_desactivar(actor_id, objetivo_id, activo_ahora, rol, gerentes):
+def decidir_desactivar(actor_id, objetivo_id, activo_ahora, rol, admins):
     """Si se permite activar/desactivar. Funcion pura. Mismo encierro."""
     if activo_ahora:  # se va a DESACTIVAR
         if actor_id == objetivo_id:
             return False, 'No puedes desactivar tu propia cuenta.'
-        if rol == GRUPO_GERENCIA and set(gerentes or []) <= {objetivo_id}:
-            return False, ('Es la unica cuenta de Gerencia activa. '
-                           'Desactivarla deja el sistema sin administracion.')
+        if rol == GRUPO_ADMIN and set(admins or []) <= {objetivo_id}:
+            return False, ('Es la unica cuenta activa que puede administrar '
+                           'usuarios. Desactivarla deja el sistema sin '
+                           'administracion.')
     return True, None
 
 
@@ -199,9 +207,9 @@ def _rol_de(usuario):
     return g.name if g else ''
 
 
-def _gerentes_activos():
+def _admins_activos():
     return set(User.objects
-               .filter(groups__name=GRUPO_GERENCIA, is_active=True)
+               .filter(groups__name=GRUPO_ADMIN, is_active=True)
                .values_list('id', flat=True))
 
 
@@ -222,8 +230,8 @@ def _uno(u):
 
 def _negado():
     return Response(
-        {'detail': 'Tu usuario no pertenece a Gerencia, asi que no puede '
-                   'administrar cuentas.',
+        {'detail': 'Tu usuario no es Supervisor, asi que no puede '
+                   'administrar cuentas. Pideselo a un supervisor.',
          'codigo': 'sin_permiso'},
         status=status.HTTP_403_FORBIDDEN)
 
@@ -276,14 +284,14 @@ def usuarios_roles(request):
     # Los grupos que existen, no una lista escrita a mano: si mañana se crea
     # otro rol en el admin, aparece solo.
     #
-    # GERENCIA VA ULTIMA, y no es cosmetica. El desplegable de la pantalla
-    # arranca sin nada elegido, pero si algun dia alguien quita esa opcion
-    # vacia, el primero de la lista queda preseleccionado: por orden
-    # alfabetico seria `mobile_gerencia`, y un descuido crearia una cuenta
-    # capaz de administrar a todas las demas. Que el rol mas poderoso no sea
-    # el primero es la segunda capa de esa misma defensa.
+    # EL ROL QUE ADMINISTRA VA ULTIMO, y no es cosmetica. El desplegable de
+    # la pantalla arranca sin nada elegido, pero si algun dia alguien quita
+    # esa opcion vacia, el primero de la lista queda preseleccionado, y un
+    # descuido crearia una cuenta capaz de administrar a todas las demas. Que
+    # el rol mas poderoso no sea el primero es la segunda capa de esa misma
+    # defensa.
     grupos = sorted(Group.objects.all(),
-                    key=lambda g: (g.name == GRUPO_GERENCIA, g.name))
+                    key=lambda g: (g.name == GRUPO_ADMIN, g.name))
     return Response({'results': [
         {'code': g.name, 'label': etiqueta_de(g.name)} for g in grupos]})
 
@@ -377,7 +385,7 @@ def usuarios_rol(request, pk):
                         status=status.HTTP_400_BAD_REQUEST)
 
     ok, motivo = decidir_cambio(request.user.id, u.id, _rol_de(u), rol,
-                                _gerentes_activos())
+                                _admins_activos())
     if not ok:
         return Response({'detail': motivo, 'codigo': 'encierro'},
                         status=status.HTTP_409_CONFLICT)
@@ -418,7 +426,7 @@ def usuarios_actividad(request, pk):
                         status=status.HTTP_404_NOT_FOUND)
 
     ok, motivo = decidir_desactivar(request.user.id, u.id, u.is_active,
-                                    _rol_de(u), _gerentes_activos())
+                                    _rol_de(u), _admins_activos())
     if not ok:
         return Response({'detail': motivo, 'codigo': 'encierro'},
                         status=status.HTTP_409_CONFLICT)

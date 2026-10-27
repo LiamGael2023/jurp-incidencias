@@ -185,6 +185,18 @@ ok((await p.evaluate(() => window.__AVISOS)).length === 0,
    'y no se avisa además por el cartel de arriba',
    (await p.evaluate(() => window.__AVISOS)).join(', '));
 
+/* EL MOTIVO LO PONE EL SERVIDOR. Quién administra cuentas no es lo mismo en
+ * los dos sistemas: en PLUVIRA es Gerencia y en SENTRIA son los
+ * supervisores. Si el texto estuviera escrito en la pantalla, SENTRIA
+ * mandaría a pedirle el permiso a un grupo que allí no administra nada. */
+await ir('sinpermiso-sentria');
+const falloS = await p.locator('.eqe-fallo').count()
+  ? await p.locator('.eqe-fallo').innerText() : '';
+ok(/Supervisor/i.test(falloS), 'en SENTRIA el motivo habla de Supervisor',
+   falloS.replace(/\n/g, ' ').slice(0, 110));
+ok(!/Gerencia/i.test(falloS), 'y no de Gerencia, que ahí no administra nada',
+   falloS.replace(/\n/g, ' ').slice(0, 110));
+
 // ══════════ EL SERVIDOR NO LO SOPORTA ══════════
 await ir('viejo');
 ok(await p.locator('.eqe-tabla').count() === 0,
