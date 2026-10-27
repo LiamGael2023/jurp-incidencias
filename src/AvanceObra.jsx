@@ -40,6 +40,7 @@ import {
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Swal from 'sweetalert2';
+import AvanceFisico from './AvanceFisico';
 import { API_OPS } from './api';
 
 
@@ -558,6 +559,12 @@ export default function AvanceObra() {
               </table>
             </div>
           </div>
+
+          {/* Lo mismo, pero en metrado. Va DEBAJO de lo valorizado y no
+              encima: el número que se cobra sigue siendo el de arriba. Pero
+              con un presupuesto sin precios, arriba sale todo a cero y esto
+              es lo único que dice si se ha hecho algo. */}
+          <AvanceFisico obra={obra} />
 
           {/* Detalle semanal */}
           <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'10px',
