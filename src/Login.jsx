@@ -22,6 +22,11 @@ import { marcarEntrada } from './sesion';
 const LOGIN_POR_APP = {
   pluvira: '/api/v1/mobile/auth/login/',
   sentria: '/vigapi/mobile/auth/login/',
+  /* HYDROMETRIX comparte padrón con PLUVIRA: las dos salen al mismo
+   * servidor. No es copiar y pegar —son el mismo conjunto de cuentas, y los
+   * operadores entran con las credenciales que ya usaban en el sistema
+   * viejo—. SENTRIA es el que tiene padrón aparte. */
+  hydrometrix: '/api/v1/mobile/auth/login/',
 };
 
 function Login({ onLoginSuccess, app }) {

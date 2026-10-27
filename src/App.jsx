@@ -21,11 +21,16 @@ import MapaInventario from './MapaInventario';
 import ReportesInventario from './ReportesInventario';
 import CampaniasInventario from './CampaniasInventario';
 import MapaTematico from './MapaTematico';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt, FaMobileAlt, FaUserTag } from 'react-icons/fa';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt, FaMobileAlt, FaUserTag, FaWater, FaFlask } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 import EquiposEnlazados from './EquiposEnlazados';
+import Hydrometrix from './Hydrometrix';
 
-const URL_HYDROMETRIX = 'http://sistema.jriegopresurizado.org.pe/';
+/* HYDROMETRIX YA NO SALE FUERA. Esta tarjeta mandaba a
+ * http://sistema.jriegopresurizado.org.pe/ —el sistema viejo, y encima por
+ * http: usuario y clave viajaban en claro—. Ahora entra en NEXHYDRO como
+ * PLUVIRA y SENTRIA, con el mismo padrón de usuarios: el login pega contra
+ * ese mismo servidor, así que las credenciales de siempre valen. */
 
 /* Menu completo. "apps" indica desde que tarjeta de NEXHIDRO se ve cada opcion. */
 // El menú se agrupa por MÓDULO. Cada entrada con `seccion: true` es una
@@ -41,6 +46,9 @@ const MENU = [
   // mismos usuarios —son dos listas de personas distintas, aunque algunas
   // sean la misma persona.
   { clave: 'usuarios-sentria', titulo: 'Usuarios', icono: <FaUserTag />,        apps: ['sentria'], soloAdmin: true },
+  // HYDROMETRIX: las dos pantallas de los operadores del Lateral 10.
+  { clave: 'distribucion',  titulo: 'Distribución',   icono: <FaWater />,        apps: ['hydrometrix'] },
+  { clave: 'calidad-agua',  titulo: 'Calidad de Agua', icono: <FaFlask />,       apps: ['hydrometrix'] },
   { clave: 'estadisticas', titulo: 'Estadísticas',  icono: <FaChartPie />,      apps: ['pluvira'] },
   { clave: 'reportes',     titulo: 'Reportes',      icono: <FaFilePdf />,       apps: ['pluvira'] },
   { clave: 'maquinaria',   titulo: 'Maquinaria',    icono: <FaTruck />,         apps: ['pluvira'] },
@@ -67,7 +75,12 @@ const MENU = [
   { clave: 'inv-reportes', titulo: 'Reportes',      icono: <FaClipboardCheck />, apps: ['pluvira'] },
 ];
 
-const vistaInicial = (app) => (app === 'sentria' ? 'vigilancia' : 'mapa');
+const PRIMERA_VISTA = {
+  sentria: 'vigilancia',
+  hydrometrix: 'distribucion',
+  pluvira: 'mapa',
+};
+const vistaInicial = (app) => PRIMERA_VISTA[app] || 'mapa';
 
 /* Las vistas validas salen del propio menu: lo que no este aqui no se acepta
    desde la URL, para que un hash cualquiera no deje la pantalla en blanco. */
@@ -88,7 +101,7 @@ const vistaDeURL = () => {
    directo en una pestaña nueva, saltando la intro. */
 const appDeURL = () => {
   const a = new URLSearchParams(window.location.search).get('app');
-  return a === 'pluvira' || a === 'sentria' ? a : null;
+  return a === 'pluvira' || a === 'sentria' || a === 'hydrometrix' ? a : null;
 };
 
 function App() {
@@ -211,10 +224,10 @@ function App() {
       <Nexhidra
         onEntrar={() => salirDeIntro('pluvira')}
         onSentria={() => salirDeIntro('sentria')}
-        onCaudixa={() => { window.location.href = URL_HYDROMETRIX; }}
+        onCaudixa={() => salirDeIntro('hydrometrix')}
         hrefPluvira="?app=pluvira"
         hrefSentria="?app=sentria"
-        hrefCaudixa={URL_HYDROMETRIX}
+        hrefCaudixa="?app=hydrometrix"
       />
     );
   }
@@ -316,6 +329,16 @@ function App() {
    * -PLUVIRA, SENTRIA, HYDROMETRIX- un menú que no lo dice obliga a
    * recordarlo. El logo sale solo: cuando el menú filtrado no declara
    * secciones, RailGIS rotula el módulo activo. */
+  /* HYDROMETRIX, en el rail como los demás módulos. */
+  if (vistaActual === 'distribucion' || vistaActual === 'calidad-agua') {
+    return (
+      <div className="maq">
+        <RailGIS {...propsRail} />
+        <div className="maq-main"><Hydrometrix vista={vistaActual} /></div>
+      </div>
+    );
+  }
+
   if (vistaActual === 'vigilancia' || vistaActual === 'usuarios-sentria') {
     return (
       <div className="maq">

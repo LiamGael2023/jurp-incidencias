@@ -84,10 +84,18 @@ for (const f of ficheros) {
 ok(fallos === 0, 'ningún fichero usa un icono sin importarlo',
    fallos ? `${fallos} fichero(s)` : '');
 
-/* Y que esto sirva de algo: con el import quitado, tiene que verlo. */
+/* Y que esto sirva de algo: con un import quitado, tiene que verlo.
+ *
+ * El icono se saca del propio fichero en vez de escribirlo aquí. La primera
+ * versión decía `FaUserTag` a mano y se rompió en cuanto ese import dejó de
+ * ser el último de la lista: la prueba daba MAL sin que hubiera nada roto,
+ * que es la forma más rápida de que alguien la desactive. */
 const app = sinComentarios(readFileSync(join(SRC, 'App.jsx'), 'utf8'));
-const roto = app.replace(', FaUserTag }', ' }');
-ok(roto !== app, 'el sabotaje cambia algo');
+const usados = [...app.matchAll(USO)].map(m => m[1]).filter(n => /^Fa/.test(n));
+const victima = usados[0];
+ok(!!victima, 'hay algún icono en App.jsx que sabotear', victima);
+const roto = app.replace(new RegExp(`,\\s*${victima}\\b`), '');
+ok(roto !== app, 'el sabotaje cambia algo', victima);
 const impsRoto = new Set();
 for (const m of roto.matchAll(IMPORTA)) {
   for (const t of m[1].split(',')) {
@@ -95,9 +103,9 @@ for (const m of roto.matchAll(IMPORTA)) {
     if (n) impsRoto.add(n);
   }
 }
-ok([...roto.matchAll(USO)].some(m => m[1] === 'FaUserTag'
-                                 && !impsRoto.has(m[1])),
-   'y la comprobación muerde si falta un import');
+ok([...roto.matchAll(USO)].some(m => m[1] === victima
+                                 && !impsRoto.has(victima)),
+   'y la comprobación muerde si falta un import', victima);
 
 const malos = r.filter(x => !x).length;
 console.log(`\n${r.length - malos} de ${r.length} en orden${malos ? `, ${malos} MAL` : ''}.`);
