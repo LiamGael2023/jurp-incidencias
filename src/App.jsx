@@ -50,7 +50,7 @@ const MENU = [
   { clave: 'distribucion',  titulo: 'Distribución',   icono: <FaWater />,        apps: ['hydrometrix'] },
   { clave: 'calidad-agua',  titulo: 'Calidad de Agua', icono: <FaFlask />,       apps: ['hydrometrix'] },
   { clave: 'estadisticas', titulo: 'Estadísticas',  icono: <FaChartPie />,      apps: ['pluvira'] },
-  { clave: 'reportes',     titulo: 'Reportes',      icono: <FaFilePdf />,       apps: ['pluvira'] },
+  { clave: 'reportes',     titulo: 'Pronósticos Meteorológicos', icono: <FaFilePdf />, apps: ['pluvira'] },
   { clave: 'maquinaria',   titulo: 'Maquinaria',    icono: <FaTruck />,         apps: ['pluvira'] },
   { clave: 'partes',       titulo: 'Partes Diarios', icono: <FaClipboardList />, apps: ['pluvira'] },
   // Va justo después de Partes Diarios porque se alimenta de ellos: el metrado
