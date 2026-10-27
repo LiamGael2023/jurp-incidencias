@@ -780,6 +780,16 @@ export default function GestionCosteo({
         };
       });
       setRecursos([...formatPers, ...formatMat, ...formatMaq]);
+      /* Y el cuadro de partidas de arriba, que es donde se ve el EJECUTADO y
+       * el SALDO. Lo calcula el servidor a partir del metrado imputado, así
+       * que guardar un parte lo cambia; pero se cargaba una sola vez al abrir
+       * y había que salir y volver a entrar para verlo. Va aquí dentro, y no
+       * en cada sitio que guarda, porque son nueve y el décimo se olvidaría.
+       *
+       * Sin await: el cuadro de arriba y la lista de abajo se refrescan por
+       * su cuenta, y hacer esperar a una por la otra solo retrasa la que ya
+       * estaba lista. */
+      cargarProgramado();
     } catch (error) { console.error("❌ Error al obtener los recursos guardados:", error); }
   };
   const abrirModalPdf = (dbId) => {
@@ -2627,7 +2637,17 @@ export default function GestionCosteo({
                           </>
                         );
                       })()}
-                      <div className="tbl-col"><label className="tbl-form-label">Combustible (Gls)</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.combustible} onChange={e => setNuevoRecurso({...nuevoRecurso, combustible: e.target.value})} /></div>
+                      {/* Aquí estaba «Combustible (Gls)». Se quitó: el
+                          combustible se registra como una línea más, contra
+                          su partida en galones, igual que todo lo demás.
+                          Teniéndolo también en la cabecera, el mismo gasto se
+                          apuntaba dos veces y nada obligaba a que las dos
+                          cifras coincidieran.
+
+                          El valor SIGUE viajando al backend desde el estado:
+                          los partes viejos lo tienen cargado, y dejar de
+                          mandarlo los pondría a cero solo por abrirlos a
+                          corregir otra cosa. */}
                       <div className="tbl-col"><label className="tbl-form-label">Vale N°</label><input type="text" className="tbl-form-control" value={nuevoRecurso.vale} onChange={e => setNuevoRecurso({...nuevoRecurso, vale: e.target.value})} /></div>
                     </div>
                     {/* Las horas efectivas se anotan en cada actividad. Aquí solo el total. */}
