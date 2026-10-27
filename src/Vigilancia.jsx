@@ -154,7 +154,14 @@ function Vigilancia() {
         </div>
       </div>
 
-      <div className="tbl-page-body" style={{padding:0,overflowY:'auto',maxHeight:'calc(100vh - 140px)'}}>
+      {/* El padding HORIZONTAL lo pone la hoja de estilos, no esta línea.
+          Antes aquí decía `padding: 0`, y un estilo en línea gana sobre
+          `.maq .tbl-page-body`: el rail del menú flota encima, así que las
+          pestañas y las tarjetas quedaban debajo de él y no se podían ni
+          leer ni pulsar. La cabecera sí se apartaba, porque ésa no lleva
+          estilo en línea. */}
+      <div className="tbl-page-body"
+           style={{paddingTop:0,paddingBottom:0,overflowY:'auto',maxHeight:'calc(100vh - 140px)'}}>
 
         {/* Aviso de error: sin esto, un fallo de permisos se vería igual
             que "no hay registros", que es una afirmación distinta. */}
