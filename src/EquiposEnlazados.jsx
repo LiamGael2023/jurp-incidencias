@@ -175,7 +175,11 @@ export default function EquiposEnlazados({
       pedir(`${apiUsuarios}list/`, { callar: [403, 404] }),
       apiEquipos ? pedir(`${apiEquipos}?estado=todos`, { callar: [403, 404] })
                  : Promise.resolve(null),
-      pedir(`${apiUsuarios}roles/`),
+      /* Calla el 403 y el 404 como la de usuarios: los dos fallan juntos
+       * -es el mismo permiso y el mismo parche-, y sin esto salía el aviso
+       * rojo de arriba diciendo «no tienes permiso (código 403)» encima del
+       * mensaje de la propia pantalla, que dice lo mismo y mejor. */
+      pedir(`${apiUsuarios}roles/`, { callar: [403, 404] }),
     ]);
     setCargando(false);
 

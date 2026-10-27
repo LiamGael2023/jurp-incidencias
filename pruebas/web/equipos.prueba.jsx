@@ -16,6 +16,13 @@
  */
 import { createRoot } from 'react-dom/client';
 import EquiposEnlazados from '../../src/EquiposEnlazados';
+import { alFallar } from '../../src/sesion';
+
+/* Los avisos globales que dispara pedir(). La pantalla explica el 403 con su
+ * propio mensaje; si además se avisa por aquí, el usuario ve dos carteles
+ * que dicen lo mismo y uno peor. */
+window.__AVISOS = [];
+alFallar(a => window.__AVISOS.push(a.motivo));
 
 const v = new URLSearchParams(location.search).get('v') || 'mezcla';
 localStorage.setItem('userToken', 'token-de-prueba');

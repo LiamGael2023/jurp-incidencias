@@ -177,6 +177,13 @@ ok(/Gerencia/i.test(fallo), 'y se dice que es cuestión de permisos',
 ok(!/sesi[oó]n/i.test(fallo),
    'sin mandarlo a volver a entrar, que no arreglaría nada',
    fallo.replace(/\n/g, ' ').slice(0, 110));
+/* Y UNA SOLA VEZ. La pantalla ya lo explica, con más detalle que el cartel
+ * global: avisar también por ahí ponía «no tienes permiso (código 403)»
+ * encima del mensaje bueno. Las dos llamadas —usuarios y roles— fallan
+ * juntas, así que basta con que una no lo silencie para que salga. */
+ok((await p.evaluate(() => window.__AVISOS)).length === 0,
+   'y no se avisa además por el cartel de arriba',
+   (await p.evaluate(() => window.__AVISOS)).join(', '));
 
 // ══════════ EL SERVIDOR NO LO SOPORTA ══════════
 await ir('viejo');
