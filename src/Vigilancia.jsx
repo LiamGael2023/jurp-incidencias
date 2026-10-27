@@ -33,6 +33,14 @@ function Vigilancia() {
   // Modal imagen
   const [modalImg, setModalImg] = useState(null);
 
+  /* La fila abierta a pantalla completa. La tabla recorta a propósito -la
+   * descripción en una línea y las evidencias a tres- porque si no, diez
+   * filas no caben en una pantalla. Pero lo recortado es justo lo que hace
+   * falta para entender un reporte, así que tiene que haber dónde verlo
+   * entero. Se guarda la fila, no su id: ya la tenemos, y volver a pedirla
+   * al servidor para enseñar lo mismo es una espera sin nada a cambio. */
+  const [detalle, setDetalle] = useState(null);
+
   // ── Cargar datos ──────────────────────────────────────────────────────
   const cargarTodo = async () => {
     setCargando(true);
@@ -148,6 +156,97 @@ function Vigilancia() {
     </div>
   );
 
+
+  /* ── El detalle ────────────────────────────────────────────────────────
+   *
+   * Se pinta con lo que ya trae la fila. Cada dato va envuelto en su propia
+   * condición, así que un campo que este servidor no mande sencillamente no
+   * aparece: la alternativa -dar por hecho que está- deja una etiqueta con
+   * un guión al lado, que se lee como "no hay dato" cuando lo que pasa es
+   * que se pidió mal. */
+  const dato = (etiqueta, valor, icono) => (valor === null || valor === undefined
+    || valor === '' ? null : (
+    <div style={{display:'flex',gap:'10px',padding:'10px 0',borderBottom:'1px solid #f1f5f9'}}>
+      <div style={{minWidth:'140px',fontSize:'12px',color:'#626976',textTransform:'uppercase',fontWeight:'600',display:'flex',alignItems:'center',gap:'6px'}}>
+        {icono} {etiqueta}
+      </div>
+      <div style={{fontSize:'13px',color:'#1d273b',flex:1,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{valor}</div>
+    </div>
+  ));
+
+  const panelDetalle = (d) => {
+    if (!d) return null;
+    const evid = d.evidencias || [];
+    const hayCoords = d.latitud && d.longitud;
+    const prio = COLOR_PRIORIDAD[d.prioridad];
+    return (
+      <div onClick={()=>setDetalle(null)}
+           style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:10000,background:'rgba(15,23,42,0.55)',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'40px 20px',overflowY:'auto'}}>
+        {/* Con nombre, y no un div suelto: así la prueba lo encuentra sin
+            depender de la estructura, que cambia cada vez que se añade un
+            dato. */}
+        <div className="vig-detalle" onClick={e=>e.stopPropagation()}
+             style={{background:'#fff',borderRadius:'8px',width:'100%',maxWidth:'820px',boxShadow:'0 20px 60px rgba(0,0,0,0.3)',overflow:'hidden'}}>
+
+          <div style={{padding:'18px 22px',borderBottom:'1px solid #e2e8f0',display:'flex',alignItems:'flex-start',gap:'12px'}}>
+            <div style={{flex:1}}>
+              <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'6px',flexWrap:'wrap'}}>
+                {d.tipo && <span style={{background:'#fee2e2',color:'#dc2626',padding:'2px 8px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>{d.tipo}</span>}
+                {prio && <span style={{background:prio.fondo,color:prio.texto,padding:'2px 8px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>{d.prioridad}</span>}
+              </div>
+              <h3 style={{margin:0,fontSize:'18px',fontWeight:'700',color:'#1d273b'}}>{d.titulo || 'Detalle'}</h3>
+            </div>
+            <button onClick={()=>setDetalle(null)} aria-label="Cerrar"
+                    style={{border:'none',background:'#f1f5f9',color:'#475569',width:'32px',height:'32px',borderRadius:'50%',cursor:'pointer',fontSize:'15px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              <FaTimes size={13}/>
+            </button>
+          </div>
+
+          <div style={{padding:'6px 22px 18px'}}>
+            {dato('Descripción', d.descripcion || d.detalles)}
+            {dato('Reportado por', d.reportado_por_nombre || d.reportado_por, <FaUser size={11}/>)}
+            {dato('Fecha', d.fecha_reporte ? fmtFecha(d.fecha_reporte) : null, <FaCalendarAlt size={11}/>)}
+            {dato('Garita', d.garita_cercana || d.garita_asignada, <FaMapMarkerAlt size={11}/>)}
+            {dato('Distancia a la garita',
+                  typeof d.distancia_garita_m === 'number'
+                    ? `${Math.round(d.distancia_garita_m)} m`
+                      + (d.garita_asignada && d.garita_cercana
+                         && d.garita_asignada !== d.garita_cercana
+                         ? ` — su puesto es ${d.garita_asignada}` : '')
+                    : null)}
+            {/* Las coordenadas sueltas no las lee nadie: lo que sirve es
+                poder abrirlas en un mapa. */}
+            {hayCoords && dato('Ubicación', (
+              <a href={`https://www.google.com/maps?q=${d.latitud},${d.longitud}`}
+                 target="_blank" rel="noreferrer"
+                 style={{color:'#206bc4',textDecoration:'none',fontWeight:'600'}}>
+                {d.latitud}, {d.longitud} — ver en el mapa
+              </a>
+            ), <FaMapMarkerAlt size={11}/>)}
+
+            {/* TODAS las evidencias, no las tres de la tabla. */}
+            <div style={{paddingTop:'14px'}}>
+              <div style={{fontSize:'12px',color:'#626976',textTransform:'uppercase',fontWeight:'600',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>
+                <FaImage size={11}/> Evidencias ({evid.length})
+              </div>
+              {evid.length > 0 ? (
+                <div style={{display:'flex',flexWrap:'wrap',gap:'10px'}}>
+                  {evid.map((ev, j) => (
+                    <img key={j} src={getUrlImagen(ev.archivo)} alt={`Evidencia ${j+1}`}
+                         onClick={(e)=>{e.stopPropagation();setModalImg(getUrlImagen(ev.archivo));}}
+                         style={{width:'150px',height:'150px',objectFit:'cover',borderRadius:'6px',border:'1px solid #e2e8f0',cursor:'zoom-in'}} />
+                  ))}
+                </div>
+              ) : (
+                <div style={{fontSize:'13px',color:'#626976'}}>Este reporte no trae fotos.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const tabBtn = (key, icon, label) => (
     <button onClick={()=>{setTab(key);}} style={{padding:'12px 20px',border:'none',background:'transparent',cursor:'pointer',fontSize:'13px',fontWeight:tab===key?'700':'500',color:tab===key?'#206bc4':'#626976',borderBottom:tab===key?'2px solid #206bc4':'2px solid transparent',marginBottom:'-2px',transition:'all 0.2s',display:'flex',alignItems:'center',gap:'6px'}}>
       {icon} {label}
@@ -233,7 +332,12 @@ function Vigilancia() {
                 </thead>
                 <tbody>
                   {paginar(incidentes, pagInc).map((inc, i) => (
-                    <tr key={inc.id || i} style={{borderBottom:'1px solid #f1f5f9'}}>
+                    /* La fila entera abre el detalle. Un botón "ver" en la
+                       última columna sería más explícito, pero obliga a
+                       apuntar a un enlace de 40 px cuando lo que se quiere
+                       es "este reporte": toda la fila es el blanco. */
+                    <tr key={inc.id || i} onClick={()=>setDetalle(inc)} title="Ver el detalle"
+                        style={{borderBottom:'1px solid #f1f5f9',cursor:'pointer'}}>
                       <td style={{padding:'10px 14px'}}><span style={{background:'#fee2e2',color:'#dc2626',padding:'2px 8px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>{inc.tipo}</span></td>
                       <td style={{padding:'10px 14px',fontWeight:'600',color:'#1d273b'}}>{inc.titulo}</td>
                       <td style={{padding:'10px 14px',color:'#475569',maxWidth:'250px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{inc.descripcion}</td>
@@ -243,7 +347,7 @@ function Vigilancia() {
                         {(inc.evidencias || []).length > 0 ? (
                           <div style={{display:'flex',gap:'4px',justifyContent:'center'}}>
                             {inc.evidencias.slice(0,3).map((ev, j) => (
-                              <img key={j} src={getUrlImagen(ev.archivo)} alt="" onClick={()=>setModalImg(getUrlImagen(ev.archivo))} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} />
+                              <img key={j} src={getUrlImagen(ev.archivo)} alt="" onClick={(e)=>{e.stopPropagation();setModalImg(getUrlImagen(ev.archivo));}} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} />
                             ))}
                             {inc.evidencias.length > 3 && <span style={{fontSize:'11px',color:'#626976',alignSelf:'center'}}>+{inc.evidencias.length-3}</span>}
                           </div>
@@ -297,10 +401,10 @@ function Vigilancia() {
                                   : <span style={{background:'#f1f3f5',color:'#626976',padding:'3px 10px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>Cerrado</span>}
                       </td>
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
-                        {t.foto_inicio ? <img src={getUrlImagen(t.foto_inicio)} alt="" onClick={()=>setModalImg(getUrlImagen(t.foto_inicio))} style={{width:'40px',height:'40px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}}/> : <span style={{color:'#cbd5e1'}}>—</span>}
+                        {t.foto_inicio ? <img src={getUrlImagen(t.foto_inicio)} alt="" onClick={(e)=>{e.stopPropagation();setModalImg(getUrlImagen(t.foto_inicio));}} style={{width:'40px',height:'40px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}}/> : <span style={{color:'#cbd5e1'}}>—</span>}
                       </td>
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
-                        {t.foto_fin ? <img src={getUrlImagen(t.foto_fin)} alt="" onClick={()=>setModalImg(getUrlImagen(t.foto_fin))} style={{width:'40px',height:'40px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}}/> : <span style={{color:'#cbd5e1'}}>—</span>}
+                        {t.foto_fin ? <img src={getUrlImagen(t.foto_fin)} alt="" onClick={(e)=>{e.stopPropagation();setModalImg(getUrlImagen(t.foto_fin));}} style={{width:'40px',height:'40px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}}/> : <span style={{color:'#cbd5e1'}}>—</span>}
                       </td>
                     </tr>
                   ))}
@@ -352,8 +456,8 @@ function Vigilancia() {
                       <td style={{padding:'10px 14px',color:'#475569',maxWidth:'180px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.observacion || '—'}</td>
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
                         <div style={{display:'flex',gap:'4px',justifyContent:'center'}}>
-                          {(t.foto_documento || t.foto_documento_url) && <img src={getUrlImagen(t.foto_documento || t.foto_documento_url)} alt="Doc" onClick={()=>setModalImg(getUrlImagen(t.foto_documento || t.foto_documento_url))} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} title="Documento"/>}
-                          {(t.foto_movilidad || t.foto_movilidad_url) && <img src={getUrlImagen(t.foto_movilidad || t.foto_movilidad_url)} alt="Mov" onClick={()=>setModalImg(getUrlImagen(t.foto_movilidad || t.foto_movilidad_url))} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} title="Movilidad"/>}
+                          {(t.foto_documento || t.foto_documento_url) && <img src={getUrlImagen(t.foto_documento || t.foto_documento_url)} alt="Doc" onClick={(e)=>{e.stopPropagation();setModalImg(getUrlImagen(t.foto_documento || t.foto_documento_url));}} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} title="Documento"/>}
+                          {(t.foto_movilidad || t.foto_movilidad_url) && <img src={getUrlImagen(t.foto_movilidad || t.foto_movilidad_url)} alt="Mov" onClick={(e)=>{e.stopPropagation();setModalImg(getUrlImagen(t.foto_movilidad || t.foto_movilidad_url));}} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} title="Movilidad"/>}
                           {!(t.foto_documento || t.foto_documento_url) && !(t.foto_movilidad || t.foto_movilidad_url) && <span style={{color:'#cbd5e1',fontSize:'11px'}}>—</span>}
                         </div>
                       </td>
@@ -403,7 +507,8 @@ function Vigilancia() {
                     const fuera = v.garita_asignada && v.garita_cercana
                       && v.garita_asignada !== v.garita_cercana;
                     return (
-                      <tr key={v.id || i} style={{borderBottom:'1px solid #f1f5f9'}}>
+                      <tr key={v.id || i} onClick={()=>setDetalle(v)} title="Ver el detalle"
+                          style={{borderBottom:'1px solid #f1f5f9',cursor:'pointer'}}>
                         <td style={{padding:'10px 14px'}}>
                           <span style={{background:c.fondo,color:c.texto,padding:'2px 8px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>{v.prioridad || '—'}</span>
                         </td>
@@ -427,7 +532,7 @@ function Vigilancia() {
                           {(v.evidencias || []).length > 0 ? (
                             <div style={{display:'flex',gap:'4px',justifyContent:'center'}}>
                               {v.evidencias.slice(0,3).map((ev, j) => (
-                                <img key={j} src={getUrlImagen(ev.archivo)} alt="" onClick={()=>setModalImg(getUrlImagen(ev.archivo))} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} />
+                                <img key={j} src={getUrlImagen(ev.archivo)} alt="" onClick={(e)=>{e.stopPropagation();setModalImg(getUrlImagen(ev.archivo));}} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} />
                               ))}
                               {v.evidencias.length > 3 && <span style={{fontSize:'11px',color:'#626976',alignSelf:'center'}}>+{v.evidencias.length-3}</span>}
                             </div>
@@ -447,6 +552,8 @@ function Vigilancia() {
       </div>
 
       {/* ── Modal Imagen ─────────────────────────────────────────────────── */}
+      {panelDetalle(detalle)}
+
       {modalImg && (
         <div onClick={()=>setModalImg(null)} style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:10001,background:'rgba(0,0,0,0.9)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'zoom-out'}}>
           <button onClick={()=>setModalImg(null)} style={{position:'absolute',top:'16px',right:'20px',background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',fontSize:'22px',cursor:'pointer',borderRadius:'50%',width:'40px',height:'40px',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>

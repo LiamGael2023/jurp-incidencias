@@ -44,6 +44,48 @@ const borde = await p.locator('.tbl-page-body > div').first().evaluate(
 ok(borde >= RAIL, 'y lo que se pinta dentro empieza a la derecha del menú',
    `${Math.round(borde)}px`);
 
+// ══════════ EL DETALLE DE UNA INCIDENCIA ══════════
+// La tabla recorta a propósito: la descripción en una línea y las fotos a
+// tres. Lo recortado es justo lo que hace falta para entender un reporte,
+// así que el detalle existe para enseñarlo entero.
+const filasInc = p.locator('.tbl-page-body table tbody tr');
+/* El recorte es CSS -text-overflow-, así que innerText trae el texto
+ * entero: hay que preguntarle al navegador si no cabe. */
+const noCabe = await filasInc.nth(2).locator('td').nth(2).evaluate(
+  el => el.scrollWidth > el.clientWidth);
+ok(noCabe, 'en la tabla la descripción larga no cabe en su celda');
+
+await filasInc.nth(2).click();
+await p.waitForTimeout(350);
+ok(await p.locator('.vig-detalle').count() === 1, 'pulsar la fila abre el detalle');
+const det = await p.locator('.vig-detalle').innerText();
+ok(/sin novedad posterior/.test(det),
+   'y en el detalle, entera', det.replace(/\n/g, ' ').slice(0, 120));
+ok(/v_montoya/.test(det), 'con quién la reportó');
+ok(/22\/10\/2026/.test(det), 'y cuándo', det.replace(/\n/g, ' ').slice(0, 90));
+
+/* Cinco fotos: la tabla enseña tres. Si el detalle enseñara las mismas
+ * tres, no serviría para nada. */
+const fotos = await p.locator('img[alt^="Evidencia"]').count();
+ok(fotos === 5, 'y TODAS las evidencias, no las tres de la tabla', `${fotos}`);
+
+/* Las coordenadas sueltas no las lee nadie: lo que sirve es abrirlas. */
+const mapa = await p.locator('a[href*="google.com/maps"]').count();
+ok(mapa === 1, 'la ubicación se puede abrir en un mapa');
+const href = mapa ? await p.locator('a[href*="google.com/maps"]').getAttribute('href') : '';
+ok(/-8\.1150,-79\.0280/.test(href), 'con las coordenadas del reporte', href);
+
+// Una foto no debe abrir las dos cosas a la vez.
+await p.locator('img[alt^="Evidencia"]').first().click();
+await p.waitForTimeout(300);
+ok(await p.locator('img[alt="Evidencia"]').count() === 1,
+   'al pulsar una foto se abre el visor');
+// Se recarga para seguir: cerrar a mano el visor y el detalle encadena
+// clics frágiles, y lo que viene después no depende de cómo se cerraron.
+await p.goto(BASE, { waitUntil: 'domcontentloaded' });
+await p.waitForSelector('.tbl-page-wrapper', { timeout: 10000 });
+await p.waitForTimeout(500);
+
 // ══════════ LA PESTAÑA DE VULNERABILIDADES ══════════
 const pestanas = await p.locator('.tbl-page-body button').allInnerTexts();
 ok(pestanas.join('|').includes('Vulnerabilidades (4)'),

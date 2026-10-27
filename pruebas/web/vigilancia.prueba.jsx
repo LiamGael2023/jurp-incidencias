@@ -27,6 +27,18 @@ const INCIDENTES = [
   { id: 2, tipo: 'Incidente', titulo: 'Reporte: Incidente',
     descripcion: 'Moto no cuenta con placas', reportado_por: 'v_calderonr',
     fecha: '2026-09-10T12:50:00Z', evidencias: [] },
+  /* El que la tabla NO puede enseñar entero: descripción larga, cinco
+   * fotos -la tabla corta en tres- y coordenadas. Es el caso para el que
+   * existe el detalle. */
+  { id: 3, tipo: 'Incidente General', titulo: 'Reporte: Incidente General',
+    descripcion: 'Siendo las 02:40 horas se detecta el ingreso de dos personas '
+      + 'por el sector sur, se procede a dar aviso al supervisor de turno y se '
+      + 'realiza el recorrido perimétrico correspondiente sin novedad posterior.',
+    reportado_por_nombre: 'v_montoya', fecha_reporte: '2026-10-22T05:27:00Z',
+    latitud: '-8.1150', longitud: '-79.0280',
+    evidencias: [{ archivo: '/media/a.jpg' }, { archivo: '/media/b.jpg' },
+      { archivo: '/media/c.jpg' }, { archivo: '/media/d.jpg' },
+      { archivo: '/media/e.jpg' }] },
 ];
 
 /* Como vienen de verdad: seis filas, prioridad ALTA/MEDIA/BAJA, sin estado
