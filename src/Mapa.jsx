@@ -2141,9 +2141,14 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               <div className="gis-modal-estaciones">
                 {[...lluviasAPI].sort((a, b) => (a.sinDatos - b.sinDatos) || (b.totalRain - a.totalRain)).map(e => (
                   <button key={e.id}
-                    className={`gis-chip ${estLluvia === e.id ? 'activo' : ''}`}
+                    className={`gis-chip ${estLluvia === e.id ? 'activo' : ''}${estaCaida(e) ? ' gis-chip-caido' : ''}`}
                     onClick={() => { setEstLluvia(e.id); cargarHorasLluvia(e.id, e.tipo); }}>
-                    {e.tipo === 'innova' ? '📡' : (e.tipo === 'davis' ? '🌡️' : '🌧️')} {e.name} · {e.sinDatos ? 'sin datos' : `${e.totalRain.toFixed(1)} mm`}
+                    {e.tipo === 'innova' ? '📡' : (e.tipo === 'davis' ? '🌡️' : '🌧️')} {e.name} ·{' '}
+                    {/* La caida se dice aqui tambien: estas fichas son el
+                        indice del panel, y elegir una estacion muerta creyendo
+                        que marca 0.0 mm es justo lo que hay que evitar. */}
+                    {estaCaida(e) ? `⊘ sin conexión (${desdeCuando(e)})`
+                      : (e.sinDatos ? 'sin datos' : `${e.totalRain.toFixed(1)} mm`)}
                   </button>
                 ))}
               </div>
@@ -2151,6 +2156,36 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               <div className="gis-modal-resumen">
                 <div><span>Acumulado hoy</span><b>{est?.sinDatos ? 'sin datos' : `${acum.toFixed(1)} mm`}</b></div>
                 <div><span>Hora más intensa</span><b>{pico.mm > 0 ? `${pico.hora}:00 · ${pico.mm.toFixed(1)} mm` : '—'}</b></div>
+                {/* CUANDO SE SUPO DE ELLA POR ULTIMA VEZ. Sin este dato, un
+                    "0.0 mm" dice dos cosas opuestas y no hay forma de
+                    distinguirlas: que no llovio, o que la estacion lleva horas
+                    callada y nadie sabe que cayo. Paso el 26/10 con VALLUNARAJU
+                    y JURPANA: marcaban 0.0 porque su proveedor dejo de
+                    entregar el dato a mediodia. */}
+                <div>
+                  <span>Último dato</span>
+                  {(() => {
+                    if (est?.tipo === 'innova') {
+                      return <b>{est.actualizado || '—'}</b>;
+                    }
+                    if (!est?.ultima) {
+                      return <b className="gis-sin-conexion">nada en {desdeCuando(est)}</b>;
+                    }
+                    const caida = estaCaida(est);
+                    const hoy = est.ultima.toDateString() === new Date().toDateString();
+                    const cuando = hoy
+                      ? est.ultima.toLocaleTimeString('es-PE',
+                          { hour: '2-digit', minute: '2-digit' })
+                      : est.ultima.toLocaleString('es-PE',
+                          { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                    return (
+                      <b className={caida ? 'gis-sin-conexion' : undefined}>
+                        {cuando} · {haceRato(est.ultima.getTime(), ahora)}
+                        {caida && ' · sin conexión'}
+                      </b>
+                    );
+                  })()}
+                </div>
               </div>
 
               <div className="gis-modal-grafico">

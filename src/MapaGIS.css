@@ -573,3 +573,20 @@
   background: rgba(134, 142, 150, .18);
   border-color: rgba(134, 142, 150, .4);
 }
+/* El "ultimo dato" en rojo cuando la estacion lleva mas de HORAS_CAIDA
+   callada. Es la diferencia entre "no llovio" y "no sabemos que cayo", y
+   tiene que verse sin leer. */
+.gis-modal-resumen b.gis-sin-conexion {
+  color: #ff8787;
+  font-size: 15px;
+}
+
+.gis-chip.gis-chip-caido {
+  border-color: rgba(239, 68, 68, .45);
+  color: #ffb3b3;
+}
+.gis-chip.gis-chip-caido.activo {
+  background: rgba(239, 68, 68, .18);
+  border-color: rgba(239, 68, 68, .7);
+  color: #fff;
+}
