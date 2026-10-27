@@ -1,0 +1,318 @@
+/* ===========================================================
+   HYDROMETRIX: Distribución y Calidad de Agua.
+
+   Mismo lenguaje que Incidentes, Maquinaria y Estadísticas —Inter,
+   tarjetas blancas sobre fondo frío, radio 4, borde de un píxel—. El
+   acento es el azul del módulo, #1268C3, que es el que el rail ya usa
+   para teñir HYDROMETRIX: la pantalla y su menú dicen lo mismo.
+
+   EL HUECO DEL RAIL. El rail del menú es un overlay fijo y publica su
+   ancho en --rail-w. Cada bloque se aparta solo; sin eso la primera
+   tarjeta queda debajo del menú, que es lo que ya pasó en Vigilancia.
+   =========================================================== */
+
+.hm {
+  --azul: #1268C3;
+  --tinta: #1d273b;
+  --tinta-2: #475569;
+  --tinta-3: #626976;
+  --borde: rgba(98, 105, 118, .16);
+  --papel: #fff;
+
+  min-height: 100%;
+  padding-bottom: 32px;
+  background: transparent;
+  color: var(--tinta);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+  box-sizing: border-box;
+}
+.hm *, .hm *::before, .hm *::after { box-sizing: border-box; }
+
+/* ---------- cabecera ---------- */
+.hm-head {
+  padding: 24px 24px 18px;
+  padding-left: calc(var(--rail-w, 286px) + 24px);
+  transition: padding-left .35s ease;
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.hm-pretitulo {
+  font-size: 12px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--tinta-3); margin-bottom: 2px;
+}
+.hm-titulo {
+  margin: 0; font-size: 24px; font-weight: 600; line-height: 1.2;
+  color: var(--tinta);
+}
+.hm-head-der { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+.hm-body {
+  padding: 0 24px;
+  padding-left: calc(var(--rail-w, 286px) + 24px);
+  transition: padding-left .35s ease;
+  display: flex; flex-direction: column; gap: 26px;
+}
+
+/* ---------- bloque ---------- */
+.hm-bloque { display: flex; flex-direction: column; gap: 14px; }
+.hm-bloque-cab {
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--borde); padding-bottom: 9px;
+}
+.hm-bloque-cab h2 {
+  margin: 0; font-size: 15px; font-weight: 700; color: var(--tinta);
+  display: flex; align-items: center; gap: 8px;
+}
+.hm-bloque-cab h2 svg { color: var(--azul); font-size: 15px; }
+.hm-bloque-der {
+  margin-left: auto; font-size: 12px; color: var(--azul); font-weight: 500;
+}
+
+/* ---------- tarjeta ---------- */
+.hm-tarjeta {
+  background: var(--papel);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(30, 41, 59, .04);
+  display: flex; flex-direction: column;
+  min-width: 0;
+}
+.hm-tarjeta-cab {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--borde);
+}
+.hm-tarjeta-cab h3 {
+  margin: 0; font-size: 14px; font-weight: 600; color: var(--tinta);
+  display: flex; align-items: center; gap: 8px;
+}
+.hm-tarjeta-cab h3 svg { color: var(--azul); }
+.hm-tarjeta-acciones {
+  margin-left: auto; display: flex; align-items: flex-end; gap: 10px;
+  flex-wrap: wrap;
+}
+.hm-tarjeta-cuerpo { padding: 12px 10px 6px; min-width: 0; }
+.hm-nota {
+  margin: 0; padding: 0 16px 10px; font-size: 12px; color: var(--tinta-3);
+}
+
+.hm-icono {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex-shrink: 0;
+  border: 1px solid var(--borde); border-radius: 5px;
+  background: #fff; color: var(--tinta-3); cursor: pointer;
+  font-size: 12px; transition: all .15s;
+}
+.hm-icono:hover { color: var(--azul); border-color: #bfdbfe; background: #f5f9ff; }
+
+/* ---------- rejillas ---------- */
+.hm-rejilla-2 {
+  display: grid; gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(430px, 1fr));
+}
+.hm-rejilla-3 {
+  display: grid; gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+.hm-rejilla-tomas {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(262px, 1fr));
+}
+
+/* ---------- tarjeta de toma ---------- */
+.hm-toma {
+  background: var(--fondo, #fff);
+  border: 1px solid var(--borde);
+  border-left: 3px solid var(--punto, #cbd5e1);
+  border-radius: 6px;
+  padding: 13px 15px 12px;
+}
+.hm-toma-cab {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 11px;
+}
+.hm-toma-cab b {
+  font-size: 17px; font-weight: 700; color: var(--tinta); letter-spacing: -.01em;
+}
+.hm-insignia {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  background: var(--insignia-fondo); color: var(--insignia-texto);
+  border: 1px solid var(--insignia-borde);
+}
+.hm-insignia svg { font-size: 10px; }
+
+.hm-dato {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 0; font-size: 12.5px; color: var(--tinta-2);
+  border-top: 1px dashed rgba(98, 105, 118, .14);
+}
+.hm-dato:first-of-type { border-top: 0; }
+.hm-dato svg { color: #94a3b8; font-size: 11px; flex-shrink: 0; }
+.hm-dato b {
+  margin-left: auto; font-weight: 600; color: var(--tinta);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.hm-dato b small { font-weight: 500; color: var(--tinta-3); margin-left: 3px; }
+
+/* ---------- filtros ---------- */
+.hm-campo { display: flex; flex-direction: column; gap: 4px; position: relative; min-width: 0; }
+.hm-campo label {
+  font-size: 11px; font-weight: 500; color: var(--tinta-3);
+}
+.hm-campo-corto { width: 132px; flex-shrink: 0; }
+.hm-campo-ancho { flex-shrink: 0; }
+.hm-campo-ancho .hm-unidad { height: 32px; }
+
+.hm-select, .hm-desplegable {
+  height: 32px; padding: 0 9px;
+  border: 1px solid var(--borde); border-radius: 5px;
+  background: #fff; color: var(--tinta); font-size: 12.5px;
+  font-family: inherit; cursor: pointer; width: 100%;
+}
+.hm-select:focus, .hm-desplegable:focus {
+  outline: 2px solid rgba(18, 104, 195, .35); outline-offset: 1px;
+}
+.hm-desplegable {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  text-align: left; min-width: 170px;
+}
+.hm-desplegable svg { font-size: 10px; color: var(--tinta-3); flex-shrink: 0; }
+
+.hm-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 60;
+  min-width: 210px; max-height: 288px; overflow-y: auto;
+  background: #fff; border: 1px solid var(--borde); border-radius: 6px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .14);
+  padding: 5px;
+}
+.hm-menu-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 8px; border: 0; border-radius: 4px; background: none;
+  font-size: 12.5px; font-family: inherit; color: var(--tinta);
+  cursor: pointer; text-align: left;
+}
+.hm-menu-item:hover { background: #f1f5f9; }
+.hm-menu-todas { font-weight: 600; }
+.hm-menu-raya { height: 1px; background: var(--borde); margin: 4px 2px; }
+.hm-casilla {
+  width: 15px; height: 15px; flex-shrink: 0;
+  border: 1px solid #cbd5e1; border-radius: 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; color: var(--azul);
+}
+
+.hm-unidad { display: flex; align-items: center; gap: 5px; }
+.hm-unidad-rotulo { font-size: 11px; color: var(--tinta-3); margin-right: 2px; }
+.hm-pastilla {
+  padding: 4px 10px; border-radius: 5px;
+  border: 1px solid var(--borde); background: #fff;
+  font-size: 11.5px; font-family: inherit; font-weight: 500;
+  color: var(--tinta-3); cursor: pointer; transition: all .15s;
+}
+.hm-pastilla:hover { border-color: #bfdbfe; color: var(--azul); }
+.hm-pastilla.activa {
+  background: var(--azul); border-color: var(--azul); color: #fff;
+}
+
+.hm-filtros {
+  display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;
+  padding: 11px 16px; border-bottom: 1px solid var(--borde);
+  background: #fbfcfe;
+}
+.hm-filtros .hm-campo:first-child { flex: 1; min-width: 190px; }
+/* Una fila de filtros suelta —la que manda sobre varios gráficos— no lleva
+   raya abajo: no separa nada, es la tarjeta entera. */
+.hm-tarjeta > .hm-filtros:last-child { border-bottom: 0; border-radius: 6px; }
+
+.hm-barra {
+  display: flex; align-items: center; gap: 10px;
+  padding: 2px 6px 8px;
+}
+.hm-barra-der { margin-left: auto; display: flex; gap: 7px; }
+
+/* ---------- avisos ---------- */
+.hm-aviso {
+  display: flex; gap: 10px; align-items: flex-start;
+  margin: 10px 8px 14px; padding: 12px 14px;
+  border-radius: 6px; font-size: 12.5px; line-height: 1.55;
+}
+.hm-aviso > svg { flex-shrink: 0; margin-top: 2px; font-size: 13px; }
+.hm-aviso-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+.hm-aviso-vacio { background: #f8fafc; border: 1px solid #e2e8f0; color: #475569; }
+.hm-aviso-error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+.hm-aviso-diag { background: #fffbeb; border: 1px solid #fde68a; color: #78350f; }
+.hm-aviso-diag p { margin: 7px 0; }
+.hm-diag-ruta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; margin-top: 3px; color: #92400e;
+}
+.hm-diag-claves { margin-top: 7px; }
+.hm-diag-claves code {
+  display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px;
+  background: #fff; border: 1px solid #fde68a; border-radius: 3px;
+  font-size: 11px; color: #78350f;
+}
+.hm-diag-crudo {
+  margin: 8px 0 0; padding: 10px; max-height: 260px; overflow: auto;
+  background: #1e293b; color: #e2e8f0; border-radius: 5px;
+  font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all;
+}
+.hm-enlace {
+  border: 0; background: none; padding: 0; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  color: #92400e; text-decoration: underline;
+}
+.hm-hueco {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 180px; color: var(--tinta-3); font-size: 13px;
+}
+
+/* ---------- ampliar ---------- */
+.hm-lupa {
+  position: fixed; inset: 0; z-index: 900;
+  background: rgba(15, 23, 42, .55);
+  display: flex; align-items: center; justify-content: center; padding: 28px;
+}
+.hm-lupa-caja {
+  background: #fff; border-radius: 8px; width: min(1180px, 100%);
+  max-height: 100%; display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .3);
+}
+.hm-lupa-caja > header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px; border-bottom: 1px solid var(--borde);
+}
+.hm-lupa-caja > header h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.hm-lupa-caja > header .hm-icono { margin-left: auto; }
+.hm-lupa-cuerpo { padding: 14px 12px; overflow: auto; }
+
+/* ---------- apexcharts ---------- */
+.hm .apexcharts-toolbar { z-index: 5; }
+.hm .apexcharts-menu {
+  border-radius: 5px; border: 1px solid var(--borde); font-size: 12px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .14);
+}
+.hm .apexcharts-tooltip {
+  border: 1px solid var(--borde) !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .14) !important;
+  border-radius: 6px !important;
+}
+.hm .apexcharts-tooltip-title {
+  background: #f8fafc !important; border-bottom: 1px solid var(--borde) !important;
+  font-weight: 600 !important;
+}
+.hm .apexcharts-legend-text { color: var(--tinta-2) !important; }
+
+/* ---------- pantallas estrechas ---------- */
+@media (max-width: 900px) {
+  .hm-head, .hm-body { padding-left: 16px; padding-right: 16px; }
+  .hm-titulo { font-size: 20px; }
+  .hm-rejilla-2, .hm-rejilla-3 { grid-template-columns: 1fr; }
+  .hm-filtros .hm-campo:first-child { min-width: 0; width: 100%; }
+  .hm-campo-corto { width: calc(50% - 6px); }
+  .hm-lupa { padding: 10px; }
+}
