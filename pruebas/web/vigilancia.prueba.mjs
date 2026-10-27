@@ -44,6 +44,51 @@ const borde = await p.locator('.tbl-page-body > div').first().evaluate(
 ok(borde >= RAIL, 'y lo que se pinta dentro empieza a la derecha del menú',
    `${Math.round(borde)}px`);
 
+// ══════════ LA PESTAÑA DE VULNERABILIDADES ══════════
+const pestanas = await p.locator('.tbl-page-body button').allInnerTexts();
+ok(pestanas.join('|').includes('Vulnerabilidades (4)'),
+   'la pestaña sale con su cuenta', pestanas.join(' | ').slice(0, 90));
+
+await p.locator('button:has-text("Vulnerabilidades")').click();
+await p.waitForTimeout(400);
+
+const filas = p.locator('.tbl-page-body table tbody tr');
+ok(await filas.count() === 4, 'se listan las cuatro', `${await filas.count()}`);
+
+/* LO QUE MAS IMPORTA DE ESTA PESTAÑA: no tienen estado, se registran y no
+ * se cierran. Así que lo único que separa lo urgente de lo demás es la
+ * prioridad, y si la lista llega desordenada hay que leerla entera. */
+const prioridades = await filas.locator('td:nth-child(1)').allInnerTexts();
+ok(prioridades.map(x => x.trim()).join(',') === 'ALTA,ALTA,MEDIA,BAJA',
+   'las ALTA primero, aunque lleguen al final',
+   prioridades.map(x => x.trim()).join(','));
+
+const primera = await filas.first().innerText();
+ok(/Candado forzado/.test(primera),
+   'y entre las ALTA, la más reciente arriba',
+   primera.replace(/\n/g, ' ').slice(0, 70));
+
+/* Los KPI son por prioridad y no un total: seis vulnerabilidades son pocas
+ * o muchas según cuántas sean ALTA. */
+const tarjetas = await p.locator('.tbl-page-body > div:last-of-type > div:first-child').innerText();
+ok(/ALTA[\s\S]*2/i.test(tarjetas), 'el resumen cuenta las ALTA',
+   tarjetas.replace(/\n/g, ' ').slice(0, 80));
+
+const lejana = await filas.nth(0).innerText();
+ok(/870/.test(lejana), 'se ve a qué distancia de la garita quedó',
+   lejana.replace(/\n/g, ' ').slice(0, 110));
+ok(/asignado a Garita 1/.test(lejana),
+   'y que fue lejos de su puesto, que es lo que explica la distancia',
+   lejana.replace(/\n/g, ' ').slice(0, 110));
+
+ok(await filas.nth(0).locator('img').count() === 3,
+   'las evidencias se ven, hasta tres');
+ok(/\+1/.test(lejana), 'y se dice cuántas quedan fuera',
+   lejana.replace(/\n/g, ' ').slice(0, 110));
+
+const sinFoto = await filas.nth(1).innerText();
+ok(/—/.test(sinFoto), 'cuando no hay evidencias se dice, no se deja en blanco');
+
 ok(errs.length === 0, 'sin errores de JavaScript', errs.join(' | ').slice(0, 200));
 
 await b.close();

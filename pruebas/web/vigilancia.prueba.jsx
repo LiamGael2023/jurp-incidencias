@@ -29,12 +29,43 @@ const INCIDENTES = [
     fecha: '2026-09-10T12:50:00Z', evidencias: [] },
 ];
 
+/* Como vienen de verdad: seis filas, prioridad ALTA/MEDIA/BAJA, sin estado
+ * -se registran, no se cierran- y con la garita más cercana y su distancia.
+ * El orden de llegada es a propósito el peor posible: una BAJA primero. */
+const VULNERABILIDADES = [
+  { id: 1, titulo: 'Reja perimétrica cortada', detalles: 'Sector norte, junto al canal',
+    prioridad: 'BAJA', latitud: '-8.11', longitud: '-79.03',
+    reportado_por_nombre: 'v_calderonr', fecha_reporte: '2026-10-20T18:00:00Z',
+    garita_asignada: 'Garita 2', garita_cercana: 'Garita 2',
+    distancia_garita_m: 41.6, evidencias: [{ archivo: '/media/v1.jpg' }] },
+  { id: 2, titulo: 'Luminaria apagada', detalles: 'Acceso principal sin iluminación',
+    prioridad: 'ALTA', latitud: '-8.12', longitud: '-79.04',
+    reportado_por_nombre: 'v_montoya', fecha_reporte: '2026-10-21T02:10:00Z',
+    garita_asignada: 'Garita 1', garita_cercana: 'Garita 1',
+    distancia_garita_m: 12, evidencias: [] },
+  { id: 3, titulo: 'Candado forzado', detalles: 'Portón de servicio',
+    prioridad: 'ALTA', latitud: '-8.13', longitud: '-79.05',
+    reportado_por_nombre: 'v_cueva', fecha_reporte: '2026-10-24T22:30:00Z',
+    /* Reportada lejos de su puesto: la distancia sin esta explicación
+     * parecería un error de GPS. */
+    garita_asignada: 'Garita 1', garita_cercana: 'Garita 4',
+    distancia_garita_m: 870.4, evidencias: [{ archivo: '/media/v3a.jpg' },
+      { archivo: '/media/v3b.jpg' }, { archivo: '/media/v3c.jpg' },
+      { archivo: '/media/v3d.jpg' }] },
+  { id: 4, titulo: 'Cámara desalineada', detalles: 'No cubre el ingreso',
+    prioridad: 'MEDIA', latitud: '-8.14', longitud: '-79.06',
+    reportado_por_nombre: 'v_chavez', fecha_reporte: '2026-10-19T14:00:00Z',
+    garita_asignada: 'Garita 3', garita_cercana: 'Garita 3',
+    distancia_garita_m: 7, evidencias: [] },
+];
+
 window.fetch = async (u) => {
   const url = String(u);
   if (url.includes('/incidentes/lista/')) return json({ results: INCIDENTES });
   if (url.includes('/incidentes/gestion/')) return json({ results: [] });
   if (url.includes('/transito/')) return json({ results: [] });
   if (url.includes('/alertas/')) return json({ results: [] });
+  if (url.includes('/vulnerabilidades/lista/')) return json({ results: VULNERABILIDADES });
   return json({ results: [] });
 };
 

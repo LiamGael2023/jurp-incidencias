@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FaSyncAlt, FaShieldAlt, FaClock, FaCar, FaExclamationTriangle, FaChevronLeft, FaChevronRight, FaTimes, FaImage, FaMapMarkerAlt, FaUser, FaCalendarAlt, FaCheckCircle, FaSignInAlt, FaSignOutAlt } from 'react-icons/fa';
+import { FaSyncAlt, FaShieldAlt, FaClock, FaCar, FaExclamationTriangle, FaChevronLeft, FaChevronRight, FaTimes, FaImage, FaMapMarkerAlt, FaUser, FaCalendarAlt, FaCheckCircle, FaSignInAlt, FaSignOutAlt, FaUnlockAlt } from 'react-icons/fa';
 import './Incidentes.css';
 import { MEDIA } from './api';
 
@@ -21,11 +21,13 @@ function Vigilancia() {
   const [turnos, setTurnos] = useState([]);
   const [transitos, setTransitos] = useState([]);
   const [alertas, setAlertas] = useState([]);
+  const [vulnerabilidades, setVulnerabilidades] = useState([]);
 
   // Paginación
   const [pagInc, setPagInc] = useState(1);
   const [pagTur, setPagTur] = useState(1);
   const [pagTra, setPagTra] = useState(1);
+  const [pagVul, setPagVul] = useState(1);
   const itemsPP = 10;
 
   // Modal imagen
@@ -55,17 +57,18 @@ function Vigilancia() {
     };
 
     try {
-      const [rInc, rTur, rTra, rAle] = await Promise.all([
+      const [rInc, rTur, rTra, rAle, rVul] = await Promise.all([
         fetch(`${BASE}/incidentes/lista/`, opciones),
         fetch(`${BASE}/incidentes/gestion/`, opciones),
         fetch(`${BASE}/transito/`, opciones),
         fetch(`${BASE}/alertas/`, opciones),
+        fetch(`${BASE}/vulnerabilidades/lista/`, opciones),
       ]);
 
       // Un 401 en todas significa que el backend todavía no reconoce el
       // token de PLUVIRA. Se avisa en vez de mostrar tablas vacías, que
       // se leerían como "no hay registros".
-      if ([rInc, rTur, rTra, rAle].every(r => r.status === 401)) {
+      if ([rInc, rTur, rTra, rAle, rVul].every(r => r.status === 401)) {
         setError('El servidor de vigilancia no aceptó la sesión. Revisa la integración con PLUVIRA.');
       }
 
@@ -73,6 +76,7 @@ function Vigilancia() {
       if (rTur.ok) { const d = await rTur.json(); setTurnos(Array.isArray(d) ? d : d.results || []); }
       if (rTra.ok) { const d = await rTra.json(); setTransitos(Array.isArray(d) ? d : d.results || []); }
       if (rAle.ok) { const d = await rAle.json(); setAlertas(Array.isArray(d) ? d : d.results || []); }
+      if (rVul.ok) { const d = await rVul.json(); setVulnerabilidades(Array.isArray(d) ? d : d.results || []); }
     } catch (e) {
       console.error('Error cargando vigilancia:', e);
       setError('No se pudo conectar con el servidor de vigilancia.');
@@ -111,6 +115,28 @@ function Vigilancia() {
   const ingresos = transitos.filter(t => t.tipo === 'INGRESO').length;
   const salidas = transitos.filter(t => t.tipo === 'SALIDA').length;
   const alertasActivas = alertas.filter(a => a.estado === 'activa').length;
+
+  /* Las vulnerabilidades no tienen estado: se registran, no se cierran. Así
+   * que lo que ordena la lista es la prioridad, no si están resueltas, y
+   * las ALTA van primero —a igualdad, lo más reciente arriba—. Dejarlas en
+   * el orden que llegan obligaría a leerlas todas para encontrar las que
+   * importan. */
+  const PESO = { ALTA: 0, MEDIA: 1, BAJA: 2 };
+  const vulnerabilidadesOrdenadas = [...vulnerabilidades].sort((a, b) => {
+    const d = (PESO[a.prioridad] ?? 9) - (PESO[b.prioridad] ?? 9);
+    if (d !== 0) return d;
+    return new Date(b.fecha_reporte || 0) - new Date(a.fecha_reporte || 0);
+  });
+  const vulnPorPrioridad = (p) =>
+    vulnerabilidades.filter(v => v.prioridad === p).length;
+
+  /* Los colores son los mismos que usa el resto del módulo para la gravedad:
+   * el rojo de los incidentes, el ámbar de las alertas activas. */
+  const COLOR_PRIORIDAD = {
+    ALTA:  { fondo: '#fee2e2', texto: '#dc2626', barra: '#d63939' },
+    MEDIA: { fondo: '#fef3c7', texto: '#b45309', barra: '#f59f00' },
+    BAJA:  { fondo: '#e0f2fe', texto: '#0369a1', barra: '#206bc4' },
+  };
 
   const kpi = (color, icon, label, value) => (
     <div style={{background:'#fff',borderRadius:'4px',border:'1px solid rgba(98,105,118,0.16)',padding:'16px 20px',flex:1,minWidth:'140px',borderLeft:`4px solid ${color}`,display:'flex',alignItems:'center',gap:'12px'}}>
@@ -178,6 +204,7 @@ function Vigilancia() {
           {tabBtn('incidentes', <FaExclamationTriangle/>, `Incidentes (${incidentes.length})`)}
           {tabBtn('turnos', <FaClock/>, `Turnos (${turnos.length})`)}
           {tabBtn('transitos', <FaCar/>, `Tránsitos (${transitos.length})`)}
+          {tabBtn('vulnerabilidades', <FaUnlockAlt/>, `Vulnerabilidades (${vulnerabilidades.length})`)}
         </div>
 
         <div style={{padding:'20px'}}>
@@ -336,6 +363,83 @@ function Vigilancia() {
                 </tbody>
               </table>
               {paginador(pagTra, setPagTra, totalPags(transitos))}
+            </div>
+          </>)}
+
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {/* ── TAB: VULNERABILIDADES ────────────────────────────────────── */}
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {tab === 'vulnerabilidades' && (<>
+            {/* Los KPI son por prioridad y no un total, porque un total no
+                dice nada: seis vulnerabilidades son pocas o muchas según
+                cuántas sean ALTA. */}
+            <div style={{display:'flex',gap:'12px',flexWrap:'wrap',marginBottom:'20px'}}>
+              {kpi(COLOR_PRIORIDAD.ALTA.barra, <FaExclamationTriangle/>, 'Prioridad Alta', vulnPorPrioridad('ALTA'))}
+              {kpi(COLOR_PRIORIDAD.MEDIA.barra, <FaShieldAlt/>, 'Prioridad Media', vulnPorPrioridad('MEDIA'))}
+              {kpi(COLOR_PRIORIDAD.BAJA.barra, <FaUnlockAlt/>, 'Prioridad Baja', vulnPorPrioridad('BAJA'))}
+            </div>
+
+            <div style={{background:'#fff',borderRadius:'4px',border:'1px solid rgba(98,105,118,0.16)',overflow:'hidden'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px'}}>
+                <thead>
+                  <tr style={{background:'#f8fafc',borderBottom:'1px solid #e2e8f0'}}>
+                    <th style={{padding:'10px 14px',textAlign:'left',fontWeight:'600',color:'#475569'}}>Prioridad</th>
+                    <th style={{padding:'10px 14px',textAlign:'left',fontWeight:'600',color:'#475569'}}>Título</th>
+                    <th style={{padding:'10px 14px',textAlign:'left',fontWeight:'600',color:'#475569'}}>Detalles</th>
+                    <th style={{padding:'10px 14px',textAlign:'left',fontWeight:'600',color:'#475569'}}>Garita</th>
+                    <th style={{padding:'10px 14px',textAlign:'left',fontWeight:'600',color:'#475569'}}>Reportado por</th>
+                    <th style={{padding:'10px 14px',textAlign:'left',fontWeight:'600',color:'#475569'}}>Fecha</th>
+                    <th style={{padding:'10px 14px',textAlign:'center',fontWeight:'600',color:'#475569'}}>Evidencias</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginar(vulnerabilidadesOrdenadas, pagVul).map((v, i) => {
+                    const c = COLOR_PRIORIDAD[v.prioridad] || COLOR_PRIORIDAD.BAJA;
+                    /* Que la garita más cercana no sea la asignada significa
+                       que el vigilante reportó lejos de su puesto. No es un
+                       error —puede estar rondando—, pero es lo que explica
+                       una distancia grande, y sin decirlo el número solo
+                       confunde. */
+                    const fuera = v.garita_asignada && v.garita_cercana
+                      && v.garita_asignada !== v.garita_cercana;
+                    return (
+                      <tr key={v.id || i} style={{borderBottom:'1px solid #f1f5f9'}}>
+                        <td style={{padding:'10px 14px'}}>
+                          <span style={{background:c.fondo,color:c.texto,padding:'2px 8px',borderRadius:'4px',fontSize:'11px',fontWeight:'600'}}>{v.prioridad || '—'}</span>
+                        </td>
+                        <td style={{padding:'10px 14px',fontWeight:'600',color:'#1d273b'}}>{v.titulo}</td>
+                        <td style={{padding:'10px 14px',color:'#475569',maxWidth:'260px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={v.detalles}>{v.detalles}</td>
+                        <td style={{padding:'10px 14px',color:'#475569',whiteSpace:'nowrap'}}>
+                          <span style={{display:'flex',alignItems:'center',gap:'5px'}}>
+                            <FaMapMarkerAlt size={11} color="#94a3b8"/>
+                            {v.garita_cercana || v.garita_asignada || '—'}
+                          </span>
+                          {typeof v.distancia_garita_m === 'number' && (
+                            <div style={{fontSize:'11px',color:'#626976'}}>
+                              a {Math.round(v.distancia_garita_m)} m
+                              {fuera && ` · asignado a ${v.garita_asignada}`}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{padding:'10px 14px',color:'#475569'}}>{v.reportado_por_nombre || '—'}</td>
+                        <td style={{padding:'10px 14px',color:'#475569',whiteSpace:'nowrap'}}>{fmtFecha(v.fecha_reporte)}</td>
+                        <td style={{padding:'10px 14px',textAlign:'center'}}>
+                          {(v.evidencias || []).length > 0 ? (
+                            <div style={{display:'flex',gap:'4px',justifyContent:'center'}}>
+                              {v.evidencias.slice(0,3).map((ev, j) => (
+                                <img key={j} src={getUrlImagen(ev.archivo)} alt="" onClick={()=>setModalImg(getUrlImagen(ev.archivo))} style={{width:'36px',height:'36px',objectFit:'cover',borderRadius:'4px',border:'1px solid #e2e8f0',cursor:'pointer'}} />
+                              ))}
+                              {v.evidencias.length > 3 && <span style={{fontSize:'11px',color:'#626976',alignSelf:'center'}}>+{v.evidencias.length-3}</span>}
+                            </div>
+                          ) : <span style={{color:'#cbd5e1',fontSize:'11px'}}>—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {vulnerabilidades.length === 0 && <tr><td colSpan="7" style={{padding:'30px',textAlign:'center',color:'#626976'}}>No hay vulnerabilidades registradas</td></tr>}
+                </tbody>
+              </table>
+              {paginador(pagVul, setPagVul, totalPags(vulnerabilidades))}
             </div>
           </>)}
 
