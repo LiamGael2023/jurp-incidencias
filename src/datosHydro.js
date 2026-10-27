@@ -111,7 +111,10 @@ export function listaDe(resp) {
  * las rutas cuya respuesta todavía no se ha mirado, pero el primero manda.
  */
 const N = {
-  idToma: ['id', 'toma_id', 'pk', 'codigo_toma'],
+  /* `value` va PRIMERO: el catalogo de este servidor devuelve
+   * {label, value} y es `value` lo que aceptan las rutas que filtran
+   * por toma. Faltaba de la lista, asi que el id salia undefined. */
+  idToma: ['value', 'id', 'toma_id', 'pk', 'codigo_toma'],
   nombreToma: ['toma', 'nombre', 'name', 'codigo', 'label', 'titulo',
     'descripcion', 'toma_nombre', 'nombre_toma'],
 
@@ -180,8 +183,15 @@ export function normalizaTomas(resp) {
     }
     const id = campo(o, N.idToma);
     const nombre = campo(o, N.nombreToma);
+    /* EL INDICE NO SIRVE DE ID. El servidor valida la toma contra su propio
+     * catalogo: mandarle un 0 porque era la primera de la lista devuelve
+     * «toma invalida». Y el sintoma enganaba, porque el desplegable SI
+     * mostraba "10.2" —el nombre si se leia bien— mientras enviaba otra
+     * cosa. Si no hay clave de id, el nombre es la mejor apuesta: en este
+     * servidor la toma se llama igual que su codigo. El indice queda solo
+     * como ultimo recurso para que la lista se pinte. */
     return {
-      id: id !== undefined ? id : i,
+      id: id !== undefined ? id : (nombre !== undefined ? nombre : i),
       nombre: nombre !== undefined ? String(nombre) : `Toma ${id ?? i}`,
     };
   });
