@@ -305,13 +305,37 @@ function App() {
     );
   }
 
-  /* USUARIOS DE SENTRIA NO LLEVA RAIL, a diferencia del de PLUVIRA. Cada
-   * módulo tiene su armazón: las pantallas de PLUVIRA —mapa, partes,
-   * maquinaria— viven en el rail de NEXHYDRO, y las de SENTRIA en la
-   * cabecera «Sistema Integrado de Monitoreo» con su barra lateral. Vigilancia
-   * usa ésa, así que Usuarios también: puesta en el rail, pasar de una
-   * pantalla a la otra cambiaba el marco entero y parecían dos aplicaciones
-   * distintas. Por eso cae abajo, al armazón por defecto, y no aquí. */
+  /* LAS DOS PANTALLAS DE SENTRIA VAN EN EL MISMO ARMAZON, y es el rail.
+   *
+   * Antes Vigilancia caía en la barra lateral genérica —la de «MENÚ
+   * PRINCIPAL», sin logo— y Usuarios en el rail de NEXHYDRO. Pasar de una a
+   * otra cambiaba el marco entero y parecían dos aplicaciones.
+   *
+   * Se unifican en el rail y no al revés porque el rail enseña de qué módulo
+   * son las pantallas que estás viendo: con tres módulos en la misma web
+   * -PLUVIRA, SENTRIA, HYDROMETRIX- un menú que no lo dice obliga a
+   * recordarlo. El logo sale solo: cuando el menú filtrado no declara
+   * secciones, RailGIS rotula el módulo activo. */
+  if (vistaActual === 'vigilancia' || vistaActual === 'usuarios-sentria') {
+    return (
+      <div className="maq">
+        <RailGIS {...propsRail} />
+        <div className="maq-main">
+          {vistaActual === 'vigilancia' && <Vigilancia />}
+          {/* Mismo contrato, otro servidor. `apiEquipos={null}` no es «no
+              tengo permiso»: SENTRIA no ata cuentas a celulares, así que
+              esas columnas no existen aquí. */}
+          {vistaActual === 'usuarios-sentria' && (
+            <EquiposEnlazados
+              apiUsuarios="/vigapi/mobile/users/"
+              apiEquipos={null}
+              sistema="SENTRIA"
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (vistaActual === 'proyectos') {
     return (
@@ -438,17 +462,8 @@ function App() {
               onIncidenteAbierto={() => setIncidenteAbrir(null)}
             />
           )}
-          {vistaActual === 'vigilancia' && <Vigilancia />}
-          {/* Mismo contrato, otro servidor. `apiEquipos={null}` no es «no
-              tengo permiso»: SENTRIA no ata cuentas a celulares, así que
-              esas columnas no existen aquí. */}
-          {vistaActual === 'usuarios-sentria' && (
-            <EquiposEnlazados
-              apiUsuarios="/vigapi/mobile/users/"
-              apiEquipos={null}
-              sistema="SENTRIA"
-            />
-          )}
+          {/* Vigilancia y Usuarios no están aquí: las dos pantallas de
+              SENTRIA se devuelven arriba, en el armazón del rail. */}
           {vistaActual === 'estadisticas' && <Estadisticas />}
           {vistaActual === 'reportes' && <Reportes />}
           {vistaActual === 'maquinaria' && <Maquinaria irAIncidente={irAIncidente} />}
