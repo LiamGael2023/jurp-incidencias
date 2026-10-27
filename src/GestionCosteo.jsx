@@ -886,6 +886,18 @@ export default function GestionCosteo({
    * porque la escalera necesita la partida completa —rutaDe y cuelgaDe leen
    * el código para saber de qué cuelga— y progDetalle es un resumen. */
   const partidasDelParte = useMemo(() => {
+    /* EN UNA ACTIVIDAD DE OBRA, el presupuesto entero. En una incidencia,
+     * solo lo programado.
+     *
+     * La diferencia no es un capricho: en una incidencia se programa de
+     * antemano qué partidas va a tocar ese evento, y acotar a eso evita
+     * imputar a una partida que no tiene nada que ver. En una actividad ya
+     * no se programa nada —el bloque de añadir partidas se quitó de aquí
+     * porque las partidas se registran en Proyectos—, así que acotar a «lo
+     * programado» dejaba el desplegable con lo poco que se hubiera
+     * programado antes de quitarlo. Con la partida ya obligatoria, eso es
+     * un formulario que no se puede completar. */
+    if (!esIncidencia) return partidas;
     if (!progDetalle.length) return partidas;
     /* LOS TITULOS NO ENTRAN. Un título es una fila que agrupa: no tiene
      * unidad ni precio, y su total es la suma de lo que cuelga. Imputarle
@@ -897,14 +909,14 @@ export default function GestionCosteo({
     // Si por lo que sea ninguna coincide, mejor el presupuesto entero que un
     // selector vacío: lo primero es molesto, lo segundo bloquea el parte.
     return sub.length ? sub : partidas;
-  }, [partidas, progDetalle]);
+  }, [partidas, progDetalle, esIncidencia]);
 
   /* ¿La lista de partidas está ACOTADA a lo programado, o es el presupuesto
    * entero? Lo usan los dos formularios que ofrecen partida -el parte de
    * maquinaria y los de mano de obra e insumo- para decir de dónde salen las
    * opciones. Vive aquí y no dentro de uno de ellos porque, estando dentro,
    * el otro reventaba con un ReferenceError al abrirse. */
-  const acotado = progDetalle.length > 0
+  const acotado = esIncidencia && progDetalle.length > 0
     && partidasDelParte.length < partidas.length;
 
   const partidaDeLaLinea = partidas.find(
@@ -3179,10 +3191,19 @@ export default function GestionCosteo({
                             Solo las {partidasDelParte.length} programadas para esta incidencia
                           </div>
                         ) : partidas.length > 0 && (
-                          <div style={{ fontSize:'11.5px', fontWeight:400, color:'#b45309', marginTop:'3px' }}>
-                            Las {partidas.length} del presupuesto entero — prográmalas
-                            arriba y aquí saldrán solo las de esta incidencia
-                          </div>
+                          /* En una actividad no hay nada que programar —ese
+                             bloque se quitó—, así que mandar a programar
+                             arriba sería mandar a un sitio que ya no existe. */
+                          esIncidencia ? (
+                            <div style={{ fontSize:'11.5px', fontWeight:400, color:'#b45309', marginTop:'3px' }}>
+                              Las {partidas.length} del presupuesto entero — prográmalas
+                              arriba y aquí saldrán solo las de esta incidencia
+                            </div>
+                          ) : (
+                            <div style={{ fontSize:'11.5px', fontWeight:400, color:'#64748b', marginTop:'3px' }}>
+                              Las {partidas.length} del presupuesto de esta obra
+                            </div>
+                          )
                         )}
                       </div>
 
