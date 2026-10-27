@@ -35,6 +35,29 @@ const cant = (n) => (parseFloat(n) || 0).toLocaleString('es-PE',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pct = (n) => (parseFloat(n) || 0).toFixed(2) + ' %';
 
+/**
+ * El color de una barra de avance, por tramos.
+ *
+ *     < 25 %   rojo       va muy por detrás
+ *     < 75 %   naranja    a medio camino
+ *     >= 75 %  verde      cerca de terminar
+ *
+ * Se exporta porque la tabla valorizada de AvanceObra pinta lo mismo: dos
+ * tablas del mismo tablero con escalas de color distintas se leen mal, y una
+ * copia de esta función acabaría divergiendo de la otra.
+ *
+ * Pasar del 100 % NO tiene color propio: el tramo lo decide el porcentaje y
+ * ya está. Que se haya ejecutado de más se dice en el SALDO, que sale en
+ * rojo y en negativo, y repetirlo en la barra pintaría de rojo —de «va
+ * atrasado»— justo a la que más ha avanzado.
+ */
+export const colorAvance = (n) => {
+  const v = parseFloat(n) || 0;
+  if (v < 25) return '#dc2626';
+  if (v < 75) return '#ea580c';
+  return '#16a34a';
+};
+
 /** La estructura a la que cuelga una partida: el primer tramo de su ruta. */
 const estructuraDe = (p) => {
   try {
@@ -179,7 +202,7 @@ export default function AvanceFisico({ obra }) {
                   const prog = parseFloat(p.metrado) || 0;
                   const ejec = parseFloat(p.ejecutado) || 0;
                   const a = parseFloat(p.avance) || 0;
-                  const pasada = a > 100;
+                  const color = colorAvance(a);
                   return (
                     <tr key={p.id} style={{ borderTop:'1px solid #f1f5f9',
                       background: ejec > 0 ? '#fff' : '#fcfdfe' }}>
@@ -200,11 +223,10 @@ export default function AvanceFisico({ obra }) {
                           <div style={{ flex:1, height:'8px', background:'#f1f5f9',
                             borderRadius:'5px', overflow:'hidden', minWidth:'60px' }}>
                             <div style={{ width:`${Math.min(100, a)}%`, height:'100%',
-                              borderRadius:'5px',
-                              background: pasada ? '#dc2626' : '#1463A5' }} />
+                              borderRadius:'5px', background: color }} />
                           </div>
                           <span style={{ fontSize:'11.5px', fontWeight:700, minWidth:'52px',
-                            textAlign:'right', color: pasada ? '#dc2626' : '#475569' }}>
+                            textAlign:'right', color }}>
                             {pct(a)}
                           </span>
                         </div>

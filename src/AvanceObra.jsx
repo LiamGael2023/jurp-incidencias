@@ -40,7 +40,7 @@ import {
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Swal from 'sweetalert2';
-import AvanceFisico from './AvanceFisico';
+import AvanceFisico, { colorAvance } from './AvanceFisico';
 import { API_OPS } from './api';
 
 
@@ -506,7 +506,9 @@ export default function AvanceObra() {
                 <tbody>
                   {(datos.estructuras || []).map(e => {
                     const p = Math.min(100, e.pct || 0);
-                    const pasada = (e.pct || 0) > 100;
+                    // La misma escala que la tabla física de abajo: dos tablas
+                    // del mismo tablero con colores distintos se leen mal.
+                    const color = colorAvance(e.pct);
                     return (
                       <tr key={e.codigo || e.descripcion}
                         style={{ borderTop:'1px solid #f1f5f9',
@@ -530,10 +532,10 @@ export default function AvanceObra() {
                             <div style={{ flex:1, height:'8px', background:'#f1f5f9',
                               borderRadius:'5px', overflow:'hidden', minWidth:'70px' }}>
                               <div style={{ width:`${p}%`, height:'100%', borderRadius:'5px',
-                                background: pasada ? '#dc2626' : '#1463A5' }} />
+                                background: color }} />
                             </div>
                             <span style={{ fontSize:'11.5px', fontWeight:700, minWidth:'52px',
-                              textAlign:'right', color: pasada ? '#dc2626' : '#475569' }}>
+                              textAlign:'right', color }}>
                               {pct(e.pct)}
                             </span>
                           </div>
