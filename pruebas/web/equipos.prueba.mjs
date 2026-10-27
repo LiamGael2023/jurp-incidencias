@@ -204,6 +204,25 @@ ok(await p.locator('.eqe-tabla').count() === 0,
 ok(await p.locator('.eqe-falta').count() === 1,
    'y sale el aviso de que falta en el servidor');
 
+// ══════════ EL HUECO DEL RAIL, SOLO DONDE HAY RAIL ══════════
+// La pantalla reserva a su izquierda el ancho del rail porque el rail es un
+// overlay fijo y si no se dibuja debajo. En el armazon de la barra lateral
+// clasica no hay nada que esquivar, y esa reserva dejaba 300 px en blanco
+// con la tabla pegada al borde derecho.
+await ir('mezcla');
+const sinRail = await p.locator('.eqe').evaluate(
+  el => parseFloat(getComputedStyle(el).paddingLeft));
+ok(sinRail < 60, 'sin rail, la pantalla no deja un hueco a la izquierda',
+   `${sinRail}px`);
+
+await p.goto(`${BASE}?v=mezcla&rail=1`, { waitUntil: 'domcontentloaded' });
+await p.waitForSelector('.eqe', { timeout: 10000 });
+await p.waitForTimeout(450);
+const conRail = await p.locator('.eqe').evaluate(
+  el => parseFloat(getComputedStyle(el).paddingLeft));
+ok(conRail > 200, 'y dentro del rail sí lo deja, o se dibujaría debajo',
+   `${conRail}px`);
+
 // ══════════ QUE SE LEA ══════════
 await ir('mezcla');
 const flojos = (await medidorDe(p)(

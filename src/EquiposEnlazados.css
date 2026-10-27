@@ -6,12 +6,22 @@
 
 .eqe {
   padding: 18px 22px 28px;
-  /* El rail del menú es un overlay fijo: sin este hueco la pantalla se
-   * dibuja debajo de él. Ya pasó con Campañas. */
-  padding-left: calc(var(--rail-w, 286px) + 22px);
   background: #f1f5f9;
   min-height: 100vh;
   box-sizing: border-box;
+}
+
+/* EL HUECO DEL RAIL SOLO CUANDO HAY RAIL. El rail del menú es un overlay
+ * fijo: dentro de él la pantalla necesita reservarle el ancho o se dibuja
+ * debajo —ya pasó con Campañas—. Pero esta misma pantalla se usa también en
+ * el armazón de la barra lateral clásica, y allí esa reserva no tapa nada:
+ * deja 300 px en blanco a la izquierda y empuja la tabla contra el borde
+ * derecho.
+ *
+ * Atarlo al contenedor en vez de al componente es lo que permite que la
+ * pantalla sirva en los dos sitios sin saber en cuál está. */
+.maq-main > .eqe {
+  padding-left: calc(var(--rail-w, 286px) + 22px);
 }
 
 .eqe-cab h2 {

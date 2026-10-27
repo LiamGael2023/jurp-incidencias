@@ -186,4 +186,21 @@ const props = (v === 'sentria' || v === 'sinpermiso-sentria')
       sistema: 'SENTRIA' }
   : {};
 
-createRoot(document.getElementById('app')).render(<EquiposEnlazados {...props} />);
+/* ?rail=1 la monta dentro del armazon del rail; sin eso, dentro de la barra
+ * lateral clasica. La misma pantalla se usa en los dos, y el hueco que hay
+ * que reservarle al rail -que es un overlay fijo- solo vale en uno: fuera de
+ * el son 300 px en blanco a la izquierda. */
+const conRail = new URLSearchParams(location.search).get('rail') === '1';
+const raiz = document.getElementById('app');
+let donde = raiz;
+if (conRail) {
+  const maq = document.createElement('div');
+  maq.className = 'maq';
+  const main = document.createElement('div');
+  main.className = 'maq-main';
+  maq.appendChild(main);
+  raiz.appendChild(maq);
+  donde = main;
+}
+
+createRoot(donde).render(<EquiposEnlazados {...props} />);
