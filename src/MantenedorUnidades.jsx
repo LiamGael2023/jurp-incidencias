@@ -13,6 +13,14 @@
 // concreto. Quien configura un proyecto lo configura entero desde el mismo
 // sitio.
 //
+// CADA UNIDAD DICE CÓMO SE MIDE. En la hoja de metrados de JURP las columnas
+// son LARGO, ANCHO, ALTURA, ÁREA y Coefi., y no todas se llenan siempre: en
+// el Excel original están pintadas de amarillo, fila por fila, las que
+// corresponden a cada unidad. Eso no lo decide quien llena la hoja, lo decide
+// la unidad: un galón no tiene largo. Por eso las casillas se guardan aquí y
+// no dentro del formulario de metrados —el día que JURP añada una unidad
+// nueva también tiene que poder decir cómo se mide, sin tocar el código—.
+//
 // DESACTIVAR NO ES BORRAR, y el servidor lo impone: un DELETE pone
 // `activo=false`. Las partidas guardan el código como texto, así que si la
 // fila desapareciera, las que ya usan "m3" mostrarían un código que no está
@@ -34,7 +42,23 @@ const API = `${API_OPS}/unidades/`;
 
 const Portal = ({ children }) => createPortal(children, document.body);
 
-const VACIA = { codigo: '', nombre: '' };
+/* Las cinco casillas de la hoja de metrados, en el orden del Excel. */
+const DIMS = [
+  { campo: 'usa_largo',       corto: 'largo',  largo: 'Largo (m)' },
+  { campo: 'usa_ancho',       corto: 'ancho',  largo: 'Ancho (m)' },
+  { campo: 'usa_altura',      corto: 'altura', largo: 'Altura (m)' },
+  { campo: 'usa_area',        corto: 'área',   largo: 'Área (m²)' },
+  { campo: 'usa_coeficiente', corto: 'coef.',  largo: 'Coeficiente' },
+];
+
+/* Unidad recién nacida: sin dimensiones y con coeficiente, que es como está
+ * el Excel para diecisiete de las veinte. Lo normal es que la nueva también
+ * se cuente de a una. */
+const VACIA = {
+  codigo: '', nombre: '',
+  usa_largo: false, usa_ancho: false, usa_altura: false,
+  usa_area: false, usa_coeficiente: true,
+};
 
 export default function MantenedorUnidades({ onCerrar, onCambio }) {
   const [lista, setLista] = useState([]);
@@ -43,7 +67,7 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
   const [busca, setBusca] = useState('');
   const [verInactivas, setVerInactivas] = useState(false);
   const [nueva, setNueva] = useState({ ...VACIA });
-  const [editando, setEditando] = useState(null);   // {id, codigo, nombre}
+  const [editando, setEditando] = useState(null);   // la fila completa
   const [ocupado, setOcupado] = useState(null);     // id, o 'nueva'
 
   const cargar = useCallback(async () => {
@@ -96,6 +120,8 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
     return porDefecto;
   };
 
+  const soloDims = (o) => DIMS.reduce((a, d) => ({ ...a, [d.campo]: !!o[d.campo] }), {});
+
   const crear = async () => {
     const codigo = nueva.codigo.trim();
     if (!codigo) { setError('Escribe el código de la unidad.'); return; }
@@ -104,7 +130,8 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
       const r = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigo, nombre: nueva.nombre.trim(), activo: true }),
+        body: JSON.stringify({
+          codigo, nombre: nueva.nombre.trim(), activo: true, ...soloDims(nueva) }),
       });
       if (!r.ok) { setError(await motivo(r, `El servidor respondió ${r.status}.`)); return; }
       setNueva({ ...VACIA });
@@ -122,7 +149,8 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
       const r = await fetch(`${API}${id}/`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigo: codigo.trim(), nombre: nombre.trim() }),
+        body: JSON.stringify({
+          codigo: codigo.trim(), nombre: nombre.trim(), ...soloDims(editando) }),
       });
       if (!r.ok) { setError(await motivo(r, `El servidor respondió ${r.status}.`)); return; }
       setEditando(null);
@@ -151,6 +179,43 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
     finally { setOcupado(null); }
   };
 
+  /* Los campos que habilita una unidad, para leerlos de un vistazo sin tener
+   * que abrir la edición. */
+  const Casillas = ({ u }) => {
+    const dims = DIMS.filter(d => d.campo !== 'usa_coeficiente' && u[d.campo]);
+    if (!dims.length) {
+      return (
+        <span style={{ fontSize:'11.5px', color:'#94a3b8' }}>
+          se cuenta de a una{u.usa_coeficiente ? ' · coef.' : ''}
+        </span>
+      );
+    }
+    return (
+      <span style={{ display:'inline-flex', gap:'4px', flexWrap:'wrap' }}>
+        {dims.map(d => <span key={d.campo} style={pastilla}>{d.corto}</span>)}
+        {u.usa_coeficiente && <span style={{ ...pastilla, ...pastillaGris }}>coef.</span>}
+      </span>
+    );
+  };
+
+  /* Las cinco casillas en modo edición. El mismo bloque sirve para el alta y
+   * para corregir, que es lo que evita que se separen con el tiempo. */
+  const Marcar = ({ valor, onMarcar }) => (
+    <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', alignItems:'center' }}>
+      <span style={{ fontSize:'11.5px', color:'#64748b', fontWeight:600 }}>
+        Habilita:
+      </span>
+      {DIMS.map(d => (
+        <label key={d.campo} style={{ display:'inline-flex', alignItems:'center',
+          gap:'5px', fontSize:'12.5px', color:'#475569', cursor:'pointer' }}>
+          <input type="checkbox" checked={!!valor[d.campo]}
+            onChange={e => onMarcar({ ...valor, [d.campo]: e.target.checked })} />
+          {d.largo}
+        </label>
+      ))}
+    </div>
+  );
+
   const activas = lista.filter(u => u.activo).length;
 
   return (
@@ -165,7 +230,8 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
                 <FaRulerCombined color="#1463A5" /> Unidades de medida
               </div>
               <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
-                Lo que eligen las partidas del presupuesto. {activas} activa(s).
+                Lo que eligen las partidas, y qué casillas habilita cada una
+                en la hoja de metrados. {activas} activa(s).
               </div>
             </div>
             <button onClick={onCerrar} style={btnCerrar}><FaTimes /></button>
@@ -181,26 +247,29 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
             )}
 
             {/* ── Alta ── */}
-            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap',
-              alignItems:'center', marginBottom:'14px' }}>
-              <input value={nueva.codigo} maxLength={20}
-                onChange={e => setNueva({ ...nueva, codigo: e.target.value })}
-                onKeyDown={e => e.key === 'Enter' && crear()}
-                placeholder="Código (m3, H-H…)"
-                style={ctrl({ width:'150px', fontFamily:'monospace' })} />
-              <input value={nueva.nombre} maxLength={120}
-                onChange={e => setNueva({ ...nueva, nombre: e.target.value })}
-                onKeyDown={e => e.key === 'Enter' && crear()}
-                placeholder="Nombre (Metro Cúbico…)"
-                style={ctrl({ flex:1, minWidth:'190px' })} />
-              <button onClick={crear} disabled={ocupado === 'nueva'} style={btnPri}>
-                <FaPlus size={11} /> {ocupado === 'nueva' ? 'Guardando…' : 'Añadir'}
-              </button>
+            <div style={panel}>
+              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap',
+                alignItems:'center', marginBottom:'10px' }}>
+                <input value={nueva.codigo} maxLength={20}
+                  onChange={e => setNueva({ ...nueva, codigo: e.target.value })}
+                  onKeyDown={e => e.key === 'Enter' && crear()}
+                  placeholder="Código (m3, H-H…)"
+                  style={ctrl({ width:'150px', fontFamily:'monospace' })} />
+                <input value={nueva.nombre} maxLength={120}
+                  onChange={e => setNueva({ ...nueva, nombre: e.target.value })}
+                  onKeyDown={e => e.key === 'Enter' && crear()}
+                  placeholder="Nombre (Metro Cúbico…)"
+                  style={ctrl({ flex:1, minWidth:'190px' })} />
+                <button onClick={crear} disabled={ocupado === 'nueva'} style={btnPri}>
+                  <FaPlus size={11} /> {ocupado === 'nueva' ? 'Guardando…' : 'Añadir'}
+                </button>
+              </div>
+              <Marcar valor={nueva} onMarcar={setNueva} />
             </div>
 
             {/* ── Filtros ── */}
             <div style={{ display:'flex', gap:'8px', flexWrap:'wrap',
-              alignItems:'center', marginBottom:'10px' }}>
+              alignItems:'center', margin:'12px 0 10px' }}>
               <div style={{ position:'relative', flex:1, minWidth:'180px' }}>
                 <FaSearch size={11} style={{ position:'absolute', left:'11px',
                   top:'11px', color:'#94a3b8' }} />
@@ -239,6 +308,7 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
                       fontSize:'11px', textTransform:'uppercase', letterSpacing:'.04em' }}>
                       <th style={th}>Código</th>
                       <th style={th}>Nombre</th>
+                      <th style={th}>Habilita</th>
                       <th style={{ ...th, textAlign:'right' }} />
                     </tr>
                   </thead>
@@ -246,57 +316,65 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
                     {visibles.map(u => {
                       const enEdicion = editando && editando.id === u.id;
                       const trabajando = ocupado === u.id;
+
+                      /* En edición la fila se convierte en un panel a todo lo
+                       * ancho: siete controles no caben en celdas sin quedar
+                       * ilegibles. */
+                      if (enEdicion) {
+                        return (
+                          <tr key={u.id} style={{ borderTop:'1px solid #f1f5f9',
+                            background:'#f8fafc' }}>
+                            <td colSpan={4} style={{ padding:'12px' }}>
+                              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap',
+                                alignItems:'center', marginBottom:'10px' }}>
+                                <input value={editando.codigo} maxLength={20}
+                                  onChange={e => setEditando({ ...editando, codigo: e.target.value })}
+                                  style={ctrl({ width:'150px', fontFamily:'monospace' })} />
+                                <input value={editando.nombre} maxLength={120}
+                                  onChange={e => setEditando({ ...editando, nombre: e.target.value })}
+                                  onKeyDown={e => e.key === 'Enter' && guardarEdicion()}
+                                  placeholder="Nombre"
+                                  style={ctrl({ flex:1, minWidth:'190px' })} />
+                                <button onClick={guardarEdicion} disabled={trabajando}
+                                  style={btnPri}>
+                                  <FaCheck size={11} /> {trabajando ? 'Guardando…' : 'Guardar'}
+                                </button>
+                                <button onClick={() => setEditando(null)} style={btnSec}>
+                                  <FaTimes size={11} /> Cancelar
+                                </button>
+                              </div>
+                              <Marcar valor={editando} onMarcar={setEditando} />
+                            </td>
+                          </tr>
+                        );
+                      }
+
                       return (
                         <tr key={u.id} style={{ borderTop:'1px solid #f1f5f9',
                           background: u.activo ? '#fff' : '#fafafa',
                           opacity: u.activo ? 1 : .65 }}>
                           <td style={{ ...td, fontFamily:'monospace', fontWeight:700 }}>
-                            {enEdicion
-                              ? <input value={editando.codigo} maxLength={20}
-                                  onChange={e => setEditando({ ...editando, codigo: e.target.value })}
-                                  style={ctrl({ width:'130px', fontFamily:'monospace' })} />
-                              : u.codigo}
+                            {u.codigo}
                           </td>
                           <td style={{ ...td, color:'#475569' }}>
-                            {enEdicion
-                              ? <input value={editando.nombre} maxLength={120}
-                                  onChange={e => setEditando({ ...editando, nombre: e.target.value })}
-                                  onKeyDown={e => e.key === 'Enter' && guardarEdicion()}
-                                  style={ctrl({ width:'100%' })} />
-                              : (u.nombre || <span style={{ color:'#94a3b8' }}>sin nombre</span>)}
-                            {!u.activo && !enEdicion && (
-                              <span style={etiqueta}>desactivada</span>
-                            )}
+                            {u.nombre || <span style={{ color:'#94a3b8' }}>sin nombre</span>}
+                            {!u.activo && <span style={etiqueta}>desactivada</span>}
                           </td>
+                          <td style={td}><Casillas u={u} /></td>
                           <td style={{ ...td, textAlign:'right', whiteSpace:'nowrap' }}>
-                            {enEdicion ? (
-                              <>
-                                <button onClick={guardarEdicion} disabled={trabajando}
-                                  style={{ ...btnIco, color:'#15803d' }}>
-                                  <FaCheck size={12} /> Guardar
-                                </button>
-                                <button onClick={() => setEditando(null)} style={btnIco}>
-                                  <FaTimes size={12} /> Cancelar
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => { setError(''); setEditando({
-                                    id: u.id, codigo: u.codigo || '', nombre: u.nombre || '' }); }}
-                                  disabled={trabajando} style={btnIco} title="Corregir">
-                                  <FaEdit size={12} /> Editar
-                                </button>
-                                <button onClick={() => alternar(u)} disabled={trabajando}
-                                  style={{ ...btnIco, color: u.activo ? '#b91c1c' : '#15803d' }}
-                                  title={u.activo
-                                    ? 'Dejar de ofrecerla (no borra las partidas que ya la usan)'
-                                    : 'Volver a ofrecerla'}>
-                                  {u.activo ? <><FaBan size={12} /> Desactivar</>
-                                            : <><FaUndo size={12} /> Reactivar</>}
-                                </button>
-                              </>
-                            )}
+                            <button
+                              onClick={() => { setError(''); setEditando({ ...u }); }}
+                              disabled={trabajando} style={btnIco} title="Corregir">
+                              <FaEdit size={12} /> Editar
+                            </button>
+                            <button onClick={() => alternar(u)} disabled={trabajando}
+                              style={{ ...btnIco, color: u.activo ? '#b91c1c' : '#15803d' }}
+                              title={u.activo
+                                ? 'Dejar de ofrecerla (no borra las partidas que ya la usan)'
+                                : 'Volver a ofrecerla'}>
+                              {u.activo ? <><FaBan size={12} /> Desactivar</>
+                                        : <><FaUndo size={12} /> Reactivar</>}
+                            </button>
                           </td>
                         </tr>
                       );
@@ -308,6 +386,14 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
 
             <div style={{ fontSize:'11.5px', color:'#94a3b8', marginTop:'12px',
               lineHeight:1.6 }}>
+              <b>Habilita</b> son las casillas que se podrán llenar al medir:
+              un galón no tiene largo, y si el formulario lo deja escribir,
+              el parcial sale multiplicado por un número que no significa
+              nada. <b>m3</b> y <b>m2</b> llevan área además de las
+              dimensiones a propósito: el volumen sale de largo × ancho ×
+              altura o de área × altura, según lo que se haya medido en
+              campo.
+              <br />
               Desactivar no borra nada: la unidad deja de ofrecerse para lo
               nuevo y las partidas que ya la usan se siguen entendiendo. El
               código se guarda tal cual lo escribas, porque es el que sale
@@ -341,11 +427,13 @@ const btnCerrar = { background:'transparent', border:'none', cursor:'pointer',
 const fondo = { position:'fixed', inset:0, zIndex:100000, background:'rgba(2,8,20,.6)',
   display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' };
 const dialogo = { background:'#fff', borderRadius:'13px', width:'100%',
-  maxWidth:'720px', maxHeight:'92vh', display:'flex', flexDirection:'column',
+  maxWidth:'860px', maxHeight:'92vh', display:'flex', flexDirection:'column',
   overflow:'hidden', fontFamily:'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' };
 const cabecera = { display:'flex', justifyContent:'space-between',
   alignItems:'flex-start', gap:'12px', padding:'15px 20px',
   borderBottom:'1px solid #e2e8f0' };
+const panel = { background:'#fff', border:'1px solid #e2e8f0', borderRadius:'10px',
+  padding:'12px' };
 const aviso = { background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'9px',
   padding:'11px 14px', fontSize:'12.5px', color:'#b91c1c', marginBottom:'14px',
   display:'flex', gap:'9px', alignItems:'flex-start', lineHeight:1.6 };
@@ -355,3 +443,6 @@ const th = { padding:'9px 12px', textAlign:'left', fontWeight:700 };
 const td = { padding:'9px 12px', verticalAlign:'middle' };
 const etiqueta = { marginLeft:'8px', background:'#f1f5f9', color:'#64748b',
   borderRadius:'10px', padding:'2px 8px', fontSize:'10.5px', fontWeight:700 };
+const pastilla = { background:'#e0f2fe', color:'#0369a1', borderRadius:'10px',
+  padding:'2px 8px', fontSize:'10.5px', fontWeight:700 };
+const pastillaGris = { background:'#f1f5f9', color:'#64748b' };
