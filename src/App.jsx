@@ -305,23 +305,13 @@ function App() {
     );
   }
 
-  if (vistaActual === 'usuarios-sentria') {
-    return (
-      <div className="maq">
-        <RailGIS {...propsRail} />
-        <div className="maq-main">
-          {/* Mismo contrato, otro servidor. `apiEquipos={null}` no es «no
-              tengo permiso»: SENTRIA no ata cuentas a celulares, así que
-              esas columnas no existen aquí. */}
-          <EquiposEnlazados
-            apiUsuarios="/vigapi/mobile/users/"
-            apiEquipos={null}
-            sistema="SENTRIA"
-          />
-        </div>
-      </div>
-    );
-  }
+  /* USUARIOS DE SENTRIA NO LLEVA RAIL, a diferencia del de PLUVIRA. Cada
+   * módulo tiene su armazón: las pantallas de PLUVIRA —mapa, partes,
+   * maquinaria— viven en el rail de NEXHYDRO, y las de SENTRIA en la
+   * cabecera «Sistema Integrado de Monitoreo» con su barra lateral. Vigilancia
+   * usa ésa, así que Usuarios también: puesta en el rail, pasar de una
+   * pantalla a la otra cambiaba el marco entero y parecían dos aplicaciones
+   * distintas. Por eso cae abajo, al armazón por defecto, y no aquí. */
 
   if (vistaActual === 'proyectos') {
     return (
@@ -449,6 +439,16 @@ function App() {
             />
           )}
           {vistaActual === 'vigilancia' && <Vigilancia />}
+          {/* Mismo contrato, otro servidor. `apiEquipos={null}` no es «no
+              tengo permiso»: SENTRIA no ata cuentas a celulares, así que
+              esas columnas no existen aquí. */}
+          {vistaActual === 'usuarios-sentria' && (
+            <EquiposEnlazados
+              apiUsuarios="/vigapi/mobile/users/"
+              apiEquipos={null}
+              sistema="SENTRIA"
+            />
+          )}
           {vistaActual === 'estadisticas' && <Estadisticas />}
           {vistaActual === 'reportes' && <Reportes />}
           {vistaActual === 'maquinaria' && <Maquinaria irAIncidente={irAIncidente} />}
