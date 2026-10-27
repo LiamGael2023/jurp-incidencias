@@ -21,7 +21,7 @@ import MapaInventario from './MapaInventario';
 import ReportesInventario from './ReportesInventario';
 import CampaniasInventario from './CampaniasInventario';
 import MapaTematico from './MapaTematico';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt, FaMobileAlt } from 'react-icons/fa';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt, FaMobileAlt, FaUserTag } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 import EquiposEnlazados from './EquiposEnlazados';
 
