@@ -250,6 +250,23 @@ ok(e403permiso !== e403sin, 'y los dos mensajes son distintos');
 const e403ingles = explica(403, 'Authentication credentials were not provided.', 'tomas/');
 ok(e403ingles === e403sin, 'da igual si el servidor responde en inglés');
 
+/* LA RESPUESTA DE VERDAD DE ESTE SERVIDOR, copiada de la pantalla. No usa
+ * la forma de DRF: trae `codigo` y `detalle`. Leyendo solo `detail` el
+ * mensaje salía «Tu cuenta entró, pero…», que es falso —no entró— y manda
+ * a pedir permisos cuando lo que falta es que llegue el token. */
+const REAL = {
+  codigo: 'not_authenticated',
+  como_autenticar: 'Authorization: Token <TU_TOKEN>',
+  detalle: 'Falta autenticación. Incluye tu token en el encabezado Authorization.',
+};
+const eReal = explica(403, REAL.detalle, 'tomas/', REAL.codigo);
+ok(eReal.includes('token'), 'el 403 de verdad habla del token', eReal.slice(0, 46));
+ok(!eReal.includes('entró'), 'y NO dice que la cuenta haya entrado');
+/* Y que lo decida el código aunque el texto cambie de redacción: es lo
+ * único que el servidor promete mantener. */
+ok(explica(403, 'cualquier cosa', 'tomas/', 'not_authenticated').includes('token'),
+   'el código manda sobre el texto');
+
 /* Un token mirado y rechazado SI es sesión caducada: eso se arregla
  * volviendo a entrar, no tocando el servidor. */
 ok(explica(401, 'Token inválido.', 'tomas/').includes('Vuelve a entrar'),

@@ -543,9 +543,14 @@ export const BASE_HYDRO = '/api/operadores';
  *
  * Por eso el mensaje del servidor se enseña SIEMPRE, pegado al nuestro.
  */
-export function explica(estado, detalle, ruta) {
+export function explica(estado, detalle, ruta, codigo) {
   const d = sinTildes(detalle);
-  const sinCredenciales = d.includes('no se proveyeron')
+  /* El código, cuando viene, manda sobre el texto: es lo único que el
+   * servidor promete no cambiar de redacción. Estas rutas contestan
+   * `{"codigo":"not_authenticated", "detalle":"Falta autenticación..."}`,
+   * que no es la forma de DRF y por eso hay que mirarla aparte. */
+  const sinCredenciales = sinTildes(codigo) === 'not_authenticated'
+    || d.includes('no se proveyeron') || d.includes('falta autenticacion')
     || d.includes('not provided') || d.includes('no fueron proporcionadas');
   /* Un token que el servidor mira y rechaza SI es sesión caducada, y eso se
    * arregla volviendo a entrar. Mezclarlo con lo anterior mandaría a tocar
@@ -601,14 +606,21 @@ export async function pide(ruta, params) {
   if (!r.ok) {
     /* El mensaje del servidor vale más que uno nuestro: si la vista exige
      * `date` y le mandamos `fecha`, el 400 lo dice con el nombre bueno. */
-    const detalle = (cuerpo && (cuerpo.detail || cuerpo.error))
+    /* `detalle` y `codigo` son de este servidor; `detail` es lo que pone
+     * DRF de fábrica. Se prueban los dos: leyendo solo el de DRF, el
+     * mensaje se quedaba sin el del servidor y acababa volcando el JSON
+     * entero en la pantalla. */
+    const detalle = (cuerpo && (cuerpo.detalle || cuerpo.detail
+        || cuerpo.mensaje || cuerpo.error))
       || (texto || '').slice(0, 200);
+    const codigo = cuerpo && (cuerpo.codigo || cuerpo.code);
     return {
       ok: false,
       estado: r.status,
       cuerpo,
       detalle,
-      error: `${explica(r.status, detalle, ruta)}${
+      codigo,
+      error: `${explica(r.status, detalle, ruta, codigo)}${
         detalle ? ` · El servidor dice: «${detalle}»` : ''}`,
     };
   }
