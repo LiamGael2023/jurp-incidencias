@@ -96,9 +96,91 @@ export const UNIDADES_METRADO = ['m', 'm2', 'm3', 'glb'];
 
 export const UNIDADES_METRADO_TXT = { m: 'm', m2: 'm²', m3: 'm³', glb: 'glb' };
 
+/**
+ * Las líneas nuevas se miden con la grilla del Excel de JURP; las viejas, con
+ * las fórmulas de geometría que había antes.
+ *
+ * Se marca en la propia línea y no por fecha porque hay cientos de partes ya
+ * guardados: al reabrir uno de 2025 tiene que seguir diciendo lo mismo que
+ * decía, con su trapecio y su imagen de referencia. La marca viaja dentro de
+ * `medidas`, que es texto libre en el backend, así que esto no necesitó
+ * ninguna migración.
+ */
+export const MODO_GRILLA = 'grilla';
+
+const num0 = (v) => { const x = parseFloat(v); return Number.isFinite(x) ? x : 0; };
+
+/**
+ * El metrado tal como lo saca la hoja de JURP:
+ *
+ *   PARCIAL = CANTIDAD × LARGO × ANCHO × ALTURA × Coefi.
+ *   TOTAL   = PARCIAL × N° ESTRUC.
+ *
+ * `u` es la fila del catálogo de unidades, que dice qué casillas participan.
+ * Las que esa unidad no habilita se ignoran aunque traigan número: un galón
+ * no tiene largo, y multiplicar por uno que alguien dejó escrito daría un
+ * total que nadie sabría de dónde salió.
+ *
+ * EL ÁREA SUSTITUYE A LARGO × ANCHO, no se suma a ellos. Es la segunda vía
+ * que ofrece la hoja: un volumen sale de largo × ancho × altura, o de área ×
+ * altura cuando el área venía medida de antes. Si hay área escrita, manda
+ * ella.
+ *
+ * Un factor vacío NO cuenta como cero. Con un cero de verdad el total sería
+ * siempre cero mientras se está escribiendo, y parecería que la fórmula está
+ * rota. Vacío significa «esta casilla no participa».
+ */
+export const metradoGrilla = (a, u) => {
+  const usa = (campo) => (u ? !!u[campo] : true);
+  const trozos = [];
+  let v = 1;
+
+  const mete = (valor, etiqueta) => {
+    const x = num0(valor);
+    if (x <= 0) return;
+    v *= x;
+    trozos.push(`${x} ${etiqueta}`);
+  };
+
+  mete(a.cantidad, 'cant.');
+
+  const area = num0(a.area);
+  if (usa('usa_area') && area > 0) {
+    mete(area, 'área');
+  } else {
+    if (usa('usa_largo')) mete(a.largo, 'largo');
+    if (usa('usa_ancho')) mete(a.ancho, 'ancho');
+  }
+  if (usa('usa_altura')) mete(a.altura, 'altura');
+  if (usa('usa_coeficiente')) mete(a.coeficiente, 'coef.');
+
+  const parcial = v;
+  mete(a.nEstruc, 'estruc.');
+
+  return {
+    val: round4(v),
+    unit: (u ? u.codigo : '') || a.unidadMetrado || '',
+    parcial: round4(parcial),
+    formula: trozos.length ? trozos.join(' × ') : 'sin medidas',
+  };
+};
+
 export const estadoInicialActividad = {
   zonaTrabajo: '', actividad: '', actividadOtros: '', observacion: '',
   hmInicio: '', hmFin: '', horasEfectivas: '', obsReduccion: '',
+  // Grilla de metrado. `cantidad`, `coeficiente` y `nEstruc` nacen en 1
+  // porque es lo que son el 90% de las veces y escribirlo cada vez es ruido.
+  // `altura` no está aquí: ya existía abajo, entre los campos del calculador
+  // viejo, y significa lo mismo —la altura en metros—. Declararla dos veces
+  // dejaba el valor a merced de cuál de las dos líneas quedara última.
+  modoMetrado: MODO_GRILLA,
+  cantidad: '1', largo: '', ancho: '', area: '',
+  coeficiente: '1', nEstruc: '1',
+  // Lo que sale de la grilla, ya calculado. Se guarda en la línea porque la
+  // grilla necesita el catálogo de unidades para saber qué casillas cuentan,
+  // y el PDF, los reportes y el avance no lo tienen a mano: así siguen
+  // leyendo el metrado por donde lo leían.
+  metradoValor: '',
   // Partida del presupuesto a la que se imputa el metrado. Se guarda el id
   // (para sumar el avance) y tambien el codigo y la descripcion: un
   // presupuesto se modifica, y un parte ya firmado tiene que seguir
@@ -209,6 +291,16 @@ export const rangoHorometro = (lista) => {
 };
 
 export const calcMetradoDe = (r) => {
+  /* Línea de la grilla nueva: el valor ya viene calculado en la propia línea.
+   * Entra por aquí a propósito, en vez de que cada consumidor sepa de los dos
+   * modos: el PDF, los reportes, el resumen y el avance siguen llamando a
+   * calcMetradoDe como siempre y no se enteran del cambio. */
+  if (r.modoMetrado === MODO_GRILLA) {
+    return {
+      val: parseFloat(r.metradoValor) || 0,
+      unit: r.unidadMetrado || '',
+    };
+  }
   // OTROS, o sin el check marcado → el metrado es el que el usuario escribe a mano.
   if (r.actividad === 'OTROS' || !r.calcularMetrado) {
     return { val: parseFloat(r.metradoManual) || 0, unit: UNIDADES_METRADO_TXT[r.unidadMetrado] || r.unidadMetrado || 'm³' };
@@ -234,7 +326,20 @@ export const calcMetradoDe = (r) => {
 
 export const fmtNum = (n) => (parseFloat(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export const textoActividad = (r) => (r.actividad === 'OTROS' ? (r.actividadOtros || '').trim() : (r.actividad || ''));
+/**
+ * Cómo se llama la línea en el PDF, los reportes y el resumen del parte.
+ *
+ * En la grilla nueva no hay «actividad realizada»: el trabajo ES la partida
+ * que se imputa, y su descripción es la que ya está escrita en el
+ * presupuesto, aprobada. Inventar otro nombre al lado solo daba dos textos
+ * para la misma cosa, que acababan sin parecerse.
+ */
+export const textoActividad = (r) => {
+  if (r.modoMetrado === MODO_GRILLA) {
+    return (r.partidaDescripcion || '').trim();
+  }
+  return r.actividad === 'OTROS' ? (r.actividadOtros || '').trim() : (r.actividad || '');
+};
 
 export const resumenActividades = (lista) => {
   if (!lista || !lista.length) return { texto: '', metrado: 0, unidad: 'm3', calculado: false };
@@ -288,6 +393,12 @@ export const actividadesParaBackend = (lista) => (lista || []).map((a, i) => {
       anchoSup: a.anchoSup, anchoInf: a.anchoInf, anchoBase: a.anchoBase,
       corona: a.corona, talud: a.talud, hPromedio: a.hPromedio,
       nViajes: a.nViajes, volTolva: a.volTolva, fe: a.fe,
+      // La grilla. `medidas` es texto libre en el backend, así que todo esto
+      // cabe sin migración: no hay columnas nuevas que crear.
+      modoMetrado: a.modoMetrado || '',
+      cantidad: a.cantidad, largo: a.largo, ancho: a.ancho, area: a.area,
+      coeficiente: a.coeficiente, nEstruc: a.nEstruc,
+      metradoValor: a.metradoValor,
     }),
   };
 });
@@ -295,8 +406,14 @@ export const actividadesParaBackend = (lista) => (lista || []).map((a, i) => {
 export const actividadesDesdeBackend = (arr) => (arr || []).map(a => {
   let crudo = {};
   try { crudo = a.medidas ? JSON.parse(a.medidas) : {}; } catch { crudo = {}; }
+  /* Un parte guardado ANTES de la grilla no lleva la marca, y hay cientos.
+   * `estadoInicialActividad` sí la trae —es lo que toca para una línea
+   * nueva—, así que hay que quitársela a los viejos o se leerían con la
+   * grilla y aparecerían con metrado cero. */
+  const esGrilla = crudo.modoMetrado === MODO_GRILLA;
   return {
     ...estadoInicialActividad,
+    modoMetrado: esGrilla ? MODO_GRILLA : '',
     ...crudo,
     zonaTrabajo: a.work_zone_text || '',
     hmInicio: a.start_horometer != null ? String(a.start_horometer) : '',
@@ -308,8 +425,12 @@ export const actividadesDesdeBackend = (arr) => (arr || []).map(a => {
     partidaDescripcion: a.partida_descripcion || '',
     // Sin 'medidas' (partes de antes de este cambio) se conserva al menos el
     // metrado guardado, en vez de recalcularlo a cero con campos vacíos.
-    actividad: crudo.actividad || (IMG_METRADO[a.actividad] ? a.actividad : 'OTROS'),
-    actividadOtros: crudo.actividadOtros || (IMG_METRADO[a.actividad] ? '' : (a.actividad || '')),
+    /* El `|| 'OTROS'` es para los partes viejos sin `medidas`, que no decían
+     * con qué fórmula se midieron. Una línea de la grilla tampoco trae
+     * actividad —no existe el campo— pero ahí vacío es lo correcto: caer en
+     * OTROS la pondría en modo manual y perdería su metrado. */
+    actividad: esGrilla ? '' : (crudo.actividad || (IMG_METRADO[a.actividad] ? a.actividad : 'OTROS')),
+    actividadOtros: esGrilla ? '' : (crudo.actividadOtros || (IMG_METRADO[a.actividad] ? '' : (a.actividad || ''))),
     calcularMetrado: crudo.calcularMetrado ?? false,
     metradoManual: crudo.metradoManual ?? (a.metrado != null ? String(a.metrado) : ''),
     unidadMetrado: crudo.unidadMetrado || a.metrado_unidad || 'm3',
