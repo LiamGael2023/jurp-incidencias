@@ -1976,7 +1976,7 @@ export default function GestionCosteo({
                             metrado: Number(progEdit.metrado) || 0,
                             precio: Number(progEdit.precio) || 0,
                           })}
-                      unidades={catUnidades.map(u => u.codigo)}
+                      unidades={catUnidades}
                       onCancelar={() => { setProgEdit(null); setProgErr({}); }}
                     />
                   )}
@@ -1990,7 +1990,7 @@ export default function GestionCosteo({
                       guardando={progGuardando}
                       onCambio={setProgNueva}
                       onGuardar={crearPartida}
-                      unidades={catUnidades.map(u => u.codigo)}
+                      unidades={catUnidades}
                       onCancelar={() => { setProgAbierto(false); setProgErr({}); }}
                     />
                   )}

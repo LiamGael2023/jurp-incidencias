@@ -101,7 +101,7 @@ export default function PresupuestoProyecto({ proyecto, abierto, onCerrar, onCam
      * cae en su lista de sugerencias de siempre. */
     fetch(`${API_OPS}/unidades/?activo=true`)
       .then(r => (r.ok ? r.json() : []))
-      .then(d => setUnidades((Array.isArray(d) ? d : (d.results || [])).map(u => u.codigo)))
+      .then(d => setUnidades(Array.isArray(d) ? d : (d.results || [])))
       .catch(() => setUnidades([]));
   }, [abierto, proyecto, cargar, probar]);
 

@@ -65,6 +65,26 @@ export default function FormaPartida({
 
   const pon = (k) => (e) => onCambio({ ...valor, [k]: e.target.value });
 
+  /* El catálogo del servidor. Se acepta tanto una lista de códigos como de
+   * objetos {codigo, nombre}: con nombre el desplegable se lee sin saberse
+   * "H-H" de memoria. Sin catálogo —servidor sin el módulo— quedan las
+   * sugerencias de siempre, que es peor pero no deja la pantalla inservible. */
+  const base = (unidades && unidades.length ? unidades : UNIDADES)
+    .map(u => (typeof u === 'string' ? { codigo: u, nombre: '' } : u));
+
+  /* La partida puede venir con una unidad que no está en el catálogo: los
+   * presupuestos importados de Excel traen códigos como "gls" que nadie dio
+   * de alta. Se añade como opción, marcada, en vez de dejar el desplegable
+   * en blanco —que es lo que haría un select normal— porque eso reescribiría
+   * la unidad de la partida con solo abrir el formulario para corregir otra
+   * cosa. Y señalarla es justamente lo que lleva a darla de alta o a
+   * cambiarla a propósito. */
+  const actual = String(valor.unidad || '').trim();
+  const opciones = actual && !base.some(o =>
+    String(o.codigo).toLowerCase() === actual.toLowerCase())
+    ? [{ codigo: actual, nombre: '', fuera: true }, ...base]
+    : base;
+
   /* Enter guarda, Escape cancela. Son pocos campos y se rellenan seguidos;
    * obligar a soltar el teclado para pulsar un botón convierte un alta de
    * cinco segundos en una de quince. */
@@ -115,12 +135,24 @@ export default function FormaPartida({
             de lo que cuelga. Enseñar los campos en gris invitaría a
             preguntarse por qué no se pueden rellenar. */}
         {!esTitulo && (<>
-          <label className="cos-prog-campo corto">
+          {/* Desplegable y no texto libre: la unidad decide después qué
+              casillas se habilitan al medir, y eso solo se puede saber si el
+              valor existe en el catálogo. Escribiéndola a mano salen "m3",
+              "M3" y "mc" conviviendo, y ninguna cuadra con nada. */}
+          {/* `medio` y no `corto`: en 120px «m3 · Metro Cúbico» se corta. */}
+          <label className="cos-prog-campo medio">
             <span>Unidad</span>
-            <input type="text" value={valor.unidad} list="cos-unidades"
-              maxLength={12} placeholder="m3"
+            <select value={valor.unidad || ''}
               className={errores.unidad ? 'mal' : ''}
-              onChange={pon('unidad')} />
+              onChange={pon('unidad')}>
+              <option value="">— elegir —</option>
+              {opciones.map(o => (
+                <option key={o.codigo} value={o.codigo}>
+                  {o.fuera ? `${o.codigo} — fuera del catálogo`
+                           : (o.nombre ? `${o.codigo} · ${o.nombre}` : o.codigo)}
+                </option>
+              ))}
+            </select>
             {errores.unidad && <em>{errores.unidad}</em>}
           </label>
 
@@ -158,11 +190,6 @@ export default function FormaPartida({
           partidas que cuelguen de él.
         </div>
       )}
-
-      <datalist id="cos-unidades">
-        {(unidades && unidades.length ? unidades : UNIDADES)
-          .map(u => <option key={u} value={u} />)}
-      </datalist>
 
       <div className="cos-prog-forma-pie">
         <button type="button" className="cos-prog-cancel"
