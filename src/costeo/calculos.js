@@ -176,6 +176,9 @@ export const estadoInicialActividad = {
   modoMetrado: MODO_GRILLA,
   cantidad: '1', largo: '', ancho: '', area: '',
   coeficiente: '1', nEstruc: '1',
+  // Numero del comprobante, solo en las unidades que lo piden (combustible).
+  // Va en `medidas`, que es texto libre: sin columna nueva ni migracion.
+  vale: '',
   // Lo que sale de la grilla, ya calculado. Se guarda en la línea porque la
   // grilla necesita el catálogo de unidades para saber qué casillas cuentan,
   // y el PDF, los reportes y el avance no lo tienen a mano: así siguen
@@ -398,7 +401,7 @@ export const actividadesParaBackend = (lista) => (lista || []).map((a, i) => {
       modoMetrado: a.modoMetrado || '',
       cantidad: a.cantidad, largo: a.largo, ancho: a.ancho, area: a.area,
       coeficiente: a.coeficiente, nEstruc: a.nEstruc,
-      metradoValor: a.metradoValor,
+      metradoValor: a.metradoValor, vale: a.vale || '',
     }),
   };
 });

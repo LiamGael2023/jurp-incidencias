@@ -951,6 +951,24 @@ export default function GestionCosteo({
     return u ? u.usa_horometro !== false : true;
   })();
 
+  /* ¿Esta línea pide el número del comprobante? Lo dice la unidad, igual que
+   * el horómetro, y con un campo propio: «no lleva horómetro» y «viene con
+   * vale» no son la misma cosa aunque hoy coincidan en Gln. */
+  const pideVale = (() => {
+    if (!partidaDeLaLinea) return false;
+    const u = catUnidades.find(
+      x => normaUnidad(x.codigo) === normaUnidad(partidaDeLaLinea.unidad));
+    return !!(u && u.usa_vale);
+  })();
+
+  /* Lo mismo, pero para una línea ya guardada: se mira por el código de
+   * unidad que la línea se llevó consigo. Lo usa el guardado del parte para
+   * resumir en la cabecera los galones y los vales de sus líneas. */
+  const lineaConVale = (a) => {
+    const u = catUnidades.find(x => normaUnidad(x.codigo) === normaUnidad(a.unidadMetrado));
+    return !!(u && u.usa_vale);
+  };
+
   const unidadDelCatalogo = (codigo) => {
     const c = normaUnidad(codigo);
     if (!c) return null;
@@ -1417,8 +1435,20 @@ export default function GestionCosteo({
         fd.append('end_horometer', rgHM.fin === '' ? 0 : rgHM.fin);
         fd.append('horas_efectivas', horasDeLista(actividades));
         fd.append('obs_reduccion', resumenReduccion(actividades));
-        fd.append('fuel_gallons', parseFloat(r.combustible) || 0);
-        fd.append('fuel_voucher', r.vale || '');
+        /* Los galones y los vales de la cabecera YA NO SE ESCRIBEN: se
+         * resumen de las líneas que los llevan. Se siguen mandando porque
+         * los informes y la tabla de partes leen de ahí; lo que cambia es
+         * que ahora son un reflejo de lo registrado y no un segundo sitio
+         * donde teclear el mismo dato.
+         *
+         * Sin líneas de vale se respeta lo que trajera el parte: editar uno
+         * viejo para corregir una observación no puede ponerle el
+         * combustible a cero. */
+        const lineasVale = actividades.filter(lineaConVale);
+        const galones = lineasVale.reduce((s, a) => s + (parseFloat(a.metradoValor) || 0), 0);
+        const vales = lineasVale.map(a => (a.vale || '').trim()).filter(Boolean).join(' / ');
+        fd.append('fuel_gallons', lineasVale.length ? galones : (parseFloat(r.combustible) || 0));
+        fd.append('fuel_voucher', lineasVale.length ? vales : (r.vale || ''));
         const res = resumenActividades(actividades);
         fd.append('activities', res.texto || textoActividad(r));
         fd.append('observations', r.observaciones || '');
@@ -1840,8 +1870,12 @@ export default function GestionCosteo({
           formData.append('end_horometer', rgHM.fin === '' ? 0 : rgHM.fin);
           formData.append('horas_efectivas', horasDeLista(r.actividadesLista || []));
           formData.append('obs_reduccion', resumenReduccion(r.actividadesLista || []));
-          formData.append('fuel_gallons', parseFloat(r.combustible) || 0);
-          formData.append('fuel_voucher', r.vale);
+          // Igual que arriba: la cabecera resume lo de las líneas.
+          const lineasVale = actividades.filter(lineaConVale);
+          const galones = lineasVale.reduce((s, a) => s + (parseFloat(a.metradoValor) || 0), 0);
+          const vales = lineasVale.map(a => (a.vale || '').trim()).filter(Boolean).join(' / ');
+          formData.append('fuel_gallons', lineasVale.length ? galones : (parseFloat(r.combustible) || 0));
+          formData.append('fuel_voucher', lineasVale.length ? vales : (r.vale || ''));
           // Cabecera: el texto de todas las actividades y el metrado resumido.
           // El detalle real viaja en actividades_json.
           const lineas = r.actividadesLista || [];
@@ -2648,7 +2682,11 @@ export default function GestionCosteo({
                           los partes viejos lo tienen cargado, y dejar de
                           mandarlo los pondría a cero solo por abrirlos a
                           corregir otra cosa. */}
-                      <div className="tbl-col"><label className="tbl-form-label">Vale N°</label><input type="text" className="tbl-form-control" value={nuevoRecurso.vale} onChange={e => setNuevoRecurso({...nuevoRecurso, vale: e.target.value})} /></div>
+                      {/* Aquí estaba «Vale N°». Se fue detrás del campo de
+                          combustible y por lo mismo: el vale es de UNA carga
+                          concreta, no del día entero. Ahora se escribe en su
+                          línea, y un parte con dos cargas lleva sus dos
+                          números en vez de uno que tapa al otro. */}
                     </div>
                     {/* Las horas efectivas se anotan en cada actividad. Aquí solo el total. */}
                     {(() => {
@@ -3427,6 +3465,19 @@ export default function GestionCosteo({
                           {fmtCant(g.val)} {partidaDeLaLinea.unidad}
                         </span>
                       </div>
+
+                      {pideVale && (
+                        <div style={{ marginTop:'12px' }}>
+                          <label className="tbl-form-label">
+                            N° de vale <small style={{ color:'#94a3b8', fontWeight:400 }}>
+                              · el comprobante de esta carga</small>
+                          </label>
+                          <input type="text" className="tbl-form-control" maxLength={40}
+                            placeholder="Ej. 004512"
+                            value={actForm.vale || ''}
+                            onChange={e => setActForm({ ...actForm, vale: e.target.value })} />
+                        </div>
+                      )}
 
                       {/* Lo que de verdad importa de este número: cuánto queda
                           de la partida después de cargarle esto. Sin esto hay

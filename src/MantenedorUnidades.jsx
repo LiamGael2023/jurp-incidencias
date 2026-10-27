@@ -57,6 +57,7 @@ const DIMS = [
  * grupo para que no parezca un factor más de la fórmula. */
 const OTRAS = [
   { campo: 'usa_horometro', corto: 'horóm.', largo: 'Lleva horómetro' },
+  { campo: 'usa_vale',      corto: 'vale',   largo: 'Pide N° de vale' },
 ];
 
 /* Unidad recién nacida: sin dimensiones y con coeficiente, que es como está
@@ -66,6 +67,7 @@ const VACIA = {
   codigo: '', nombre: '',
   usa_largo: false, usa_ancho: false, usa_altura: false,
   usa_area: false, usa_coeficiente: true, usa_horometro: true,
+  usa_vale: false,
 };
 
 export default function MantenedorUnidades({ onCerrar, onCambio }) {
@@ -210,12 +212,20 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
   /* Se marca la EXCEPCION, no la norma: casi todas llevan horómetro, y
    * ponérselo a las diecinueve para que se vea la que no lo lleva es ruido
    * que esconde justo el dato que importa. */
-  const SinHorometro = ({ u }) => (!u.usa_horometro ? (
-    <span style={{ ...pastilla, background:'#fef3c7', color:'#92400e' }}
-      title="Su línea en un parte de maquinaria no pide horómetro ni horas">
-      sin horómetro
-    </span>
-  ) : null);
+  const SinHorometro = ({ u }) => (<>
+    {!u.usa_horometro && (
+      <span style={{ ...pastilla, background:'#fef3c7', color:'#92400e' }}
+        title="Su línea en un parte de maquinaria no pide horómetro ni horas">
+        sin horómetro
+      </span>
+    )}
+    {u.usa_vale && (
+      <span style={{ ...pastilla, background:'#ede9fe', color:'#5b21b6' }}
+        title="Su línea pide el número del comprobante">
+        con vale
+      </span>
+    )}
+  </>);
 
   /* Las cinco casillas en modo edición. El mismo bloque sirve para el alta y
    * para corregir, que es lo que evita que se separen con el tiempo. */
@@ -428,7 +438,10 @@ export default function MantenedorUnidades({ onCerrar, onCambio }) {
               <b>Lleva horómetro</b> es aparte: no multiplica nada. Dice si, en
               un parte de maquinaria, la línea pide tramo de horómetro y horas
               efectivas. El combustible no las lleva —no es trabajo de la
-              máquina, es lo que se le echó—.
+              máquina, es lo que se le echó—. <b>Pide N° de vale</b> añade a
+              la línea el número del comprobante: el combustible se carga
+              contra un vale del grifo, y ese número es el que luego cuadra
+              con la factura.
               <br />
               Desactivar no borra nada: la unidad deja de ofrecerse para lo
               nuevo y las partidas que ya la usan se siguen entendiendo. El
