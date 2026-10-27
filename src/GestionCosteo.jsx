@@ -2671,22 +2671,25 @@ export default function GestionCosteo({
                           </>
                         );
                       })()}
-                      {/* Aquí estaba «Combustible (Gls)». Se quitó: el
-                          combustible se registra como una línea más, contra
-                          su partida en galones, igual que todo lo demás.
-                          Teniéndolo también en la cabecera, el mismo gasto se
-                          apuntaba dos veces y nada obligaba a que las dos
-                          cifras coincidieran.
+                      {/* Solo en INCIDENCIAS. En una actividad de obra el
+                          combustible se registra como una línea más, contra su
+                          partida en galones; tenerlo además aquí apuntaba el
+                          mismo gasto dos veces sin que nada obligara a que las
+                          dos cifras cuadraran. En una incidencia ese flujo no
+                          cambió, así que el campo se queda donde estaba.
 
-                          El valor SIGUE viajando al backend desde el estado:
-                          los partes viejos lo tienen cargado, y dejar de
-                          mandarlo los pondría a cero solo por abrirlos a
-                          corregir otra cosa. */}
-                      {/* Aquí estaba «Vale N°». Se fue detrás del campo de
-                          combustible y por lo mismo: el vale es de UNA carga
-                          concreta, no del día entero. Ahora se escribe en su
-                          línea, y un parte con dos cargas lleva sus dos
-                          números en vez de uno que tapa al otro. */}
+                          En los dos casos el valor viaja al backend: en una
+                          actividad se resume de las líneas, aquí se escribe. */}
+                      {esIncidencia && (
+                        <div className="tbl-col"><label className="tbl-form-label">Combustible (Gls)</label><input type="number" step={STEP4} className="tbl-form-control" value={nuevoRecurso.combustible} onChange={e => setNuevoRecurso({...nuevoRecurso, combustible: e.target.value})} /></div>
+                      )}
+                      {/* Igual que el combustible: solo en incidencias. En una
+                          actividad el vale es de UNA carga concreta y se
+                          escribe en su línea, así que un parte con dos cargas
+                          lleva sus dos números en vez de uno que tapa al otro. */}
+                      {esIncidencia && (
+                        <div className="tbl-col"><label className="tbl-form-label">Vale N°</label><input type="text" className="tbl-form-control" value={nuevoRecurso.vale} onChange={e => setNuevoRecurso({...nuevoRecurso, vale: e.target.value})} /></div>
+                      )}
                     </div>
                     {/* Las horas efectivas se anotan en cada actividad. Aquí solo el total. */}
                     {(() => {
