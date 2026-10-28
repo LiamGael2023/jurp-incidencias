@@ -20,7 +20,7 @@ import { createPortal } from 'react-dom';
 import {
   FaPlus, FaSyncAlt, FaTimes, FaExclamationTriangle, FaCheckCircle,
   FaFolderOpen, FaFileExcel, FaTrash, FaEdit, FaSpinner,
-  FaMapMarkerAlt, FaSearch, FaListUl, FaRulerCombined,
+  FaMapMarkerAlt, FaSearch, FaListUl, FaRulerCombined, FaInfoCircle,
 } from 'react-icons/fa';
 import MantenedorUnidades from './MantenedorUnidades';
 import ModalImportarPresupuesto from './ImportarPresupuesto';
@@ -93,9 +93,42 @@ export default function Proyectos() {
 
   const sinPresupuesto = useMemo(
     () => lista.filter(p => !p.partidas).length, [lista]);
-  const descuadrados = useMemo(
-    () => lista.filter(p => p.partidas &&
-      Math.abs((p.suma_partidas || 0) - parseFloat(p.costo_directo || 0)) > 1), [lista]);
+  /* NO DECLARADO NO ES DESCUADRADO.
+   *
+   * El costo directo lo trae la cabecera del Excel, y hay Excels que vienen
+   * sin ella: el presupuesto entra entero, con sus precios, y el proyecto se
+   * queda en 0.00. Comparar 0 contra la suma daba un «faltan partidas» que
+   * mandaba a buscar lo que no falta —en JURP-JUV 2026 las 38 tienen precio—.
+   *
+   * Son dos cosas distintas y se dicen distinto: aquí no hay nada que
+   * cuadrar, hay algo que declarar. */
+  const sinDeclarar = (p) => p.partidas > 0
+    && !(parseFloat(p.costo_directo) > 0)
+    && (p.suma_partidas || 0) > 0;
+
+  const descuadre = (p) => p.partidas > 0 && !sinDeclarar(p)
+    && Math.abs((p.suma_partidas || 0) - parseFloat(p.costo_directo || 0)) > 1;
+
+  const descuadrados = useMemo(() => lista.filter(descuadre), [lista]);
+  const porDeclarar = useMemo(() => lista.filter(sinDeclarar), [lista]);
+
+  /* Adoptar la suma de las partidas como costo directo del proyecto. Es la
+   * cifra que ya está cargada y sumada; lo único que falta es que el proyecto
+   * la declare suya. */
+  const declararCosto = async (pro) => {
+    setError('');
+    try {
+      const r = await fetch(`${API}/proyectos/${pro.id}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ costo_directo: Number(pro.suma_partidas).toFixed(2) }),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      await cargar();
+    } catch (e) {
+      setError('No se pudo declarar el costo directo. ' + (e.message || e));
+    }
+  };
 
   const guardar = async () => {
     if (!editando.codigo.trim() || !editando.nombre.trim()) {
@@ -210,6 +243,32 @@ export default function Proyectos() {
           </div>
         )}
 
+        {/* Avisa, pero no alarma: no hay nada roto que arreglar, hay una cifra
+            que escribir, y se escribe desde aquí mismo. */}
+        {porDeclarar.length > 0 && (
+          <div style={aviso('#f0f9ff', '#bae6fd', '#075985')}>
+            <FaInfoCircle style={{ marginTop:'2px', flexShrink:0 }} />
+            <span>
+              <b>{porDeclarar.length} proyecto(s)</b> tienen su presupuesto cargado
+              y valorizado, pero no declaran costo directo — el Excel vino sin esa
+              cifra en la cabecera. No falta ninguna partida.
+              {porDeclarar.map(p => (
+                <span key={p.id} style={{ display:'block', marginTop:'5px' }}>
+                  <b>{p.codigo}</b> · sus {p.partidas} partidas suman{' '}
+                  <b>{soles(p.suma_partidas)}</b>{' '}
+                  <button onClick={() => declararCosto(p)}
+                    style={{ background:'#0284c7', border:'none', color:'#fff',
+                      borderRadius:'5px', padding:'3px 9px', fontSize:'11.5px',
+                      fontWeight:700, cursor:'pointer', fontFamily:'inherit',
+                      marginLeft:'4px' }}>
+                    Declararlo
+                  </button>
+                </span>
+              ))}
+            </span>
+          </div>
+        )}
+
         <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'10px',
           overflow:'hidden' }}>
           {cargando && !lista.length ? (
@@ -244,8 +303,8 @@ export default function Proyectos() {
                   {visibles.map(p => {
                     const est = ESTADOS[p.estado] || ESTADOS.activo;
                     const sinPres = !p.partidas;
-                    const descuadra = p.partidas &&
-                      Math.abs((p.suma_partidas || 0) - parseFloat(p.costo_directo || 0)) > 1;
+                    const descuadra = descuadre(p);
+                    const porDeclarar = sinDeclarar(p);
                     return (
                       <tr key={p.id} style={{ borderTop:'1px solid #f1f5f9',
                         background: sinPres ? '#fffdf7' : '#fff' }}>
@@ -274,19 +333,34 @@ export default function Proyectos() {
                         </td>
                         <td style={{ padding:'10px 12px', textAlign:'right',
                           whiteSpace:'nowrap' }}>
+                          {/* Sin declarar se enseña la suma, no el 0.00. Un
+                              proyecto con 38 partidas valoradas no vale cero, y
+                              escribirlo en rojo mandaba a buscar un error que no
+                              existe. */}
                           <div style={{ fontWeight:700,
-                            color: descuadra ? '#dc2626' : '#1463A5' }}>
-                            {soles(p.costo_directo)}
+                            color: descuadra ? '#dc2626' : porDeclarar ? '#64748b' : '#1463A5' }}>
+                            {soles(porDeclarar ? p.suma_partidas : p.costo_directo)}
                           </div>
                           {/* Los dos números juntos, siempre. Si enseñara solo
                               uno, el día que dejaran de cuadrar escondería
                               justamente el problema. */}
-                          {p.partidas > 0 && (
+                          {p.partidas > 0 && (porDeclarar ? (
+                            <div style={{ fontSize:'10.5px', color:'#94a3b8', marginTop:'1px' }}>
+                              de las partidas{' · '}
+                              <button onClick={() => declararCosto(p)}
+                                title="Dejarlo escrito como costo directo del proyecto"
+                                style={{ background:'none', border:'none', padding:0,
+                                  color:'#1463A5', cursor:'pointer', fontSize:'10.5px',
+                                  fontWeight:700, fontFamily:'inherit' }}>
+                                declarar
+                              </button>
+                            </div>
+                          ) : (
                             <div style={{ fontSize:'10.5px',
                               color: descuadra ? '#dc2626' : '#94a3b8', marginTop:'1px' }}>
                               suman {soles(p.suma_partidas)}
                             </div>
-                          )}
+                          ))}
                         </td>
                         <td style={{ padding:'10px 12px', textAlign:'right',
                           color: p.actividades ? '#1e293b' : '#cbd5e1' }}>
