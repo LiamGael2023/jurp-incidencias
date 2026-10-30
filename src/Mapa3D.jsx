@@ -11,7 +11,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import urlWorkerMapLibre from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import {
   FaTimes, FaGlobeAmericas, FaPlay, FaPause, FaSyncAlt, FaCloudRain, FaFlask, FaUndo,
-  FaExclamationTriangle, FaCheckCircle,
+  FaExclamationTriangle, FaCheckCircle, FaWater,
 } from 'react-icons/fa';
 import { capaBase } from './capasBase';
 import { fmtFecha, estaCaida } from './lluviaEstacion';
@@ -22,6 +22,9 @@ import {
   cargarPronostico, equivalente15, HORAS_CONFIABLES, probDe, etiquetaEstacion,
   circulo, bboxEstaciones, pintarManto, gradienteCSS,
 } from './lluvia3D';
+import {
+  crearRelieve, cargarTeselaTerrarium, trazarFlujo, prepararCapas, cruces as crucesFlujo, destino,
+} from './escorrentia';
 
 /**
  * Vista 3D en globo.
@@ -93,6 +96,12 @@ const ZOOM_NOMBRES = 10.2;
 const ACENTO = NIVELES[1].color;         // el naranja del código
 const ACENTO_AVISO = NIVELES[0].color;   // el amarillo del código
 const SOMBRA_PILL = '0 2px 8px rgba(0,0,0,.45)';
+// Escorrentía: líneas que se mueven cuesta abajo. Secuencia de trazos del
+// ejemplo de MapLibre para animar una línea sin redibujar su geometría.
+const SECUENCIA_TRAZO = [
+  [0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5], [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0],
+  [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2], [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5],
+];
 const LADO_MANTO = 160;               // píxeles del lienzo interpolado
 const TOPE_INTENSIDAD = 1.4;          // mm/15 min en el extremo de la rampa
 const MAX_GOTAS = 3200;
@@ -175,6 +184,13 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
   const [reproduciendo, setReproduciendo] = useState(false);
   const [vel, setVel] = useState(900);
   const [minutoUI, setMinutoUI] = useState(0);
+  // Escorrentía: recorrido del agua desde cada estación, cuesta abajo.
+  const [verFlujo, setVerFlujo] = useState(false);
+  const [flujos, setFlujos] = useState(null);       // [{ id, name, coords, km, fin, cruces }]
+  const [calculandoFlujo, setCalculandoFlujo] = useState(false);
+  const flujosRef = useRef(null);
+  const verFlujoRef = useRef(false);
+  const relieveDEM = useRef(null);
 
   const minutoRef = useRef(0);
   const datosRef = useRef(null);
@@ -381,7 +397,93 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
         },
       });
     }
+
+    // Escorrentía. Van encima de todo: son lo que se quiere leer cuando están.
+    if (!m.getSource('escorrentia')) {
+      // lineMetrics: lo exige line-gradient, que aclara el agua arriba y la
+      // oscurece abajo para que la dirección se lea aunque esté en pausa.
+      m.addSource('escorrentia', { type: 'geojson', lineMetrics: true, data: { type: 'FeatureCollection', features: [] } });
+      m.addLayer({
+        id: 'escorrentia-halo', type: 'line', source: 'escorrentia',
+        layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#04223d', 'line-width': ['+', ['get', 'w'], 3], 'line-opacity': ['*', ['get', 'o'], 0.55] },
+      });
+      m.addLayer({
+        id: 'escorrentia', type: 'line', source: 'escorrentia',
+        layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-width': ['get', 'w'],
+          'line-opacity': ['get', 'o'],
+          'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, '#c5f6fa', 0.5, '#4dabf7', 1, '#1864ab'],
+        },
+      });
+      m.addLayer({
+        id: 'escorrentia-flujo', type: 'line', source: 'escorrentia',
+        layout: { visibility: 'none', 'line-join': 'round' },
+        paint: {
+          'line-color': '#ffffff',
+          'line-width': ['*', ['get', 'w'], 0.45],
+          'line-opacity': ['*', ['get', 'o'], 0.85],
+          'line-dasharray': SECUENCIA_TRAZO[0],
+        },
+      });
+      m.addSource('escorrentia-cruces', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      m.addLayer({
+        id: 'escorrentia-cruces', type: 'circle', source: 'escorrentia-cruces',
+        layout: { visibility: 'none' },
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 4, 13, 8],
+          'circle-color': ['get', 'color'],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+          'circle-opacity': ['get', 'o'],
+          'circle-stroke-opacity': ['get', 'o'],
+        },
+      });
+      m.on('click', 'escorrentia-cruces', (ev) => {
+        const f = ev.features?.[0];
+        if (!f) return;
+        const pr = f.properties;
+        new maplibregl.Popup({ offset: 10, closeButton: false })
+          .setLngLat(f.geometry.coordinates)
+          .setHTML(`<div style="font-family:system-ui;min-width:160px">
+            <div style="font-size:10px;font-weight:800;color:#1463A5;letter-spacing:.3px">PUNTO DE IMPACTO</div>
+            <div style="font-size:13px;font-weight:700;color:#1e293b;margin:2px 0">${pr.capa}</div>
+            <div style="font-size:11px;color:#64748b">Agua de <b>${pr.estacion}</b>, a ${Number(pr.km).toFixed(1)} km de la estación</div>
+          </div>`)
+          .addTo(m);
+      });
+      m.on('mouseenter', 'escorrentia-cruces', () => { m.getCanvas().style.cursor = 'pointer'; });
+      m.on('mouseleave', 'escorrentia-cruces', () => { m.getCanvas().style.cursor = ''; });
+    }
   }, [listo, bbox, capasLinea]);
+
+  // Grosor y brillo de cada recorrido según lo que ha llovido en su estación
+  // hasta este instante: el agua que corre es la que cayó.
+  const pintarFlujos = useCallback((slot) => {
+    const m = mapa.current;
+    const fl = flujosRef.current;
+    if (!m || !fl || !verFlujoRef.current) return;
+    const d = datosRef.current;
+    const lineas = [], puntos = [];
+    for (const f of fl) {
+      if (f.coords.length < 2) continue;
+      const inten = d?.intensidad[f.id];
+      const av = inten ? d.acumulado[f.id][slot] : 0;
+      const iv = inten ? eq15(d, inten[slot]) : 0;
+      // Sin lluvia la ruta sigue visible pero tenue: se puede leer el
+      // terreno antes de que llueva, que es cuando sirve planificar.
+      const o = !inten ? 0.35 : (av > 0 || iv > 0 ? 0.95 : 0.55);
+      const w = 2 + Math.min(6, av * 1.6 + iv * 3);
+      lineas.push({ type: 'Feature', properties: { w, o }, geometry: { type: 'LineString', coordinates: f.coords } });
+      for (const c of f.cruces) {
+        puntos.push({ type: 'Feature', properties: { color: c.color, capa: c.capa, estacion: f.name, km: c.km, o: Math.max(o, 0.6) },
+          geometry: { type: 'Point', coordinates: c.punto } });
+      }
+    }
+    m.getSource('escorrentia')?.setData({ type: 'FeatureCollection', features: lineas });
+    m.getSource('escorrentia-cruces')?.setData({ type: 'FeatureCollection', features: puntos });
+  }, []);
 
   // Columnas de un instante. Aparte del manto porque también se rehacen al
   // cambiar el zoom (el radio depende de él) y eso no debe repintar el IDW.
@@ -417,6 +519,7 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
     if (!m || !d) return;
     slotPintado.current = slot;
     pintarColumnas(slot);
+    pintarFlujos(slot);
 
     const puntos = [];
     const ultimos = Object.values(d.acumulado).filter(Boolean).map(a => a[d.nSlots - 1]);
@@ -471,7 +574,57 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
       const tendencia = d.t0 && slot * d.minSlot >= HORAS_CONFIABLES * 60;
       m.setPaintProperty('lluvia-manto', 'raster-opacity', tendencia ? 0.45 : 0.88);
     }
-  }, [ests, bbox, pintarColumnas]);
+  }, [ests, bbox, pintarColumnas, pintarFlujos]);
+
+  // ── Escorrentía ──────────────────────────────────────────────────────
+  // Las capas de infraestructura con las que se buscan cruces, preparadas
+  // una vez (segmentos con su caja).
+  const capasCruce = useMemo(() => prepararCapas(capasLinea), [capasLinea]);
+
+  // Se calcula una sola vez por conjunto de estaciones: el relieve no cambia
+  // con la hora ni con la fuente de datos.
+  useEffect(() => {
+    if (!modoLluvia || !verFlujo || !ests.length || flujosRef.current) return;
+    let cancelado = false;
+    if (!relieveDEM.current) relieveDEM.current = crearRelieve(cargarTeselaTerrarium);
+    Promise.resolve()
+      .then(() => { if (!cancelado) setCalculandoFlujo(true); })
+      .then(() => Promise.all(ests.map(async e => {
+        const r = await trazarFlujo(relieveDEM.current, e.lng, e.lat);
+        return { id: e.id, name: e.name, ...r, cruces: crucesFlujo(r.coords, capasCruce) };
+      })))
+      .then(lista => {
+        if (cancelado) return;
+        flujosRef.current = lista;
+        setFlujos(lista);
+        if (datosRef.current) pintarFlujos(slotDe(datosRef.current, minutoRef.current));
+      })
+      .catch(err => { if (!cancelado) setAviso(`No se pudo calcular la escorrentía: ${err.message}`); })
+      .finally(() => { if (!cancelado) setCalculandoFlujo(false); });
+    return () => { cancelado = true; };
+  }, [modoLluvia, verFlujo, ests, capasCruce, pintarFlujos]);
+
+  // Si cambian las estaciones, los recorridos ya no valen.
+  useEffect(() => () => { flujosRef.current = null; }, [ests]);
+
+  // Encender/apagar y animar el trazo cuesta abajo.
+  useEffect(() => {
+    const m = mapa.current;
+    verFlujoRef.current = modoLluvia && verFlujo;
+    if (!m || !listo) return;
+    const vis = modoLluvia && verFlujo ? 'visible' : 'none';
+    ['escorrentia-halo', 'escorrentia', 'escorrentia-flujo', 'escorrentia-cruces']
+      .forEach(id => { if (m.getLayer(id)) m.setLayoutProperty(id, 'visibility', vis); });
+    if (vis === 'none') return;
+    if (datosRef.current) pintarFlujos(slotDe(datosRef.current, minutoRef.current));
+    let i = 0;
+    const t = setInterval(() => {
+      if (!m.getLayer('escorrentia-flujo')) return;
+      i = (i + 1) % SECUENCIA_TRAZO.length;
+      m.setPaintProperty('escorrentia-flujo', 'line-dasharray', SECUENCIA_TRAZO[i]);
+    }, 70);
+    return () => clearInterval(t);
+  }, [modoLluvia, verFlujo, listo, flujos, pintarFlujos]);
 
   // Entrar/salir: visibilidad de capas, vuelo y etiquetas de estaciones.
   useEffect(() => {
@@ -681,6 +834,25 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
       ctx.clearRect(0, 0, cv.width, cv.height);
     };
   }, [modoLluvia, ests, pintarSlot]);
+
+  // Para el panel: primero las estaciones donde ha llovido, y de cada una el
+  // primer cruce con agua (canal o red), que es el dato de operación.
+  const listaFlujos = useMemo(() => {
+    if (!flujos) return [];
+    return flujos.map(f => {
+      const a = datos?.acumulado[f.id];
+      const av = a ? a[slotDe(datos, minutoUI)] : 0;
+      return { ...f, av, impacto: f.cruces.find(c => !/camino|v[ií]a/i.test(c.capa)) || null };
+    }).sort((x, y) => (y.av - x.av) || ((y.impacto ? 1 : 0) - (x.impacto ? 1 : 0)) || x.name.localeCompare(y.name));
+  }, [flujos, datos, minutoUI]);
+
+  const irAFlujo = (f) => {
+    const m = mapa.current;
+    if (!m || !f.coords.length) return;
+    const lngs = f.coords.map(c => c[0]), lats = f.coords.map(c => c[1]);
+    m.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+      { padding: { top: 100, bottom: 190, left: 60, right: 370 }, pitch: 55, maxZoom: 14, duration: 1800, essential: true });
+  };
 
   const buscar = (min) => {
     minutoRef.current = Math.max(0, Math.min(duracion(datosRef.current) - 0.01, min));
@@ -1039,6 +1211,32 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
             </>
           )}
 
+          {verFlujo && (
+            <>
+              <div style={{ ...etiqueta, margin: '14px 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <FaWater size={10} /> Hacia dónde va el agua
+              </div>
+              {calculandoFlujo && <div style={{ fontSize: 11, color: '#9fb3c8' }}>Siguiendo el relieve desde cada estación…</div>}
+              {listaFlujos.map(f => (
+                <button key={f.id} onClick={() => irAFlujo(f)}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', color: '#fff',
+                           background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,.07)', padding: '5px 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11 }}>
+                    <span style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>
+                    {f.av > 0 && <span style={{ color: '#9fb3c8', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{f.av.toFixed(1)} mm</span>}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: f.impacto ? f.impacto.color : '#9fb3c8', fontWeight: f.impacto ? 700 : 500 }}>
+                    → {destino(f)}
+                  </div>
+                </button>
+              ))}
+              <div style={{ fontSize: 9.5, color: '#7fa5c0', marginTop: 8, lineHeight: 1.45 }}>
+                Sigue la máxima pendiente del relieve SRTM (celdas de ~38 m). En quebradas es fiable; en la pampa
+                irrigada es orientativo: el modelo no ve drenes, alcantarillas ni bordos.
+              </div>
+            </>
+          )}
+
           {fuente === 'sim' && (
             <>
               <div style={{ ...etiqueta, margin: '14px 0 4px', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1112,6 +1310,10 @@ function Mapa3D({ incidentes = [], capasLinea = [], estaciones = [], onCerrar, o
               <button onClick={() => setVistaManto('int')} style={chip(vistaManto === 'int')}>Intensidad</button>
               <button onClick={() => setVistaManto('acu')} style={chip(vistaManto === 'acu')}>Acumulado</button>
             </div>
+            <button onClick={() => setVerFlujo(v => !v)} style={{ ...chip(verFlujo), display: 'inline-flex', alignItems: 'center', gap: 5 }}
+              title="Por dónde se iría el agua que cae en cada estación, siguiendo el relieve">
+              {calculandoFlujo ? <FaSyncAlt className="icon-spin" size={10} /> : <FaWater size={10} />} Escorrentía
+            </button>
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#9fb3c8' }}
                  title={vistaManto === 'int'
                    ? 'El manto usa los mismos umbrales de alerta que las columnas'
