@@ -187,10 +187,21 @@ def paso_serializer(raiz, simulacro):
 
 
 def paso_lee(raiz, simulacro):
-    """Que se puedan guardar: _lee_campos los acepta."""
-    ruta, mal = _busca(raiz, r'^def _lee_campos\(')
+    """Que se puedan guardar: _lee_campos los acepta.
+
+    Hay DOS _lee_campos en la app: uno para las partidas propias de una
+    incidencia y otro para el presupuesto de un proyecto. Son lectores de
+    campos distintos y los beneficiarios solo tienen sentido en el segundo,
+    porque los drenes son titulos del presupuesto.
+
+    Por eso el archivo no se busca por el nombre de la funcion -que sale dos
+    veces- sino por la VISTA que atiende la ruta que usa la pantalla:
+    presupuesto_detalle, que es quien recibe el PATCH de
+    /proyectos/<id>/partidas/<id>/. Ahi no hay nada que adivinar.
+    """
+    ruta, mal = _busca(raiz, r'^def presupuesto_detalle\(')
     if mal:
-        return False, mal
+        return False, 'buscando presupuesto_detalle: {0}'.format(mal)
     t = leer(ruta)
     ini, fin = _bloque(t, r'^def _lee_campos\(')
     if ini is None:
@@ -213,9 +224,9 @@ def paso_fila(raiz, simulacro):
     Se ancla en el cierre del `return {` de esa funcion y no en un campo
     concreto, porque la fila ha ido creciendo con los parches.
     """
-    ruta, mal = _busca(raiz, r'^def _fila\(')
+    ruta, mal = _busca(raiz, r'^def presupuesto_detalle\(')
     if mal:
-        return False, mal
+        return False, 'buscando presupuesto_detalle: {0}'.format(mal)
     t = leer(ruta)
     ini, fin = _bloque(t, r'^def _fila\(')
     if ini is None:
