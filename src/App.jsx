@@ -11,6 +11,7 @@ import './MaquinariaGIS.css';
 import Incidentes from './Incidentes';
 import AvanceObra from './AvanceObra';
 import ReporteConvenio from './ReporteConvenio';
+import RendicionPetroleo from './RendicionPetroleo';
 import Actividades from './Actividades';
 import Proyectos from './Proyectos';
 import Estadisticas from './Estadisticas';
@@ -22,7 +23,7 @@ import MapaInventario from './MapaInventario';
 import ReportesInventario from './ReportesInventario';
 import CampaniasInventario from './CampaniasInventario';
 import MapaTematico from './MapaTematico';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt, FaMobileAlt, FaUserTag, FaWater, FaFlask, FaFileContract } from 'react-icons/fa';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt, FaMobileAlt, FaUserTag, FaWater, FaFlask, FaFileContract, FaGasPump } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 import EquiposEnlazados from './EquiposEnlazados';
 import Hydrometrix from './Hydrometrix';
@@ -68,6 +69,9 @@ const MENU = [
   // fuera. Son dos pantallas y no una: aquella es para dentro, esta para la
   // JUCH, y mezclarlas daria un papel con la mitad de mas para cada lector.
   { clave: 'reporte-obra', titulo: 'Reporte de Avance', icono: <FaFileContract />, apps: ['pluvira'] },
+  // Detras del reporte: es el otro papel que sale fuera, y el unico que
+  // ademas guarda evidencia. Va por proyecto, como aquel.
+  { clave: 'rendicion',    titulo: 'Rendición de Petróleo', icono: <FaGasPump />, apps: ['pluvira'] },
   // Va al final de PLUVIRA porque no es una pantalla de trabajo diario: se
   // entra cuando alguien cambio de celular o se le perdio, no todos los dias.
   { clave: 'equipos',      titulo: 'Usuarios y equipos', icono: <FaMobileAlt />,  apps: ['pluvira'], soloAdmin: true },
@@ -386,12 +390,15 @@ function App() {
 
   // Avance de Obra comparte el layout de Maquinaria/Partes: es una vista de
   // tablero, de ancho completo, y el tema ya esta en MaquinariaGIS.css.
-  if (vistaActual === 'obra' || vistaActual === 'reporte-obra') {
+  if (vistaActual === 'obra' || vistaActual === 'reporte-obra'
+      || vistaActual === 'rendicion') {
     return (
       <div className="maq">
         <RailGIS {...propsRail} />
         <div className="maq-main">
-          {vistaActual === 'obra' ? <AvanceObra /> : <ReporteConvenio />}
+          {vistaActual === 'obra' && <AvanceObra />}
+          {vistaActual === 'reporte-obra' && <ReporteConvenio />}
+          {vistaActual === 'rendicion' && <RendicionPetroleo />}
         </div>
       </div>
     );
