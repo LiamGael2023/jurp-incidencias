@@ -113,55 +113,126 @@ def paso_modelo(raiz, simulacro):
     return True, 'dos campos anadidos'
 
 
+def _busca(raiz, patron):
+    """El archivo de la app que contiene `patron`, buscando en todos.
+
+    No se da por sabido en que archivo vive cada cosa. Este backend reparte
+    las vistas en modulos -views_partidas.py, views_presupuesto.py- y no en
+    un views.py unico; dar por hecho lo segundo es lo que hizo fallar la
+    primera version de este parche. Buscar cuesta un listdir y no vuelve a
+    fallar cuando alguien reorganice.
+
+    Devuelve (ruta, None) si sale en uno solo, y (None, motivo) si no sale o
+    si sale en varios: parchear uno de dos a ciegas deja el otro atras.
+    """
+    app = os.path.join(raiz, 'operations')
+    if not os.path.isdir(app):
+        return None, 'no existe {0}'.format(app)
+    salen = []
+    for nombre in sorted(os.listdir(app)):
+        if not nombre.endswith('.py'):
+            continue
+        ruta = os.path.join(app, nombre)
+        try:
+            if re.search(patron, leer(ruta), re.M):
+                salen.append(ruta)
+        except (IOError, OSError, UnicodeDecodeError):
+            continue
+    if not salen:
+        return None, 'no encuentro {0} en operations/*.py'.format(patron)
+    if len(salen) > 1:
+        return None, ('{0} sale en {1} archivos: {2}'
+                      .format(patron, len(salen),
+                              ', '.join(os.path.basename(x) for x in salen)))
+    return salen[0], None
+
+
+def _bloque(t, inicio):
+    """El trozo de `t` que ocupa una funcion: de su `def` al siguiente.
+
+    Hace falta para mirar DENTRO de una funcion y no en todo el archivo.
+    _lee_campos y _fila viven en el mismo modulo, asi que preguntar «esta
+    area_ha en este archivo» daba que si en cuanto se parcheaba la primera,
+    y la segunda se saltaba creyendose hecha. Lo descubrio la prueba en
+    seco: _fila se quedaba sin los campos y nadie se enteraba hasta que el
+    front los pidiera.
+    """
+    m = re.search(inicio, t, re.M)
+    if not m:
+        return None, None
+    sig = re.search(r'^(?:def |class )', t[m.end():], re.M)
+    return m.end(), (m.end() + sig.start() if sig else len(t))
+
+
 def paso_serializer(raiz, simulacro):
     """Los dos nombres en la lista `fields` de PartidaSerializer."""
-    ruta = os.path.join(raiz, 'operations/serializers.py')
-    if not os.path.exists(ruta):
-        return False, 'no existe {0}'.format(ruta)
+    ruta, mal = _busca(raiz, r'^class PartidaSerializer\(')
+    if mal:
+        return False, mal
     t = leer(ruta)
     if 'area_ha' in t:
-        return True, 'ya estaba'
+        return True, 'ya estaba ({0})'.format(os.path.basename(ruta))
 
     m = re.search(r'^class PartidaSerializer\(', t, re.M)
-    if not m:
-        return False, 'no encuentro class PartidaSerializer'
-    # El primer `fields = [...]` despues de esa clase es el suyo.
     f = re.search(r'fields = \[(.*?)\]', t[m.end():], re.S)
     if not f:
         return False, 'PartidaSerializer no tiene una lista fields'
-    ini = m.end() + f.start(1)
-    fin = m.end() + f.end(1)
-    dentro = t[ini:fin].rstrip()
+    i, j = m.end() + f.start(1), m.end() + f.end(1)
+    dentro = t[i:j].rstrip()
     if not dentro.endswith(','):
         dentro += ','
-    nuevo = dentro + '\n                  "usuarios", "area_ha"'
-    escribir(ruta, t[:ini] + nuevo + t[fin:], simulacro)
-    return True, 'expuestos en el serializer'
+    escribir(ruta, t[:i] + dentro + '\n                  "usuarios", "area_ha"'
+             + t[j:], simulacro)
+    return True, 'expuestos en {0}'.format(os.path.basename(ruta))
 
 
-def paso_vistas(raiz, simulacro):
-    """Que se puedan guardar (_lee_campos) y que vuelvan (_fila)."""
-    ruta = os.path.join(raiz, 'operations/views.py')
-    if not os.path.exists(ruta):
-        return False, 'no existe {0}'.format(ruta)
+def paso_lee(raiz, simulacro):
+    """Que se puedan guardar: _lee_campos los acepta."""
+    ruta, mal = _busca(raiz, r'^def _lee_campos\(')
+    if mal:
+        return False, mal
     t = leer(ruta)
-    if 'area_ha' in t:
-        return True, 'ya estaba'
+    ini, fin = _bloque(t, r'^def _lee_campos\(')
+    if ini is None:
+        return False, 'no encuentro _lee_campos en {0}'.format(os.path.basename(ruta))
+    if 'area_ha' in t[ini:fin]:
+        return True, 'ya estaba ({0})'.format(os.path.basename(ruta))
 
-    ancla_lee = '    if titulo:\n'
-    if t.count(ancla_lee) != 1:
-        return False, ('esperaba un «if titulo:» en _lee_campos y hay {0}'
-                       .format(t.count(ancla_lee)))
-    t = t.replace(ancla_lee, LEE + ancla_lee, 1)
+    m = re.search(r'^def _lee_campos\(', t, re.M)
+    corte = re.search(r'^    if titulo:', t[m.end():], re.M)
+    if not corte:
+        return False, '_lee_campos no tiene el corte «if titulo:»'
+    i = m.end() + corte.start()
+    escribir(ruta, t[:i] + LEE + t[i:], simulacro)
+    return True, 'lectura anadida en {0}'.format(os.path.basename(ruta))
 
-    ancla_fila = '        "ruta": p.ruta,\n'
-    if t.count(ancla_fila) != 1:
-        return False, ('esperaba un «"ruta": p.ruta,» en _fila y hay {0}'
-                       .format(t.count(ancla_fila)))
-    t = t.replace(ancla_fila, ancla_fila + FILA, 1)
 
-    escribir(ruta, t, simulacro)
-    return True, 'lectura y respuesta anadidas'
+def paso_fila(raiz, simulacro):
+    """Que vuelvan al front: _fila los devuelve.
+
+    Se ancla en el cierre del `return {` de esa funcion y no en un campo
+    concreto, porque la fila ha ido creciendo con los parches.
+    """
+    ruta, mal = _busca(raiz, r'^def _fila\(')
+    if mal:
+        return False, mal
+    t = leer(ruta)
+    ini, fin = _bloque(t, r'^def _fila\(')
+    if ini is None:
+        return False, 'no encuentro _fila en {0}'.format(os.path.basename(ruta))
+    if 'area_ha' in t[ini:fin]:
+        return True, 'ya estaba ({0})'.format(os.path.basename(ruta))
+
+    m = re.search(r'^def _fila\(', t, re.M)
+    ret = re.search(r'    return \{', t[m.end():], re.M)
+    if not ret:
+        return False, '_fila no tiene un «return {» donde anclar'
+    cierre = re.search(r'^    \}', t[m.end() + ret.end():], re.M)
+    if not cierre:
+        return False, 'no encuentro el cierre del return de _fila'
+    i = m.end() + ret.end() + cierre.start()
+    escribir(ruta, t[:i] + FILA + t[i:], simulacro)
+    return True, 'respuesta anadida en {0}'.format(os.path.basename(ruta))
 
 
 def main():
@@ -173,7 +244,8 @@ def main():
     pasos = [
         ('modelo', lambda: paso_modelo(args.raiz, args.dry_run)),
         ('serializer', lambda: paso_serializer(args.raiz, args.dry_run)),
-        ('vistas', lambda: paso_vistas(args.raiz, args.dry_run)),
+        ('guardar', lambda: paso_lee(args.raiz, args.dry_run)),
+        ('devolver', lambda: paso_fila(args.raiz, args.dry_run)),
     ]
 
     fallo = False
