@@ -55,6 +55,10 @@ export default function ReporteConvenio() {
   const [obras, setObras] = useState([]);
   const [obra, setObra] = useState('');
   const [filas, setFilas] = useState([]);
+  /* Lo imputado, parte a parte, con su fecha. De aquí sale la cronología:
+   * no se teclea en ningún sitio, se deduce de los partes que ya existen y
+   * se va llenando sola conforme se registran. */
+  const [movs, setMovs] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
   const [editando, setEditando] = useState(null);   // {id, usuarios, area_ha}
@@ -84,7 +88,29 @@ export default function ReporteConvenio() {
       const r = await fetch(`${API_OPS}/partidas/?obra=${encodeURIComponent(obra)}`);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json();
-      setFilas(Array.isArray(j) ? j : (j.partidas || []));
+      const lista = Array.isArray(j) ? j : (j.partidas || []);
+      setFilas(lista);
+
+      /* Los partes traen la fecha; las partidas solo el total. Se piden
+       * enteros y se agrupan aquí porque el backend no ofrece un corte por
+       * mes, y añadir un endpoint para esto era otro despliegue. Son ~450 KB
+       * hoy y crecen con cada parte: el día que pese, se mueve al servidor. */
+      try {
+        const pr = await (await fetch(`${API_OPS}/daily-part-heavy-equipments/`)).json();
+        const partes = Array.isArray(pr) ? pr : (pr.results || []);
+        const mias = new Set(lista.filter(x => !x.es_titulo).map(x => String(x.id)));
+        const dePartida = {};
+        lista.filter(x => !x.es_titulo).forEach(x => { dePartida[String(x.id)] = drenDe(x); });
+        const out = [];
+        partes.forEach(pt => (pt.actividades || []).forEach(a => {
+          if (!mias.has(String(a.partida))) return;
+          const f = String(pt.date || '').slice(0, 7);
+          if (!f) return;   // sin fecha no hay mes al que llevarlo
+          out.push({ mes: f, dren: dePartida[String(a.partida)] || '—',
+                     unidad: (a.metrado_unidad || '').trim(), val: num(a.metrado) });
+        }));
+        setMovs(out);
+      } catch { setMovs([]); }
       try {
         const pr = await (await fetch(`${API_OPS}/proyectos/`)).json();
         const mio = (Array.isArray(pr) ? pr : []).find(x => x.codigo === obra);
@@ -121,6 +147,23 @@ export default function ReporteConvenio() {
       // La magnitud principal primero: la que más volumen programado mueve.
       .sort((a, b) => b.prog - a.prog);
 
+    /* La cronología, por unidad: meses × drenes. Los meses salen de lo que
+     * hay, no de un calendario fijo: una obra que empezó en mayo no tiene por
+     * qué enseñar enero en blanco. */
+    const meses = [...new Set(movs.map(m => m.mes))].sort();
+    bloques.forEach(b => {
+      const celda = {};
+      movs.filter(m => m.unidad === b.unidad).forEach(m => {
+        celda[m.dren] = celda[m.dren] || {};
+        celda[m.dren][m.mes] = (celda[m.dren][m.mes] || 0) + m.val;
+      });
+      const porMes = meses.map(x => movs
+        .filter(m => m.unidad === b.unidad && m.mes === x)
+        .reduce((s, m) => s + m.val, 0));
+      let acum = 0;
+      b.crono = { meses, celda, porMes, acumulado: porMes.map(v => (acum += v)) };
+    });
+
     const usuarios = drenes.reduce((s, d) => s + num(d.usuarios), 0);
     const area = drenes.reduce((s, d) => s + num(d.area_ha), 0);
     /* `undefined` en todos los drenes significa que el servidor todavía no
@@ -131,7 +174,7 @@ export default function ReporteConvenio() {
 
     const proy = (obras.find(o => o.obra === obra) || {}).proyecto || '';
     return { drenes, bloques, usuarios, area, soportaBenef, proyecto: proy };
-  }, [filas, obras, obra]);
+  }, [filas, movs, obras, obra]);
 
   /* ── Guardar los beneficiarios de un dren ───────────────────────────── */
   const guardarBenef = async () => {
@@ -200,8 +243,39 @@ export default function ReporteConvenio() {
         footStyles: { fillColor: [241, 245, 249], textColor: 20, fontStyle: 'bold' },
         margin: { left: 14, right: 14 },
       });
-      y = doc.lastAutoTable.finalY + 8;
-      if (y > 170) { doc.addPage(); y = 18; }
+      y = doc.lastAutoTable.finalY + 6;
+      if (y > 150) { doc.addPage(); y = 18; }
+
+      /* La cronología va detrás de su propia unidad, no toda junta al final:
+       * el que lee quiere ver los metros y cuándo se hicieron sin pasar tres
+       * páginas en medio. */
+      const c = b.crono;
+      if (c && c.meses.length) {
+        const mes = (m) => {
+          const [a2, mm] = m.split('-');
+          return ['', 'Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Set','Oct','Nov','Dic'][+mm]
+            + ' ' + a2.slice(2);
+        };
+        const conMov = datos.drenes.filter(d => c.celda[d.codigo]
+          && Object.values(c.celda[d.codigo]).some(v => v > 0));
+        autoTable(doc, {
+          startY: y,
+          head: [['Dren', ...c.meses.map(mes), 'Total']],
+          body: conMov.map(d => {
+            const f = c.celda[d.codigo] || {};
+            const tot = c.meses.reduce((s, m) => s + (f[m] || 0), 0);
+            return [d.descripcion, ...c.meses.map(m => (f[m] ? cant(f[m]) : '')), cant(tot)];
+          }),
+          foot: [['TOTAL', ...c.porMes.map(v => cant(v)), cant(b.ejec)]],
+          theme: 'grid',
+          styles: { fontSize: 7, cellPadding: 1.2 },
+          headStyles: { fillColor: [100, 116, 139] },
+          footStyles: { fillColor: [241, 245, 249], textColor: 20, fontStyle: 'bold' },
+          margin: { left: 14, right: 14 },
+        });
+        y = doc.lastAutoTable.finalY + 8;
+        if (y > 160) { doc.addPage(); y = 18; }
+      }
     }
 
     if (datos.soportaBenef) {
@@ -466,6 +540,111 @@ function BloqueUnidad({ b, drenes, principal }) {
             type="radialBar" height={230} />
         </div>
       </div>
+
+      <Cronologia b={b} drenes={drenes} />
+    </div>
+  );
+}
+
+/* ── Cuándo se hizo cada cosa ────────────────────────────────────────────
+ *
+ * La matriz dren × mes y la curva acumulada, en la unidad del bloque. No se
+ * escribe en ningún sitio: sale de la fecha de los partes y del metrado que
+ * imputan, así que se va llenando sola y no puede desalinearse de lo que
+ * dicen los totales de arriba.
+ *
+ * Solo salen los drenes con movimiento. Diecinueve filas en blanco para ver
+ * las cuatro que tienen algo es el tipo de tabla que se deja de mirar. */
+function Cronologia({ b, drenes }) {
+  const { meses, celda, porMes, acumulado } = b.crono || {};
+  if (!meses || !meses.length) {
+    return (
+      <div style={{ marginTop:'12px', fontSize:'11.5px', color:'#94a3b8',
+        borderTop:'1px solid #f1f5f9', paddingTop:'10px' }}>
+        Todavía no hay partes con metrado imputado en {b.unidad}, así que no
+        hay cronología que mostrar. Aparecerá sola conforme se registren.
+      </div>
+    );
+  }
+  const conMov = drenes.filter(d => celda[d.codigo]
+    && Object.values(celda[d.codigo]).some(v => v > 0));
+  const etq = (m) => {
+    const [a, mm] = m.split('-');
+    return ['', 'Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Set','Oct','Nov','Dic'][+mm]
+      + ' ' + a.slice(2);
+  };
+
+  const curva = {
+    chart: { type:'line', toolbar:{ show:false }, fontFamily:'inherit',
+             animations:{ enabled:false } },
+    stroke: { curve:'straight', width:3 },
+    markers: { size:4 },
+    colors: ['#1463A5'],
+    xaxis: { categories: meses.map(etq), labels:{ style:{ fontSize:'10.5px' } } },
+    yaxis: { labels:{ formatter:(v)=>cant(v,0), style:{ fontSize:'10.5px' } } },
+    grid: { borderColor:'#f1f5f9' },
+    dataLabels: { enabled:false },
+    tooltip: { y:{ formatter:(v)=>`${cant(v)} ${b.unidad} acumulados` } },
+  };
+
+  return (
+    <div style={{ marginTop:'14px', borderTop:'1px solid #f1f5f9', paddingTop:'12px' }}>
+      <div style={{ fontSize:'12.5px', fontWeight:700, color:'#334155',
+        marginBottom:'8px' }}>
+        Cronología en {b.unidad}
+        <span style={{ fontWeight:400, color:'#94a3b8', fontSize:'11.5px' }}>
+          {' '}· de la fecha de los partes, no se escribe aparte
+        </span>
+      </div>
+
+      <div style={{ overflowX:'auto', marginBottom:'10px' }}>
+        <table style={{ width:'100%', minWidth:`${260 + meses.length * 82}px`,
+          borderCollapse:'collapse', fontSize:'12px' }}>
+          <thead>
+            <tr style={cabecera}>
+              <th style={{ ...th, textAlign:'left' }}>Dren</th>
+              {meses.map(m => <th key={m} style={th}>{etq(m)}</th>)}
+              <th style={{ ...th, borderLeft:'2px solid #e2e8f0' }}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {conMov.map(d => {
+              const fila = celda[d.codigo] || {};
+              const tot = meses.reduce((s, m) => s + (fila[m] || 0), 0);
+              return (
+                <tr key={d.id} style={{ borderTop:'1px solid #f1f5f9' }}>
+                  <td style={{ ...td, color:'#1e293b', fontWeight:600 }}>
+                    {d.descripcion}</td>
+                  {meses.map(m => (
+                    <td key={m} style={{ ...td, textAlign:'right',
+                      color: fila[m] ? '#1e293b' : '#e2e8f0' }}>
+                      {fila[m] ? cant(fila[m]) : '—'}
+                    </td>
+                  ))}
+                  <td style={{ ...td, textAlign:'right', fontWeight:700,
+                    color:'#1463A5', borderLeft:'2px solid #e2e8f0' }}>
+                    {cant(tot)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr style={{ background:'#f8fafc', borderTop:'2px solid #e2e8f0',
+              fontWeight:800, color:'#1e293b' }}>
+              <td style={td}>TOTAL</td>
+              {porMes.map((v, i) => (
+                <td key={i} style={{ ...td, textAlign:'right' }}>{cant(v)}</td>
+              ))}
+              <td style={{ ...td, textAlign:'right', color:'#1463A5',
+                borderLeft:'2px solid #e2e8f0' }}>{cant(b.ejec)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <ReactApexChart options={curva}
+        series={[{ name:`Acumulado (${b.unidad})`, data: acumulado.map(v => +v.toFixed(2)) }]}
+        type="line" height={210} />
     </div>
   );
 }
