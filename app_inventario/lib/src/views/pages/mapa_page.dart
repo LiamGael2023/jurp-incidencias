@@ -54,6 +54,9 @@ class _MapaPageState extends State<MapaPage> {
   LatLngBounds? _vista;
   double _zoom = 11;
   LatLng? _yo;
+  /// Radio de incertidumbre en metros, tal como lo declara el aparato.
+  double _precision = 0;
+  bool _buscandoPos = false;
   bool _leyendaAbierta = false;
 
   /// Cuántos activos se están dibujando ahora mismo. Se cuenta al construir
@@ -74,31 +77,104 @@ class _MapaPageState extends State<MapaPage> {
 
   // ── posición ──────────────────────────────────────────────────────────
 
+  /// Lleva el mapa a donde está el inspector.
+  ///
+  /// CADA FALLO SE DICE POR SU NOMBRE. «No se pudo obtener la ubicación»
+  /// vale para cinco cosas distintas —el GPS apagado, el permiso sin dar, el
+  /// permiso denegado para siempre, el aparato sin fijar satélites, el
+  /// permiso que falta en el manifiesto— y cada una se arregla de una
+  /// manera. Con el mensaje genérico, en el cerro, uno se queda tocando el
+  /// botón sin saber qué mirar.
+  ///
+  /// Donde se puede, el aviso lleva el botón que lleva al sitio donde se
+  /// arregla.
   Future<void> _irAMiPosicion() async {
+    if (_buscandoPos) return;
+    setState(() => _buscandoPos = true);
     try {
+      // 1. ¿Está el GPS encendido? Es el caso más común con diferencia, y
+      //    el único que no se nota mirando la app.
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        _aviso('La ubicación del teléfono está apagada.',
+            accion: 'Activar', onAccion: Geolocator.openLocationSettings);
+        return;
+      }
+
+      // 2. El permiso.
       var permiso = await Geolocator.checkPermission();
       if (permiso == LocationPermission.denied) {
         permiso = await Geolocator.requestPermission();
       }
-      if (permiso == LocationPermission.denied ||
-          permiso == LocationPermission.deniedForever) {
-        _aviso('Sin permiso de ubicación');
+      if (permiso == LocationPermission.deniedForever) {
+        _aviso('Negaste el permiso de ubicación para siempre.',
+            accion: 'Ajustes', onAccion: Geolocator.openAppSettings);
         return;
       }
-      final p = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high);
+      if (permiso == LocationPermission.denied) {
+        _aviso('Sin permiso de ubicación no puedo situarte en el mapa.');
+        return;
+      }
+
+      // 3. La posición. Con límite de tiempo: bajo techo o en una quebrada
+      //    el aparato puede estar diez minutos sin fijar satélites, y sin
+      //    tope esto se queda esperando callado para siempre.
+      Position? p;
+      try {
+        p = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 15),
+        );
+      } catch (_) {
+        // 4. Si no fija a tiempo, vale la última conocida: en campo, a cien
+        //    metros de donde uno estaba hace un minuto, sirve igual para
+        //    encontrar la estructura. Eso sí, se avisa de que es vieja.
+        p = await Geolocator.getLastKnownPosition();
+        if (p != null) _aviso('Última posición conocida; el GPS aún no fija.');
+      }
+
+      if (p == null) {
+        _aviso('El GPS no logró fijar posición. Sal a cielo abierto y '
+            'vuelve a intentarlo.');
+        return;
+      }
+
       final punto = LatLng(p.latitude, p.longitude);
-      setState(() => _yo = punto);
+      setState(() {
+        _yo = punto;
+        _precision = p!.accuracy;
+      });
       _mapa.move(punto, 17);
     } catch (e) {
-      _aviso('No se pudo obtener la ubicación');
+      // El caso que no se puede arreglar desde el teléfono: la app se
+      // compiló sin declarar el permiso. Pasa cuando se generó android/ a
+      // mano sin añadir lo que dice el LEEME, y desde dentro de la app no
+      // hay nada que tocar: hay que recompilar.
+      final txt = e.toString().toLowerCase();
+      if (txt.contains('manifest') ||
+          (txt.contains('permission') && txt.contains('define'))) {
+        _aviso('La app se compiló sin el permiso de ubicación en el '
+            'AndroidManifest. Hay que añadirlo y recompilar.');
+      } else {
+        _aviso('No se pudo obtener la ubicación: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _buscandoPos = false);
     }
   }
 
-  void _aviso(String texto) {
+  void _aviso(String texto, {String? accion, VoidCallback? onAccion}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(texto)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(texto),
+      duration: const Duration(seconds: 6),
+      action: accion == null
+          ? null
+          : SnackBarAction(
+              label: accion,
+              textColor: Colors.white,
+              onPressed: onAccion ?? () {},
+            ),
+    ));
   }
 
   // ── capas dibujadas ───────────────────────────────────────────────────
@@ -361,6 +437,21 @@ class _MapaPageState extends State<MapaPage> {
               PolygonLayer(polygons: _poligonos(inv)),
               PolylineLayer(polylines: _lineas(inv)),
               MarkerLayer(markers: _rotulosSectores(inv)),
+              // El círculo de precisión no es adorno: dice si el punto azul
+              // vale un metro o cincuenta. Con el GPS de un teléfono junto a
+              // un cerro, la diferencia decide si uno está buscando LA toma
+              // o la de al lado.
+              if (_yo != null && _precision > 0)
+                CircleLayer(circles: [
+                  CircleMarker(
+                    point: _yo!,
+                    radius: _precision,
+                    useRadiusInMeter: true,
+                    color: AppColors.azul.withOpacity(0.14),
+                    borderColor: AppColors.azul.withOpacity(0.5),
+                    borderStrokeWidth: 1,
+                  ),
+                ]),
               if (_yo != null)
                 MarkerLayer(markers: [
                   Marker(
@@ -460,7 +551,16 @@ class _MapaPageState extends State<MapaPage> {
             foregroundColor: AppColors.azul,
             elevation: 3,
             onPressed: _irAMiPosicion,
-            child: const Icon(Icons.my_location),
+            // Fijar satélites tarda; sin esta señal uno cree que el botón
+            // no hizo nada y lo pulsa cuatro veces.
+            child: _buscandoPos
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.4, color: AppColors.azul),
+                  )
+                : const Icon(Icons.my_location),
           ),
           const SizedBox(height: 10),
           FloatingActionButton.extended(
