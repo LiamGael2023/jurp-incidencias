@@ -119,6 +119,57 @@ from .models import FotoActivo as _FotoActivo
 
 
 class FotoActivoSerializer(_serializers_fotos.ModelSerializer):
+    """Las rutas de lectura van RELATIVAS, no absolutas.
+
+    El cliente sabe cual es su base -la web y la app de campo entran por
+    hosts distintos- y el servidor no tiene por que adivinarla. Una URL
+    absoluta construida aqui sale con el host de la peticion, que detras de
+    un proxy no siempre es el que el cliente puede abrir.
+
+    `imagen_api` es la que hay que usar para VER la foto: la entrega Django
+    y no necesita que nginx publique /media/.
+
+    OJO CON `imagen`: se deja como el campo del modelo, tal cual, y no como
+    campo calculado. Un SerializerMethodField es de SOLO LECTURA, asi que
+    convertirlo en uno dejaba al POST sin archivo y la subida fallaba con un
+    error que no mencionaba la causa. La ruta de media, que era lo que se
+    queria enseñar, va aparte en `imagen_media`.
+    """
+
+    imagen_api = _serializers_fotos.SerializerMethodField()
+    imagen_media = _serializers_fotos.SerializerMethodField()
+
+    class Meta:
+        model = _FotoActivo
+        fields = ['id', 'tipo_activo', 'activo_fid', 'imagen', 'imagen_api',
+                  'imagen_media', 'descripcion', 'tomada_por', 'creada']
+        read_only_fields = ['creada']
+
+    def get_imagen_api(self, obj):
+        return 'fotos/{0}/imagen/'.format(obj.pk)
+
+    def get_imagen_media(self, obj):
+        from django.conf import settings as _conf
+        if not obj.imagen:
+            return ''
+        return '{0}{1}'.format(getattr(_conf, 'MEDIA_URL', '/media/'),
+                               obj.imagen.name)
+'''
+
+
+# El bloque EXACTO que escribió la primera versión. Se guarda para poder
+# sustituirlo donde ya se aplicó, en vez de pedirle a nadie que lo edite a
+# mano: dejaba `imagen` como campo calculado y eso lo volvía de solo
+# lectura, con lo que el POST se quedaba sin archivo.
+SERIALIZADOR_V1 = '''
+
+# ── Fotos de los activos ──────────────────────────────────────────────────
+from rest_framework import serializers as _serializers_fotos
+
+from .models import FotoActivo as _FotoActivo
+
+
+class FotoActivoSerializer(_serializers_fotos.ModelSerializer):
     """Las rutas van RELATIVAS, no absolutas.
 
     El cliente sabe cuál es su base -la web y la app de campo entran por
@@ -265,13 +316,26 @@ def paso_modelo(app, simulacro):
 
 
 def paso_serializador(app, simulacro):
+    """Anade el serializador, o corrige el que dejo la primera version.
+
+    La v1 declaraba `imagen` como campo calculado y eso lo vuelve de solo
+    lectura: el POST se quedaba sin archivo y la subida fallaba con un error
+    que no mencionaba la causa. Donde ya se aplico se sustituye el bloque
+    entero, que es mas seguro que explicar por chat que linea tocar.
+    """
     ruta = os.path.join(app, 'serializers.py')
     if not os.path.exists(ruta):
         return False, ('no existe serializers.py; dime como se llama y '
                        'ajusto el parche')
     t = leer(ruta)
-    if 'FotoActivoSerializer' in t:
+    if 'imagen_media' in t:
         return True, 'ya estaba'
+    if SERIALIZADOR_V1 in t:
+        escribir(ruta, t.replace(SERIALIZADOR_V1, SERIALIZADOR), simulacro)
+        return True, 'corregido: `imagen` vuelve a ser escribible'
+    if 'FotoActivoSerializer' in t:
+        return False, ('hay un FotoActivoSerializer que no reconozco; '
+                       'miralo a mano antes de seguir')
     escribir(ruta, t.rstrip() + '\n' + SERIALIZADOR, simulacro)
     return True, 'FotoActivoSerializer anadido'
 
