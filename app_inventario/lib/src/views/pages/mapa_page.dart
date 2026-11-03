@@ -263,8 +263,8 @@ class _MapaPageState extends State<MapaPage> {
         // relleno. Si se borrara del todo, uno perdería la referencia de
         // dónde estaba justo mientras mira lo que hay en los demás.
         final apagado = esSector &&
-            i < inv.sectores.length &&
-            inv.sectoresApagados.contains(inv.sectores[i].nombre);
+            i < inv.sectoresDeLaCapa.length &&
+            inv.sectoresApagados.contains(inv.sectoresDeLaCapa[i].nombre);
         for (final anillo in activos[i].lineas) {
           if (anillo.length < 3) continue;
           out.add(Polygon(
@@ -289,7 +289,7 @@ class _MapaPageState extends State<MapaPage> {
     if (inv.visibles['sectores_pech'] != true || _zoom < 9.5) return const [];
     final out = <Marker>[];
     final activos = inv.activosDe('sectores_pech');
-    final sectores = inv.sectores;
+    final sectores = inv.sectoresDeLaCapa;
     for (var i = 0; i < activos.length; i++) {
       final pt = activos[i].punto;
       if (pt == null || !_enVista(pt)) continue;

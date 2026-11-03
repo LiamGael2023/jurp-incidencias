@@ -183,22 +183,39 @@ class InventarioController extends ChangeNotifier {
   /// de invisible hasta que alguien se dé cuenta de que existe.
   final Set<String> sectoresApagados = {};
 
-  List<Sector> _sectores = const [];
+  List<Sector> _sectores = const [];       // en el orden de la capa
+  List<Sector> _sectoresOrdenados = const [];
   FiltroSectores? _filtro;
   String _firmaSectores = '';
 
-  /// Los sectores, reconstruidos cuando cambian los polígonos descargados.
-  List<Sector> get sectores {
+  void _rehacerSectores() {
     final activos = activosDe('sectores_pech');
     final firma = '${_llave('sectores_pech')}|${activos.length}';
-    if (firma != _firmaSectores) {
-      _firmaSectores = firma;
-      _sectores = sectoresDeActivos(activos);
-      _filtro = _sectores.isEmpty ? null : FiltroSectores(_sectores);
-      // Un sector apagado que ya no existe no debe seguir filtrando.
-      sectoresApagados.removeWhere(
-          (n) => !_sectores.any((s) => s.nombre == n));
-    }
+    if (firma == _firmaSectores) return;
+    _firmaSectores = firma;
+    _sectores = sectoresDeActivos(activos);
+    _sectoresOrdenados = [..._sectores]
+      ..sort((a, b) => comparaNatural(a.nombre, b.nombre));
+    _filtro = _sectores.isEmpty ? null : FiltroSectores(_sectores);
+    // Un sector apagado que ya no existe no debe seguir filtrando.
+    sectoresApagados.removeWhere((n) => !_sectores.any((s) => s.nombre == n));
+  }
+
+  /// Los sectores para ENSEÑAR, en orden natural: SECTOR 10 después del 9 y
+  /// no entre el 1 y el 2.
+  List<Sector> get sectores {
+    _rehacerSectores();
+    return _sectoresOrdenados;
+  }
+
+  /// Los sectores en el orden en que vienen de la capa.
+  ///
+  /// El mapa los necesita así porque empareja cada polígono con su sector
+  /// por posición. Ordenar esta lista también habría pintado el SECTOR 3 con
+  /// el color del 1 en cuanto los nombres no vinieran ya ordenados del
+  /// servidor —y el panel diría un color y el mapa otro—.
+  List<Sector> get sectoresDeLaCapa {
+    _rehacerSectores();
     return _sectores;
   }
 

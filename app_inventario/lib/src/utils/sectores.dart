@@ -247,6 +247,32 @@ class FiltroSectores {
   }
 }
 
+/* ── Orden natural ───────────────────────────────────────────────────────
+
+   «SECTOR 10» va después de «SECTOR 9», no entre «SECTOR 1» y «SECTOR 2».
+   Ordenar como texto pone el 10 justo después del 1 porque compara carácter
+   a carácter, y una lista así se lee mal aunque nadie sepa decir por qué.
+
+   El truco es comparar por trozos: los de dígitos como números y el resto
+   como texto. Es lo que hace el visor web con localeCompare(numeric: true). */
+
+final _trozos = RegExp(r'\d+|\D+');
+
+int comparaNatural(String a, String b) {
+  final ta = _trozos.allMatches(a.toLowerCase()).map((m) => m[0]!).toList();
+  final tb = _trozos.allMatches(b.toLowerCase()).map((m) => m[0]!).toList();
+
+  for (var i = 0; i < ta.length && i < tb.length; i++) {
+    final na = int.tryParse(ta[i]);
+    final nb = int.tryParse(tb[i]);
+    final cmp = (na != null && nb != null)
+        ? na.compareTo(nb)
+        : ta[i].compareTo(tb[i]);
+    if (cmp != 0) return cmp;
+  }
+  return ta.length.compareTo(tb.length);
+}
+
 /// Construye los sectores a partir de los polígonos ya descargados.
 ///
 /// Los colores son los de la paleta del visor, en orden: con un solo verde
