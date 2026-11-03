@@ -12,6 +12,8 @@ import {
 } from 'react-icons/fa';
 import { prepararFoto, motivoRechazo, urlFoto, ordenarFotos, peso } from './fotosActivo';
 import { caracteristicas, cobertura, tituloActivo } from './fichaActivo';
+import { laminasDe, laminaDeBloque, laminasSueltas } from './esquemasFicha';
+import VisorImagen from './VisorImagen';
 import Swal from 'sweetalert2';
 import { datosDeCapa, filtroDeSectores } from './sectores';
 import { codcatsConLicencia, colorLote, tieneLicencia, textoLicencia,
@@ -1313,6 +1315,32 @@ function ocultoPorRespuesta(campo, valores) {
   return false;
 }
 
+/**
+ * Un croquis de la ficha: el dibujo acotado, su pie de cotas y un clic para
+ * verlo grande.
+ *
+ * Lo de ampliar no es un adorno. En el teléfono la lámina cabe a unos 150 px
+ * de alto y a ese tamaño las cotas —b₁, h₂, Lt₁— no se leen; mirarlas de
+ * cerca es parte de llenar la ficha, igual que en el papel uno se acerca el
+ * formato a los ojos.
+ */
+function Croquis({ lamina, onAmpliar, compacto = false }) {
+  if (!lamina) return null;
+  return (
+    <figure className={`inv-croquis${compacto ? ' compacto' : ''}`}>
+      <button type="button" onClick={() => onAmpliar(lamina)}
+              title={`Ampliar · ${lamina.titulo}`}>
+        <img src={lamina.src} alt={lamina.titulo} loading="lazy" />
+        <span className="inv-croquis-lupa"><FaExpand size={10} /></span>
+      </button>
+      <figcaption>
+        <b>{lamina.titulo}</b>
+        {lamina.pie && <span>{lamina.pie}</span>}
+      </figcaption>
+    </figure>
+  );
+}
+
 export function ModalEvaluacion({ inv }) {
   const [valores, setValores] = useState({});
   const [resumen, setResumen] = useState({});
@@ -1321,6 +1349,8 @@ export function ModalEvaluacion({ inv }) {
   const [cerradas, setCerradas] = useState({});
   // Tras un guardado fallido, los obligatorios vacíos se pintan en rojo.
   const [senalar, setSenalar] = useState(false);
+  // Croquis que se está mirando a pantalla completa, o null.
+  const [lamina, setLamina] = useState(null);
   const cuerpo = useRef(null);
 
   const ev = inv.evaluando;
@@ -1351,6 +1381,15 @@ export function ModalEvaluacion({ inv }) {
     });
     return grupos;
   }, [campos]);
+
+  /* LOS CROQUIS DE LA FICHA DE PAPEL. Los campos piden «Base (b₁)» o
+   * «Talud (Z)» y esas letras solo significan algo sobre el dibujo acotado.
+   * Cada lámina de componente —compuerta, retención, diques— se pinta dentro
+   * de su bloque; las de la estructura entera, en una tira arriba. */
+  const laminas = useMemo(() => laminasDe(ev?.tipo), [ev?.tipo]);
+  const sueltas = useMemo(
+    () => laminasSueltas(laminas, (secciones || []).map(g => g.titulo)),
+    [laminas, secciones]);
 
   // Al abrir: precarga con la evaluación previa si existe, y si no con el
   // dato que ya tiene el inventario. El técnico confirma o corrige, en vez
@@ -1507,6 +1546,16 @@ export function ModalEvaluacion({ inv }) {
             </div>
           )}
 
+          {/* Los croquis de la estructura entera, antes de nada: es lo
+              primero que se mira en la ficha de papel. */}
+          {sueltas.length > 0 && (
+            <div className="inv-croquis-tira">
+              {sueltas.map(l => (
+                <Croquis key={l.clave} lamina={l} onAmpliar={setLamina} />
+              ))}
+            </div>
+          )}
+
           {secciones && secciones.map((g, i) => {
             // El bloque general va abierto; los demás cerrados, porque con
             // diez bloques abiertos de golpe no se ve dónde empieza nada.
@@ -1516,6 +1565,8 @@ export function ModalEvaluacion({ inv }) {
             const faltanAqui = visibles.filter(
               c => c.obligatorio && (valores[c.campo] === '' || valores[c.campo] == null)
             ).length;
+            // El dibujo de ESTE componente, si la ficha lo trae.
+            const croquis = laminaDeBloque(laminas, g.titulo);
 
             return (
               <div className="inv-bloque" key={g.titulo || '_general'}>
@@ -1531,6 +1582,12 @@ export function ModalEvaluacion({ inv }) {
                       ? <b className="inv-bloque-falta">{faltanAqui}</b>
                       : <FaCheckCircle className="inv-bloque-ok" size={11} />}
                   </button>
+                )}
+
+                {/* En el papel el dibujo va al lado de las cotas que
+                    explica; aquí, encima de ellas. */}
+                {abierta && croquis && (
+                  <Croquis lamina={croquis} onAmpliar={setLamina} compacto />
                 )}
 
                 {abierta && (
@@ -1625,6 +1682,13 @@ export function ModalEvaluacion({ inv }) {
             </div>
           </div>
 
+          {/* EVIDENCIA FOTOGRÁFICA, como la hoja 2 de la ficha. Antes había
+              que guardar, cerrar, abrir la ficha del activo y entrar a las
+              fotos; en campo eso son cuatro toques con el teléfono en una
+              mano. Es la misma galería de la ficha —las mismas fotos del
+              mismo activo—, no una copia. */}
+          <GaleriaFotos tipo={ev.tipo} fid={ev.fid} nombre={nombre} />
+
           {fallo && (
             <div className="inv-error"><FaExclamationCircle /> {fallo}</div>
           )}
@@ -1639,6 +1703,13 @@ export function ModalEvaluacion({ inv }) {
             {guardando ? 'Guardando…' : (previa ? 'Actualizar' : 'Guardar evaluación')}
           </button>
         </div>
+
+        {/* El croquis a pantalla completa. Va por portal, así que su fondo
+            no es el fondo del modal y cerrarlo no cierra el formulario a
+            medio llenar. */}
+        <VisorImagen
+          foto={lamina && { src: lamina.src, titulo: lamina.titulo }}
+          onCerrar={() => setLamina(null)} />
 
       </div>
     </div>

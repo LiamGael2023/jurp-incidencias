@@ -1763,3 +1763,91 @@
   padding: 5px 0 2px; border-top: 1px dashed rgba(255,255,255,.10);
   margin-top: 4px;
 }
+
+/* ── Croquis de la ficha ────────────────────────────────────────────────
+   Los dibujos acotados que la ficha de papel lleva impresos junto a los
+   campos. Van sobre blanco y con todo el dibujo a la vista -object-fit:
+   contain, nunca cover-: un croquis recortado por los bordes pierde justo
+   las cotas, que están en el perímetro.
+
+   La altura está limitada porque algunas láminas son muy apaisadas (el
+   perfil de un sifón mide tres veces lo que mide de alto) y a tamaño
+   natural empujarían los campos fuera de la pantalla. Para leer las cotas
+   está el clic. */
+/* auto-fit y no auto-fill: con una sola lámina las columnas vacías se
+   colapsan y el dibujo ocupa el ancho entero en vez de quedarse encogido en
+   un tercio con dos huecos al lado. */
+.inv-croquis-tira {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.inv-modal .inv-croquis {
+  margin: 0;
+  border: 1px solid #dde8f3;
+  border-radius: 9px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.inv-modal .inv-croquis > button {
+  display: block;
+  position: relative;
+  width: 100%;
+  padding: 9px;
+  border: 0;
+  background: #fff;
+  cursor: zoom-in;
+}
+
+/* Ancho automático, no 100%: hay láminas muy verticales -la compuerta, la
+   retención- y estirarlas al ancho de la tarjeta solo añade franjas blancas
+   a los lados. Que cada dibujo ocupe lo suyo y se centre. */
+.inv-modal .inv-croquis img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 170px;
+  margin: 0 auto;
+}
+
+.inv-modal .inv-croquis.compacto {
+  margin: 0 0 11px;
+  background: #fbfdff;
+}
+.inv-modal .inv-croquis.compacto img { max-height: 220px; }
+
+.inv-croquis-lupa {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  padding: 3px 5px;
+  border-radius: 5px;
+  color: #fff;
+  background: rgba(11, 42, 91, .68);
+  opacity: 0;
+  transition: opacity .12s;
+}
+.inv-croquis > button:hover .inv-croquis-lupa { opacity: 1; }
+
+.inv-modal .inv-croquis figcaption {
+  padding: 7px 10px 9px;
+  border-top: 1px solid #eef3f9;
+  background: #f8fbfe;
+  line-height: 1.35;
+}
+.inv-modal .inv-croquis figcaption b {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #33506e;
+}
+.inv-modal .inv-croquis figcaption span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #6b8299;
+}
