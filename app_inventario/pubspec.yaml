@@ -45,6 +45,12 @@ dependencies:
   # Cámara, archivos
   image_picker: ^1.1.2
   flutter_image_compress: ^2.3.0
+  # Vídeo: comprimir antes de subir y reproducir al mirar. Hay averías que
+  # una foto no cuenta —una compuerta que no cierra, una fuga, el ruido de
+  # una bomba— y sin comprimir no sube: un minuto del teléfono son más de
+  # cien megas y la red de campo no los mueve.
+  video_compress: ^3.1.2
+  video_player: ^2.8.2
   open_filex: ^4.4.0
   share_plus: ^9.0.0
 

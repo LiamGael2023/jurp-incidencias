@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:video_player/video_player.dart';
+
 import '../../models/modelos.dart';
 
 /// Ver una foto a pantalla completa.
@@ -124,7 +126,9 @@ class _VisorFotosState extends State<VisorFotos> {
         controller: _paginas,
         itemCount: _fotos.length,
         onPageChanged: (i) => setState(() => _actual = i),
-        itemBuilder: (_, i) => InteractiveViewer(
+        itemBuilder: (_, i) => _fotos[i].esVideo
+            ? _Reproductor(key: ValueKey(_fotos[i].id), url: _fotos[i].url)
+            : InteractiveViewer(
           minScale: 1,
           maxScale: 5,
           child: Center(
@@ -178,6 +182,156 @@ class _VisorFotosState extends State<VisorFotos> {
                 style: const TextStyle(color: Colors.white, fontSize: 13.5),
               ),
             ),
+    );
+  }
+}
+
+
+/// Reproduce un vídeo de la evidencia.
+///
+/// Arranca solo y en silencio: lo que se mira es una avería, no una
+/// película, y un sonido inesperado a todo volumen en una oficina es la
+/// clase de detalle que hace que la gente deje de abrir los vídeos. El
+/// altavoz se enciende con un toque.
+class _Reproductor extends StatefulWidget {
+  final String url;
+  const _Reproductor({super.key, required this.url});
+
+  @override
+  State<_Reproductor> createState() => _ReproductorState();
+}
+
+class _ReproductorState extends State<_Reproductor> {
+  VideoPlayerController? _mando;
+  String? _fallo;
+  bool _sonando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _preparar();
+  }
+
+  Future<void> _preparar() async {
+    final c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    try {
+      await c.initialize();
+      await c.setVolume(0);
+      await c.setLooping(true);
+      await c.play();
+      if (!mounted) {
+        await c.dispose();
+        return;
+      }
+      setState(() {
+        _mando = c;
+        _sonando = true;
+      });
+    } catch (e) {
+      await c.dispose();
+      if (mounted) {
+        setState(() => _fallo = e.toString().split('\n').first);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _mando?.dispose();
+    super.dispose();
+  }
+
+  void _alternarPausa() {
+    final c = _mando;
+    if (c == null) return;
+    setState(() {
+      if (c.value.isPlaying) {
+        c.pause();
+        _sonando = false;
+      } else {
+        c.play();
+        _sonando = true;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_fallo != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.videocam_off_outlined,
+                  color: Colors.white38, size: 46),
+              const SizedBox(height: 12),
+              Text(
+                'No se pudo reproducir el vídeo.\n$_fallo',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final c = _mando;
+    if (c == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
+    }
+
+    return Center(
+      child: AspectRatio(
+        aspectRatio: c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio,
+        child: GestureDetector(
+          onTap: _alternarPausa,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              VideoPlayer(c),
+              if (!_sonando)
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(14),
+                    child: Icon(Icons.play_arrow,
+                        color: Colors.white, size: 42),
+                  ),
+                ),
+              // La barra dice cuánto queda, que en un vídeo de avería es la
+              // diferencia entre esperar y pensar que se colgó.
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: VideoProgressIndicator(c, allowScrubbing: true),
+              ),
+              Positioned(
+                right: 8,
+                top: 8,
+                child: IconButton(
+                  icon: Icon(
+                    c.value.volume == 0
+                        ? Icons.volume_off
+                        : Icons.volume_up,
+                    color: Colors.white,
+                  ),
+                  onPressed: () => setState(
+                      () => c.setVolume(c.value.volume == 0 ? 1 : 0)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

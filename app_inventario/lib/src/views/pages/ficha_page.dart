@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:video_compress/video_compress.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -42,6 +43,9 @@ class _FichaPageState extends State<FichaPage> {
   /// que reintentando se arregla.
   bool _sinAlmacen = false;
   bool _subiendo = false;
+  /// Qué se está haciendo, para decirlo en pantalla. Comprimir y
+  /// subir tardan, y sin rótulo parece que la app se colgó.
+  String? _tarea;
 
   @override
   void initState() {
@@ -122,10 +126,32 @@ class _FichaPageState extends State<FichaPage> {
     );
     if (x == null) return;
 
-    setState(() => _subiendo = true);
+    setState(() {
+      _subiendo = true;
+      _tarea = 'Preparando la foto…';
+    });
     final archivo = await _preparar(x);
+    if (archivo == null) {
+      if (mounted) {
+        setState(() {
+          _subiendo = false;
+          _tarea = null;
+        });
+      }
+      return;
+    }
+    if (mounted) setState(() => _tarea = 'Subiendo…');
+    await _subirArchivo(archivo);
+  }
+
+  /// Sube un archivo ya listo, sea foto o vídeo.
+  ///
+  /// Está aparte porque el camino de la foto y el del vídeo solo se
+  /// diferencian en cómo se prepara el archivo; el envío, los errores y lo
+  /// que se le dice al inspector cuando algo falla son los mismos, y
+  /// tenerlos por duplicado garantiza que un día digan cosas distintas.
+  Future<void> _subirArchivo(File archivo) async {
     try {
-      if (archivo == null) throw Exception('No se pudo preparar la foto');
       final inv = context.read<InventarioController>();
       final nueva = await inv.api
           .subirFoto(widget.activo.tipo, widget.activo.fid, archivo);
@@ -133,28 +159,36 @@ class _FichaPageState extends State<FichaPage> {
       setState(() {
         _fotos = [...?_fotos, nueva];
         _subiendo = false;
+        _tarea = null;
       });
     } on SinEndpoint {
       if (!mounted) return;
       setState(() {
         _subiendo = false;
+        _tarea = null;
         _sinAlmacen = true;
-        _falloFotos = 'Este servidor todavía no guarda fotos de activos.';
+        _falloFotos = 'Este servidor todavía no guarda evidencia de activos.';
       });
     } on SinConexion {
       if (!mounted) return;
-      setState(() => _subiendo = false);
+      setState(() {
+        _subiendo = false;
+        _tarea = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Sin señal: la foto no se subió. Vuelve a '
-            'intentarlo cuando tengas cobertura.'),
+        content: Text('Sin señal: no se subió. Vuelve a intentarlo cuando '
+            'tengas cobertura.'),
       ));
     } catch (e) {
       // El motivo que da el servidor, tal cual. Decir «¿hay señal?» a
       // alguien que tiene cuatro rayas lo manda a perder la mañana.
       if (!mounted) return;
-      setState(() => _subiendo = false);
+      setState(() {
+        _subiendo = false;
+        _tarea = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('No se pudo subir la foto. ${_motivo(e)}'),
+        content: Text('No se pudo subir. ${_motivo(e)}'),
         duration: const Duration(seconds: 6),
       ));
     }
@@ -186,6 +220,65 @@ class _FichaPageState extends State<FichaPage> {
       ),
     ));
     if (mounted) _cargarFotos();
+  }
+
+  /// Sube un vídeo de la galería.
+  ///
+  /// SE COMPRIME SIEMPRE, y no es optativo. Un minuto grabado con el
+  /// teléfono son más de cien megas; por la red de campo eso no sube, y
+  /// aunque subiera, nginx corta en 64 MB. Comprimido a calidad media un
+  /// minuto queda en unos ocho, que es lo que separa «no funciona» de
+  /// «funciona».
+  ///
+  /// Comprimir tarda —medio minuto para un vídeo de un minuto— así que se
+  /// avisa en pantalla: sin aviso, el inspector cree que se colgó y lo
+  /// vuelve a intentar.
+  Future<void> _subirVideo() async {
+    final x = await ImagePicker().pickVideo(
+      source: ImageSource.gallery,
+      // Más de esto no hace falta para documentar una avería, y es lo que
+      // mantiene el archivo en un tamaño que la red de campo mueve.
+      maxDuration: const Duration(minutes: 2),
+    );
+    if (x == null || !mounted) return;
+
+    setState(() {
+      _subiendo = true;
+      _tarea = 'Comprimiendo el vídeo…';
+    });
+
+    File? archivo;
+    try {
+      final info = await VideoCompress.compressVideo(
+        x.path,
+        quality: VideoQuality.MediumQuality,
+        deleteOrigin: false,
+      );
+      if (info?.path != null) archivo = File(info!.path!);
+    } catch (_) {
+      // Si la compresión falla —un códec que el aparato no sabe rehacer—
+      // se intenta con el original. Puede que no suba, y entonces el error
+      // lo dirá; peor sería no intentarlo.
+    }
+    archivo ??= File(x.path);
+
+    final megas = await archivo.length() / 1048576;
+    if (megas > 60) {
+      if (!mounted) return;
+      setState(() {
+        _subiendo = false;
+        _tarea = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('El vídeo pesa ${megas.toStringAsFixed(0)} MB y el '
+            'servidor admite 60. Graba uno más corto.'),
+        duration: const Duration(seconds: 6),
+      ));
+      return;
+    }
+
+    if (mounted) setState(() => _tarea = 'Subiendo ${megas.toStringAsFixed(1)} MB…');
+    await _subirArchivo(archivo);
   }
 
   // ── pantalla ──────────────────────────────────────────────────────────
@@ -265,7 +358,7 @@ class _FichaPageState extends State<FichaPage> {
                 else if (_fotos!.isEmpty)
                   Text(
                     _falloFotos ??
-                        'Sin fotos. La primera es la que más sirve: una '
+                        'Sin evidencia. La primera foto es la que más sirve: una '
                             'vista general de la estructura, con el canal '
                             'de fondo.',
                     style: const TextStyle(color: AppColors.gris),
@@ -283,24 +376,37 @@ class _FichaPageState extends State<FichaPage> {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                _fotos![i].url,
-                                width: 96,
-                                height: 96,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                  width: 96,
-                                  height: 96,
-                                  color: const Color(0xFFF1F6FB),
-                                  child: const Icon(
-                                      Icons.broken_image_outlined,
-                                      color: AppColors.gris),
-                                ),
-                              ),
+                              // Del vídeo no se pide miniatura: habría que
+                              // bajarlo entero para sacar un fotograma. Un
+                              // recuadro oscuro con el icono dice lo mismo
+                              // y no gasta datos de campo.
+                              child: _fotos![i].esVideo
+                                  ? Container(
+                                      width: 96,
+                                      height: 96,
+                                      color: const Color(0xFF0B1725),
+                                      child: const Icon(
+                                          Icons.play_circle_outline,
+                                          color: Colors.white70, size: 34),
+                                    )
+                                  : Image.network(
+                                      _fotos![i].url,
+                                      width: 96,
+                                      height: 96,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        width: 96,
+                                        height: 96,
+                                        color: const Color(0xFFF1F6FB),
+                                        child: const Icon(
+                                            Icons.broken_image_outlined,
+                                            color: AppColors.gris),
+                                      ),
+                                    ),
                             ),
                             // La lupa dice que la miniatura se puede abrir.
                             // Sin ella nadie la toca: parece una ilustracion.
-                            const Positioned(
+                            if (!_fotos![i].esVideo) const Positioned(
                               right: 4,
                               bottom: 4,
                               child: DecoratedBox(
@@ -328,7 +434,19 @@ class _FichaPageState extends State<FichaPage> {
                   // en ningún sitio, y el inspector la daría por subida.
                   const SizedBox.shrink()
                 else if (_subiendo)
-                  const LinearProgressIndicator()
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const LinearProgressIndicator(),
+                      if (_tarea != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(_tarea!,
+                              style: const TextStyle(
+                                  fontSize: 12.5, color: AppColors.gris)),
+                        ),
+                    ],
+                  )
                 else
                   Row(
                     children: [
@@ -339,12 +457,20 @@ class _FichaPageState extends State<FichaPage> {
                           label: const Text('Cámara'),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => _tomarFoto(ImageSource.gallery),
                           icon: const Icon(Icons.photo_library_outlined),
                           label: const Text('Galería'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _subirVideo,
+                          icon: const Icon(Icons.videocam_outlined),
+                          label: const Text('Vídeo'),
                         ),
                       ),
                     ],

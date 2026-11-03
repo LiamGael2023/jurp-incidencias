@@ -290,13 +290,22 @@ String _sinTildes(String t) {
 /// Minúsculas y sin tildes, para que «cámara» encuentre «camara».
 String normalizaBusqueda(String t) => _sinTildes(t.trim());
 
-/// Una foto de un activo.
+/// Una evidencia de un activo: una foto o un vídeo.
 class Foto {
   final int id;
   final String url;
   final String descripcion;
 
-  const Foto(this.id, this.url, this.descripcion);
+  /// Lo dice el servidor, no se adivina.
+  ///
+  /// La ruta de entrega —fotos/<id>/imagen/— no tiene extensión, así que
+  /// mirándola no hay forma de saber si lo que va a llegar es una imagen o
+  /// un vídeo. Y hace falta saberlo ANTES de pedirlo, para enseñar un
+  /// reproductor en vez de un `Image.network` que fallaría sin explicar
+  /// por qué.
+  final bool esVideo;
+
+  const Foto(this.id, this.url, this.descripcion, {this.esVideo = false});
 
   /// @param baseApi raíz del inventario (…/vigapi/inventario)
   /// @param baseHost el host a secas, para las rutas de /media/
@@ -308,11 +317,12 @@ class Foto {
   /// respaldo por si algún día se publica.
   factory Foto.desdeJson(Map<String, dynamic> j, String baseApi,
       [String? baseHost]) {
-    final porApi = _texto(j['imagen_api']);
+    final video = _bool(j['es_video']);
+    final porApi = _texto(j['archivo_api'] ?? j['imagen_api']);
     if (porApi.isNotEmpty) {
       final sep = porApi.startsWith('/') ? '' : '/';
       return Foto(_entero(j['id']), '$baseApi$sep$porApi',
-          _texto(j['descripcion']));
+          _texto(j['descripcion']), esVideo: video);
     }
 
     var u = _texto(j['imagen_url'] ?? j['imagen'] ?? j['url'] ?? j['archivo']);
@@ -320,7 +330,13 @@ class Foto {
       final base = baseHost ?? baseApi;
       u = u.startsWith('/') ? '$base$u' : '$base/$u';
     }
-    return Foto(_entero(j['id']), u, _texto(j['descripcion']));
+    // Sin el dato del servidor -una versión vieja del backend- se cae a la
+    // extensión del nombre, que es lo único que queda.
+    final porNombre = RegExp(r'\.(mp4|mov|m4v|3gp|avi|mkv|webm)$',
+            caseSensitive: false)
+        .hasMatch(u);
+    return Foto(_entero(j['id']), u, _texto(j['descripcion']),
+        esVideo: video || porNombre);
   }
 }
 
