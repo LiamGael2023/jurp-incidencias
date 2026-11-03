@@ -367,8 +367,14 @@ class InventarioService {
 
   // ── reportes ──────────────────────────────────────────────────────────
 
-  Future<List<Formato>> formatos(String ambito, int? campaniaId) async {
-    final c = campaniaId == null ? '' : '&campania=$campaniaId';
+  /// Los formatos disponibles para un ámbito.
+  ///
+  /// `anio` y NO el id de la campaña: el generador recibe el año —es lo que
+  /// manda el visor web— y con un id recibía «campaña 1», buscaba una
+  /// campaña del año 1 y devolvía cero registros sin que nada pareciera
+  /// roto. Null = inventario base, con el estado del levantamiento original.
+  Future<List<Formato>> formatos(String ambito, int? anio) async {
+    final c = anio == null ? '' : '&campania=$anio';
     final d = await _json('/reportes/?ambito=$ambito$c');
     return [
       for (final x in (d['formatos'] as List? ?? const []))
@@ -383,8 +389,8 @@ class InventarioService {
   /// usuario con un archivo de error sin explicación, y el archivo de error
   /// se llama igual que el bueno.
   Future<File> descargarFormato(
-      String clave, String nombreArchivo, String ambito, int? campaniaId) async {
-    final c = campaniaId == null ? '' : '&campania=$campaniaId';
+      String clave, String nombreArchivo, String ambito, int? anio) async {
+    final c = anio == null ? '' : '&campania=$anio';
     final ruta = clave == 'todos'
         ? '$base/reportes/todos/?ambito=$ambito$c'
         : '$base/reportes/${Uri.encodeComponent(clave)}/?ambito=$ambito$c';

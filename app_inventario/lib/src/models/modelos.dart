@@ -309,21 +309,38 @@ class Foto {
 
 /// Una fila del avance de campaña, por tipo de activo.
 class AvanceCapa {
-  final String tipoActivo;
+  final String tipo;
+  /// El nombre bonito, tal como lo manda el servidor.
+  final String nombre;
   final int total;
   final int evaluados;
   final int criticos;
 
-  const AvanceCapa(this.tipoActivo, this.total, this.evaluados, this.criticos);
+  const AvanceCapa({
+    required this.tipo,
+    required this.nombre,
+    required this.total,
+    required this.evaluados,
+    required this.criticos,
+  });
 
+  /// El campo es `tipo`, no `tipo_activo`.
+  ///
+  /// Leerlo con el nombre equivocado no daba un error: daba una lista de
+  /// filas con su cuadrito de color, su «0/29» y el nombre en blanco. Un
+  /// dato que falta en silencio es peor que uno que revienta, porque parece
+  /// un problema de diseño y se busca donde no es. Se aceptan los dos
+  /// nombres por si el backend cambia de opinión.
   factory AvanceCapa.desdeJson(Map<String, dynamic> j) => AvanceCapa(
-        _texto(j['tipo_activo']),
-        _entero(j['total']),
-        _entero(j['evaluados']),
-        _entero(j['criticos']),
+        tipo: _texto(j['tipo'] ?? j['tipo_activo']),
+        nombre: _texto(j['nombre']),
+        total: _entero(j['total']),
+        evaluados: _entero(j['evaluados']),
+        criticos: _entero(j['criticos']),
       );
 
   int get pendientes => total - evaluados;
+  double get porcentaje => total == 0 ? 0 : evaluados / total * 100;
 }
 
 /// Un formato oficial del ANA que el servidor genera y la app descarga.

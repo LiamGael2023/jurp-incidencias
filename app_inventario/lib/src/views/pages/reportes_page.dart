@@ -24,6 +24,14 @@ class ReportesPage extends StatefulWidget {
 
 class _ReportesPageState extends State<ReportesPage> {
   String _ambito = 'JURP';
+
+  /// Qué estado llevan los activos en el formato: null = el del
+  /// levantamiento original; un año = el que se les registró en esa
+  /// campaña. Arranca en null, como el visor web, porque es lo que siempre
+  /// existe: una campaña recién abierta todavía no tiene nada evaluado y el
+  /// formato saldría vacío.
+  int? _anio;
+
   List<Formato>? _formatos;
   String? _error;
   String? _bajando;
@@ -41,7 +49,7 @@ class _ReportesPageState extends State<ReportesPage> {
     });
     final inv = context.read<InventarioController>();
     try {
-      final f = await inv.api.formatos(_ambito, inv.campania?.id);
+      final f = await inv.api.formatos(_ambito, _anio);
       if (mounted) setState(() => _formatos = f);
     } catch (e) {
       if (mounted) {
@@ -61,7 +69,7 @@ class _ReportesPageState extends State<ReportesPage> {
     final inv = context.read<InventarioController>();
     try {
       final archivo = await inv.api
-          .descargarFormato(f.clave, f.archivo, _ambito, inv.campania?.id);
+          .descargarFormato(f.clave, f.archivo, _ambito, _anio);
       if (!mounted) return;
       setState(() => _bajando = null);
 
@@ -126,6 +134,43 @@ class _ReportesPageState extends State<ReportesPage> {
             },
           ),
           const SizedBox(height: 12),
+
+          // Qué estado llevan los activos en el formato. Es la misma
+          // elección que ofrece el visor web, y hace falta: una campaña
+          // recién abierta no tiene nada evaluado, así que pedir el formato
+          // «de la campaña» devuelve un archivo vacío que parece un fallo.
+          DropdownButtonFormField<int?>(
+            value: _anio,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Estado a reportar'),
+            items: [
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text('Inventario base (sin evaluar)'),
+              ),
+              for (final c in inv.campanias)
+                DropdownMenuItem<int?>(
+                  value: c.anio,
+                  child: Text('Campaña ${c.anio}'),
+                ),
+            ],
+            onChanged: (v) {
+              setState(() => _anio = v);
+              _cargar();
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 12),
+            child: Text(
+              _anio == null
+                  ? 'Los activos salen con el estado del levantamiento '
+                      'original.'
+                  : 'Los activos toman el estado que se les registró en '
+                      '$_anio.',
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.gris, height: 1.35),
+            ),
+          ),
 
           if (_error != null)
             Container(
@@ -226,9 +271,15 @@ class _FilaAvance extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final capa = capaPorCodigo(a.tipoActivo);
+    final capa = capaPorCodigo(a.tipo);
+    // El nombre que manda el servidor manda; si no viene, el de la capa; y
+    // si tampoco, el código pelado. Lo que nunca puede salir es un hueco.
+    final titulo = a.nombre.isNotEmpty
+        ? a.nombre
+        : (capa?.label ?? (a.tipo.isEmpty ? 'Sin tipo' : a.tipo));
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         children: [
           Container(
@@ -241,10 +292,27 @@ class _FilaAvance extends StatelessWidget {
           ),
           const SizedBox(width: 9),
           Expanded(
-            child: Text(capa?.label ?? a.tipoActivo,
+            child: Text(titulo,
                 style: const TextStyle(fontSize: 14),
                 overflow: TextOverflow.ellipsis),
           ),
+          if (a.criticos > 0) ...[
+            // Los críticos van aquí y no escondidos en un informe: son las
+            // estructuras que hay que ir a arreglar.
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+              decoration: BoxDecoration(
+                color: const Color(0xFFC92A2A),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Text('${a.criticos}',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800)),
+            ),
+            const SizedBox(width: 8),
+          ],
           Text('${a.evaluados}/${a.total}',
               style: const TextStyle(
                   fontSize: 13.5,
