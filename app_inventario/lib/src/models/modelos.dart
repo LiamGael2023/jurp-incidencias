@@ -298,9 +298,26 @@ class Foto {
 
   const Foto(this.id, this.url, this.descripcion);
 
-  factory Foto.desdeJson(Map<String, dynamic> j, String base) {
-    var u = _texto(j['imagen'] ?? j['url'] ?? j['archivo']);
+  /// @param baseApi raíz del inventario (…/vigapi/inventario)
+  /// @param baseHost el host a secas, para las rutas de /media/
+  ///
+  /// SE PREFIERE `imagen_api`, que es la ruta por la que el propio Django
+  /// entrega el archivo. La otra, `imagen`, apunta a /media/, y en este
+  /// servidor nginx no publica /media/: pedirla devolvería el index.html
+  /// del front y en pantalla saldría una imagen rota. Se deja como
+  /// respaldo por si algún día se publica.
+  factory Foto.desdeJson(Map<String, dynamic> j, String baseApi,
+      [String? baseHost]) {
+    final porApi = _texto(j['imagen_api']);
+    if (porApi.isNotEmpty) {
+      final sep = porApi.startsWith('/') ? '' : '/';
+      return Foto(_entero(j['id']), '$baseApi$sep$porApi',
+          _texto(j['descripcion']));
+    }
+
+    var u = _texto(j['imagen_url'] ?? j['imagen'] ?? j['url'] ?? j['archivo']);
     if (u.isNotEmpty && !u.startsWith('http')) {
+      final base = baseHost ?? baseApi;
       u = u.startsWith('/') ? '$base$u' : '$base/$u';
     }
     return Foto(_entero(j['id']), u, _texto(j['descripcion']));

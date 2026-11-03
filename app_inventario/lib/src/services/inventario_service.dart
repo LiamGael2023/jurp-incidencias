@@ -372,7 +372,7 @@ class InventarioService {
     final lista = d is List ? d : ((d as Map)['results'] as List? ?? const []);
     return [
       for (final j in lista)
-        Foto.desdeJson(Map<String, dynamic>.from(j as Map),
+        Foto.desdeJson(Map<String, dynamic>.from(j as Map), base,
             AuthService.servidor)
     ];
   }
@@ -411,7 +411,7 @@ class InventarioService {
 
     return Foto.desdeJson(
         Map<String, dynamic>.from(jsonDecode(cuerpo) as Map),
-        AuthService.servidor);
+        base, AuthService.servidor);
   }
 
   Future<void> borrarFoto(int id) async {
