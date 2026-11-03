@@ -110,8 +110,12 @@ const List<GrupoCapas> gruposCapas = [
         tipo: TipoGeom.poligono, contexto: true),
     Capa('via_auxiliar_kmz', 'Vía auxiliar', Color(0xFF9AA3AB),
         tipo: TipoGeom.poligono, contexto: true),
-    Capa('red_nacional_kmz', 'Red vial nacional', Color(0xFFDEE2E6),
-        tipo: TipoGeom.poligono, contexto: true),
+    // La red vial nacional no entra en la app. Es la capa más pesada del
+    // catálogo y la menos útil en campo: la Panamericana ya está dibujada
+    // en la ortofoto de fondo, con su número de ruta y todo, así que lo
+    // único que aportaba era tiempo de descarga y trazos grises encima de
+    // una carretera que ya se veía. En el visor web sigue estando, que ahí
+    // ni la espera ni el dato pesan igual.
   ], contexto: true),
 ];
 
