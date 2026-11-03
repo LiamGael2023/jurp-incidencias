@@ -17,9 +17,7 @@ environment:
 # aparte y con la app ya funcionando.
 #
 # Lo que NO está y en PLUVIRA sí: firebase (aquí no hay notificaciones),
-# fl_chart, video, archive/xml (no se leen KMZ) y google_fonts —esta última
-# baja la tipografía de internet en el primer arranque, y esta app se abre
-# en sitios donde eso es justo lo que no hay—.
+# fl_chart, video y archive/xml (no se leen KMZ).
 dependencies:
   flutter:
     sdk: flutter
@@ -27,6 +25,10 @@ dependencies:
   # Estado y UI
   provider: ^6.1.1
   cupertino_icons: ^1.0.8
+  # La tipografía de PLUVIRA. La baja una vez y la guarda en caché; si el
+  # primer arranque es sin señal, Flutter cae a la del sistema y la app va
+  # igual —no es motivo para empaquetar 2 MB de fuente—.
+  google_fonts: ^6.1.0
 
   # Red y almacenamiento
   http: ^1.2.0

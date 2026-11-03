@@ -11,6 +11,7 @@ import '../../controllers/inventario_controller.dart';
 import '../../models/modelos.dart';
 import '../../services/auth_service.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/app_theme.dart';
 import '../../utils/catalogo_capas.dart';
 import '../../utils/croquis.dart';
 
@@ -405,17 +406,21 @@ class _EvaluacionPageState extends State<EvaluacionPage> {
           InkWell(
             onTap: () => setState(() => _cerrados[titulo] = abierto),
             child: Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
               decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FC),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.borde),
+                color: abierto ? Colors.white : const Color(0xFFF1F6FB),
+                borderRadius: BorderRadius.circular(AppTheme.radioChico),
+                border: Border.all(
+                    color: abierto ? AppColors.verde : AppColors.borde,
+                    width: abierto ? 1.4 : 1),
+                boxShadow: abierto ? AppTheme.sombraTarjeta : null,
               ),
               child: Row(
                 children: [
                   Icon(abierto ? Icons.expand_more : Icons.chevron_right,
-                      size: 20, color: AppColors.tinta),
+                      size: 20,
+                      color: abierto ? AppColors.verdeOscuro : AppColors.gris),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(titulo,
@@ -540,11 +545,7 @@ class _Croquis extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: AppColors.borde),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: AppTheme.tarjeta,
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

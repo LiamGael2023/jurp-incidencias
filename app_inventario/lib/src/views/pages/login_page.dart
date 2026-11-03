@@ -56,37 +56,98 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Form(
+      // El degradado verde ocupa la pantalla y la tarjeta blanca flota
+      // encima, como el login de PLUVIRA con su tarjeta azul. Es la familia
+      // visual de las apps de la Junta: quien entra reconoce la casa antes
+      // de leer el título.
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [AppColors.verde, AppColors.verdeOscuro, Color(0xFF05513B)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 28),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 26),
+                      child: Column(
+                        children: [
+                          Image.asset('assets/img/logo-inventario-min.png',
+                              height: 62, fit: BoxFit.contain),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'INVENTARIO',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 26,
+                              letterSpacing: 2.4,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.1,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Junta de Riego Presurizado Moche Virú Chao',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.white.withOpacity(0.82),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _Tarjeta(child: _formulario()),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Infraestructura de riego · Campaña vigente',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Colors.white.withOpacity(0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _formulario() {
+    return Form(
                 key: _form,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Image.asset('assets/img/logo-inventario.png',
-                        height: 64, fit: BoxFit.contain),
-                    const SizedBox(height: 10),
                     const Text(
-                      'Inventario de infraestructura',
-                      textAlign: TextAlign.center,
+                      'Iniciar sesión',
                       style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
                           color: AppColors.tinta),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     const Text(
-                      'Junta de Riego Presurizado Moche Virú Chao',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 13, color: AppColors.gris),
+                      'Con tus credenciales de siempre.',
+                      style: TextStyle(fontSize: 12.5, color: AppColors.gris),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 22),
                     TextFormField(
                       controller: _usuario,
                       autocorrect: false,
@@ -162,11 +223,26 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ],
                 ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+              );
   }
+}
+
+/// La tarjeta blanca sobre el degradado.
+class _Tarjeta extends StatelessWidget {
+  final Widget child;
+  const _Tarjeta({required this.child});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x33000000), blurRadius: 24, offset: Offset(0, 10)),
+          ],
+        ),
+        child: child,
+      );
 }

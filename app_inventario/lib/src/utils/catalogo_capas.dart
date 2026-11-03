@@ -115,6 +115,42 @@ const List<GrupoCapas> gruposCapas = [
   ], contexto: true),
 ];
 
+/* ── Símbolo de cada capa ────────────────────────────────────────────────
+   Sobre una ortofoto, veinte capas de puntos en veinte tonos de azul son
+   veinte manchas iguales: el color solo no distingue una toma de una caja
+   hidráulica. El dibujo dentro del punto sí, y encima se reconoce de lejos
+   sin abrir la leyenda.
+
+   No son los iconos oficiales del inventario -esos son PNG y viven en el
+   visor web-, son los de Material: pesan cero y se ven nítidos a cualquier
+   tamaño. Lo que importa es que dos capas vecinas no compartan dibujo. */
+const _iconos = <String, IconData>{
+  'tomas_l10': Icons.input,
+  'tomas_otros_sectores': Icons.input,
+  'tomas_canal_madre': Icons.input,
+  'entregas': Icons.output,
+  'laterales': Icons.water,
+  'partidor': Icons.call_split,
+  'canoas': Icons.waves,
+  'sifon': Icons.swap_calls,
+  'alcantarilla': Icons.hdr_strong,
+  'aliviadero': Icons.water_damage,
+  'desarenadores': Icons.filter_alt,
+  'camara_rompepresion': Icons.compress,
+  'cajas_hidraulicas': Icons.crop_square,
+  'pases_de_tuberias': Icons.horizontal_rule,
+  'reservorios': Icons.water_drop,
+  'puente_vehicular': Icons.directions_car,
+  'puente_peatonal': Icons.directions_walk,
+  'bocatomas': Icons.login,
+  'estaciones_control': Icons.sensors,
+  'rapidas': Icons.trending_down,
+  'garitas_jurp': Icons.security,
+  'garitas_otros': Icons.shield_outlined,
+};
+
+IconData iconoDeCapa(String codigo) => _iconos[codigo] ?? Icons.place;
+
 /// Todas las capas en una lista, sin las que no se dibujan.
 final List<Capa> todasLasCapas = [
   for (final g in gruposCapas)

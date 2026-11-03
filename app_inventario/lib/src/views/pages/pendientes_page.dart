@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../controllers/inventario_controller.dart';
 import '../../services/pendientes_service.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/app_theme.dart';
 import '../../utils/catalogo_capas.dart';
 
 /// La bandeja: lo que se evaluó sin señal y todavía no está en el servidor.
@@ -72,11 +73,7 @@ class _PendientesPageState extends State<PendientesPage> {
                     final capa = capaPorCodigo(x.tipo);
                     return Container(
                       padding: const EdgeInsets.all(13),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(color: AppColors.borde),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      decoration: AppTheme.tarjeta,
                       child: Row(
                         children: [
                           const Icon(Icons.cloud_off_outlined,

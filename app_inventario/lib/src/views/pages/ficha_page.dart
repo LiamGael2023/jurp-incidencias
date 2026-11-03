@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../../controllers/inventario_controller.dart';
 import '../../models/modelos.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/app_theme.dart';
 import '../../utils/catalogo_capas.dart';
 import 'evaluacion_page.dart';
 
@@ -356,22 +357,31 @@ class _Tarjeta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: AppColors.borde),
-          borderRadius: BorderRadius.circular(12),
-        ),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        decoration: AppTheme.tarjeta,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(titulo.toUpperCase(),
-                style: const TextStyle(
-                    fontSize: 11,
-                    letterSpacing: 0.7,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.gris)),
-            const SizedBox(height: 10),
+            Row(
+              children: [
+                Container(
+                  width: 3,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: AppColors.verde,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(titulo.toUpperCase(),
+                    style: const TextStyle(
+                        fontSize: 11,
+                        letterSpacing: 0.8,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.gris)),
+              ],
+            ),
+            const SizedBox(height: 12),
             hijo,
           ],
         ),
@@ -389,14 +399,22 @@ class _TarjetaEvaluacion extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
+        borderRadius: BorderRadius.circular(AppTheme.radio),
         border: Border.all(color: AppColors.borde),
-        borderRadius: BorderRadius.circular(12),
+        boxShadow: AppTheme.sombraTarjeta,
       ),
       // La franja de color es el dato de un vistazo: en campo muchas veces
       // solo se quiere saber «¿esta ya está, y cómo quedó?».
       child: Row(
         children: [
-          Container(width: 6, height: 44, color: color),
+          Container(
+            width: 6,
+            height: 46,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

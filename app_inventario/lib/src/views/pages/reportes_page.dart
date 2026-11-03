@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../controllers/inventario_controller.dart';
 import '../../models/modelos.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/app_theme.dart';
 import '../../utils/catalogo_capas.dart';
 
 /// Avance de la campaña y los formatos oficiales del ANA.
@@ -177,11 +178,7 @@ class _Resumen extends StatelessWidget {
     final pct = inv.porcentaje;
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: AppColors.borde),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: AppTheme.tarjeta,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -278,11 +275,7 @@ class _FilaFormato extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: AppColors.borde),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: AppTheme.tarjeta,
       child: ListTile(
         onTap: bajando ? null : onTap,
         leading: bajando

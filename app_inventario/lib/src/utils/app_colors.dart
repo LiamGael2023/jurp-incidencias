@@ -26,6 +26,21 @@ class AppColors {
 
   static const estadoSinDato = Color(0xFF868E96);
 
+  // ── Cristal oscuro ────────────────────────────────────────────────────
+  // Es el material del visor web: paneles translúcidos sobre la ortofoto.
+  // Sobre satélite un panel blanco deslumbra al sol y además tapa el mapa;
+  // el cristal oscuro deja ver lo que hay debajo y se lee en la calle.
+  static const cristal = Color(0xE60D1B2E);
+  static const cristalBorde = Color(0x1FFFFFFF);
+  static const cristalTexto = Color(0xFFE8F0F8);
+  static const cristalSuave = Color(0xFF9FB6CC);
+
+  // ── Sombras ───────────────────────────────────────────────────────────
+  // Literales ARGB y no withOpacity: así son `const` y el widget no se
+  // reconstruye por una sombra.
+  static const sombra = Color(0x26000000);
+  static const sombraFuerte = Color(0x40000000);
+
   static Color deEstado(String? e) =>
       estados[(e ?? '').toUpperCase()] ?? estadoSinDato;
 
