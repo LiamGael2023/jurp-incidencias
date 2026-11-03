@@ -1084,7 +1084,30 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
 
           El racimo se puede apagar: para documentar con una captura estorba,
           porque en la foto salen burbujas con un número en vez de los activos. */}
-      <Racimo activo={conRacimo} innerRef={refCluster}>
+      {/* ── POR QUE ESTE COMPONENTE LLEVA CLAVE ───────────────────────
+          El racimo nunca quitaba marcadores. markerClusterGroup con
+          chunkedLoading los añade por tandas y de forma asincrona; cuando
+          React desmonta uno que todavia esta en la cola, removeLayer no lo
+          encuentra y la tanda lo añade igual.
+
+          Medido en produccion, con el mapa quieto y apagando y encendiendo
+          una capa de puntos seis veces seguidas:
+
+              1630 → 1656 → 1718 → 1744 → 1806 → 1832 → 1894
+
+          Sube siempre. Apagar una capa no quitaba ni un marcador, y volver a
+          encenderla los duplicaba. No era cosa del filtro por sector: ya
+          pasaba antes con cualquier capa, solo que nadie apagaba capas lo
+          bastante seguido para verlo.
+
+          Con la clave, React tira el grupo entero y monta uno nuevo con los
+          hijos que toquen. Se paga volver a agrupar cuando cambia lo que se
+          ve —que es justo cuando uno espera que el mapa cambie— y a cambio
+          lo que hay en pantalla es lo que deberia haber. */}
+      <Racimo key={`racimo|${inv.ambito}|${[...inv.sectoresOcultos].sort().join(',')}`
+        + '|' + TODAS.filter(c => c.tipo !== 'line' && c.tipo !== 'poly'
+                                  && inv.visibles[c.codigo]).map(c => c.codigo).join(',')}
+        activo={conRacimo} innerRef={refCluster}>
       {!sinPuntos && TODAS.map(capa => {
         if (!inv.visibles[capa.codigo]) return null;
         if (capa.tipo === 'line' || capa.tipo === 'poly') return null;
