@@ -1,0 +1,11 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # El código de este proyecto está comentado en castellano y con nombres
+    # en castellano. No es un capricho: lo va a mantener gente que trabaja en
+    # castellano, y un nombre a medio traducir -`fotosList`, `getCapa`- se
+    # lee peor que cualquiera de los dos idiomas enteros.
+    prefer_const_constructors: true
+    prefer_const_declarations: true
+    avoid_print: true

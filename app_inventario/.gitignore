@@ -1,0 +1,14 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+pubspec.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+
+# Generadas por `flutter create`: dependen de la versión de Flutter de cada
+# máquina y reescribirlas en cada equipo ensucia el historial. Se regeneran
+# con el comando del LEEME.
+android/
+ios/

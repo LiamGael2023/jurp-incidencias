@@ -1,0 +1,62 @@
+name: inventario_jurp
+description: "Inventario de infraestructura de riego — JURP"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+# LAS VERSIONES SON LAS DE PLUVIRA, A PROPÓSITO.
+#
+# No son las últimas de pub.dev: son las que ya compilan y ya corren en los
+# teléfonos de la Junta. Estrenar versión de flutter_map o de geolocator en
+# una app que todavía no se ha ejecutado nunca es juntar dos problemas que
+# conviene tener separados —si algo falla, que no haya que adivinar si es el
+# código nuevo o la librería nueva—. Subirlas, cuando toque, es una tarde
+# aparte y con la app ya funcionando.
+#
+# Lo que NO está y en PLUVIRA sí: firebase (aquí no hay notificaciones),
+# fl_chart, video, archive/xml (no se leen KMZ) y google_fonts —esta última
+# baja la tipografía de internet en el primer arranque, y esta app se abre
+# en sitios donde eso es justo lo que no hay—.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Estado y UI
+  provider: ^6.1.1
+  cupertino_icons: ^1.0.8
+
+  # Red y almacenamiento
+  http: ^1.2.0
+  shared_preferences: ^2.2.2
+  path: ^1.9.0
+  path_provider: ^2.1.2
+
+  # Mapa y posición
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.0
+  geolocator: ^11.0.0
+  utm: ^0.1.3-nullsafety.1
+
+  # Cámara, archivos
+  image_picker: ^1.1.2
+  flutter_image_compress: ^2.3.0
+  open_filex: ^4.4.0
+  share_plus: ^9.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/img/
+    # Los croquis acotados de la ficha de papel, recortados de los diez
+    # formatos de levantamiento en campo. Van dentro de la app y no se piden
+    # al servidor: son trece archivos de 184 KB en total y se miran
+    # justamente donde no hay señal.
+    - assets/croquis/
