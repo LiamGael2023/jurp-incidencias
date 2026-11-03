@@ -1432,7 +1432,27 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
       {/* La captura cuelga de aquí y no de .gis: así la foto sale sin
           cabecera, panel, herramientas ni leyenda, que son hermanos de este div. */}
       <div className="gis-mapa" ref={contenedorRef}>
-        <MapContainer center={centroMapa} zoom={10} style={{ height: '100%', width: '100%' }} ref={mapRef} zoomControl={false}>
+        {/* preferCanvas es lo que hace que los canales salgan en su sitio en
+            la foto del mapa.
+
+            Por defecto Leaflet dibuja los vectores en un <svg> al que coloca
+            con un `transform` y un `viewBox` desplazado, uno compensando al
+            otro. html2canvas no reproduce bien esa pareja: cuenta el
+            desplazamiento dos veces y el dibujo sale corrido. Medido aquí con
+            un punto de control: 160 px en horizontal y 104 en vertical, que a
+            zoom 13 son unos tres kilómetros —lo bastante para que el Canal
+            Madre apareciera cruzando el mar en la captura, estando bien en
+            pantalla—. Y el corrimiento cambia con cada arrastre, así que no
+            es algo que se pueda compensar con una constante.
+
+            Con el lienzo no hay SVG que trasladar: los vectores se pintan en
+            un <canvas> y html2canvas lo copia tal cual. Medido: 0 px, recién
+            cargado, tras arrastrar y tras acercar. El halo oscuro de los
+            trazos no se pierde —el filtro CSS pasa a aplicarse sobre el
+            lienzo, ver InventarioGIS.css—.
+
+            Es el mismo arreglo que ya llevaba la lámina de MapaTematico. */}
+        <MapContainer preferCanvas center={centroMapa} zoom={10} style={{ height: '100%', width: '100%' }} ref={mapRef} zoomControl={false}>
           <TeselasBase base={mapaBase} opacidad={opacidadBase} />
           <FlyToComp pos={miUbicacion || flyTarget} />
           <UTMDisplay />

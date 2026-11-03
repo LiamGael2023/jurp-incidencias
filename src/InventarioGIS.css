@@ -1116,8 +1116,15 @@
    El halo oscuro bajo cada trazo es la solución cartográfica de siempre.
    Da el contraste que el color no puede dar, y funciona igual sobre el
    verde de los campos, sobre el desierto y sobre el mar, sin tener que
-   elegir el tono en función del fondo. */
-.leaflet-overlay-pane svg path {
+   elegir el tono en función del fondo.
+
+   El lienzo va en la lista porque los visores dibujan con `preferCanvas`
+   (ver Mapa.jsx): ahí no hay <path> al que apuntar, el trazo son píxeles de
+   un <canvas>, y el filtro sobre el lienzo entero da exactamente el mismo
+   halo —solo rodea lo pintado, que es lo que hay—. Sin esta segunda línea
+   el halo desaparecía al cambiar de renderizador, en silencio. */
+.leaflet-overlay-pane svg path,
+.leaflet-overlay-pane canvas {
   filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.85));
 }
 

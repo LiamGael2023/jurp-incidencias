@@ -98,7 +98,11 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app,
       {/* La captura cuelga de aquí y no de .gis: así la foto sale sin
           cabecera, panel, herramientas ni leyenda, que son hermanos de este div. */}
       <div className="gis-mapa" ref={contenedorRef}>
-        <MapContainer center={CENTRO} zoom={10} style={{ height: '100%', width: '100%' }}
+        {/* preferCanvas: sin él los vectores salen corridos en la captura
+            —html2canvas cuenta dos veces el desplazamiento del <svg> de
+            Leaflet y el canal acaba dibujado sobre el mar—. Explicado largo
+            en Mapa.jsx, donde se midió. */}
+        <MapContainer preferCanvas center={CENTRO} zoom={10} style={{ height: '100%', width: '100%' }}
           ref={mapRef} zoomControl={false}>
           <TeselasBase base={base} opacidad={opacidad} />
           <UTMDisplay />
