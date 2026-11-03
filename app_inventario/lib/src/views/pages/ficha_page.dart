@@ -14,6 +14,7 @@ import '../../utils/app_colors.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/catalogo_capas.dart';
 import 'evaluacion_page.dart';
+import 'visor_fotos.dart';
 
 /// Lo que se sabe de una estructura: sus características, cómo quedó la
 /// última evaluación y sus fotos.
@@ -159,6 +160,34 @@ class _FichaPageState extends State<FichaPage> {
     }
   }
 
+  /// Abre la foto a pantalla completa.
+  ///
+  /// Al volver se recarga la lista: dentro se pueden borrar, y quedarse
+  /// enseñando una miniatura de algo que ya no esta es peor que tardar un
+  /// segundo en refrescar.
+  Future<void> _verFoto(int indice) async {
+    final fotos = _fotos;
+    if (fotos == null || fotos.isEmpty) return;
+    final inv = context.read<InventarioController>();
+
+    await Navigator.of(context).push(MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => VisorFotos(
+        fotos: fotos,
+        inicial: indice,
+        onBorrar: (foto) async {
+          try {
+            await inv.api.borrarFoto(foto.id);
+            return null;
+          } catch (e) {
+            return 'No se pudo borrar. ${_motivo(e)}';
+          }
+        },
+      ),
+    ));
+    if (mounted) _cargarFotos();
+  }
+
   // ── pantalla ──────────────────────────────────────────────────────────
 
   @override
@@ -248,20 +277,46 @@ class _FichaPageState extends State<FichaPage> {
                       scrollDirection: Axis.horizontal,
                       itemCount: _fotos!.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (_, i) => ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          _fotos![i].url,
-                          width: 96,
-                          height: 96,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            width: 96,
-                            height: 96,
-                            color: const Color(0xFFF1F6FB),
-                            child: const Icon(Icons.broken_image_outlined,
-                                color: AppColors.gris),
-                          ),
+                      itemBuilder: (_, i) => GestureDetector(
+                        onTap: () => _verFoto(i),
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                _fotos![i].url,
+                                width: 96,
+                                height: 96,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  width: 96,
+                                  height: 96,
+                                  color: const Color(0xFFF1F6FB),
+                                  child: const Icon(
+                                      Icons.broken_image_outlined,
+                                      color: AppColors.gris),
+                                ),
+                              ),
+                            ),
+                            // La lupa dice que la miniatura se puede abrir.
+                            // Sin ella nadie la toca: parece una ilustracion.
+                            const Positioned(
+                              right: 4,
+                              bottom: 4,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: Color(0xB80B2A5B),
+                                  borderRadius:
+                                      BorderRadius.all(Radius.circular(5)),
+                                ),
+                                child: Padding(
+                                  padding: EdgeInsets.all(3),
+                                  child: Icon(Icons.zoom_in,
+                                      size: 14, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
