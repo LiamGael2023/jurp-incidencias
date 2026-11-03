@@ -116,6 +116,45 @@ const COLORS_USUARIO = ['#e8590c','#7048e8','#12b886','#f03e3e','#1098ad','#ae3e
 const API_CAPAS = `${API_OPS}/capas-mapa`;
 
 // ── Config KMZ ──────────────────────────────────────────────────────────────
+/* ── Tramos ───────────────────────────────────────────────────────────────
+   El mismo tramo viene escrito de dos maneras en los KMZ: 'Tramo IX' y
+   'TRAMO IX', 'Tramo X' y 'TRAMO X', y así media docena. Son levantamientos
+   distintos que nadie unificó, y al compararse como texto el filtro
+   escondía justo la mitad de lo que uno pedía.
+
+   Se normaliza para comparar y se enseña siempre igual: «Tramo» con la
+   primera en mayúscula y el número romano en mayúsculas. */
+const normTramo = (v) => {
+  const s = String(v ?? '').trim().replace(/\s+/g, ' ');
+  if (!s) return '';
+  const m = s.match(/^tramo\s+(.+)$/i);
+  return m ? `Tramo ${m[1].toUpperCase()}` : s;
+};
+
+/** Valor de un número romano, para poder ordenar los tramos como números. */
+const valorRomano = (r) => {
+  const V = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+  const s = String(r).toUpperCase();
+  let total = 0;
+  for (let i = 0; i < s.length; i++) {
+    const a = V[s[i]], b = V[s[i + 1]];
+    if (!a) return NaN;
+    total += b && b > a ? -a : a;
+  }
+  return total;
+};
+
+/** Ordena 'Tramo X' detrás de 'Tramo IX' y no entre el I y el XI. */
+const cmpTramo = (a, b) => {
+  const ra = valorRomano((a.match(/^Tramo\s+(.+)$/) || [])[1] || '');
+  const rb = valorRomano((b.match(/^Tramo\s+(.+)$/) || [])[1] || '');
+  const na = Number.isNaN(ra) ? Number(((a.match(/(\d+)/) || [])[1])) : ra;
+  const nb = Number.isNaN(rb) ? Number(((b.match(/(\d+)/) || [])[1])) : rb;
+  if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+  if (Number.isFinite(na) !== Number.isFinite(nb)) return Number.isFinite(na) ? -1 : 1;
+  return a.localeCompare(b, 'es');
+};
+
 const KMZ_CONFIG = [
   { key:'KMZ_CanalMadre', label:'Canal Madre', color:'#1971c2', data:kmzCanalMadre, tipo:'poly', icon:icoCanalMadre },
   { key:'KMZ_Lateral10', label:'Lateral 10', color:'#4dabf7', data:kmzLateral10, tipo:'poly', icon:icoCanalTrap },
@@ -144,7 +183,7 @@ const KMZ_CONFIG = [
   { key:'VIA_RedNacional', label:'Red Nacional', color:'#d63939', data:geoRedNacional, tipo:'line', icon:null },
 ];
 const KMZ_CAPAS_DEFAULT = Object.fromEntries(KMZ_CONFIG.map(c => [c.key, false]));
-const SEARCH_INDEX = KMZ_CONFIG.flatMap(cfg => (cfg.data?.features || []).filter(f => f.geometry?.type === 'Point' && f.properties?.name).map(f => ({ name: f.properties.name, tipo: cfg.label, tramo: f.properties.TRAMO || '', progresiva: f.properties.PROGRESIVA || '', coords: f.geometry.coordinates, icon: cfg.icon, color: cfg.color })));
+const SEARCH_INDEX = KMZ_CONFIG.flatMap(cfg => (cfg.data?.features || []).filter(f => f.geometry?.type === 'Point' && f.properties?.name).map(f => ({ name: f.properties.name, tipo: cfg.label, tramo: normTramo(f.properties.TRAMO), progresiva: f.properties.PROGRESIVA || '', coords: f.geometry.coordinates, icon: cfg.icon, color: cfg.color })));
 
 // ── Sub-componentes ─────────────────────────────────────────────────────────
 function ZoomDerecha() { const map = useMap(); useEffect(() => { const zc = L.control.zoom({ position: 'topright' }); zc.addTo(map); return () => zc.remove(); }, [map]); return null; }
@@ -376,10 +415,28 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const stats = useMemo(() => {
     const all = KMZ_CONFIG.flatMap(c => (c.data?.features || []).map(f => ({ ...f.properties, _tipo: c.label })));
     const tramos = {}, estados = {}, tipos = {};
-    for (const f of all) { const t = f.TRAMO || 'Sin Tramo'; const e = f.ESTADO || 'Sin dato'; tramos[t] = (tramos[t] || 0) + 1; estados[e] = (estados[e] || 0) + 1; tipos[f._tipo] = (tipos[f._tipo] || 0) + 1; }
+    for (const f of all) {
+      /* EL MISMO TRAMO VIENE ESCRITO DE DOS MANERAS. En los KMZ conviven
+         'Tramo IX' (187 rasgos) y 'TRAMO IX' (166), 'Tramo X' y 'TRAMO X',
+         y así media docena. Salen de levantamientos distintos y nadie los
+         unificó. Contados por separado, la lista enseñaba el mismo tramo
+         dos veces y el filtro —que compara el texto tal cual— escondía
+         justo la mitad de lo que uno pedía. Se agrupan por su forma
+         normalizada y se cuentan juntos. */
+      const t = normTramo(f.TRAMO) || 'Sin Tramo';
+      const e = f.ESTADO || 'Sin dato';
+      tramos[t] = (tramos[t] || 0) + 1;
+      estados[e] = (estados[e] || 0) + 1;
+      tipos[f._tipo] = (tipos[f._tipo] || 0) + 1;
+    }
     return { tramos, estados, tipos, total: all.length };
   }, []);
-  const tramosUnicos = useMemo(() => Object.keys(stats.tramos).sort(), [stats]);
+  /* Ordenados por número romano y no alfabéticamente: así 'Tramo X' va
+     detrás del IX y no entre el I y el XI, que es donde lo pone ordenar
+     por letras. */
+  const tramosUnicos = useMemo(
+    () => Object.keys(stats.tramos).filter(t => t !== 'Sin Tramo').sort(cmpTramo),
+    [stats]);
   const estadosUnicos = useMemo(() => Object.keys(stats.estados).filter(e => e !== 'Sin dato').sort(), [stats]);
   const totalKMZ = KMZ_CONFIG.reduce((a, c) => a + (c.data?.features?.length || 0), 0);
   const activasKMZ = KMZ_CONFIG.filter(c => capasKMZ[c.key]).length;
@@ -641,7 +698,34 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const incMes = useMemo(() => { const now = new Date(), m = {}; for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); m[`${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`] = 0; } for (const x of incidentesAPI) { const d = new Date(x.timestamp); const k = `${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`; if (k in m) m[k]++; } return Object.entries(m).map(([mes, cant]) => ({ mes, cant })); }, [incidentesAPI]);
 
   // Filtered
-  const getFilteredData = (cfg) => { if (!cfg.data?.features?.length || (!filtroTramo && !filtroEstado)) return cfg.data; return { ...cfg.data, features: cfg.data.features.filter(f => { const p = f.properties || {}; if (filtroTramo && (p.TRAMO || '') !== filtroTramo) return false; if (filtroEstado && (p.ESTADO || '') !== filtroEstado) return false; return true; }) }; };
+  /* El tramo se compara NORMALIZADO: en los KMZ el mismo tramo viene como
+     'Tramo IX' y como 'TRAMO IX', y comparando el texto tal cual el filtro
+     escondía la mitad de lo que uno pedía sin decir por qué. */
+  const getFilteredData = (cfg) => {
+    if (!cfg.data?.features?.length || (!filtroTramo && !filtroEstado)) return cfg.data;
+    return {
+      ...cfg.data,
+      features: cfg.data.features.filter(f => {
+        const p = f.properties || {};
+        if (filtroTramo && normTramo(p.TRAMO) !== filtroTramo) return false;
+        if (filtroEstado && (p.ESTADO || '') !== filtroEstado) return false;
+        return true;
+      }),
+    };
+  };
+
+  /* Cuántas estructuras deja ver el filtro, y de cuántas encendidas.
+     Sin este número el filtro es mudo: se elige un tramo, el mapa cambia
+     poco -o nada, si no hay ninguna capa de infraestructura encendida- y no
+     hay forma de saber si filtró, si no había nada, o si está roto. */
+  const resumenFiltro = useMemo(() => {
+    const encendidas = KMZ_CONFIG.filter(c => capasKMZ[c.key]);
+    const total = encendidas.reduce((a, c) => a + (c.data?.features?.length || 0), 0);
+    const visibles = encendidas.reduce(
+      (a, c) => a + (getFilteredData(c)?.features?.length || 0), 0);
+    return { capas: encendidas.length, total, visibles };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capasKMZ, filtroTramo, filtroEstado]);
   const incFiltrados = useMemo(() => {
     const limite = Date.now() - (filtroTiempo * 864e5);
     return filtroTiempo === 0 ? incidentesAPI : incidentesAPI.filter(i => i.timestamp >= limite);
@@ -1837,6 +1921,31 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               <select className="gis-mini-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
                 <option value="">Todo estado</option>{estadosUnicos.map(e2 => <option key={e2} value={e2}>{e2}</option>)}
               </select>
+              {/* QUÉ ESTÁ HACIENDO EL FILTRO. Estos filtros solo actúan
+                  sobre las capas de infraestructura, y ésas vienen todas
+                  apagadas: se elegía un tramo, no cambiaba nada en el mapa
+                  -porque no había nada encendido que filtrar- y parecía
+                  roto. Ahora lo dice, y ofrece encenderlas. */}
+              {(filtroTramo || filtroEstado) && (
+                resumenFiltro.capas === 0 ? (
+                  <div style={{ fontSize: 11, color: '#ffd43b', lineHeight: 1.4,
+                                padding: '4px 0' }}>
+                    No hay ninguna capa de infraestructura encendida: el filtro
+                    no tiene sobre qué actuar.{' '}
+                    <button className="gis-inc-link" style={{ padding: 0 }}
+                      onClick={() => setCapasKMZ(Object.fromEntries(
+                        KMZ_CONFIG.map(c => [c.key, true])))}>
+                      Encender todas
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#8d99ae', padding: '4px 0' }}>
+                    {resumenFiltro.visibles.toLocaleString('es-PE')} de{' '}
+                    {resumenFiltro.total.toLocaleString('es-PE')} estructuras
+                    {resumenFiltro.visibles === 0 && ' · ninguna coincide'}
+                  </div>
+                )
+              )}
               {(filtroTramo || filtroEstado) && (
                 <button className="gis-inc-link" style={{ padding: '4px 0' }} onClick={() => { setFiltroTramo(''); setFiltroEstado(''); }}>✕ Limpiar filtros</button>
               )}
