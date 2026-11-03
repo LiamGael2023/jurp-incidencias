@@ -1674,12 +1674,14 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         <button className={`gis-tool ${ver3D ? 'activo' : ''}`} title="Vista 3D en globo"
           onClick={() => setVer3D(true)}
           style={{ fontWeight: 800, fontSize: 12, letterSpacing: '.02em' }}>3D</button>
-        <button className={`gis-tool ${inv.abierto ? 'activo' : ''}`}
-          title="Inventario JURP · capas de PostGIS con su estado de evaluación"
-          onClick={inv.alternar}><FaClipboardCheck /></button>
-        <button className={`gis-tool ${verReportes ? 'activo' : ''}`}
-          title="Formatos ANA · descargar los reportes oficiales"
-          onClick={() => setVerReportes(v => !v)}><FaFileExcel /></button>
+        {/* Aquí estaban los botones de Inventario y de Formatos ANA. Se
+            quitaron de la barra del mapa.
+
+            El inventario NO queda inalcanzable: sigue abriéndose solo al
+            elegir un activo en el buscador, y tiene su propia sección en el
+            menú. El panel de formatos ANA sí se queda sin puerta desde esta
+            pantalla; se deja montado y sin uso a la espera de decidir dónde
+            vive, en vez de borrarlo de paso. */}
         <button className={`gis-tool ${showLayers ? 'activo' : ''}`} title="Capas" onClick={() => setShowLayers(v => !v)}><FaLayerGroup /></button>
         <button className={`gis-tool ${capasUsuario.length || capasGuardadas.some(c => c.visible) ? 'activo' : ''}`}
           title="Cargar un KMZ o KML desde tu equipo"
