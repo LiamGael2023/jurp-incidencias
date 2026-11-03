@@ -89,6 +89,28 @@ class InventarioService {
     return m;
   }
 
+  /// El índice de búsqueda: todas las estructuras, con lo justo para
+  /// encontrarlas. Se guarda en el teléfono, así que buscar sigue
+  /// funcionando sin señal aunque no se pueda abrir la ficha.
+  Future<List<ItemIndice>> indice() async {
+    final archivo = await _archivoCache('_indice');
+    try {
+      final d = await _json('/capas/indice/');
+      final filas = _lista(d);
+      await archivo.writeAsString(jsonEncode(filas));
+      return [for (final j in filas) ItemIndice.desdeJson(j)];
+    } catch (e) {
+      if (await archivo.exists()) {
+        final l = jsonDecode(await archivo.readAsString()) as List;
+        return [
+          for (final j in l)
+            ItemIndice.desdeJson(Map<String, dynamic>.from(j as Map))
+        ];
+      }
+      rethrow;
+    }
+  }
+
   // ── capas ─────────────────────────────────────────────────────────────
 
   /// Una capa entera, en GeoJSON, ya convertida a activos.

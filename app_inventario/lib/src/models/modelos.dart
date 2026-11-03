@@ -214,6 +214,72 @@ class Activo {
   bool get esPech => ambito == 'PECH';
 }
 
+/// Una fila del índice de búsqueda.
+///
+/// El índice es una lista ligera de TODAS las estructuras —unas dos mil
+/// quinientas— con lo justo para encontrarlas y volar hasta ellas. Se pide
+/// una sola vez y pesa poco, que es lo que permite buscar sin tener las
+/// treinta y siete capas descargadas: si hubiera que cargarlas todas para
+/// poder buscar, buscar sería lo último que uno haría.
+class ItemIndice {
+  final String tipo;
+  final int fid;
+  final String nombre;
+  final String canal;
+  final String progresiva;
+  final double lat;
+  final double lng;
+
+  // No es `const`: la clase lleva un campo `late final` calculado, y eso y
+  // un constructor constante no pueden convivir.
+  ItemIndice({
+    required this.tipo,
+    required this.fid,
+    required this.nombre,
+    required this.canal,
+    required this.progresiva,
+    required this.lat,
+    required this.lng,
+  });
+
+  factory ItemIndice.desdeJson(Map<String, dynamic> j) => ItemIndice(
+        tipo: _texto(j['tipo']),
+        fid: _entero(j['fid']),
+        nombre: _texto(j['nombre']),
+        canal: _texto(j['canal']),
+        progresiva: _texto(j['progresiva']),
+        lat: _decimal(j['lat']) ?? 0,
+        lng: _decimal(j['lng']) ?? 0,
+      );
+
+  Map<String, dynamic> aJson() => {
+        'tipo': tipo, 'fid': fid, 'nombre': nombre, 'canal': canal,
+        'progresiva': progresiva, 'lat': lat, 'lng': lng,
+      };
+
+  bool get ubicado => lat != 0 || lng != 0;
+
+  /// Todo lo buscable de esta fila, junto y ya normalizado. Se calcula una
+  /// vez al construir y no en cada tecla: con dos mil quinientas filas y una
+  /// búsqueda por pulsación, normalizar al vuelo se nota en el dedo.
+  late final String buscable =
+      _sinTildes('$nombre $canal $progresiva $tipo');
+}
+
+const _conTilde = 'áéíóúüñÁÉÍÓÚÜÑ';
+const _sinTilde = 'aeiouunAEIOUUN';
+
+String _sinTildes(String t) {
+  var s = t.toLowerCase();
+  for (var i = 0; i < _conTilde.length; i++) {
+    s = s.replaceAll(_conTilde[i], _sinTilde[i].toLowerCase());
+  }
+  return s;
+}
+
+/// Minúsculas y sin tildes, para que «cámara» encuentre «camara».
+String normalizaBusqueda(String t) => _sinTildes(t.trim());
+
 /// Una foto de un activo.
 class Foto {
   final int id;

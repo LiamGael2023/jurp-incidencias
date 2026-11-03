@@ -47,6 +47,11 @@ class InventarioController extends ChangeNotifier {
 
   int pendientes = 0;
 
+  /// El índice de búsqueda. Se pide aparte y sin bloquear el arranque: el
+  /// mapa tiene que dibujarse aunque el índice tarde, y buscar es lo segundo
+  /// que hace el inspector, no lo primero.
+  List<ItemIndice> indice = [];
+
   // ── arranque ──────────────────────────────────────────────────────────
 
   Future<void> iniciar() async {
@@ -64,6 +69,7 @@ class InventarioController extends ChangeNotifier {
 
       if (campania != null) await _cargarCampania(campania!);
       await contarPendientes();
+      cargarIndice();   // en segundo plano, a propósito
     } catch (e) {
       error = _motivo(e);
     } finally {
@@ -165,6 +171,54 @@ class InventarioController extends ChangeNotifier {
     ambito = nuevo;
     notifyListeners();
     await cargarEncendidas();
+  }
+
+  // ── búsqueda ──────────────────────────────────────────────────────────
+
+  Future<void> cargarIndice() async {
+    try {
+      indice = await api.indice();
+      notifyListeners();
+    } catch (_) {
+      // Sin índice el mapa funciona igual; solo no se puede buscar. No vale
+      // la pena un error en pantalla por esto.
+    }
+  }
+
+  /// Busca por nombre, canal, progresiva o tipo. Sin tildes ni mayúsculas.
+  ///
+  /// Desde dos letras: con una sola, «a» devuelve media lista y el teléfono
+  /// se pasa un segundo dibujándola para nada.
+  List<ItemIndice> buscar(String texto, {int tope = 30}) {
+    final q = normalizaBusqueda(texto);
+    if (q.length < 2) return const [];
+    final out = <ItemIndice>[];
+    for (final i in indice) {
+      if (i.buscable.contains(q)) {
+        out.add(i);
+        if (out.length >= tope) break;
+      }
+    }
+    return out;
+  }
+
+  /// Enciende una capa y la descarga si hacía falta. Lo usa la búsqueda:
+  /// llevar a una estructura de una capa apagada y dejarla invisible al
+  /// llegar sería un viaje a ninguna parte.
+  Future<void> asegurarCapa(String codigo) async {
+    if (visibles[codigo] != true) {
+      visibles[codigo] = true;
+      notifyListeners();
+    }
+    await cargarCapa(codigo);
+  }
+
+  /// El activo ya descargado que corresponde a una fila del índice, si está.
+  Activo? activoDe(String tipo, int fid) {
+    for (final a in activosDe(tipo)) {
+      if (a.fid == fid) return a;
+    }
+    return null;
   }
 
   // ── evaluaciones ──────────────────────────────────────────────────────

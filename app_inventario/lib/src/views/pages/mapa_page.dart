@@ -13,6 +13,7 @@ import '../../utils/app_colors.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/catalogo_capas.dart';
 import '../widgets/panel_capas.dart';
+import 'buscar_page.dart';
 import 'ficha_page.dart';
 import 'login_page.dart';
 import 'pendientes_page.dart';
@@ -425,6 +426,37 @@ class _MapaPageState extends State<MapaPage> {
   void _ir(Widget pagina) =>
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => pagina));
 
+  /// Buscar una estructura y volar hasta ella.
+  ///
+  /// Tres cosas en orden, y las tres hacen falta: se enciende su capa —si no,
+  /// se llega y no hay nada que ver—, se acerca el mapa hasta el zoom en que
+  /// los puntos dejan de agruparse —si no, se llega a un racimo y la
+  /// estructura buscada sigue escondida dentro— y, si la capa ya está
+  /// descargada, se abre su ficha directamente, que es a lo que se venía.
+  Future<void> _buscar() async {
+    final elegido = await Navigator.of(context).push<ItemIndice>(
+      MaterialPageRoute(builder: (_) => const BuscarPage()),
+    );
+    if (elegido == null || !mounted) return;
+
+    final destino = LatLng(elegido.lat, elegido.lng);
+    _mapa.move(destino, 18);
+
+    final inv = context.read<InventarioController>();
+    await inv.asegurarCapa(elegido.tipo);
+    if (!mounted) return;
+
+    final activo = inv.activoDe(elegido.tipo, elegido.fid);
+    final capa = capaPorCodigo(elegido.tipo);
+    if (activo != null && capa != null) {
+      _abrirFicha(activo, capa);
+    } else {
+      // La capa no llegó —sin señal, o el ámbito la filtra—. Al menos el
+      // mapa ya está encima: se dice por qué no se abrió la ficha.
+      _aviso('Te llevé al punto, pero esa capa aún no está descargada.');
+    }
+  }
+
   // ── pantalla ──────────────────────────────────────────────────────────
 
   @override
@@ -554,6 +586,18 @@ class _MapaPageState extends State<MapaPage> {
                         ],
                       ),
                     ],
+                  ),
+                  // El buscador. Parece un campo pero es un botón: al
+                  // tocarlo se abre la pantalla de búsqueda con el teclado
+                  // ya arriba. Escribir aquí no serviría —el teclado taparía
+                  // los resultados— y tener dos campos, uno para abrir y
+                  // otro para escribir, se nota en la segunda búsqueda.
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _BarraBusqueda(
+                      cuantos: inv.indice.length,
+                      onTap: _buscar,
+                    ),
                   ),
                   if (inv.iniciando)
                     const Padding(
@@ -734,6 +778,52 @@ class _Cabecera extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// La barra de búsqueda de la cabecera.
+class _BarraBusqueda extends StatelessWidget {
+  final int cuantos;
+  final VoidCallback onTap;
+  const _BarraBusqueda({required this.cuantos, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.radioChico),
+        child: Container(
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: AppColors.cristal,
+            borderRadius: BorderRadius.circular(AppTheme.radioChico),
+            border: Border.all(color: AppColors.cristalBorde),
+            boxShadow: AppTheme.sombraFlotante,
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.search, size: 19, color: AppColors.cristalSuave),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  // Decir cuántas hay no es presumir: avisa de que el índice
+                  // ya llegó y de que la búsqueda va a encontrar algo.
+                  cuantos == 0
+                      ? 'Buscar una estructura…'
+                      : 'Buscar entre $cuantos activos…',
+                  style: const TextStyle(
+                      color: AppColors.cristalSuave, fontSize: 13.5),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
