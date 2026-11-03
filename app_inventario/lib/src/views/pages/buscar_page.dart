@@ -5,6 +5,7 @@ import '../../controllers/inventario_controller.dart';
 import '../../models/modelos.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/catalogo_capas.dart';
+import '../widgets/simbolo_capa.dart';
 
 /// Buscar una estructura por su nombre, su canal o su progresiva.
 ///
@@ -128,12 +129,12 @@ class _Resultado extends StatelessWidget {
       leading: Container(
         width: 38,
         height: 38,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: (capa?.color ?? AppColors.gris).withOpacity(0.14),
+          color: (capa?.color ?? AppColors.gris).withOpacity(0.12),
           shape: BoxShape.circle,
         ),
-        child: Icon(iconoDeCapa(item.tipo),
-            size: 19, color: capa?.color ?? AppColors.gris),
+        child: SimboloCapa(capa: capa, lado: 24),
       ),
       title: Text(
         item.nombre.isEmpty ? '#${item.fid}' : item.nombre,

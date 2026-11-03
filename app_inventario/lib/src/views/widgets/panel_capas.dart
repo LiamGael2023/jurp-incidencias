@@ -6,6 +6,7 @@ import '../../utils/app_colors.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/catalogo_capas.dart';
 import '../../utils/sectores.dart';
+import 'simbolo_capa.dart';
 
 /// Qué se ve en el mapa.
 ///
@@ -389,24 +390,17 @@ class _FilaCapa extends StatelessWidget {
             const SizedBox(width: 11),
 
             // El símbolo con el que sale en el mapa, para poder emparejar
-            // la lista con lo que se ve detrás sin tener que probar.
-            Container(
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(encendida ? 1 : 0.35),
-                shape: capa.tipo == TipoGeom.punto
-                    ? BoxShape.circle
-                    : BoxShape.rectangle,
-                borderRadius: capa.tipo == TipoGeom.punto
-                    ? null
-                    : BorderRadius.circular(5),
-                border: Border.all(color: capa.color, width: 2),
+            // la lista con lo que se ve detrás sin tener que probar. La
+            // capa apagada lo lleva atenuado: sigue diciendo cuál es, pero
+            // sin competir con las encendidas.
+            SizedBox(
+              width: 24,
+              child: Center(
+                child: Opacity(
+                  opacity: encendida ? 1 : 0.45,
+                  child: SimboloCapa(capa: capa),
+                ),
               ),
-              child: capa.tipo == TipoGeom.punto
-                  ? Icon(iconoDeCapa(capa.codigo),
-                      size: 11, color: capa.color)
-                  : null,
             ),
             const SizedBox(width: 10),
 

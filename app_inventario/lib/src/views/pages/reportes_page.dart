@@ -8,6 +8,7 @@ import '../../models/modelos.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/catalogo_capas.dart';
+import '../widgets/simbolo_capa.dart';
 
 /// Avance de la campaña y los formatos oficiales del ANA.
 ///
@@ -282,15 +283,11 @@ class _FilaAvance extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         children: [
-          Container(
-            width: 11,
-            height: 11,
-            decoration: BoxDecoration(
-              color: capa?.color ?? AppColors.gris,
-              borderRadius: BorderRadius.circular(3),
-            ),
-          ),
-          const SizedBox(width: 9),
+          // El mismo símbolo que en el mapa y en el panel de capas. Con un
+          // cuadrito de color, quince filas de tonos de azul no se
+          // distinguen entre sí ni de lo que se ve en el mapa.
+          SizedBox(width: 26, child: Center(child: SimboloCapa(capa: capa))),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(titulo,
                 style: const TextStyle(fontSize: 14),
