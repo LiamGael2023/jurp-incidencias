@@ -162,6 +162,61 @@ class _MapaPageState extends State<MapaPage> {
     }
   }
 
+  /// Diagnóstico del GPS, con pulsación larga sobre el botón de ubicación.
+  ///
+  /// POR QUÉ HACE FALTA. Cuando el botón falla en el cerro, lo que llega es
+  /// «no sale mi ubicación», y desde aquí no hay forma de saber cuál de las
+  /// cinco causas es. Esto pregunta las cuatro cosas por separado y las
+  /// enseña juntas: con una foto de esta pantalla se sabe exactamente dónde
+  /// está el problema, sin ir y volver tres veces.
+  Future<void> _diagnosticoUbicacion() async {
+    final lineas = <String>[];
+
+    Future<void> mirar(String que, Future<Object?> Function() fn) async {
+      try {
+        lineas.add('$que: ${await fn()}');
+      } catch (e) {
+        lineas.add('$que: ERROR → $e');
+      }
+    }
+
+    await mirar('Servicio de ubicación activo',
+        () => Geolocator.isLocationServiceEnabled());
+    await mirar('Permiso concedido', () => Geolocator.checkPermission());
+    await mirar('Última posición conocida',
+        () async => (await Geolocator.getLastKnownPosition())?.toString() ?? 'ninguna');
+    await mirar(
+        'Posición ahora (10 s)',
+        () async => (await Geolocator.getCurrentPosition(
+                desiredAccuracy: LocationAccuracy.high,
+                timeLimit: const Duration(seconds: 10)))
+            .toString());
+
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Diagnóstico de ubicación'),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            lineas.join('\n\n'),
+            style: const TextStyle(fontSize: 12.5, height: 1.4),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: Geolocator.openAppSettings,
+            child: const Text('Permisos de la app'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _aviso(String texto, {String? accion, VoidCallback? onAccion}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -545,7 +600,11 @@ class _MapaPageState extends State<MapaPage> {
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          FloatingActionButton.small(
+          // Pulsación larga: el diagnóstico. No lleva botón propio porque
+          // es para cuando algo falla, no para el uso diario.
+          GestureDetector(
+            onLongPress: _diagnosticoUbicacion,
+            child: FloatingActionButton.small(
             heroTag: 'pos',
             backgroundColor: Colors.white,
             foregroundColor: AppColors.azul,
@@ -561,6 +620,7 @@ class _MapaPageState extends State<MapaPage> {
                         strokeWidth: 2.4, color: AppColors.azul),
                   )
                 : const Icon(Icons.my_location),
+            ),
           ),
           const SizedBox(height: 10),
           FloatingActionButton.extended(
