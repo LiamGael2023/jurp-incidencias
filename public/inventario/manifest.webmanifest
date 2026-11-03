@@ -1,0 +1,31 @@
+{
+  "name": "Inventario JURP",
+  "short_name": "Inventario",
+  "description": "Inventario de infraestructura de riego: visor GIS, evaluación en campo y reportes de campaña.",
+  "lang": "es-PE",
+  "dir": "ltr",
+  "start_url": "/inventario/",
+  "scope": "/inventario/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#0CA678",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "/inventario/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/inventario/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/inventario/icono-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Monitoreo GIS",
+      "url": "/inventario/#inv-mapa",
+      "icons": [{ "src": "/inventario/icono-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Reportes",
+      "url": "/inventario/#inv-reportes",
+      "icons": [{ "src": "/inventario/icono-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

@@ -39,7 +39,17 @@ const APPS = {
                  icono: <FaClipboardCheck /> },
 };
 
-export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogout, app }) {
+/**
+ * `marca` cambia QUIÉN firma el rail: { logo, min, nombre }.
+ *
+ * Dentro de NEXHYDRO arriba va NEXHYDRO y debajo el módulo, porque el módulo
+ * es una parte del ecosistema. Pero la app de inventario no es un módulo de
+ * nada: es la aplicación entera, y poner otro logo encima del suyo diría lo
+ * contrario de lo que es. Cuando viene `marca`, firma ella y el bloque de
+ * módulo sobra.
+ */
+export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogout, app,
+                                  marca = null }) {
   const [colapsado, setColapsado] = useState(
     () => localStorage.getItem('railColapsado') === '1'
   );
@@ -85,9 +95,10 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
 
         {/* ── marca: logo completo abierta, solo la gota al colapsar ── */}
         <div className="railx-brand">
-          <img className="railx-logo" src={logoNexhydro}
-            alt="NEXHYDRO — Ecosistema Digital JURP" />
-          <img className="railx-logo-min" src={logoNexhydroMin} alt="NEXHYDRO" />
+          <img className="railx-logo" src={marca ? marca.logo : logoNexhydro}
+            alt={marca ? marca.nombre : 'NEXHYDRO — Ecosistema Digital JURP'} />
+          <img className="railx-logo-min" src={marca ? marca.min : logoNexhydroMin}
+            alt={marca ? marca.nombre : 'NEXHYDRO'} />
         </div>
 
         <button type="button" className="railx-colapsar" onClick={alternar}
@@ -104,7 +115,7 @@ export default function RailGIS({ menu, vistaActual, onNavegar, usuario, onLogou
             duplicaría la información.
             Si el módulo todavía no tiene logo, se rotula con su nombre en
             texto para que el rail no quede mudo. */}
-        {!(menu || []).some(m => m.seccion) && (
+        {!marca && !(menu || []).some(m => m.seccion) && (
         <div className="railx-app">
           <span className="railx-app-etq">Módulo</span>
           {info.logo ? (

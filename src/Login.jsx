@@ -29,7 +29,12 @@ const LOGIN_POR_APP = {
   hydrometrix: '/api/v1/mobile/auth/login/',
 };
 
-function Login({ onLoginSuccess, app }) {
+/**
+ * `logoMarca` y `titulo` son opcionales y solo los usa quien entra por una
+ * puerta propia —hoy, la app de inventario—. Sin ellos el login es el de
+ * siempre, con el logo de JURP.
+ */
+function Login({ onLoginSuccess, app, logoMarca = null, titulo = null }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
@@ -129,13 +134,13 @@ function Login({ onLoginSuccess, app }) {
   return (
     <div className="login-completo">
       <div className="login-formulario-seccion">
-        <img 
-          src={logo}
-          alt="Logo J Riego Presurizado" 
+        <img
+          src={logoMarca || logo}
+          alt="Logo J Riego Presurizado"
           className="login-logo"
         />
         <div className="login-titulo">
-          {app === 'sentria' ? 'SENTRIA · Vigilancia' : 'Sistema de Monitoreo'}
+          {titulo || (app === 'sentria' ? 'SENTRIA · Vigilancia' : 'Sistema de Monitoreo')}
         </div>
 
         <form className="formulario" onSubmit={handleSubmit}>

@@ -64,6 +64,7 @@ function IrA({ pos }) {
 }
 
 function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app,
+                         marca = null,
                          activoAbrir = null, onActivoAbierto = null }) {
   const [base, setBase] = useState(CAPA_POR_DEFECTO);
   const [opacidad, setOpacidad] = useState(1);
@@ -114,7 +115,7 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app,
 
       {/* ══════════════ RAIL ══════════════ */}
       <RailGIS menu={menu} vistaActual={vistaActual} onNavegar={onNavegar}
-        usuario={usuario} onLogout={onLogout} app={app} />
+        usuario={usuario} onLogout={onLogout} app={app} marca={marca} />
 
       {/* ══════════════ BARRA SUPERIOR ══════════════ */}
       <header className="gis-top">
