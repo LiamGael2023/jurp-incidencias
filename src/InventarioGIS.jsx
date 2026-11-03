@@ -13,7 +13,7 @@ import {
 import { prepararFoto, motivoRechazo, urlFoto, ordenarFotos, peso } from './fotosActivo';
 import { caracteristicas, cobertura, tituloActivo } from './fichaActivo';
 import Swal from 'sweetalert2';
-import { datosDeCapa } from './sectores';
+import { datosDeCapa, filtroDeSectores } from './sectores';
 import { codcatsConLicencia, colorLote, tieneLicencia, textoLicencia,
          CAPA_LICENCIAS, COLOR_CON_LICENCIA, COLOR_SIN_LICENCIA } from './lotes';
 import './InventarioGIS.css';
@@ -752,6 +752,28 @@ export function useInventario() {
         { numeric: true, sensitivity: 'base' }));
   }, [datos, ambito, filtroCapa]);
 
+  /* El filtro espacial. Solo se construye cuando hay sectores cargados, y
+   * el calculo por elemento se memoriza dentro, asi que encender y apagar
+   * casillas no vuelve a medir nada. */
+  const filtroSector = useMemo(() => {
+    const fc = datos[`sectores_pech::${filtroCapa['sectores_pech'] || ambito}`];
+    return filtroDeSectores(fc);
+  }, [datos, ambito, filtroCapa]);
+
+  /* Los encendidos, como conjunto. `null` significa «sin filtro»: no es lo
+   * mismo que un conjunto vacio, que seria «ninguno encendido» y dejaria el
+   * mapa en blanco. */
+  const sectoresEncendidos = useMemo(() => {
+    if (!sectoresOcultos.size || !sectores.length) return null;
+    return new Set(sectores.map(s => s.nombre).filter(n => !sectoresOcultos.has(n)));
+  }, [sectores, sectoresOcultos]);
+
+  /* ¿Pasa este elemento el filtro? Sin filtro, todo pasa. */
+  const pasaSector = useCallback((feature) => {
+    if (!sectoresEncendidos || !filtroSector) return true;
+    return filtroSector.pasa(feature, sectoresEncendidos);
+  }, [sectoresEncendidos, filtroSector]);
+
   /* Va DESPUES de `sectores` y depende de el. Definido antes y con [] como
    * dependencias, el cierre se quedaba con la lista del primer render -que
    * esta vacia, porque los datos aun no han llegado- y «apagar todos» no
@@ -771,6 +793,7 @@ export function useInventario() {
     alternarCapa, apagarTodas, evaluacionDe, totalVisibles, recargar: iniciar,
     cluster, alternarCluster,
     sectores, sectoresOcultos, alternarSector, todosLosSectores,
+    pasaSector, filtroSector, sectoresEncendidos,
   };
 }
 
@@ -938,9 +961,15 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
            * arriba sobre la capa ENTERA, así que cada uno conserva el suyo
            * aunque se apaguen los vecinos: recalcularlo sobre lo que queda
            * les cambiaría el tono y parecerían otros sectores. */
-          const ocultos = porSector ? inv.sectoresOcultos : null;
-          const fcPintar = (ocultos && ocultos.size)
-            ? { ...fc, features: fc.features.filter(f => !ocultos.has(porSector.nombre(f) || 'Sin nombre')) }
+          /* La capa de sectores se filtra por su propio nombre -un polígono
+           * ES un sector-; las demás, por dónde caen. Si se filtrara la de
+           * sectores con punto-en-polígono tambien funcionaria, pero seria
+           * pedirle a cada poligono que se busque a si mismo. */
+          const fcPintar = inv.sectoresEncendidos
+            ? { ...fc,
+                features: fc.features.filter(f => (porSector
+                  ? inv.sectoresEncendidos.has(porSector.nombre(f) || 'Sin nombre')
+                  : inv.pasaSector(f))) }
             : fc;
           if (!fcPintar.features.length) return null;
           // Verde o naranja según tenga licencia de agua.
@@ -1069,6 +1098,9 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
           const [lng, lat] = Array.isArray(c[0]) ? c[0] : c;  // MultiPoint o Point
           if (typeof lat !== 'number' || typeof lng !== 'number') return null;
           if (!dentro(lat, lng)) return null;
+          // Lo mismo que las líneas y los polígonos: si hay sectores
+          // apagados, solo se ve lo que cae en los encendidos.
+          if (!inv.pasaSector(f)) return null;
 
           const p = f.properties || {};
           const ev = inv.evaluacionDe(capa.codigo, p.fid);
@@ -2301,7 +2333,10 @@ export function PanelInventario({ inv, onVolar }) {
               {c.porSector && inv.visibles[c.codigo] && inv.sectores.length > 0 && (
                 <div className="inv-subcapas">
                   <div className="inv-subcapas-cab">
-                    <span>{inv.sectores.length - inv.sectoresOcultos.size} de {inv.sectores.length} encendidos</span>
+                    <span>
+                      {inv.sectores.length - inv.sectoresOcultos.size} de {inv.sectores.length} encendidos
+                      {inv.sectoresEncendidos && ' · el mapa muestra solo eso'}
+                    </span>
                     <span>
                       <button onClick={() => inv.todosLosSectores(true)}
                         disabled={!inv.sectoresOcultos.size}>Todos</button>
@@ -2318,6 +2353,17 @@ export function PanelInventario({ inv, onVolar }) {
                       <span title={s.nombre}>{s.nombre}</span>
                     </label>
                   ))}
+                  {/* Lo que no cae en NINGUN sector se esconde mientras haya
+                      filtro, y eso pasaria en silencio. Decirlo evita que
+                      alguien eche de menos medio canal madre sin saber por
+                      que: 19 de sus 114 tramos corren fuera de los cinco
+                      poligonos del PECH. */}
+                  {inv.sectoresEncendidos && (
+                    <div className="inv-subcapas-pie">
+                      Lo que no cae en ningún sector tampoco se ve mientras
+                      filtres. Pulsa «Todos» para recuperarlo.
+                    </div>
+                  )}
                 </div>
               )}
             </React.Fragment>

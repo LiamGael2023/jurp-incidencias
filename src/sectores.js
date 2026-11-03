@@ -221,3 +221,105 @@ export function datosDeCapa(fc) {
   }
   return d;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FILTRAR EL MAPA POR SECTOR
+   ═══════════════════════════════════════════════════════════════════════
+
+   Apagar un sector no debe quitar solo su polígono: debe dejar en pantalla
+   únicamente lo que cae dentro de los encendidos. Eso es lo que se pide de
+   verdad —«muéstrame solo lo de ese sector»— y sin ello la lista servía
+   para pintar el contorno y poco más.
+
+   NO SE PUEDE HACER POR ATRIBUTO. Lo comprobé contra el servidor, capa por
+   capa: ninguna de las de activos trae el sector como campo. Tomas,
+   entregas, laterales y canales solo llevan `ambito` (JURP / PECH), y los
+   lotes un `nom_sec` que es otra cosa. El único sitio donde vive el sector
+   es la geometría del polígono. Así que se resuelve con punto-en-polígono,
+   que ya estaba escrito en cartografia.js para esto mismo.
+
+   SE MUESTREAN VARIOS VÉRTICES, no uno. Probando solo el primero, 22 de los
+   114 tramos del canal madre salían «fuera de todo sector» porque arrancan
+   fuera y entran después. Con 24 vértices repartidos bajan a 19 —los que de
+   verdad quedan fuera— y un canal que cruza tres sectores aparece al
+   encender cualquiera de ellos, que es lo que espera quien lo mira.
+
+   LA CAJA ENVOLVENTE PRIMERO. Descarta sin hacer cuentas y es lo que vuelve
+   esto viable: 601 elementos contra 5 sectores salen en ~200 ms, y el
+   resultado se memoriza por elemento, así que el coste se paga una vez.
+*/
+
+import { puntoEnGeometria, cajaDe, enCaja } from './cartografia.js';
+
+/* Hasta 24 vértices repartidos por la geometría. Más no cambia el resultado
+   —se midió— y multiplica el trabajo en los lotes, que son los que más
+   vértices traen. */
+function muestraDeVertices(geom, tope = 24) {
+  const ps = [];
+  const ver = (c) => {
+    if (typeof c[0] === 'number') ps.push([c[0], c[1]]);
+    else for (const x of c) ver(x);
+  };
+  if (!geom?.coordinates) return ps;
+  ver(geom.coordinates);
+  if (ps.length <= tope) return ps;
+  const paso = ps.length / tope;
+  const out = [];
+  for (let i = 0; i < tope; i++) out.push(ps[Math.floor(i * paso)]);
+  return out;
+}
+
+/**
+ * Construye el filtro a partir de la capa de sectores.
+ *
+ * Devuelve null si todavía no hay sectores cargados: sin ellos no se puede
+ * decidir nada, y filtrar con una lista vacía dejaría el mapa en blanco.
+ */
+export function filtroDeSectores(fcSectores) {
+  if (!fcSectores?.features?.length) return null;
+  const d = datosDeCapa(fcSectores);
+  const zonas = fcSectores.features.map(f => ({
+    nombre: d.nombre(f) || 'Sin nombre',
+    geom: f.geometry,
+    caja: cajaDe(f.geometry),
+  }));
+
+  /* Por elemento, no por capa: un WeakMap se vacía solo cuando el
+     FeatureCollection se recarga, así que no hay que acordarse de limpiarlo. */
+  const cache = new WeakMap();
+
+  const sectoresDe = (feature) => {
+    if (!feature) return null;
+    let s = cache.get(feature);
+    if (s) return s;
+    s = new Set();
+    for (const p of muestraDeVertices(feature.geometry)) {
+      for (const z of zonas) {
+        if (s.has(z.nombre)) continue;
+        if (z.caja && !enCaja(p, z.caja)) continue;
+        if (puntoEnGeometria(p, z.geom)) s.add(z.nombre);
+      }
+    }
+    cache.set(feature, s);
+    return s;
+  };
+
+  return {
+    nombres: zonas.map(z => z.nombre),
+    sectoresDe,
+    /**
+     * ¿Se enseña este elemento con estos sectores encendidos?
+     *
+     * Lo que no cae en NINGÚN sector se esconde mientras haya filtro. Es lo
+     * coherente —un tramo fuera de todos los sectores tampoco está en el que
+     * pediste— pero se esconde en silencio, así que el panel dice cuántos
+     * son en vez de dejar que alguien los eche de menos sin saber por qué.
+     */
+    pasa: (feature, encendidos) => {
+      const s = sectoresDe(feature);
+      if (!s || !s.size) return false;
+      for (const n of s) if (encendidos.has(n)) return true;
+      return false;
+    },
+  };
+}
