@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -41,10 +43,13 @@ class _MapaPageState extends State<MapaPage> {
   /// Centro del ámbito de la Junta: Moche–Virú–Chao.
   static const LatLng _centro = LatLng(-8.4186, -78.7533);
 
-  /// Por debajo de este zoom los puntos se amontonan en manchas que no dicen
-  /// nada y además ahogan el teléfono. Las líneas y los polígonos sí se
-  /// siguen viendo, que es lo que orienta de lejos.
-  static const double _zoomPuntos = 12.5;
+  /// Radio del racimo, en píxeles. Es el mismo que el del visor web
+  /// (maxClusterRadius: 55), para que el mapa se agrupe igual en los dos.
+  static const double _radioRacimo = 55;
+
+  /// De aquí para arriba, cada estructura por separado. Equivale al
+  /// disableClusteringAtZoom del visor.
+  static const double _zoomSinRacimo = 17.5;
 
   LatLngBounds? _vista;
   double _zoom = 11;
@@ -100,23 +105,59 @@ class _MapaPageState extends State<MapaPage> {
 
   bool _enVista(LatLng p) => _vista?.contains(p) ?? true;
 
+  /// El color con que se pinta un polígono.
+  ///
+  /// Los SECTORES llevan uno distinto cada uno, como en el visor web: con un
+  /// solo verde para todos eran una mancha continua y no se veía dónde
+  /// acababa uno y empezaba el siguiente, que es justo lo que uno mira en un
+  /// mapa de sectores. Van en orden por la paleta de cuatro, así que dos
+  /// seguidos nunca repiten.
+  Color _colorPoligono(Capa capa, int indice) => capa.codigo == 'sectores_pech'
+      ? AppColors.sectores[indice % AppColors.sectores.length]
+      : capa.color;
+
   List<Polygon> _poligonos(InventarioController inv) {
     final out = <Polygon>[];
     for (final capa in todasLasCapas) {
       if (capa.tipo != TipoGeom.poligono) continue;
       if (inv.visibles[capa.codigo] != true) continue;
-      for (final a in inv.activosDe(capa.codigo)) {
-        for (final anillo in a.lineas) {
+
+      final activos = inv.activosDe(capa.codigo);
+      for (var i = 0; i < activos.length; i++) {
+        final color = _colorPoligono(capa, i);
+        for (final anillo in activos[i].lineas) {
           if (anillo.length < 3) continue;
           out.add(Polygon(
             points: anillo,
-            color: capa.color.withOpacity(0.16),
-            borderColor: capa.color,
-            borderStrokeWidth: 1.4,
+            color: color.withOpacity(0.18),
+            borderColor: color,
+            borderStrokeWidth: 1.6,
             isFilled: true,
           ));
         }
       }
+    }
+    return out;
+  }
+
+  /// El nombre de cada sector, escrito encima.
+  ///
+  /// De lejos los colores dicen que hay sectores distintos, pero no CUÁL es
+  /// cuál, y el inspector trabaja por sector. Solo a partir de cierto zoom:
+  /// con todo el valle en pantalla los rótulos se pisan unos a otros.
+  List<Marker> _rotulosSectores(InventarioController inv) {
+    if (inv.visibles['sectores_pech'] != true || _zoom < 9.5) return const [];
+    final out = <Marker>[];
+    final activos = inv.activosDe('sectores_pech');
+    for (var i = 0; i < activos.length; i++) {
+      final pt = activos[i].punto;
+      if (pt == null || !_enVista(pt)) continue;
+      out.add(Marker(
+        point: pt,
+        width: 160,
+        height: 22,
+        child: _RotuloSector(texto: activos[i].nombre.toUpperCase()),
+      ));
     }
     return out;
   }
@@ -145,41 +186,93 @@ class _MapaPageState extends State<MapaPage> {
     return out;
   }
 
+  /// Los puntos que caen en pantalla, agrupados en racimos.
+  ///
+  /// POR QUÉ HAY QUE AGRUPAR. Con las capas encendidas hay más de dos mil
+  /// estructuras. Dibujarlas una a una deja el teléfono inservible, y de
+  /// lejos no se vería nada útil igualmente: dos mil puntos sobre el valle
+  /// son una mancha. Antes esto se resolvía escondiéndolos por debajo de
+  /// cierto zoom, y el resultado era peor —la app parecía vacía y el
+  /// inspector no sabía si es que no había nada o es que no cargó—.
+  ///
+  /// Se agrupa en una rejilla del tamaño del racimo del visor web (55 px),
+  /// así que el mapa se agrupa igual en el teléfono y en la pantalla de la
+  /// oficina. La rejilla se calcula en grados a partir del zoom: a zoom z el
+  /// mundo mide 256·2^z píxeles de ancho para 360 grados.
   List<Marker> _marcadores(InventarioController inv) {
-    final out = <Marker>[];
-    if (_zoom < _zoomPuntos) {
-      _enPantalla = 0;
-      return out;
-    }
-
+    final visibles = <_PuntoVisible>[];
     for (final capa in todasLasCapas) {
       if (capa.tipo != TipoGeom.punto) continue;
       if (inv.visibles[capa.codigo] != true) continue;
-
       for (final a in inv.activosDe(capa.codigo)) {
         final pt = a.punto;
         if (pt == null || !_enVista(pt)) continue;
-
-        final ev = inv.evaluacionDe(capa.codigo, a.fid);
-        out.add(Marker(
-          point: pt,
-          width: 38,
-          height: 38,
-          child: GestureDetector(
-            onTap: () => _abrirFicha(a, capa),
-            child: _PuntoActivo(
-              color: capa.color,
-              icono: iconoDeCapa(capa.codigo),
-              estado: ev?.estadoCons,
-              evaluado: ev != null,
-              esPech: a.esPech,
-            ),
-          ),
-        ));
+        visibles.add(_PuntoVisible(a, capa, pt));
       }
     }
-    _enPantalla = out.length;
+    _enPantalla = visibles.length;
+
+    // De cerca no se agrupa: ahí es donde se evalúa, y hay que poder tocar
+    // una estructura concreta.
+    if (_zoom >= _zoomSinRacimo) {
+      return [for (final p in visibles) _marcadorSuelto(p, inv)];
+    }
+
+    final gradosPorPixel = 360.0 / (256.0 * math.pow(2, _zoom).toDouble());
+    final celda = gradosPorPixel * _radioRacimo;
+
+    final grupos = <String, List<_PuntoVisible>>{};
+    for (final p in visibles) {
+      final i = (p.punto.latitude / celda).floor();
+      final j = (p.punto.longitude / celda).floor();
+      grupos.putIfAbsent('$i:$j', () => <_PuntoVisible>[]).add(p);
+    }
+
+    final out = <Marker>[];
+    grupos.forEach((_, lista) {
+      if (lista.length == 1) {
+        out.add(_marcadorSuelto(lista.first, inv));
+        return;
+      }
+      var lat = 0.0, lng = 0.0;
+      for (final p in lista) {
+        lat += p.punto.latitude;
+        lng += p.punto.longitude;
+      }
+      final centro = LatLng(lat / lista.length, lng / lista.length);
+      final lado = lista.length < 10 ? 42.0 : (lista.length < 100 ? 50.0 : 58.0);
+      out.add(Marker(
+        point: centro,
+        width: lado,
+        height: lado,
+        child: GestureDetector(
+          // Tocar un racimo acerca: es lo que hace el visor web y lo que
+          // todo el mundo espera de un número dentro de un círculo.
+          onTap: () => _mapa.move(centro, math.min(18.0, _zoom + 2.0)),
+          child: _Racimo(cuantos: lista.length),
+        ),
+      ));
+    });
     return out;
+  }
+
+  Marker _marcadorSuelto(_PuntoVisible p, InventarioController inv) {
+    final ev = inv.evaluacionDe(p.capa.codigo, p.activo.fid);
+    return Marker(
+      point: p.punto,
+      width: 38,
+      height: 38,
+      child: GestureDetector(
+        onTap: () => _abrirFicha(p.activo, p.capa),
+        child: _PuntoActivo(
+          color: p.capa.color,
+          icono: iconoDeCapa(p.capa.codigo),
+          estado: ev?.estadoCons,
+          evaluado: ev != null,
+          esPech: p.activo.esPech,
+        ),
+      ),
+    );
   }
 
   Future<void> _abrirFicha(Activo a, Capa capa) async {
@@ -267,6 +360,7 @@ class _MapaPageState extends State<MapaPage> {
               ),
               PolygonLayer(polygons: _poligonos(inv)),
               PolylineLayer(polylines: _lineas(inv)),
+              MarkerLayer(markers: _rotulosSectores(inv)),
               if (_yo != null)
                 MarkerLayer(markers: [
                   Marker(
@@ -349,7 +443,6 @@ class _MapaPageState extends State<MapaPage> {
               child: _Leyenda(
                 abierta: _leyendaAbierta,
                 enPantalla: _enPantalla,
-                lejos: _zoom < _zoomPuntos,
                 onAlternar: () =>
                     setState(() => _leyendaAbierta = !_leyendaAbierta),
               ),
@@ -619,13 +712,11 @@ class _Nota extends StatelessWidget {
 class _Leyenda extends StatelessWidget {
   final bool abierta;
   final int enPantalla;
-  final bool lejos;
   final VoidCallback onAlternar;
 
   const _Leyenda({
     required this.abierta,
     required this.enPantalla,
-    required this.lejos,
     required this.onAlternar,
   });
 
@@ -651,9 +742,7 @@ class _Leyenda extends StatelessWidget {
                       size: 16, color: AppColors.cristalSuave),
                   const SizedBox(width: 7),
                   Text(
-                    lejos
-                        ? 'Acércate para ver las estructuras'
-                        : '$enPantalla en pantalla',
+                    '$enPantalla en pantalla',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
@@ -714,16 +803,28 @@ class _Leyenda extends StatelessWidget {
   }
 }
 
+/// Un punto que toca dibujar, con la capa de la que salió.
+class _PuntoVisible {
+  final Activo activo;
+  final Capa capa;
+  final LatLng punto;
+  const _PuntoVisible(this.activo, this.capa, this.punto);
+}
+
 /// El punto de un activo.
 ///
 /// Lleva tres datos a la vez, como en el visor web: el DIBUJO dice de qué
-/// capa es, el ANILLO cómo está de conservación (blanco = sin evaluar) y el
-/// TAMAÑO el ámbito —los del PECH van más chicos y apagados, porque son
-/// contexto y no deben competir por la vista con lo que la Junta evalúa—.
+/// capa es, el PUNTO DE LA ESQUINA cómo está de conservación, y el TAMAÑO
+/// el ámbito —los del PECH van más chicos y apagados, porque son contexto y
+/// no deben competir por la vista con lo que la Junta evalúa—.
 ///
-/// El fondo es blanco y no del color de la capa: sobre una ortofoto, un
-/// disco de color saturado compite con el cultivo y con el agua, y el
-/// dibujo de dentro se pierde. Con fondo blanco el símbolo se lee siempre.
+/// El estado va en la esquina y no como anillo alrededor, igual que en la
+/// web: un anillo grueso de color se come el dibujo de dentro justo cuando
+/// más falta hace distinguir una toma de una caja hidráulica.
+///
+/// El fondo es blanco y no del color de la capa: sobre una ortofoto un disco
+/// de color saturado compite con el cultivo y con el agua, y el símbolo se
+/// pierde. Con fondo blanco se lee siempre.
 class _PuntoActivo extends StatelessWidget {
   final Color color;
   final IconData icono;
@@ -742,26 +843,126 @@ class _PuntoActivo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lado = esPech ? 24.0 : 30.0;
-    final anillo = evaluado ? AppColors.deEstado(estado) : Colors.white;
 
     return Center(
-      child: Container(
-        width: lado,
-        height: lado,
-        decoration: BoxDecoration(
-          color: esPech ? const Color(0xE6FFFFFF) : Colors.white,
-          shape: BoxShape.circle,
-          border: Border.all(color: anillo, width: evaluado ? 3 : 2),
-          boxShadow: const [
-            BoxShadow(color: AppColors.sombraFuerte, blurRadius: 4),
+      child: SizedBox(
+        width: lado + 8,
+        height: lado + 8,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: lado,
+              height: lado,
+              decoration: BoxDecoration(
+                color: esPech ? const Color(0xE6FFFFFF) : Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: esPech ? Colors.white70 : color, width: 2),
+                boxShadow: const [
+                  BoxShadow(color: AppColors.sombraFuerte, blurRadius: 4),
+                ],
+              ),
+              child: Icon(icono,
+                  size: esPech ? 11 : 14,
+                  color: esPech ? color.withOpacity(0.75) : color),
+            ),
+            if (evaluado)
+              Positioned(
+                right: 2,
+                bottom: 2,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: AppColors.deEstado(estado),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.8),
+                  ),
+                ),
+              ),
           ],
         ),
-        child: Icon(icono,
-            size: esPech ? 11 : 14,
-            color: esPech ? color.withOpacity(0.75) : color),
       ),
     );
   }
+}
+
+/// Un racimo: cuántas estructuras hay agrupadas ahí.
+///
+/// Los tres colores son los de leaflet.markercluster, que es lo que se ve en
+/// la web: verde por debajo de diez, amarillo por debajo de cien, naranja de
+/// ahí para arriba. El anillo exterior translúcido es parte del dibujo, no
+/// adorno: sobre una ortofoto un disco opaco parece una estructura más.
+class _Racimo extends StatelessWidget {
+  final int cuantos;
+  const _Racimo({required this.cuantos});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = AppColors.deRacimo(cuantos);
+    return Center(
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.45),
+          shape: BoxShape.circle,
+        ),
+        padding: const EdgeInsets.all(5),
+        child: Container(
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.92),
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: FittedBox(
+              child: Text(
+                '$cuantos',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                  shadows: [
+                    Shadow(color: AppColors.sombraFuerte, blurRadius: 2),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// El nombre de un sector, escrito sobre el mapa.
+///
+/// Texto blanco con sombra y sin recuadro, como en el visor: un recuadro
+/// sólido sobre la ortofoto tapa justo el terreno que se está mirando.
+class _RotuloSector extends StatelessWidget {
+  final String texto;
+  const _RotuloSector({required this.texto});
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Text(
+          texto,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.8,
+            shadows: [
+              Shadow(color: Colors.black, blurRadius: 4),
+              Shadow(color: Colors.black54, blurRadius: 8),
+            ],
+          ),
+        ),
+      );
 }
 
 class _MiPosicion extends StatelessWidget {

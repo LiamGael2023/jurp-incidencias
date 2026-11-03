@@ -16,15 +16,33 @@ class AppColors {
   static const fondo = Color(0xFFF5F8FC);
   static const borde = Color(0xFFDDE8F3);
 
-  /// Estado de conservación. Las claves son las del servidor.
+  /// Estado de conservación, con los códigos del formato del ANA.
+  ///
+  /// SON EXACTAMENTE LOS DEL VISOR WEB. No se retocan «porque en el teléfono
+  /// se ve mejor»: el inspector mira el mapa en el celular y el jefe el
+  /// mismo mapa en la oficina, y si un naranja aquí es un rojo allá, la
+  /// conversación que sigue es sobre los colores y no sobre la estructura.
   static const estados = <String, Color>{
-    'B': Color(0xFF20C997),   // bueno
-    'R': Color(0xFFFAB005),   // regular
-    'M': Color(0xFFFF6B35),   // malo
-    'C': Color(0xFFE03131),   // colapsado
+    'B': Color(0xFF2F9E44),   // bueno
+    'R': Color(0xFFF59F00),   // regular
+    'M': Color(0xFFE8590C),   // malo
+    'C': Color(0xFFC92A2A),   // colapsado
+    '-': Color(0xFF868E96),   // no aplica
   };
 
   static const estadoSinDato = Color(0xFF868E96);
+
+  /// Los colores de un racimo, según cuántos agrupa. Los mismos tres de
+  /// leaflet.markercluster, que es lo que se ve en la web.
+  static const racimoChico = Color(0xFF6ECC39);
+  static const racimoMedio = Color(0xFFF0C20C);
+  static const racimoGrande = Color(0xFFF18017);
+
+  static Color deRacimo(int n) => n < 10
+      ? racimoChico
+      : n < 100
+          ? racimoMedio
+          : racimoGrande;
 
   // ── Cristal oscuro ────────────────────────────────────────────────────
   // Es el material del visor web: paneles translúcidos sobre la ortofoto.
@@ -46,5 +64,18 @@ class AppColors {
 
   static const nombresEstado = <String, String>{
     'B': 'Bueno', 'R': 'Regular', 'M': 'Malo', 'C': 'Colapsado',
+    '-': 'No aplica',
   };
+
+  /// Los cuatro colores con que se pintan los sectores, los del visor web.
+  ///
+  /// Son cuatro y no veinte a propósito: con muchos tonos, dos sectores
+  /// vecinos acaban en verdes parecidos y la línea entre ellos deja de
+  /// verse, que es justo para lo que sirve el color aquí.
+  static const sectores = <Color>[
+    Color(0xFF2A78D6),   // azul
+    Color(0xFFEB6834),   // naranja
+    Color(0xFF1BAF7A),   // aqua
+    Color(0xFFEDA100),   // amarillo
+  ];
 }

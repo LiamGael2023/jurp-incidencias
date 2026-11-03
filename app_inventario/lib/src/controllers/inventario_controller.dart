@@ -131,8 +131,17 @@ class InventarioController extends ChangeNotifier {
   /// Las encendidas, de una en una. En serie y no todas a la vez: son
   /// treinta y siete peticiones y algunas traen miles de geometrías;
   /// lanzarlas en paralelo en una red de campo las hace fallar a todas.
+  ///
+  /// PRIMERO LO QUE SE EVALÚA. Las capas del PECH son contexto —trazados,
+  /// vías, garitas de terceros— y algunas son enormes. Si se bajan en el
+  /// orden del catálogo, el inspector mira dos minutos un mapa con carreteras
+  /// y sin estructuras. Las suyas aparecen antes.
   Future<void> cargarEncendidas() async {
-    for (final c in todasLasCapas) {
+    final orden = [
+      ...todasLasCapas.where((c) => !c.contexto),
+      ...todasLasCapas.where((c) => c.contexto),
+    ];
+    for (final c in orden) {
       if (visibles[c.codigo] == true) await cargarCapa(c.codigo);
     }
   }
