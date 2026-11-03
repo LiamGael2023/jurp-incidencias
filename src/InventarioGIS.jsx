@@ -742,7 +742,14 @@ export function useInventario() {
       const n = d.nombre(f) || 'Sin nombre';
       if (!vistos.has(n)) vistos.set(n, d.color(f) || '#aec14a');
     });
-    return [...vistos].map(([nombre, color]) => ({ nombre, color }));
+    /* Ordenados, y con `numeric` para que sea «SECTOR 2» antes que
+     * «SECTOR 10»: comparando como texto el 10 se cuela detras del 1 porque
+     * «1» < «2» caracter a caracter. Hoy son cinco y daria igual; cuesta lo
+     * mismo que se mantenga el dia que haya diez. */
+    return [...vistos]
+      .map(([nombre, color]) => ({ nombre, color }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es',
+        { numeric: true, sensitivity: 'base' }));
   }, [datos, ambito, filtroCapa]);
 
   /* Va DESPUES de `sectores` y depende de el. Definido antes y con [] como
