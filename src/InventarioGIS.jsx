@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { GeoJSON, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
 import { createPathComponent } from '@react-leaflet/core';
 import L from 'leaflet';
@@ -697,6 +697,25 @@ export function useInventario() {
     } catch (e) { setError('No se pudo cambiar de campaña'); }
   }, [campanias]);
 
+  /* ── Los sectores, uno a uno ──────────────────────────────────────────
+   *
+   * «Sectores PECH» es UNA capa con cinco polígonos dentro, asi que su
+   * casilla los enciende o apaga todos a la vez. Mirar un sector concreto
+   * obligaba a apagar la capa entera y quedarse sin ninguno.
+   *
+   * Se guardan los OCULTOS y no los visibles: un sector nuevo que aparezca
+   * en el servidor sale encendido sin que nadie lo marque, que es lo que se
+   * espera de una capa que ya estaba encendida. */
+  const [sectoresOcultos, setSectoresOcultos] = useState(() => new Set());
+
+  const alternarSector = useCallback((nombre) => {
+    setSectoresOcultos(s => {
+      const n = new Set(s);
+      if (n.has(nombre)) n.delete(nombre); else n.add(nombre);
+      return n;
+    });
+  }, []);
+
   const totalVisibles = useMemo(
     () => Object.entries(visibles).filter(([, v]) => v)
       .reduce((a, [k]) => a + (datos[`${k}::${filtroCapa[k] || ambito}`]?.features?.length || 0), 0),
@@ -710,6 +729,30 @@ export function useInventario() {
     [datos, ambito, filtroCapa]
   );
 
+  /* El color sale de datosDeCapa sobre la capa ENTERA, no sobre la filtrada:
+   * asi cada sector conserva su color aunque se apaguen los de al lado. Si
+   * se recalculara sobre lo que queda, apagar un vecino le cambiaria el tono
+   * al de a lado y parecerian otros sectores. */
+  const sectores = useMemo(() => {
+    const fc = datos[`sectores_pech::${filtroCapa['sectores_pech'] || ambito}`];
+    if (!fc?.features?.length) return [];
+    const d = datosDeCapa(fc);
+    const vistos = new Map();
+    fc.features.forEach(f => {
+      const n = d.nombre(f) || 'Sin nombre';
+      if (!vistos.has(n)) vistos.set(n, d.color(f) || '#aec14a');
+    });
+    return [...vistos].map(([nombre, color]) => ({ nombre, color }));
+  }, [datos, ambito, filtroCapa]);
+
+  /* Va DESPUES de `sectores` y depende de el. Definido antes y con [] como
+   * dependencias, el cierre se quedaba con la lista del primer render -que
+   * esta vacia, porque los datos aun no han llegado- y «apagar todos» no
+   * apagaba ninguno. */
+  const todosLosSectores = useCallback((encender) => {
+    setSectoresOcultos(encender ? new Set() : new Set(sectores.map(s => s.nombre)));
+  }, [sectores]);
+
   return {
     abierto, alternar, cerrar: () => setAbierto(false),
     campania, avance, totales, datos, visibles, cargando, error, iniciando,
@@ -720,6 +763,7 @@ export function useInventario() {
     ficha, abrirFicha, cerrarFicha,
     alternarCapa, apagarTodas, evaluacionDe, totalVisibles, recargar: iniciar,
     cluster, alternarCluster,
+    sectores, sectoresOcultos, alternarSector, todosLosSectores,
   };
 }
 
@@ -883,6 +927,15 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
         if (capa.tipo === 'line' || capa.tipo === 'poly') {
           // Un color por sector, repartido para que dos vecinos no repitan.
           const porSector = capa.porSector ? datosDeCapa(fc) : null;
+          /* Los sectores apagados se quitan del GeoJSON. El color se calculó
+           * arriba sobre la capa ENTERA, así que cada uno conserva el suyo
+           * aunque se apaguen los vecinos: recalcularlo sobre lo que queda
+           * les cambiaría el tono y parecerían otros sectores. */
+          const ocultos = porSector ? inv.sectoresOcultos : null;
+          const fcPintar = (ocultos && ocultos.size)
+            ? { ...fc, features: fc.features.filter(f => !ocultos.has(porSector.nombre(f) || 'Sin nombre')) }
+            : fc;
+          if (!fcPintar.features.length) return null;
           // Verde o naranja según tenga licencia de agua.
           const licencias = capa.porLicencia ? conLicencia : null;
           return (
@@ -890,8 +943,8 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
               // El rótulo se ata al crear la capa, y onEachFeature no se
               // vuelve a ejecutar: la clave lleva el estado para que Leaflet
               // la rehaga al cruzar el zoom.
-              key={`inv-${capa.codigo}`}
-              data={fc}
+              key={`inv-${capa.codigo}-${fcPintar.features.length}`}
+              data={fcPintar}
               style={(f) => {
                 const tono = (porSector && porSector.color(f))
                   || (licencias && colorLote(f, licencias, capa.color))
@@ -2180,7 +2233,8 @@ export function PanelInventario({ inv, onVolar }) {
             </div>
 
             {grupoAbierto[i] && g.capas.filter(c => !c.oculta).map(c => (
-              <div key={c.codigo} className="gis-capa">
+            <React.Fragment key={c.codigo}>
+              <div className="gis-capa">
                 <label>
                   <input
                     type="checkbox"
@@ -2230,6 +2284,36 @@ export function PanelInventario({ inv, onVolar }) {
                   )}
                 </span>
               </div>
+
+              {/* ── Los sectores, uno a uno ──────────────────────────────
+                   «Sectores PECH» es una capa con cinco polígonos dentro, y
+                   su casilla los enciende o apaga todos. Mirar uno concreto
+                   obligaba a apagar la capa entera y quedarse sin ninguno.
+                   Cuelgan de su capa y no en un grupo aparte, porque sin la
+                   capa encendida no hay nada que apagar. */}
+              {c.porSector && inv.visibles[c.codigo] && inv.sectores.length > 0 && (
+                <div className="inv-subcapas">
+                  <div className="inv-subcapas-cab">
+                    <span>{inv.sectores.length - inv.sectoresOcultos.size} de {inv.sectores.length} encendidos</span>
+                    <span>
+                      <button onClick={() => inv.todosLosSectores(true)}
+                        disabled={!inv.sectoresOcultos.size}>Todos</button>
+                      <button onClick={() => inv.todosLosSectores(false)}
+                        disabled={inv.sectoresOcultos.size === inv.sectores.length}>Ninguno</button>
+                    </span>
+                  </div>
+                  {inv.sectores.map(s => (
+                    <label key={s.nombre} className="inv-subcapa">
+                      <input type="checkbox"
+                        checked={!inv.sectoresOcultos.has(s.nombre)}
+                        onChange={() => inv.alternarSector(s.nombre)} />
+                      <i style={{ background: s.color }} />
+                      <span title={s.nombre}>{s.nombre}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </React.Fragment>
             ))}
           </div>
         ))}
