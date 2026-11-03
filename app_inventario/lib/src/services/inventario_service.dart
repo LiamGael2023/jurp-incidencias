@@ -183,6 +183,7 @@ class InventarioService {
       if (g is! Map) continue;
 
       final lineas = <List<LatLng>>[];
+      final partes = <List<List<LatLng>>>[];
       LatLng? punto;
 
       switch ('${g['type']}') {
@@ -202,15 +203,22 @@ class InventarioService {
           }
           break;
         case 'Polygon':
-          for (final anillo in (g['coordinates'] as List? ?? const [])) {
-            lineas.add(_lineaDe(anillo));
-          }
+          final anillos = [
+            for (final a in (g['coordinates'] as List? ?? const []))
+              _lineaDe(a)
+          ];
+          partes.add(anillos);
+          lineas.addAll(anillos);
           break;
         case 'MultiPolygon':
           for (final poli in (g['coordinates'] as List? ?? const [])) {
-            for (final anillo in (poli as List? ?? const [])) {
-              lineas.add(_lineaDe(anillo));
-            }
+            // Nombre distinto del de la rama de arriba a propósito: las dos
+            // viven en el mismo `switch` y compartir nombre ahí no compila.
+            final anillosParte = [
+              for (final a in (poli as List? ?? const [])) _lineaDe(a)
+            ];
+            partes.add(anillosParte);
+            lineas.addAll(anillosParte);
           }
           break;
       }
@@ -229,6 +237,7 @@ class InventarioService {
         props: props,
         punto: punto,
         lineas: lineas,
+        partes: partes,
       ));
     }
     return salida;

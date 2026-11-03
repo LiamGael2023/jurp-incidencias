@@ -194,12 +194,22 @@ class Activo {
   final LatLng? punto;        // centro, para los de punto y para centrar
   final List<List<LatLng>> lineas;   // líneas y anillos de polígono
 
+  /// Solo para polígonos: los anillos agrupados por parte, con el contorno
+  /// primero y los huecos después.
+  ///
+  /// `lineas` sirve para DIBUJAR y por eso los lleva todos aplanados; para
+  /// preguntar «¿cae este punto dentro?» hace falta saber qué anillo es
+  /// contorno y cuál es hueco, porque un punto en un hueco está fuera. Son
+  /// las mismas listas, no copias: no ocupa el doble.
+  final List<List<List<LatLng>>> partes;
+
   const Activo({
     required this.tipo,
     required this.fid,
     required this.props,
     this.punto,
     this.lineas = const [],
+    this.partes = const [],
   });
 
   String get nombre {

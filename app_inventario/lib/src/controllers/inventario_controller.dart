@@ -4,6 +4,7 @@ import '../models/modelos.dart';
 import '../services/inventario_service.dart';
 import '../services/pendientes_service.dart';
 import '../utils/catalogo_capas.dart';
+import '../utils/sectores.dart';
 
 /// El estado del inventario: qué campaña, qué capas están encendidas, qué
 /// hay descargado y qué se evaluó.
@@ -171,6 +172,69 @@ class InventarioController extends ChangeNotifier {
     ambito = nuevo;
     notifyListeners();
     await cargarEncendidas();
+  }
+
+  // ── sectores ──────────────────────────────────────────────────────────
+
+  /// Los sectores APAGADOS, no los encendidos.
+  ///
+  /// Se guarda al revés a propósito: si un día aparece un sector nuevo en la
+  /// capa, con esta lista sale encendido —que es lo que uno espera— en vez
+  /// de invisible hasta que alguien se dé cuenta de que existe.
+  final Set<String> sectoresApagados = {};
+
+  List<Sector> _sectores = const [];
+  FiltroSectores? _filtro;
+  String _firmaSectores = '';
+
+  /// Los sectores, reconstruidos cuando cambian los polígonos descargados.
+  List<Sector> get sectores {
+    final activos = activosDe('sectores_pech');
+    final firma = '${_llave('sectores_pech')}|${activos.length}';
+    if (firma != _firmaSectores) {
+      _firmaSectores = firma;
+      _sectores = sectoresDeActivos(activos);
+      _filtro = _sectores.isEmpty ? null : FiltroSectores(_sectores);
+      // Un sector apagado que ya no existe no debe seguir filtrando.
+      sectoresApagados.removeWhere(
+          (n) => !_sectores.any((s) => s.nombre == n));
+    }
+    return _sectores;
+  }
+
+  /// Los encendidos, o null si no hay filtro que aplicar.
+  Set<String>? get sectoresEncendidos {
+    final todos = sectores;
+    if (todos.isEmpty || sectoresApagados.isEmpty) return null;
+    return {
+      for (final s in todos)
+        if (!sectoresApagados.contains(s.nombre)) s.nombre
+    };
+  }
+
+  void alternarSector(String nombre) {
+    if (!sectoresApagados.remove(nombre)) sectoresApagados.add(nombre);
+    notifyListeners();
+  }
+
+  void todosLosSectores(bool encendidos) {
+    sectoresApagados.clear();
+    if (!encendidos) {
+      sectoresApagados.addAll([for (final s in sectores) s.nombre]);
+    }
+    notifyListeners();
+  }
+
+  /// ¿Se dibuja este activo con los sectores que hay encendidos?
+  ///
+  /// La propia capa de sectores no se filtra a sí misma: apagar un sector
+  /// esconde lo que hay DENTRO, pero su contorno sigue, porque si no
+  /// desaparecería también la referencia de dónde estaba.
+  bool pasaSector(Activo a) {
+    final encendidos = sectoresEncendidos;
+    if (encendidos == null) return true;
+    if (a.tipo == 'sectores_pech') return true;
+    return _filtro?.pasa(a, encendidos) ?? true;
   }
 
   // ── búsqueda ──────────────────────────────────────────────────────────

@@ -255,16 +255,24 @@ class _MapaPageState extends State<MapaPage> {
       if (inv.visibles[capa.codigo] != true) continue;
 
       final activos = inv.activosDe(capa.codigo);
+      final esSector = capa.codigo == 'sectores_pech';
       for (var i = 0; i < activos.length; i++) {
+        if (!esSector && !inv.pasaSector(activos[i])) continue;
         final color = _colorPoligono(capa, i);
+        // Un sector apagado no desaparece: se queda en trazo fino y sin
+        // relleno. Si se borrara del todo, uno perdería la referencia de
+        // dónde estaba justo mientras mira lo que hay en los demás.
+        final apagado = esSector &&
+            i < inv.sectores.length &&
+            inv.sectoresApagados.contains(inv.sectores[i].nombre);
         for (final anillo in activos[i].lineas) {
           if (anillo.length < 3) continue;
           out.add(Polygon(
             points: anillo,
-            color: color.withOpacity(0.18),
-            borderColor: color,
-            borderStrokeWidth: 1.6,
-            isFilled: true,
+            color: color.withOpacity(apagado ? 0.0 : 0.18),
+            borderColor: color.withOpacity(apagado ? 0.45 : 1),
+            borderStrokeWidth: apagado ? 1 : 1.6,
+            isFilled: !apagado,
           ));
         }
       }
@@ -281,14 +289,19 @@ class _MapaPageState extends State<MapaPage> {
     if (inv.visibles['sectores_pech'] != true || _zoom < 9.5) return const [];
     final out = <Marker>[];
     final activos = inv.activosDe('sectores_pech');
+    final sectores = inv.sectores;
     for (var i = 0; i < activos.length; i++) {
       final pt = activos[i].punto;
       if (pt == null || !_enVista(pt)) continue;
+      if (i >= sectores.length) continue;
       out.add(Marker(
         point: pt,
-        width: 160,
+        width: 170,
         height: 22,
-        child: _RotuloSector(texto: activos[i].nombre.toUpperCase()),
+        child: _RotuloSector(
+          texto: sectores[i].nombre.toUpperCase(),
+          apagado: inv.sectoresApagados.contains(sectores[i].nombre),
+        ),
       ));
     }
     return out;
@@ -300,6 +313,7 @@ class _MapaPageState extends State<MapaPage> {
       if (capa.tipo != TipoGeom.linea) continue;
       if (inv.visibles[capa.codigo] != true) continue;
       for (final a in inv.activosDe(capa.codigo)) {
+        if (!inv.pasaSector(a)) continue;
         for (final tramo in a.lineas) {
           if (tramo.length < 2) continue;
           out.add(Polyline(
@@ -339,6 +353,7 @@ class _MapaPageState extends State<MapaPage> {
       for (final a in inv.activosDe(capa.codigo)) {
         final pt = a.punto;
         if (pt == null || !_enVista(pt)) continue;
+        if (!inv.pasaSector(a)) continue;
         visibles.add(_PuntoVisible(a, capa, pt));
       }
     }
@@ -1192,7 +1207,8 @@ class _Racimo extends StatelessWidget {
 /// sólido sobre la ortofoto tapa justo el terreno que se está mirando.
 class _RotuloSector extends StatelessWidget {
   final String texto;
-  const _RotuloSector({required this.texto});
+  final bool apagado;
+  const _RotuloSector({required this.texto, this.apagado = false});
 
   @override
   Widget build(BuildContext context) => Center(
@@ -1201,12 +1217,12 @@ class _RotuloSector extends StatelessWidget {
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: apagado ? Colors.white54 : Colors.white,
             fontSize: 12,
             fontWeight: FontWeight.w800,
             letterSpacing: 0.8,
-            shadows: [
+            shadows: const [
               Shadow(color: Colors.black, blurRadius: 4),
               Shadow(color: Colors.black54, blurRadius: 8),
             ],
