@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../controllers/inventario_controller.dart';
 import '../../models/modelos.dart';
@@ -41,6 +42,8 @@ class _MapaPageState extends State<MapaPage> {
   // arriba está este widget, no el Scaffold. Con la llave no hay duda.
   final GlobalKey<ScaffoldState> _llaveScaffold = GlobalKey<ScaffoldState>();
 
+  static const String _clavePrefRacimos = 'mapaRacimos';
+
   /// Centro del ámbito de la Junta: Moche–Virú–Chao.
   static const LatLng _centro = LatLng(-8.4186, -78.7533);
 
@@ -60,6 +63,13 @@ class _MapaPageState extends State<MapaPage> {
   bool _buscandoPos = false;
   bool _leyendaAbierta = false;
 
+  /// ¿Se agrupan los puntos en racimos?
+  ///
+  /// Se recuerda entre sesiones. Quien trabaja un sector concreto los
+  /// quiere sueltos y los quiere sueltos SIEMPRE; obligarle a apagarlos
+  /// cada mañana es el tipo de roce que hace que al final se use el papel.
+  bool _racimos = true;
+
   /// Cuántos activos se están dibujando ahora mismo. Se cuenta al construir
   /// los marcadores, que es cuando se sabe de verdad.
   int _enPantalla = 0;
@@ -73,6 +83,10 @@ class _MapaPageState extends State<MapaPage> {
       final inv = context.read<InventarioController>();
       await inv.iniciar();
       if (mounted) inv.cargarEncendidas();
+    });
+    SharedPreferences.getInstance().then((p) {
+      final guardado = p.getBool(_clavePrefRacimos);
+      if (guardado != null && mounted) setState(() => _racimos = guardado);
     });
   }
 
@@ -359,9 +373,9 @@ class _MapaPageState extends State<MapaPage> {
     }
     _enPantalla = visibles.length;
 
-    // De cerca no se agrupa: ahí es donde se evalúa, y hay que poder tocar
-    // una estructura concreta.
-    if (_zoom >= _zoomSinRacimo) {
+    // Sueltos si el inspector lo pidió, y también de cerca: ahí es donde
+    // se evalúa y hay que poder tocar una estructura concreta.
+    if (!_racimos || _zoom >= _zoomSinRacimo) {
       return [for (final p in visibles) _marcadorSuelto(p, inv)];
     }
 
@@ -436,6 +450,20 @@ class _MapaPageState extends State<MapaPage> {
       MaterialPageRoute(builder: (_) => const LoginPage()),
       (_) => false,
     );
+  }
+
+  Future<void> _alternarRacimos() async {
+    setState(() => _racimos = !_racimos);
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_clavePrefRacimos, _racimos);
+    if (!mounted) return;
+    // Decir qué acaba de pasar: el cambio se ve en el mapa, pero de lejos
+    // -o con una sola capa encendida- puede no notarse, y entonces uno
+    // pulsa otra vez y lo deja como estaba.
+    _aviso(_racimos
+        ? 'Puntos agrupados en racimos.'
+        : 'Puntos sueltos. Con muchas capas encendidas y poco zoom, el mapa '
+            'puede ir lento.');
   }
 
   void _ir(Widget pagina) =>
@@ -659,6 +687,20 @@ class _MapaPageState extends State<MapaPage> {
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Racimos sí o no. Va con los controles del mapa y no arriba con
+          // los de navegación: es lo que se ve, no a dónde se va.
+          FloatingActionButton.small(
+            heroTag: 'racimos',
+            backgroundColor: _racimos ? Colors.white : AppColors.verde,
+            foregroundColor: _racimos ? AppColors.azul : Colors.white,
+            elevation: 3,
+            tooltip:
+                _racimos ? 'Ver los puntos sueltos' : 'Agrupar en racimos',
+            onPressed: _alternarRacimos,
+            child: Icon(_racimos ? Icons.scatter_plot : Icons.bubble_chart),
+          ),
+          const SizedBox(height: 10),
+
           // Pulsación larga: el diagnóstico. No lleva botón propio porque
           // es para cuando algo falla, no para el uso diario.
           GestureDetector(
