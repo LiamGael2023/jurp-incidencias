@@ -35,6 +35,21 @@ class SinConexion implements Exception {
   String toString() => mensaje;
 }
 
+/// El servidor contestó, pero esa ruta no existe ahí.
+///
+/// ES OTRA COSA QUE NO TENER SEÑAL, y la diferencia importa: lo primero no
+/// lo arregla el inspector por mucho que suba al cerro a buscar cobertura.
+/// Pasa con el almacén de fotos, que no está desplegado en todos los
+/// servidores; decirle «¿hay señal?» a alguien que tiene cuatro rayas es
+/// mandarlo a perder la mañana.
+class SinEndpoint implements Exception {
+  final String mensaje;
+  const SinEndpoint(
+      [this.mensaje = 'Este servidor todavía no tiene esa función']);
+  @override
+  String toString() => mensaje;
+}
+
 class InventarioService {
   static const String base = '${AuthService.servidor}/vigapi/inventario';
 
@@ -334,11 +349,31 @@ class InventarioService {
 
   // ── fotos ─────────────────────────────────────────────────────────────
 
+  /// Las fotos de un activo.
+  ///
+  /// No pasa por `_json` porque aquí hay que mirar el código de estado: un
+  /// 404 significa que este servidor no tiene almacén de fotos, y eso no es
+  /// lo mismo que «no hay fotos» ni que «no hay señal».
   Future<List<Foto>> fotos(String tipo, int fid) async {
-    final d = await _json(
-        '/fotos/?tipo_activo=${Uri.encodeComponent(tipo)}&activo_fid=$fid');
+    final http.Response r;
+    try {
+      r = await http
+          .get(Uri.parse('$base/fotos/?tipo_activo='
+              '${Uri.encodeComponent(tipo)}&activo_fid=$fid'))
+          .timeout(const Duration(seconds: 30));
+    } catch (_) {
+      throw const SinConexion();
+    }
+    if (r.statusCode == 404) throw const SinEndpoint();
+    if (r.statusCode != 200) {
+      throw Exception('El servidor respondió ${r.statusCode}');
+    }
+    final d = jsonDecode(utf8.decode(r.bodyBytes));
+    final lista = d is List ? d : ((d as Map)['results'] as List? ?? const []);
     return [
-      for (final j in _lista(d)) Foto.desdeJson(j, AuthService.servidor)
+      for (final j in lista)
+        Foto.desdeJson(Map<String, dynamic>.from(j as Map),
+            AuthService.servidor)
     ];
   }
 
@@ -348,11 +383,32 @@ class InventarioService {
       ..fields['activo_fid'] = '$fid'
       ..files.add(await http.MultipartFile.fromPath('imagen', imagen.path));
 
-    final res = await req.send().timeout(const Duration(minutes: 3));
-    final cuerpo = await res.stream.bytesToString();
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('El servidor respondió ${res.statusCode}');
+    final http.StreamedResponse res;
+    try {
+      res = await req.send().timeout(const Duration(minutes: 3));
+    } catch (_) {
+      throw const SinConexion();
     }
+
+    final cuerpo = await res.stream.bytesToString();
+    if (res.statusCode == 404) throw const SinEndpoint();
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      // Cuando DRF rechaza por validación responde campo → errores. Decirlo
+      // ahorra abrir el servidor para enterarse de que la imagen pesaba más
+      // de lo que acepta.
+      String detalle = 'El servidor respondió ${res.statusCode}';
+      try {
+        final d = Map<String, dynamic>.from(jsonDecode(cuerpo) as Map);
+        final txt = d.entries
+            .map((e) => '${e.key}: '
+                '${e.value is List ? (e.value as List).join(' ') : e.value}')
+            .join(' · ');
+        if (txt.isNotEmpty) detalle = txt;
+      } catch (_) {}
+      throw Exception(detalle);
+    }
+
     return Foto.desdeJson(
         Map<String, dynamic>.from(jsonDecode(cuerpo) as Map),
         AuthService.servidor);

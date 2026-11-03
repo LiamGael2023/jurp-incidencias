@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../../controllers/inventario_controller.dart';
 import '../../models/modelos.dart';
+import '../../services/inventario_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/catalogo_capas.dart';
@@ -35,6 +36,10 @@ class FichaPage extends StatefulWidget {
 class _FichaPageState extends State<FichaPage> {
   List<Foto>? _fotos;
   String? _falloFotos;
+  /// El servidor contestó 404: aquí no hay almacén de fotos. No es lo mismo
+  /// que un fallo pasajero, así que ni se ofrecen los botones ni se insinúa
+  /// que reintentando se arregla.
+  bool _sinAlmacen = false;
   bool _subiendo = false;
 
   @override
@@ -48,15 +53,35 @@ class _FichaPageState extends State<FichaPage> {
     try {
       final f = await inv.api.fotos(widget.activo.tipo, widget.activo.fid);
       if (mounted) setState(() => _fotos = f);
+    } on SinEndpoint {
+      if (mounted) {
+        setState(() {
+          _fotos = [];
+          _sinAlmacen = true;
+          _falloFotos = 'Este servidor todavía no guarda fotos de activos. '
+              'Hasta que se active, las fotos hay que tomarlas aparte.';
+        });
+      }
+    } on SinConexion {
+      if (mounted) {
+        setState(() {
+          _fotos = [];
+          _falloFotos = 'Sin señal: no se pudieron consultar las fotos.';
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
           _fotos = [];
-          _falloFotos = 'No se pudieron consultar las fotos';
+          _falloFotos =
+              'No se pudieron consultar las fotos. ${_motivo(e)}';
         });
       }
     }
   }
+
+  String _motivo(Object e) =>
+      e.toString().replaceFirst('Exception: ', '').trim();
 
   // ── fotos ─────────────────────────────────────────────────────────────
 
@@ -108,11 +133,28 @@ class _FichaPageState extends State<FichaPage> {
         _fotos = [...?_fotos, nueva];
         _subiendo = false;
       });
-    } catch (e) {
+    } on SinEndpoint {
+      if (!mounted) return;
+      setState(() {
+        _subiendo = false;
+        _sinAlmacen = true;
+        _falloFotos = 'Este servidor todavía no guarda fotos de activos.';
+      });
+    } on SinConexion {
       if (!mounted) return;
       setState(() => _subiendo = false);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('No se pudo subir la foto. ¿Hay señal?'),
+        content: Text('Sin señal: la foto no se subió. Vuelve a '
+            'intentarlo cuando tengas cobertura.'),
+      ));
+    } catch (e) {
+      // El motivo que da el servidor, tal cual. Decir «¿hay señal?» a
+      // alguien que tiene cuatro rayas lo manda a perder la mañana.
+      if (!mounted) return;
+      setState(() => _subiendo = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('No se pudo subir la foto. ${_motivo(e)}'),
+        duration: const Duration(seconds: 6),
       ));
     }
   }
@@ -225,7 +267,12 @@ class _FichaPageState extends State<FichaPage> {
                     ),
                   ),
                 const SizedBox(height: 12),
-                if (_subiendo)
+                if (_sinAlmacen)
+                  // Sin almacén no se ofrecen los botones. Dejarlos puestos
+                  // sería invitar a tomar una foto que no se va a guardar
+                  // en ningún sitio, y el inspector la daría por subida.
+                  const SizedBox.shrink()
+                else if (_subiendo)
                   const LinearProgressIndicator()
                 else
                   Row(

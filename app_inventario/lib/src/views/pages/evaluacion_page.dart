@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../../controllers/inventario_controller.dart';
 import '../../models/modelos.dart';
+import '../../services/inventario_service.dart';
 import '../../services/auth_service.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/app_theme.dart';
@@ -223,6 +224,7 @@ class _EvaluacionPageState extends State<EvaluacionPage> {
     );
 
     bool subio;
+    var sinAlmacen = false;
     final fotosPendientes = <String>[];
     try {
       subio = await inv.guardar(
@@ -238,6 +240,12 @@ class _EvaluacionPageState extends State<EvaluacionPage> {
           try {
             await inv.api.subirFoto(
                 widget.activo.tipo, widget.activo.fid, File(ruta));
+          } on SinEndpoint {
+            // Este servidor no tiene almacen de fotos. Apuntarlas como
+            // pendientes seria prometer que se subiran algun dia: no hay a
+            // donde. Se dice una vez y se deja de intentar.
+            sinAlmacen = true;
+            break;
           } catch (_) {
             fotosPendientes.add(ruta);
           }
@@ -257,13 +265,19 @@ class _EvaluacionPageState extends State<EvaluacionPage> {
     // SE DICE LA VERDAD. Una ficha en la bandeja no está guardada, y el
     // peor resultado posible de una cola de pendientes es que el inspector
     // crea que ya subió y borre sus fotos.
-    final mensaje = subio
-        ? (fotosPendientes.isEmpty
-            ? 'Evaluación guardada.'
-            : 'Evaluación guardada; ${fotosPendientes.length} foto(s) no '
-                'subieron. Vuelve a intentarlo desde la ficha.')
-        : 'Sin señal: la ficha quedó PENDIENTE de subir. Está guardada en '
-            'el teléfono, súbela cuando tengas cobertura.';
+    final String mensaje;
+    if (!subio) {
+      mensaje = 'Sin señal: la ficha quedó PENDIENTE de subir. Está '
+          'guardada en el teléfono, súbela cuando tengas cobertura.';
+    } else if (sinAlmacen) {
+      mensaje = 'Evaluación guardada. Las fotos no: este servidor todavía '
+          'no guarda fotos de activos.';
+    } else if (fotosPendientes.isNotEmpty) {
+      mensaje = 'Evaluación guardada; ${fotosPendientes.length} foto(s) no '
+          'subieron. Vuelve a intentarlo desde la ficha.';
+    } else {
+      mensaje = 'Evaluación guardada.';
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(mensaje),
