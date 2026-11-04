@@ -198,10 +198,15 @@ class RutinaMonitoreo(models.Model):
 class TramoDeRutina(models.Model):
     """Un tramo dentro de una rutina, con quien tiene que ir a recorrerlo.
 
-    `usuario` puede quedar vacio: una rutina se crea con sus tramos y las
-    asignaciones se ponen despues, a veces al dia siguiente. Un tramo sin
-    asignar tiene que poder existir y verse, porque es justo lo que hay que
-    mirar antes de arrancar la ronda.
+    DE UNA A VARIAS PERSONAS. Un tramo largo se reparte, y hay tramos con
+    dos empresas usuarias -el III, el V y el X- donde cada una manda a su
+    coordinador. Con un solo responsable por tramo habria que elegir cual de
+    los dos consta, y el otro recorreria sin que nadie lo supiera.
+
+    Puede quedar vacio: una rutina se crea con sus tramos y las asignaciones
+    se ponen despues, a veces al dia siguiente. Un tramo sin asignar tiene
+    que poder existir y verse, porque es justo lo que hay que mirar antes de
+    arrancar la ronda.
     """
 
     rutina = models.ForeignKey(
@@ -209,9 +214,9 @@ class TramoDeRutina(models.Model):
         verbose_name='Rutina')
     tramo = models.CharField('Tramo', max_length=6, choices=OPCIONES_TRAMO,
                              db_index=True)
-    usuario = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
-        blank=True, related_name='tramos_asignados', verbose_name='Asignado a')
+    usuarios = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True,
+        related_name='tramos_a_recorrer', verbose_name='Asignado a')
     asignado_en = models.DateTimeField('Asignado el', null=True, blank=True)
 
     class Meta:
@@ -547,7 +552,7 @@ def _tramo(tr, con_visitas=False):
     d = {
         'id': tr.id,
         'tramo': tr.tramo,
-        'asignado': _persona(tr.usuario),
+        'asignados': [_persona(u) for u in tr.usuarios.all()],
         'asignado_en': tr.asignado_en,
         'visitas': len(visitas),
         'hallazgos': len([v for v in visitas if not v.sin_novedad]),
@@ -575,7 +580,7 @@ def _rutina(r, con_tramos=False):
                     key=lambda t: ORDEN_TRAMO.get(t.tramo, 99))
     d['total_tramos'] = len(tramos)
     d['recorridos'] = len([t for t in tramos if t.visitas.exists()])
-    d['sin_asignar'] = len([t for t in tramos if t.usuario_id is None])
+    d['sin_asignar'] = len([t for t in tramos if not t.usuarios.exists()])
     if con_tramos:
         d['tramos'] = [_tramo(t, con_visitas=True) for t in tramos]
     return d
@@ -629,17 +634,21 @@ def rutinas(request):
               .order_by('-fecha_inicio', '-id').first())
     antes = {}
     if previa is not None:
-        antes = dict((x.tramo, x.usuario_id)
-                     for x in previa.tramos.all() if x.usuario_id)
+        for x in previa.tramos.all():
+            ids = [u.pk for u in x.usuarios.all()]
+            if ids:
+                antes[x.tramo] = ids
 
     vistos = []
     for t in pedidos:
         if t in vistos:
             continue
         vistos.append(t)
-        TramoDeRutina.objects.create(
-            rutina=r, tramo=t, usuario_id=antes.get(t),
+        nuevo = TramoDeRutina.objects.create(
+            rutina=r, tramo=t,
             asignado_en=timezone.now() if antes.get(t) else None)
+        if antes.get(t):
+            nuevo.usuarios.add(*antes[t])
     # Releer antes de responder. Lo que llego en la peticion son cadenas, y
     # el objeto en memoria las conserva: la base es la unica que sabe que
     # '2026-11-01' es una fecha.
@@ -701,24 +710,43 @@ def asignar(request, pk):
     Usuario = get_user_model()
     cambios, fallos = [], []
     for item in lote:
-        tramo = str((item or {}).get('tramo') or '').strip().upper()
-        uid = (item or {}).get('usuario')
+        item = item or {}
+        tramo = str(item.get('tramo') or '').strip().upper()
+        # Se admite `usuarios` (lista) y tambien `usuario` suelto, que es lo
+        # que mandaba la version de un solo responsable.
+        pedidas = item.get('usuarios')
+        if pedidas is None:
+            uno = item.get('usuario')
+            pedidas = [] if uno in (None, '', 0) else [uno]
+        if not isinstance(pedidas, list):
+            fallos.append('usuarios del tramo %s tiene que ser una lista' % tramo)
+            continue
+
         try:
             tr = TramoDeRutina.objects.get(rutina=r, tramo=tramo)
         except TramoDeRutina.DoesNotExist:
             fallos.append('el tramo %s no esta en esta rutina' % (tramo or '?'))
             continue
-        if uid in (None, '', 0):
-            tr.usuario = None
-            tr.asignado_en = None
-        else:
-            try:
-                tr.usuario = Usuario.objects.get(pk=uid)
-            except Usuario.DoesNotExist:
-                fallos.append('no existe el usuario %s' % uid)
+
+        gente, malos = [], []
+        for uid in pedidas:
+            if uid in (None, '', 0):
                 continue
-            tr.asignado_en = timezone.now()
-        tr.save()
+            try:
+                gente.append(Usuario.objects.get(pk=uid))
+            except (Usuario.DoesNotExist, ValueError, TypeError):
+                malos.append(str(uid))
+        if malos:
+            fallos.append('en el tramo %s no existe(n) %s'
+                          % (tramo, ', '.join(malos)))
+            continue
+
+        # Django 1.8 no tiene .set(): se vacia y se vuelve a llenar.
+        tr.usuarios.clear()
+        if gente:
+            tr.usuarios.add(*gente)
+        tr.asignado_en = timezone.now() if gente else None
+        tr.save(update_fields=['asignado_en'])
         cambios.append(tramo)
 
     return Response({'ok': not fallos, 'cambiados': cambios, 'fallos': fallos,
@@ -792,7 +820,7 @@ def mis_tramos(request):
     """
     hoy = timezone.localtime(timezone.now()).date()
     qs = (TramoDeRutina.objects
-          .filter(usuario=request.user,
+          .filter(usuarios=request.user,
                   rutina__cerrada=False,
                   rutina__fecha_inicio__lte=hoy,
                   rutina__fecha_fin__gte=hoy)
@@ -824,7 +852,7 @@ def visitas(request):
         return Response({'ok': False, 'detail': 'No existe ese tramo de rutina.'},
                         status=status.HTTP_404_NOT_FOUND)
 
-    mio = (tr.usuario_id == getattr(request.user, 'pk', None))
+    mio = tr.usuarios.filter(pk=getattr(request.user, 'pk', None)).exists()
     if not mio and not _es_gerencia(request.user):
         return Response(
             {'ok': False, 'detail': 'Ese tramo esta asignado a otra persona.'},
@@ -1067,6 +1095,104 @@ def paso_vigente(raiz, simulacro):
     return True, 'vigente() ya no compara cadena con fecha'
 
 
+
+# ══════════════════════════════════════════════════════════════════════════
+# 2b. de un responsable por tramo a varios
+# ══════════════════════════════════════════════════════════════════════════
+#
+# El related_name de la tabla nueva NO puede ser el del campo viejo: entre
+# AddField y RemoveField los dos existen a la vez, y dos relaciones con el
+# mismo nombre inverso no arrancan el proyecto.
+
+MIGRACION_VARIOS = '''# -*- coding: utf-8 -*-
+# Lo escribe parche_monitoreo_rutinario.py.
+from __future__ import unicode_literals
+
+from django.conf import settings
+from django.db import migrations, models
+
+
+def pasar(apps, schema_editor):
+    """Lo ya asignado no se pierde: el unico responsable pasa a ser el
+    primero de la lista."""
+    Tramo = apps.get_model('core', 'TramoDeRutina')
+    for t in Tramo.objects.exclude(usuario__isnull=True):
+        t.usuarios.add(t.usuario_id)
+
+
+def deshacer(apps, schema_editor):
+    """Al revertir, se conserva el primero. Mas de uno no cabe en un campo
+    que solo admite uno, y perder a los demas en silencio seria peor que
+    decirlo: queda en el historial de la rutina."""
+    Tramo = apps.get_model('core', 'TramoDeRutina')
+    for t in Tramo.objects.all():
+        primero = t.usuarios.first()
+        if primero is not None:
+            t.usuario_id = primero.pk
+            t.save(update_fields=['usuario'])
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+        ('core', '%(anterior)s'),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='tramoderutina',
+            name='usuarios',
+            field=models.ManyToManyField(
+                blank=True, related_name='tramos_a_recorrer',
+                to=settings.AUTH_USER_MODEL, verbose_name='Asignado a'),
+        ),
+        migrations.RunPython(pasar, deshacer),
+        migrations.RemoveField(model_name='tramoderutina', name='usuario'),
+    ]
+'''
+
+
+ASIGNACION_VIEJA = """    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        blank=True, related_name='tramos_asignados', verbose_name='Asignado a')"""
+
+ASIGNACION_NUEVA = """    usuarios = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True,
+        related_name='tramos_a_recorrer', verbose_name='Asignado a')"""
+
+
+def paso_varios(raiz, simulacro):
+    """Pasa de un responsable por tramo a varios, donde ya estaba puesto."""
+    ruta = os.path.join(raiz, 'src/apps/core/models.py')
+    if not os.path.exists(ruta):
+        return False, 'no existe {0}'.format(ruta)
+    t = leer(ruta)
+    if 'class TramoDeRutina' not in t:
+        return True, 'no aplica (las tablas las pone el paso 1)'
+    if ASIGNACION_NUEVA in t:
+        hecho_modelo = True
+    elif ASIGNACION_VIEJA in t:
+        escribir(ruta, t.replace(ASIGNACION_VIEJA, ASIGNACION_NUEVA), simulacro)
+        hecho_modelo = False
+    else:
+        return False, ('la asignacion de TramoDeRutina no tiene la forma que '
+                       'esperaba; pegame el modelo y lo hago a mano')
+
+    carpeta = os.path.join(raiz, 'src/apps/core/migrations')
+    previas = sorted(n[:-3] for n in os.listdir(carpeta)
+                     if n.endswith('.py') and n != '__init__.py')
+    if any('varios_responsables' in n for n in previas):
+        return True, 'ya estaba'
+    anterior = previas[-1]
+    numero = int(anterior[:4]) + 1
+    nombre = '{0:04d}_varios_responsables.py'.format(numero)
+    escribir(os.path.join(carpeta, nombre),
+             MIGRACION_VARIOS % {'anterior': anterior}, simulacro)
+    return True, '{0}{1}'.format(
+        nombre, '' if hecho_modelo else ' (y el modelo)')
+
+
 def paso_migracion(raiz, simulacro):
     carpeta = os.path.join(raiz, 'src/apps/core/migrations')
     if not os.path.isdir(carpeta):
@@ -1164,8 +1290,9 @@ def main():
         ('1 models.py   ', paso_modelos),
         ('2 vigente()   ', paso_vigente),
         ('3 migracion   ', paso_migracion),
-        ('4 monitoreo.py', paso_modulo),
-        ('5 urls.py     ', paso_urls),
+        ('4 varios      ', paso_varios),
+        ('5 monitoreo.py', paso_modulo),
+        ('6 urls.py     ', paso_urls),
     ]
     fallo = False
     for nombre, fn in pasos:

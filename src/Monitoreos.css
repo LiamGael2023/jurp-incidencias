@@ -220,6 +220,43 @@
 }
 .mon-sel:disabled { background: #f8fafc; color: #64748b; }
 
+/* ── Quién recorre: una ficha por persona ───────────────────────────── */
+.mon-fichas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+.mon-ficha {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 5px 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+}
+.mon-quita {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  color: #475569;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+/* El rojo solo al apuntarlo: una fila con cuatro aspas rojas parece una
+   lista de errores, y lo que hay es un reparto normal. */
+.mon-quita:hover { color: #fff; background: #b91c1c; }
+.mon-quita:disabled { opacity: .4; cursor: default; }
+
 .mon-sub { margin-top: 3px; font-size: 11.5px; color: #64748b; }
 
 /* La pista de a quién buscar en el desplegable. Va en azul y no en gris

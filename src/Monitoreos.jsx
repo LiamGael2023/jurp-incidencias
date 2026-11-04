@@ -23,7 +23,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FaPlus, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaRegCircle,
-  FaSave, FaLock, FaCalendarAlt, FaBell,
+  FaSave, FaLock, FaCalendarAlt, FaBell, FaTimes,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { pedir } from './sesion';
@@ -133,12 +133,29 @@ export default function Monitoreos() {
     const total = tramos.length;
     const hechos = tramos.filter(t => t.recorrido).length;
     const conHallazgo = tramos.filter(t => t.hallazgos > 0).length;
-    const sinAsignar = tramos.filter(t => !t.asignado).length;
+    const sinAsignar = tramos.filter(t => !(t.asignados || []).length).length;
     return { total, hechos, conHallazgo, sinAsignar,
       pct: total ? Math.round((hechos / total) * 100) : 0 };
   }, [tramos]);
 
   const hayCambios = Object.keys(pendientes).length > 0;
+
+  /* Apunta el reparto de un tramo sin mandarlo todavía. Se guarda de golpe
+   * con el botón, por lo mismo de siempre: repartir catorce tramos es una
+   * decisión, no catorce. */
+  const cambiar = (tramo, ids) =>
+    setPendientes(p => ({ ...p, [tramo]: ids.map(String) }));
+
+  /* El nombre de una ficha. Se busca primero en los candidatos y si no, en
+   * lo que ya venía asignado: una cuenta puede haberse desactivado después
+   * de que se le asignara el tramo, y entonces no está en la lista pero su
+   * nombre sí tiene que salir —si no, la ficha quedaría con un número—. */
+  const nombreDe = (id, tramo) => {
+    const c = candidatos.find(x => String(x.id) === String(id));
+    if (c) return c.nombre;
+    const a = (tramo.asignados || []).find(x => String(x.id) === String(id));
+    return a ? a.nombre : `#${id}`;
+  };
 
   /* ── Acciones ──────────────────────────────────────────────────────── */
 
@@ -197,7 +214,7 @@ export default function Monitoreos() {
 
   const guardarAsignaciones = async () => {
     const asignaciones = Object.keys(pendientes).map(tramo => ({
-      tramo, usuario: pendientes[tramo] || null,
+      tramo, usuarios: pendientes[tramo] || [],
     }));
     setOcupado(true);
     const { ok, datos, res } = await pedir(`${API}rutinas/${elegida.id}/asignar/`,
@@ -346,33 +363,62 @@ export default function Monitoreos() {
                   const est = estadoDe(t);
                   const elegido = pendientes[t.tramo] !== undefined
                     ? pendientes[t.tramo]
-                    : (t.asignado ? String(t.asignado.id) : '');
+                    : (t.asignados || []).map(a => String(a.id));
                   const cambiado = pendientes[t.tramo] !== undefined;
                   return (
                     <tr key={t.id} className={cambiado ? 'mon-cambiado' : undefined}>
                       <td className="mon-tramo">{t.tramo}</td>
 
                       <td>
+                        {/* FICHAS Y NO UNA LISTA MULTIPLE. Un <select
+                            multiple> obliga a mantener pulsado Ctrl para
+                            sumar y deselecciona todo con un clic suelto: en
+                            una tabla de catorce filas eso se paga con
+                            repartos borrados sin querer. Con fichas, quitar
+                            es un botón y añadir es elegir. */}
+                        {elegido.length > 0 && (
+                          <div className="mon-fichas">
+                            {elegido.map(id => (
+                              <span key={id} className="mon-ficha">
+                                {nombreDe(id, t)}
+                                {!elegida.cerrada && (
+                                  <button type="button" className="mon-quita"
+                                    title="Quitar"
+                                    disabled={ocupado}
+                                    onClick={() => cambiar(t.tramo,
+                                      elegido.filter(x => x !== id))}>
+                                    <FaTimes size={9} />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         <select className="mon-sel"
-                          value={elegido}
+                          value=""
                           disabled={elegida.cerrada || ocupado}
-                          onChange={e => setPendientes(p => ({
-                            ...p, [t.tramo]: e.target.value,
-                          }))}>
-                          <option value="">— sin asignar —</option>
-                          {candidatos.map(c => (
-                            <option key={c.id} value={c.id}>
-                              {c.nombre} ({c.username})
-                              {c.grupo === 'mobile_gerencia' ? ' · gerencia' : ''}
-                            </option>
-                          ))}
+                          onChange={e => {
+                            if (!e.target.value) return;
+                            cambiar(t.tramo, [...elegido, e.target.value]);
+                          }}>
+                          <option value="">
+                            {elegido.length ? '+ añadir a alguien más' : '— sin asignar —'}
+                          </option>
+                          {candidatos
+                            .filter(c => !elegido.includes(String(c.id)))
+                            .map(c => (
+                              <option key={c.id} value={c.id}>
+                                {c.nombre} ({c.username})
+                                {c.grupo === 'mobile_gerencia' ? ' · gerencia' : ''}
+                              </option>
+                            ))}
                         </select>
                         {/* A QUIÉN BUSCAR EN LA LISTA. El padrón tiene más de
                             sesenta cuentas móviles y catorce de los treinta y
                             un coordinadores tienen dos, así que sin tener
                             delante el nombre del que corresponde a este tramo
                             hay que ir a buscarlo al cuadro de papel. */}
-                        {!t.asignado && (t.contactos || []).length > 0 && (
+                        {elegido.length === 0 && (t.contactos || []).length > 0 && (
                           <div className="mon-sub mon-pista">
                             del cuadro: {(t.contactos || [])
                               .map(c => `${c.coordinador} (${c.empresa})`)

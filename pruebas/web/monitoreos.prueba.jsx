@@ -28,7 +28,8 @@ const AVISADOS = [
 const TRAMOS = ['0','I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII']
   .map((t, i) => ({
     id: i + 1, tramo: t,
-    asignado: i % 3 === 2 ? null : CAND[i % 3],
+    // 0 = sin asignar, 1 = uno, 2 = dos personas en el mismo tramo
+    asignados: i % 3 === 2 ? [] : (i % 3 === 1 ? [CAND[1], CAND[2]] : [CAND[0]]),
     visitas: i < 5 ? 1 : 0,
     hallazgos: i === 2 ? 1 : 0,
     recorrido: i < 5,
