@@ -244,6 +244,16 @@ class VisitaMonitoreo(models.Model):
     Se admite mas de una visita por tramo: un recorrido puede encontrar dos
     cosas, y partirlas en dos incidentes es lo correcto porque se atienden y
     se cierran por separado. El tramo cuenta como recorrido con la primera.
+
+    Y UNA VISITA PUEDE SER DE UN ELEMENTO SUELTO. Recorrer el Tramo II es
+    recorrer sus 25 sub-tramos de 200 m y las obras de arte que hay en
+    ellos. Si todo esta bien se marca el tramo entero de una vez; si algo no
+    lo esta, se registra ESE elemento con su hallazgo y el resto se marca
+    sin novedad en masivo. Una fila por elemento, para que dentro de un ano
+    se pueda responder "cuando se reviso la entrega E12" sin deducirlo.
+
+    `elemento` vacio y tipo 'tramo' es el caso de antes -el tramo entero-, y
+    las visitas ya registradas lo siguen siendo sin tocarlas.
     """
 
     tramo_rutina = models.ForeignKey(
@@ -252,6 +262,24 @@ class VisitaMonitoreo(models.Model):
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
         blank=True, related_name='visitas_monitoreo', verbose_name='Registro')
+
+    TRAMO = 'tramo'
+    SUBTRAMO = 'subtramo'
+    OBRA = 'obra'
+    TIPOS_ELEMENTO = (
+        (TRAMO, 'El tramo entero'),
+        (SUBTRAMO, 'Sub-tramo de 200 m'),
+        (OBRA, 'Obra de arte'),
+    )
+
+    # QUE se reviso. El nombre viene del KMZ tal cual -"TRAMO II 10+200 -
+    # 10+400 CANAL", "Entrega  E12"-, porque es el unico identificador que
+    # comparten el mapa de la app y el del visor web. Inventar un codigo
+    # propio obligaria a mantener la traduccion en dos sitios.
+    tipo_elemento = models.CharField(
+        'Que se reviso', max_length=10, choices=TIPOS_ELEMENTO, default=TRAMO)
+    elemento = models.CharField('Elemento', max_length=160, blank=True,
+                                default='', db_index=True)
 
     sin_novedad = models.BooleanField('Sin novedad', default=True)
     observacion = models.TextField('Observacion', blank=True, default='')
@@ -310,6 +338,29 @@ class TelefonoUsuario(models.Model):
         return '%s - %s' % (self.usuario, self.celular)
 '''
 
+
+
+# El bloque de arriba, tal cual, para meterlo en un models.py que ya
+# tiene VisitaMonitoreo sin los campos del elemento.
+ELEMENTO_BLOQUE = '''    TRAMO = 'tramo'
+    SUBTRAMO = 'subtramo'
+    OBRA = 'obra'
+    TIPOS_ELEMENTO = (
+        (TRAMO, 'El tramo entero'),
+        (SUBTRAMO, 'Sub-tramo de 200 m'),
+        (OBRA, 'Obra de arte'),
+    )
+
+    # QUE se reviso. El nombre viene del KMZ tal cual -"TRAMO II 10+200 -
+    # 10+400 CANAL", "Entrega  E12"-, porque es el unico identificador que
+    # comparten el mapa de la app y el del visor web. Inventar un codigo
+    # propio obligaria a mantener la traduccion en dos sitios.
+    tipo_elemento = models.CharField(
+        'Que se reviso', max_length=10, choices=TIPOS_ELEMENTO, default=TRAMO)
+    elemento = models.CharField('Elemento', max_length=160, blank=True,
+                                default='', db_index=True)
+
+'''
 
 # ══════════════════════════════════════════════════════════════════════════
 # 2. la migracion, con la siembra del cuadro
@@ -515,6 +566,8 @@ tocar ni una linea del camino por el que hoy entran todos los incidentes de
 campo, que ademas ya tiene su cola offline resuelta.
 """
 
+import re
+
 from django.utils import timezone
 
 from rest_framework import status
@@ -630,6 +683,8 @@ def _contactos(tramo):
 def _visita(v):
     return {
         'id': v.id,
+        'tipo_elemento': v.tipo_elemento,
+        'elemento': v.elemento,
         'sin_novedad': v.sin_novedad,
         'observacion': v.observacion,
         'latitude': str(v.latitude) if v.latitude is not None else None,
@@ -642,6 +697,23 @@ def _visita(v):
 
 def _tramo(tr, con_visitas=False, tels=None):
     visitas = list(tr.visitas.all())
+
+    # LO REVISADO POR DENTRO. Recorrer el Tramo II es recorrer sus 25
+    # sub-tramos de 200 m y las obras de arte que caen en ellos, y el parte
+    # tiene que poder responder "cuando se reviso la entrega E12".
+    #
+    # Se cuenta por elemento DISTINTO y no por filas: si uno tiene dos
+    # -se marco sin novedad y al volver se encontro algo- sigue siendo un
+    # elemento revisado, y cuenta como con hallazgo. Contar filas diria
+    # "26 de 25 revisados", que es la clase de numero que hace desconfiar
+    # de todo el tablero.
+    por_elemento = {}
+    for v in visitas:
+        if not v.elemento:
+            continue
+        if not v.sin_novedad or v.elemento not in por_elemento:
+            por_elemento[v.elemento] = not v.sin_novedad
+
     d = {
         'id': tr.id,
         'tramo': tr.tramo,
@@ -649,6 +721,8 @@ def _tramo(tr, con_visitas=False, tels=None):
         'asignado_en': tr.asignado_en,
         'visitas': len(visitas),
         'hallazgos': len([v for v in visitas if not v.sin_novedad]),
+        'elementos_revisados': len(por_elemento),
+        'elementos_con_hallazgo': len([1 for x in por_elemento.values() if x]),
         'recorrido': bool(visitas),
         'contactos': _contactos(tr.tramo),
     }
@@ -975,32 +1049,79 @@ def mis_tramos(request):
     return Response({'ok': True, 'results': list(por_rutina.values())})
 
 
+def _para_registrar(request, valor):
+    """El tramo sobre el que se va a registrar, o el porque no se puede.
+
+    Devuelve (tramo, None) o (None, respuesta). Lo usan la visita suelta y
+    el lote, que tienen que comprobar exactamente lo mismo: que el tramo
+    existe, que es mio, y que la rutina sigue abierta. Repetirlo era
+    garantizar que un dia uno de los dos dejara registrar sobre una rutina
+    cerrada.
+    """
+    try:
+        tr = TramoDeRutina.objects.select_related('rutina').get(pk=valor)
+    except (TramoDeRutina.DoesNotExist, ValueError, TypeError):
+        return None, Response(
+            {'ok': False, 'detail': 'No existe ese tramo de rutina.'},
+            status=status.HTTP_404_NOT_FOUND)
+
+    mio = tr.usuarios.filter(pk=getattr(request.user, 'pk', None)).exists()
+    if not mio and not _es_gerencia(request.user):
+        return None, Response(
+            {'ok': False, 'detail': 'Ese tramo esta asignado a otra persona.'},
+            status=status.HTTP_403_FORBIDDEN)
+
+    if tr.rutina.cerrada:
+        return None, Response(
+            {'ok': False, 'detail': 'Esa rutina ya esta cerrada.'},
+            status=status.HTTP_400_BAD_REQUEST)
+    return tr, None
+
+
+# El sub-tramo trae su progresiva en el nombre -"TRAMO II 5+200 - 5+400
+# CANAL"- y la obra de arte no -"Entrega  E12"-. Sirve para deducir el tipo
+# cuando el telefono no lo manda.
+PROGRESIVA = re.compile('[0-9][ ]*[+][ ]*[0-9]')
+
+
+def _lee_elemento(d):
+    """Que se reviso, segun el cuerpo de la peticion.
+
+    Sin `elemento` es el tramo entero, que es como lo mandaba la app antes
+    de que esto existiera: las visitas ya registradas y las versiones
+    viejas instaladas en los telefonos siguen valiendo sin tocar nada.
+
+    EL NOMBRE ES EL DEL KMZ, TAL CUAL. Es el unico identificador que
+    comparten el mapa del telefono y el del visor web; inventar un codigo
+    propio obligaria a mantener la traduccion en dos sitios y a que
+    coincidieran para siempre. Y no se valida contra un catalogo: el
+    servidor no tiene el KMZ, asi que rechazar un nombre que no reconoce
+    seria convertir cualquier diferencia de escritura en un recorrido que
+    no se puede registrar estando en el canal.
+    """
+    clave = (d.get('elemento') or '').strip()[:160]
+    if not clave:
+        return VisitaMonitoreo.TRAMO, ''
+    tipo = (d.get('tipo_elemento') or d.get('tipo') or '').strip().lower()
+    if tipo not in (VisitaMonitoreo.SUBTRAMO, VisitaMonitoreo.OBRA):
+        tipo = (VisitaMonitoreo.SUBTRAMO if PROGRESIVA.search(clave)
+                else VisitaMonitoreo.OBRA)
+    return tipo, clave
+
+
 @api_view(['POST'])
 @permission_classes([IsMobileRoleUser])
 def visitas(request):
-    """Registra el recorrido de un tramo.
+    """Registra el recorrido de un tramo, o de un elemento suyo.
 
     `incidente` llega ya creado por hi-incidents/. Aqui no se crea ninguno:
     duplicar ese camino seria mantener dos formas de registrar lo mismo y
     que una de las dos se quede atras.
     """
     datos = request.data or {}
-    try:
-        tr = TramoDeRutina.objects.select_related('rutina').get(
-            pk=datos.get('tramo_rutina'))
-    except (TramoDeRutina.DoesNotExist, ValueError, TypeError):
-        return Response({'ok': False, 'detail': 'No existe ese tramo de rutina.'},
-                        status=status.HTTP_404_NOT_FOUND)
-
-    mio = tr.usuarios.filter(pk=getattr(request.user, 'pk', None)).exists()
-    if not mio and not _es_gerencia(request.user):
-        return Response(
-            {'ok': False, 'detail': 'Ese tramo esta asignado a otra persona.'},
-            status=status.HTTP_403_FORBIDDEN)
-
-    if tr.rutina.cerrada:
-        return Response({'ok': False, 'detail': 'Esa rutina ya esta cerrada.'},
-                        status=status.HTTP_400_BAD_REQUEST)
+    tr, mal = _para_registrar(request, datos.get('tramo_rutina'))
+    if mal is not None:
+        return mal
 
     sin_novedad = datos.get('sin_novedad')
     sin_novedad = True if sin_novedad is None else bool(sin_novedad)
@@ -1026,15 +1147,133 @@ def visitas(request):
                             status=status.HTTP_400_BAD_REQUEST)
         sin_novedad = False
 
+    tipo_elemento, elemento = _lee_elemento(datos)
     v = VisitaMonitoreo.objects.create(
         tramo_rutina=tr,
         usuario=request.user if getattr(request.user, 'pk', None) else None,
+        tipo_elemento=tipo_elemento,
+        elemento=elemento,
         sin_novedad=sin_novedad,
         observacion=observacion,
         latitude=datos.get('latitude') or None,
         longitude=datos.get('longitude') or None,
         incidente=incidente)
     return Response({'ok': True, 'visita': _visita(v),
+                     'tramo': _tramo(tr, con_visitas=True)},
+                    status=status.HTTP_201_CREATED)
+
+
+TOPE_LOTE = 400
+
+
+@api_view(['POST'])
+@permission_classes([IsMobileRoleUser])
+def visitas_lote(request):
+    """"Y todo lo demas, sin novedad": una fila por elemento, de una vez.
+
+    Como es el recorrido de verdad
+    ------------------------------
+    Se camina el tramo entero. Lo que esta mal se registra elemento por
+    elemento con el formulario de incidente de siempre -eso va por
+    visitas/-, y al terminar se marca el resto. Asi que este endpoint
+    recibe la lista completa de elementos del tramo y escribe los que
+    todavia no tienen fila.
+
+    POR QUE NO PISA LO YA REGISTRADO
+    --------------------------------
+    Los elementos que ya tienen fila se OMITEN, no se vuelven a escribir.
+    Dos razones, y las dos pasan:
+
+    - El boton se pulsa dos veces, o se pierde la respuesta y el telefono
+      reintenta. Sin esto, 25 sub-tramos se vuelven 50 filas y el avance
+      dice 50 de 25.
+    - El hallazgo se registro antes -es el orden natural: se va anotando lo
+      que se encuentra y al final se cierra el resto-. Si el lote lo pisara
+      con un "sin novedad", el masivo borraria justo lo que se fue a buscar.
+
+    Un elemento con fila no vuelve a entrar por aqui nunca. Si hay que
+    corregirlo, se registra otra visita suya por visitas/, que queda como
+    lo que es: una segunda pasada, con su hora y su firma.
+    """
+    datos = request.data or {}
+    tr, mal = _para_registrar(request, datos.get('tramo_rutina'))
+    if mal is not None:
+        return mal
+
+    crudos = datos.get('elementos')
+    if not isinstance(crudos, (list, tuple)) or not crudos:
+        return Response(
+            {'ok': False, 'detail': 'Manda la lista de elementos a marcar.'},
+            status=status.HTTP_400_BAD_REQUEST)
+    if len(crudos) > TOPE_LOTE:
+        return Response(
+            {'ok': False,
+             'detail': ('Son demasiados elementos de golpe (%d). El tramo mas '
+                        'grande del canal no llega a %d.'
+                        % (len(crudos), TOPE_LOTE))},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    # Un elemento puede venir como texto -solo su nombre, que es el caso
+    # normal del masivo- o como objeto, si trae observacion.
+    pedidos = []
+    for crudo in crudos:
+        d = {'elemento': crudo} if isinstance(crudo, str) else crudo
+        if not isinstance(d, dict):
+            continue
+        tipo, clave = _lee_elemento(d)
+        if not clave:
+            continue
+        sn = d.get('sin_novedad')
+        sn = True if sn is None else bool(sn)
+        obs = (d.get('observacion') or '').strip()
+        # El lote es para cerrar lo que esta bien. Un hallazgo sin nada que
+        # lo cuente se rechaza entero en vez de colarse como una fila que
+        # dice "hubo algo" sin decir que: con 40 elementos encima, un aviso
+        # suelto no se lee, y la fila quedaria para siempre.
+        if not sn and not obs:
+            return Response(
+                {'ok': False,
+                 'detail': ('"%s" viene como hallazgo sin observacion. Los '
+                            'hallazgos se registran uno a uno con su '
+                            'incidente.' % clave)},
+                status=status.HTTP_400_BAD_REQUEST)
+        pedidos.append((clave, tipo, sn, obs))
+
+    if not pedidos:
+        return Response(
+            {'ok': False, 'detail': 'Ningun elemento de la lista tiene nombre.'},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    ya = set(tr.visitas.exclude(elemento='')
+             .values_list('elemento', flat=True))
+    usuario = request.user if getattr(request.user, 'pk', None) else None
+    lat = datos.get('latitude') or None
+    lng = datos.get('longitude') or None
+
+    creadas, omitidas, vistos = [], [], set()
+    for clave, tipo, sn, obs in pedidos:
+        # `vistos` ademas quita los repetidos DENTRO de la misma lista: el
+        # KMZ tiene nombres duplicados -dos placemarks con el mismo rotulo-
+        # y el telefono los manda tal como los lee.
+        if clave in ya or clave in vistos:
+            omitidas.append(clave)
+            continue
+        vistos.add(clave)
+        creadas.append(VisitaMonitoreo.objects.create(
+            tramo_rutina=tr,
+            usuario=usuario,
+            tipo_elemento=tipo,
+            elemento=clave,
+            sin_novedad=sn,
+            observacion=obs,
+            latitude=lat,
+            longitude=lng))
+
+    tr = TramoDeRutina.objects.select_related('rutina').get(pk=tr.pk)
+    return Response({'ok': True,
+                     'creadas': len(creadas),
+                     'omitidas': omitidas,
+                     'visitas': [_visita(v) for v in creadas],
                      'tramo': _tramo(tr, con_visitas=True)},
                     status=status.HTTP_201_CREATED)
 '''
@@ -1053,6 +1292,7 @@ IMPORT_URLS = ("from src.apps.core.monitoreo import (\\n"
                "    telefono as mon_telefono,\\n"
                "    mis_tramos as mon_mis_tramos,\\n"
                "    visitas as mon_visitas,\\n"
+               "    visitas_lote as mon_visitas_lote,\\n"
                ")\\n")
 
 RUTAS = (
@@ -1072,7 +1312,11 @@ RUTAS = (
     "    url(r'^v1/mobile/monitoreo/mis-tramos/$',\n"
     "        mon_mis_tramos, name='monitoreo_mis_tramos'),\n"
     "    url(r'^v1/mobile/monitoreo/visitas/$',\n"
-    "        mon_visitas, name='monitoreo_visitas'),\n")
+    "        mon_visitas, name='monitoreo_visitas'),\n"
+    # Antes de visitas/ no, pero DESPUES si: Django prueba en orden y
+    # visitas/$ lleva el $, asi que no se traga visitas/lote/.
+    "    url(r'^v1/mobile/monitoreo/visitas/lote/$',\n"
+    "        mon_visitas_lote, name='monitoreo_visitas_lote'),\n")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1440,6 +1684,74 @@ def paso_telefono(raiz, simulacro):
     return True, nombre
 
 
+MIGRACION_ELEMENTO = """# -*- coding: utf-8 -*-
+# Lo escribe parche_monitoreo_rutinario.py.
+from __future__ import unicode_literals
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('core', '%(anterior)s'),
+    ]
+
+    # Las dos columnas traen default, asi que las filas que ya hay quedan
+    # como lo que son: visitas del tramo entero. No hace falta tocarlas.
+    operations = [
+        migrations.AddField(
+            model_name='visitamonitoreo',
+            name='tipo_elemento',
+            field=models.CharField(
+                choices=[('tramo', 'El tramo entero'),
+                         ('subtramo', 'Sub-tramo de 200 m'),
+                         ('obra', 'Obra de arte')],
+                default='tramo', max_length=10,
+                verbose_name='Que se reviso'),
+        ),
+        migrations.AddField(
+            model_name='visitamonitoreo',
+            name='elemento',
+            field=models.CharField(blank=True, db_index=True, default='',
+                                   max_length=160, verbose_name='Elemento'),
+        ),
+    ]
+"""
+
+
+def paso_elemento(raiz, simulacro):
+    """Que la visita pueda ser de un sub-tramo o de una obra, no solo del tramo."""
+    ruta = os.path.join(raiz, 'src/apps/core/models.py')
+    if not os.path.exists(ruta):
+        return False, 'no existe {0}'.format(ruta)
+    t = leer(ruta)
+    if 'class VisitaMonitoreo' not in t:
+        return True, 'no aplica (las tablas las pone el paso 1)'
+
+    hecho_modelo = True
+    if 'tipo_elemento' not in t:
+        # Justo encima de sin_novedad, que es donde esta en el parche. El
+        # orden importa poco a Django, pero mucho a quien lea el archivo.
+        ancla = "    sin_novedad = models.BooleanField('Sin novedad', default=True)"
+        if t.count(ancla) != 1:
+            return False, ('no encuentro sin_novedad una sola vez en '
+                           'VisitaMonitoreo; pegame el modelo y lo hago a mano')
+        escribir(ruta, t.replace(ancla, ELEMENTO_BLOQUE + ancla), simulacro)
+        hecho_modelo = False
+
+    carpeta = os.path.join(raiz, 'src/apps/core/migrations')
+    previas = sorted(n[:-3] for n in os.listdir(carpeta)
+                     if n.endswith('.py') and n != '__init__.py')
+    if any('elemento_visita' in n for n in previas):
+        return True, 'ya estaba'
+    anterior = previas[-1]
+    nombre = '{0:04d}_elemento_visita.py'.format(int(anterior[:4]) + 1)
+    escribir(os.path.join(carpeta, nombre),
+             MIGRACION_ELEMENTO % {'anterior': anterior}, simulacro)
+    return True, '{0}{1}'.format(nombre, '' if hecho_modelo else ' (y el modelo)')
+
+
 def paso_modulo(raiz, simulacro):
     for rel, que in (('src/apps/core/equipo_enlazado.py', 'EsGerencia'),
                      ('src/apps/core/permission.py', 'IsMobileRoleUser')):
@@ -1466,6 +1778,9 @@ def paso_urls(raiz, simulacro):
             ('mon_telefono', 'telefono as mon_telefono,',
              "    url(r'^v1/mobile/monitoreo/telefono/$',\n"
              "        mon_telefono, name='monitoreo_telefono'),\n"),
+            ('mon_visitas_lote', 'visitas_lote as mon_visitas_lote,',
+             "    url(r'^v1/mobile/monitoreo/visitas/lote/$',\n"
+             "        mon_visitas_lote, name='monitoreo_visitas_lote'),\n"),
         ]
         faltan = [x for x in sueltas if x[0] not in t]
         if not faltan:
@@ -1502,7 +1817,7 @@ def paso_urls(raiz, simulacro):
     t = ''.join(lineas[:destino]) + RUTAS + ''.join(lineas[destino:])
     t = insertar_linea(t, fin_de_imports(t), IMPORT_URLS.replace('\\n', '\n'))
     escribir(ruta, t, simulacro)
-    return True, 'import y 8 rutas anadidos'
+    return True, 'import y 9 rutas anadidos'
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1536,8 +1851,9 @@ def main():
         ('3 migracion   ', paso_migracion),
         ('4 varios      ', paso_varios),
         ('5 telefono    ', paso_telefono),
-        ('6 monitoreo.py', paso_modulo),
-        ('7 urls.py     ', paso_urls),
+        ('6 elemento    ', paso_elemento),
+        ('7 monitoreo.py', paso_modulo),
+        ('8 urls.py     ', paso_urls),
     ]
     fallo = False
     for nombre, fn in pasos:

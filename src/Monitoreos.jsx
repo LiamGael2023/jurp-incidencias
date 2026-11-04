@@ -53,9 +53,25 @@ const esc = (s) => String(s == null ? '' : s)
   .replace(/"/g, '&quot;');
 
 /* El estado de un tramo en tres palabras. Es lo que se lee de un vistazo y
- * lo que decide a quién hay que llamar hoy. */
+ * lo que decide a quién hay que llamar hoy.
+ *
+ * RECORRER UN TRAMO ES RECORRERLO POR DENTRO: sus franjas de 200 m y las
+ * obras de arte que hay en ellas, y la app registra una fila por elemento.
+ * Así que un tramo con cuatro elementos revisados de cuarenta no está «Sin
+ * novedad»: está a medias, y llamarlo hecho es lo que hace que nadie
+ * vuelva. Cuántos elementos tiene cada tramo sale del KMZ, que lo lleva la
+ * app y no el servidor, así que aquí se dice cuántos van y no cuántos
+ * faltan.
+ *
+ * Los servidores sin el parche del elemento no mandan estos campos, y
+ * entonces se lee lo de siempre. */
 function estadoDe(t) {
-  if (t.hallazgos > 0) return { clave: 'hallazgo', texto: 'Con hallazgo' };
+  if (t.hallazgos > 0 || t.elementos_con_hallazgo > 0) {
+    return { clave: 'hallazgo', texto: 'Con hallazgo' };
+  }
+  if (t.elementos_revisados > 0) {
+    return { clave: 'parcial', texto: `${t.elementos_revisados} revisados` };
+  }
   if (t.recorrido) return { clave: 'ok', texto: 'Sin novedad' };
   return { clave: 'pendiente', texto: 'Sin recorrer' };
 }
@@ -63,6 +79,9 @@ function estadoDe(t) {
 const ICONO = {
   hallazgo: <FaExclamationTriangle size={11} />,
   ok: <FaCheckCircle size={11} />,
+  /* A medias lleva el círculo vacío, no el check: el check es «ya está», y
+   * un tramo empezado no lo está. El ámbar dice el resto. */
+  parcial: <FaRegCircle size={11} />,
   pendiente: <FaRegCircle size={11} />,
 };
 
@@ -133,7 +152,8 @@ export default function Monitoreos() {
   const avance = useMemo(() => {
     const total = tramos.length;
     const hechos = tramos.filter(t => t.recorrido).length;
-    const conHallazgo = tramos.filter(t => t.hallazgos > 0).length;
+    const conHallazgo = tramos.filter(
+      t => t.hallazgos > 0 || t.elementos_con_hallazgo > 0).length;
     const sinAsignar = tramos.filter(t => !(t.asignados || []).length).length;
     return { total, hechos, conHallazgo, sinAsignar,
       pct: total ? Math.round((hechos / total) * 100) : 0 };
@@ -585,9 +605,21 @@ export default function Monitoreos() {
                         <span className={`mon-estado mon-${est.clave}`}>
                           {ICONO[est.clave]} {est.texto}
                         </span>
-                        {t.hallazgos > 0 && (
+                        {(t.elementos_con_hallazgo > 0 || t.hallazgos > 0) && (
                           <div className="mon-sub">
-                            {t.hallazgos} hallazgo{t.hallazgos === 1 ? '' : 's'}
+                            {t.elementos_con_hallazgo > 0
+                              ? `${t.elementos_con_hallazgo} elemento${
+                                  t.elementos_con_hallazgo === 1 ? '' : 's'
+                                } con hallazgo`
+                              : `${t.hallazgos} hallazgo${
+                                  t.hallazgos === 1 ? '' : 's'
+                                }`}
+                          </div>
+                        )}
+                        {t.elementos_revisados > 0
+                          && t.elementos_con_hallazgo > 0 && (
+                          <div className="mon-sub">
+                            {t.elementos_revisados} elementos revisados
                           </div>
                         )}
                       </td>
