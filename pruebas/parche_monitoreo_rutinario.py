@@ -171,9 +171,28 @@ class RutinaMonitoreo(models.Model):
         return self.nombre
 
     def vigente(self, dia=None):
+        """Si el dia de hoy cae dentro de la ronda.
+
+        LAS FECHAS SE NORMALIZAN ANTES DE COMPARAR. Un objeto recien creado
+        con create(fecha_inicio='2026-11-01') conserva la CADENA en memoria
+        -Django convierte al leer de la base, no al escribir-, y en Python 3
+        comparar una cadena con una fecha es un TypeError, no un False.
+
+        Paso de verdad: el endpoint de crear guardaba bien la rutina y sus
+        catorce tramos, y reventaba despues, al armar la respuesta. Desde
+        fuera parecia que no se habia creado nada.
+        """
         from django.utils import timezone
+        from django.utils.dateparse import parse_date
+
+        def como_fecha(v):
+            return parse_date(v) if isinstance(v, str) else v
+
+        ini, fin = como_fecha(self.fecha_inicio), como_fecha(self.fecha_fin)
+        if ini is None or fin is None:
+            return False
         d = dia or timezone.localtime(timezone.now()).date()
-        return (not self.cerrada) and self.fecha_inicio <= d <= self.fecha_fin
+        return (not self.cerrada) and ini <= d <= fin
 
 
 class TramoDeRutina(models.Model):
@@ -607,6 +626,10 @@ def rutinas(request):
             continue
         vistos.append(t)
         TramoDeRutina.objects.create(rutina=r, tramo=t)
+    # Releer antes de responder. Lo que llego en la peticion son cadenas, y
+    # el objeto en memoria las conserva: la base es la unica que sabe que
+    # '2026-11-01' es una fecha.
+    r.refresh_from_db()
     return Response({'ok': True, 'rutina': _rutina(r, con_tramos=True)},
                     status=status.HTTP_201_CREATED)
 
@@ -633,6 +656,7 @@ def rutina(request, pk):
     if 'cerrada' in datos:
         r.cerrada = bool(datos['cerrada'])
     r.save()
+    r.refresh_from_db()          # igual que al crear: fechas, no cadenas
     return Response({'ok': True, 'rutina': _rutina(r, con_tramos=True)})
 
 
@@ -966,6 +990,40 @@ def paso_modelos(raiz, simulacro):
     return True, 'cuatro tablas anadidas al final'
 
 
+VIGENTE_VIEJO = """    def vigente(self, dia=None):
+        from django.utils import timezone
+        d = dia or timezone.localtime(timezone.now()).date()
+        return (not self.cerrada) and self.fecha_inicio <= d <= self.fecha_fin"""
+
+
+def paso_vigente(raiz, simulacro):
+    """Corrige vigente() donde las tablas YA estaban puestas.
+
+    paso_modelos no toca models.py si encuentra RutinaMonitoreo, que es lo
+    correcto -no se reescribe un modelo ya migrado-, pero deja fuera a quien
+    aplico la primera version. Este paso cambia solo ese metodo.
+    """
+    ruta = os.path.join(raiz, 'src/apps/core/models.py')
+    if not os.path.exists(ruta):
+        return False, 'no existe {0}'.format(ruta)
+    t = leer(ruta)
+    if 'def como_fecha(v):' in t:
+        return True, 'ya estaba corregido'
+    if VIGENTE_VIEJO not in t:
+        if 'class RutinaMonitoreo' not in t:
+            return True, 'no aplica (las tablas las pone el paso 1)'
+        return False, ('vigente() no tiene la forma que esperaba; pegame '
+                       'el metodo y lo hago a mano')
+    # El cuerpo nuevo sale del propio MODELOS, para que no haya dos
+    # versiones del mismo metodo esperando a divergir.
+    m = re.search(r'    def vigente\(self, dia=None\):.*?return \(not self\.cerrada\) and ini <= d <= fin',
+                  MODELOS, re.S)
+    if not m:
+        return False, 'no encuentro el vigente() nuevo dentro del parche'
+    escribir(ruta, t.replace(VIGENTE_VIEJO, m.group(0)), simulacro)
+    return True, 'vigente() ya no compara cadena con fecha'
+
+
 def paso_migracion(raiz, simulacro):
     carpeta = os.path.join(raiz, 'src/apps/core/migrations')
     if not os.path.isdir(carpeta):
@@ -1061,9 +1119,10 @@ def main():
 
     pasos = [
         ('1 models.py   ', paso_modelos),
-        ('2 migracion   ', paso_migracion),
-        ('3 monitoreo.py', paso_modulo),
-        ('4 urls.py     ', paso_urls),
+        ('2 vigente()   ', paso_vigente),
+        ('3 migracion   ', paso_migracion),
+        ('4 monitoreo.py', paso_modulo),
+        ('5 urls.py     ', paso_urls),
     ]
     fallo = False
     for nombre, fn in pasos:
