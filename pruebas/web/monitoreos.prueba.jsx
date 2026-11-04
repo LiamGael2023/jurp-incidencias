@@ -56,6 +56,19 @@ window.fetch = async (url, opc) => {
   /* Guardar el celular de una cuenta. Es el caso que no se ve a voluntad en
    * produccion: una persona que el cuadro no reconoce -cherrera, de
    * Gerencia- y a la que hay que escribirle el numero a mano. */
+  /* Cerrar y reabrir. Se simula porque es el estado del que mas cuesta
+   * salir a mano en produccion: hay que cerrar una rutina de verdad para
+   * comprobar que se puede volver a abrir. */
+  if (/\/rutinas\/\d+\/$/.test(url) && opc && opc.method === 'POST') {
+    const datos = JSON.parse((opc && opc.body) || '{}');
+    if ('cerrada' in datos) {
+      RUTINA.cerrada = !!datos.cerrada;
+      RUTINA.vigente = !RUTINA.cerrada;
+      return new Response(JSON.stringify({ ok: true, rutina: RUTINA }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+  }
+
   if (url.includes('/telefono/')) {
     const datos = JSON.parse((opc && opc.body) || '{}');
     const limpio = String(datos.celular || '').replace(/\D/g, '');

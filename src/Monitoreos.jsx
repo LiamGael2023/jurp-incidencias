@@ -23,7 +23,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   FaPlus, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaRegCircle,
-  FaSave, FaLock, FaCalendarAlt, FaBell, FaTimes, FaSearch, FaPhoneAlt,
+  FaSave, FaLock, FaLockOpen, FaCalendarAlt, FaBell, FaTimes, FaSearch, FaPhoneAlt,
   FaPen,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
@@ -336,24 +336,53 @@ export default function Monitoreos() {
     }
   };
 
-  const cerrar = async () => {
+  /**
+   * Cierra la rutina, o la vuelve a abrir.
+   *
+   * CERRAR NO ES BORRAR, Y POR ESO SE PUEDE DESHACER. Una ronda se cierra
+   * cuando se da por terminada, y eso se decide mirando un tablero donde
+   * casi siempre falta algún tramo: cerrarla de más es un error de un clic,
+   * y sin vuelta atrás obligaría a crear otra rutina y repartir los catorce
+   * tramos otra vez. Lo registrado no se toca en ninguno de los dos
+   * sentidos.
+   */
+  const alternarCierre = async () => {
+    const cerrando = !elegida.cerrada;
     const r = await Swal.fire({
-      icon: 'warning',
-      title: `¿Cerrar «${esc(elegida.nombre)}»?`,
-      html: 'Deja de aparecer en la app y no se podrán registrar más '
-        + 'recorridos.<br><br>Lo registrado se conserva.',
+      icon: cerrando ? 'warning' : 'question',
+      title: cerrando
+        ? `¿Cerrar «${esc(elegida.nombre)}»?`
+        : `¿Reabrir «${esc(elegida.nombre)}»?`,
+      html: cerrando
+        ? 'Deja de aparecer en la app y no se podrán registrar más '
+          + 'recorridos.<br><br>Lo registrado se conserva, y se puede '
+          + 'reabrir.'
+        : 'Vuelve a aparecer en la app de quienes tienen tramos asignados, '
+          + 'y se podrán registrar recorridos otra vez.'
+          + '<br><br>Si sus fechas ya pasaron, no aparecerá en la app hasta '
+          + 'que las cambies: ahí solo salen las rutinas vigentes.',
       showCancelButton: true,
-      confirmButtonText: 'Sí, cerrar',
+      confirmButtonText: cerrando ? 'Sí, cerrar' : 'Sí, reabrir',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#b45309',
-      focusCancel: true,
+      confirmButtonColor: cerrando ? '#b45309' : '#15803d',
+      focusCancel: cerrando,
     });
     if (!r.isConfirmed) return;
+
     setOcupado(true);
-    const { ok, datos } = await pedir(`${API}rutinas/${elegida.id}/`,
-      { method: 'POST', body: JSON.stringify({ cerrada: true }) });
+    const { ok, res, datos } = await pedir(`${API}rutinas/${elegida.id}/`,
+      { method: 'POST', body: JSON.stringify({ cerrada: cerrando }) });
     setOcupado(false);
-    if (ok && datos && datos.rutina) { setElegida(datos.rutina); await cargar(elegida.id); }
+
+    if (!ok) {
+      let detalle = res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.';
+      try { const j = await res.clone().json(); if (j.detail) detalle = j.detail; }
+      catch { /* queda el genérico */ }
+      Swal.fire(cerrando ? 'No se pudo cerrar' : 'No se pudo reabrir',
+        detalle, 'error');
+      return;
+    }
+    if (datos && datos.rutina) { setElegida(datos.rutina); await cargar(elegida.id); }
   };
 
   /* ── Pintado ───────────────────────────────────────────────────────── */
@@ -440,12 +469,12 @@ export default function Monitoreos() {
                   <FaSave size={11} /> Guardar asignaciones
                 </button>
               )}
-              {!elegida.cerrada && (
-                <button type="button" className="mon-btn" onClick={cerrar}
-                  disabled={ocupado}>
-                  <FaLock size={11} /> Cerrar rutina
-                </button>
-              )}
+              <button type="button" className="mon-btn"
+                onClick={alternarCierre} disabled={ocupado}>
+                {elegida.cerrada
+                  ? <><FaLockOpen size={11} /> Reabrir rutina</>
+                  : <><FaLock size={11} /> Cerrar rutina</>}
+              </button>
             </div>
           </div>
 
