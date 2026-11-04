@@ -5,121 +5,473 @@
     {
       "tramo": "0",
       "empresa": "JURP - PECH",
-      "coordinadores": ["ILICH LOPEZ"],
-      "celulares": ["962727211"],
-      "cuenta": null
+      "coordinadores": [
+        "ILICH LOPEZ"
+      ],
+      "celulares": [
+        "962727211"
+      ],
+      "cuentas_empresa": [],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "ILICH LOPEZ",
+          "cuentas": [
+            "I_lopez",
+            "i_camones"
+          ]
+        }
+      ]
     },
     {
       "tramo": "I",
       "empresa": "DESHIDRATADORA LIBERTAD",
-      "coordinadores": ["ANGEL AREVALO"],
-      "celulares": ["954462914"],
-      "cuenta": null
+      "coordinadores": [
+        "ANGEL AREVALO"
+      ],
+      "celulares": [
+        "954462914"
+      ],
+      "cuentas_empresa": [
+        "libertad"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "ANGEL AREVALO",
+          "cuentas": [
+            "Aarevalo",
+            "angel.arevalo"
+          ]
+        }
+      ]
     },
     {
       "tramo": "II",
       "empresa": "HASS PERU",
-      "coordinadores": ["LUIS RODRIGUEZ", "LUISA GUTIERREZ GUZMAN"],
-      "celulares": ["943778120", "913358323"],
-      "cuenta": null
+      "coordinadores": [
+        "LUIS RODRIGUEZ",
+        "LUISA GUTIERREZ GUZMAN"
+      ],
+      "celulares": [
+        "943778120",
+        "913358323"
+      ],
+      "cuentas_empresa": [
+        "hassperu"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "LUIS RODRIGUEZ",
+          "cuentas": [
+            "Lrodriguez",
+            "luis.rodriguez@hassperu.com"
+          ]
+        },
+        {
+          "coordinador": "LUISA GUTIERREZ GUZMAN",
+          "cuentas": [
+            "luis.rodriguez@hassperu.com"
+          ]
+        }
+      ]
     },
     {
       "tramo": "III",
       "empresa": "HORTIFRUT",
-      "coordinadores": ["MIGUEL BARRAZA ARBULU", "ALEX VASQUEZ CALVANAPON"],
-      "celulares": ["949161291", "987989098"],
-      "cuenta": null
+      "coordinadores": [
+        "MIGUEL BARRAZA ARBULU",
+        "ALEX VASQUEZ CALVANAPON"
+      ],
+      "celulares": [
+        "949161291",
+        "987989098"
+      ],
+      "cuentas_empresa": [
+        "hortifrut",
+        "hortifrutperu"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "MIGUEL BARRAZA ARBULU",
+          "cuentas": [
+            "Marbulu"
+          ]
+        },
+        {
+          "coordinador": "ALEX VASQUEZ CALVANAPON",
+          "cuentas": [
+            "Acalvanapon"
+          ]
+        }
+      ]
     },
     {
       "tramo": "III",
       "empresa": "AVO PERU",
-      "coordinadores": ["EMILIO ALVAREZ", "VICTOR ROMERO LUDEÑA"],
-      "celulares": ["987935576", "948310551"],
-      "cuenta": null
+      "coordinadores": [
+        "EMILIO ALVAREZ",
+        "VICTOR ROMERO LUDEÑA"
+      ],
+      "celulares": [
+        "987935576",
+        "948310551"
+      ],
+      "cuentas_empresa": [
+        "avoperu"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "EMILIO ALVAREZ",
+          "cuentas": [
+            "Aemilio",
+            "Ealvarez"
+          ]
+        },
+        {
+          "coordinador": "VICTOR ROMERO LUDEÑA",
+          "cuentas": [
+            "Vludeña"
+          ]
+        }
+      ]
     },
     {
       "tramo": "IV",
       "empresa": "CAMPOSOL CHAO",
-      "coordinadores": ["JENNY MACEDO RODRIGUEZ", "JAVIER SILVA ROSALES", "FRANK RODRIGUEZ"],
-      "celulares": ["943525215", "938207916", "969219489"],
-      "cuenta": null
+      "coordinadores": [
+        "JENNY MACEDO RODRIGUEZ",
+        "JAVIER SILVA ROSALES",
+        "FRANK RODRIGUEZ"
+      ],
+      "celulares": [
+        "943525215",
+        "938207916",
+        "969219489"
+      ],
+      "cuentas_empresa": [
+        "camposol"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "JENNY MACEDO RODRIGUEZ",
+          "cuentas": [
+            "Jmacedo",
+            "Jrodriguez"
+          ]
+        },
+        {
+          "coordinador": "JAVIER SILVA ROSALES",
+          "cuentas": [
+            "Jrosales",
+            "Jsilva"
+          ]
+        },
+        {
+          "coordinador": "FRANK RODRIGUEZ",
+          "cuentas": []
+        }
+      ]
     },
     {
       "tramo": "V",
       "empresa": "ARATO PERU",
-      "coordinadores": ["IRINA VALDIVIEZO", "ALEXANDER CONTRERAS"],
-      "celulares": ["919298255", "970518874"],
-      "cuenta": null
+      "coordinadores": [
+        "IRINA VALDIVIEZO",
+        "ALEXANDER CONTRERAS"
+      ],
+      "celulares": [
+        "919298255",
+        "970518874"
+      ],
+      "cuentas_empresa": [
+        "arato"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "IRINA VALDIVIEZO",
+          "cuentas": [
+            "Ivaldiviezo",
+            "irina.valdiviezo"
+          ]
+        },
+        {
+          "coordinador": "ALEXANDER CONTRERAS",
+          "cuentas": [
+            "Acontreras"
+          ]
+        }
+      ]
     },
     {
       "tramo": "V",
       "empresa": "TALSA",
-      "coordinadores": ["EMILIO ALVAREZ", "VICTOR ROMERO LUDEÑA"],
-      "celulares": ["987935576", "948310551"],
-      "cuenta": null
+      "coordinadores": [
+        "EMILIO ALVAREZ",
+        "VICTOR ROMERO LUDEÑA"
+      ],
+      "celulares": [
+        "987935576",
+        "948310551"
+      ],
+      "cuentas_empresa": [
+        "talsa"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "EMILIO ALVAREZ",
+          "cuentas": [
+            "Aemilio",
+            "Ealvarez"
+          ]
+        },
+        {
+          "coordinador": "VICTOR ROMERO LUDEÑA",
+          "cuentas": [
+            "Vludeña"
+          ]
+        }
+      ]
     },
     {
       "tramo": "VI",
       "empresa": "CAMPOSOL VIRU",
-      "coordinadores": ["JENNY MACEDO RODRIGUEZ", "JAVIER SILVA ROSALES"],
-      "celulares": ["943525215", "938207916"],
-      "cuenta": null
+      "coordinadores": [
+        "JENNY MACEDO RODRIGUEZ",
+        "JAVIER SILVA ROSALES"
+      ],
+      "celulares": [
+        "943525215",
+        "938207916"
+      ],
+      "cuentas_empresa": [
+        "camposol"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "JENNY MACEDO RODRIGUEZ",
+          "cuentas": [
+            "Jmacedo",
+            "Jrodriguez"
+          ]
+        },
+        {
+          "coordinador": "JAVIER SILVA ROSALES",
+          "cuentas": [
+            "Jrosales",
+            "Jsilva"
+          ]
+        }
+      ]
     },
     {
       "tramo": "VII",
       "empresa": "NORTE VERDE",
-      "coordinadores": ["GUILLERMO ALEGRIA"],
-      "celulares": ["970100112"],
-      "cuenta": null
+      "coordinadores": [
+        "GUILLERMO ALEGRIA"
+      ],
+      "celulares": [
+        "970100112"
+      ],
+      "cuentas_empresa": [
+        "norteverde"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "GUILLERMO ALEGRIA",
+          "cuentas": [
+            "Galegria"
+          ]
+        }
+      ]
     },
     {
       "tramo": "VIII",
       "empresa": "SOCIEDAD AGRICOLA EL ARENAL",
-      "coordinadores": ["GENNER RODRIGUEZ"],
-      "celulares": ["953614051"],
-      "cuenta": null
+      "coordinadores": [
+        "GENNER RODRIGUEZ"
+      ],
+      "celulares": [
+        "953614051"
+      ],
+      "cuentas_empresa": [
+        "elarenal"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "GENNER RODRIGUEZ",
+          "cuentas": [
+            "Grodriguez"
+          ]
+        }
+      ]
     },
     {
       "tramo": "IX",
       "empresa": "VIRU S.A.",
-      "coordinadores": ["VANIA DE LA CRUZ", "YORDY AQUINO"],
-      "celulares": ["914421168", "953724781"],
-      "cuenta": null
+      "coordinadores": [
+        "VANIA DE LA CRUZ",
+        "YORDY AQUINO"
+      ],
+      "celulares": [
+        "914421168",
+        "953724781"
+      ],
+      "cuentas_empresa": [],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "VANIA DE LA CRUZ",
+          "cuentas": [
+            "Vcruz"
+          ]
+        },
+        {
+          "coordinador": "YORDY AQUINO",
+          "cuentas": [
+            "Yaquino"
+          ]
+        }
+      ]
     },
     {
       "tramo": "X",
       "empresa": "BEGGIE",
-      "coordinadores": ["EDWIN PAREDES", "YERSON ALAYO"],
-      "celulares": ["987129049", "981545340"],
-      "cuenta": null
+      "coordinadores": [
+        "EDWIN PAREDES",
+        "YERSON ALAYO"
+      ],
+      "celulares": [
+        "987129049",
+        "981545340"
+      ],
+      "cuentas_empresa": [
+        "beggie"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "EDWIN PAREDES",
+          "cuentas": [
+            "Eparedes",
+            "edwin.paredes"
+          ]
+        },
+        {
+          "coordinador": "YERSON ALAYO",
+          "cuentas": [
+            "Yalayo",
+            "yerson.alayo"
+          ]
+        }
+      ]
     },
     {
       "tramo": "X",
       "empresa": "AGROBERRIES",
-      "coordinadores": ["JUANA MARIÑOS"],
-      "celulares": ["913355950"],
-      "cuenta": null
+      "coordinadores": [
+        "JUANA MARIÑOS"
+      ],
+      "celulares": [
+        "913355950"
+      ],
+      "cuentas_empresa": [
+        "agroberries"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "JUANA MARIÑOS",
+          "cuentas": [
+            "Jmariños"
+          ]
+        }
+      ]
     },
     {
       "tramo": "XI",
       "empresa": "LAREDO",
-      "coordinadores": ["CARLOS GUZMAN RODRIGUEZ", "HENRY CUBA RODRIGUEZ"],
-      "celulares": ["981072008", "989174008"],
-      "cuenta": null
+      "coordinadores": [
+        "CARLOS GUZMAN RODRIGUEZ",
+        "HENRY CUBA RODRIGUEZ"
+      ],
+      "celulares": [
+        "981072008",
+        "989174008"
+      ],
+      "cuentas_empresa": [
+        "laredo"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "CARLOS GUZMAN RODRIGUEZ",
+          "cuentas": [
+            "Cguzman",
+            "luis.rodriguez@hassperu.com"
+          ]
+        },
+        {
+          "coordinador": "HENRY CUBA RODRIGUEZ",
+          "cuentas": [
+            "Rcuba",
+            "henry.cuba"
+          ]
+        }
+      ]
     },
     {
       "tramo": "XII",
       "empresa": "GREEN PERU",
-      "coordinadores": ["ROBERTO INFANTE", "MARTIN GARCIA"],
-      "celulares": ["946526804", "903231745"],
-      "cuenta": null
+      "coordinadores": [
+        "ROBERTO INFANTE",
+        "MARTIN GARCIA"
+      ],
+      "celulares": [
+        "946526804",
+        "903231745"
+      ],
+      "cuentas_empresa": [
+        "greenperu"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "ROBERTO INFANTE",
+          "cuentas": [
+            "Rinfante"
+          ]
+        },
+        {
+          "coordinador": "MARTIN GARCIA",
+          "cuentas": [
+            "Mgarcia"
+          ]
+        }
+      ]
     },
     {
       "tramo": "XIII",
       "empresa": "DANPER",
-      "coordinadores": ["JHON JHONY LUJAN", "TONY ARAUJO"],
-      "celulares": ["953254195", "949144669"],
-      "cuenta": null
+      "coordinadores": [
+        "JHON JHONY LUJAN",
+        "TONY ARAUJO"
+      ],
+      "celulares": [
+        "953254195",
+        "949144669"
+      ],
+      "cuentas_empresa": [
+        "danper"
+      ],
+      "cuentas_coordinador": [
+        {
+          "coordinador": "JHON JHONY LUJAN",
+          "cuentas": [
+            "Jlujan"
+          ]
+        },
+        {
+          "coordinador": "TONY ARAUJO",
+          "cuentas": [
+            "Taraujo"
+          ]
+        }
+      ]
     }
-  ]
+  ],
+  "_nota_cuentas": "cuentas_empresa y cuentas_coordinador son CANDIDATOS sacados del padron de PLUVIRA el 2026-11-04 emparejando por nombre, no una verdad: donde hay mas de uno hay que elegir, y la pantalla de asignacion es donde se elige."
 }
