@@ -180,6 +180,12 @@
 .eqe-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .eqe-firma { display: flex; align-items: center; gap: 4px; color: #78350f; }
 
+/* El canal de acceso. En «web y app» va en el gris de los demás subtítulos,
+   porque es lo normal y no hay nada que mirar; cuando la cuenta está
+   limitada a uno se destaca, que es cuando el dato explica por qué alguien
+   dice que no puede entrar. */
+.eqe-canal { color: #1d4ed8; font-weight: 600; }
+
 .eqe-equipo {
   display: inline-flex;
   align-items: center;

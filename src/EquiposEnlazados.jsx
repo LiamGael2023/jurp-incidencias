@@ -41,7 +41,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FaMobileAlt, FaSearch, FaSyncAlt, FaUnlock, FaExclamationTriangle,
   FaCheckCircle, FaHistory, FaUserPlus, FaKey, FaUserSlash, FaUserCheck,
-  FaUserTag, FaPen,
+  FaUserTag, FaPen, FaGlobe,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { pedir } from './sesion';
@@ -85,6 +85,37 @@ const desdeHace = (iso) => {
   const m = Math.round(dias / 30);
   return `hace ${m} meses`;
 };
+
+/* ── POR DÓNDE ENTRA CADA CUENTA ──────────────────────────────────────────
+ *
+ * UNA ELECCIÓN DE TRES, NO DOS CASILLAS. Con una casilla «web» y otra «app»
+ * se pueden dejar las dos en blanco, y eso es una cuenta que no entra por
+ * ningún lado: nadie quiere crearla, pero se crea sola con un clic de más.
+ * Con un valor único de tres ese estado no existe.
+ *
+ * LA AUSENCIA VALE «AMBOS». Es como se comportaba el sistema antes de que
+ * esto existiera, así que el día del despliegue nadie se queda fuera por no
+ * tener el campo puesto. También deja que el servidor todavía no tenga esta
+ * parte sin que la pantalla enseñe algo falso: si ningún usuario trae el
+ * campo, la columna y el botón sencillamente no aparecen.
+ *
+ * QUÉ LO HACE CUMPLIR. No esto. El bloqueo vive en el login del servidor,
+ * que ya sabe si quien entra es el navegador o la app porque la petición
+ * manda `plataforma` —es el mismo dato con el que se decide el enlace al
+ * celular—. Aquí solo se elige el valor. */
+const ACCESOS = [
+  { codigo: 'ambos', etiqueta: 'Web y app', corto: 'web y app' },
+  { codigo: 'web', etiqueta: 'Solo web', corto: 'solo web' },
+  { codigo: 'app', etiqueta: 'Solo app', corto: 'solo app' },
+];
+
+const accesoDe = (u) => {
+  const v = String((u && u.acceso) || '').toLowerCase();
+  return ACCESOS.some(a => a.codigo === v) ? v : 'ambos';
+};
+
+const textoAcceso = (codigo) =>
+  (ACCESOS.find(a => a.codigo === codigo) || ACCESOS[0]).corto;
 
 const FILTROS = [
   { clave: 'todos', texto: 'Todos' },
@@ -250,6 +281,13 @@ export default function EquiposEnlazados({
     return m;
   }, [equipos]);
 
+  /* ¿Este servidor sabe de canales? Se deduce de los datos y no de una
+   * bandera: si ninguna cuenta trae el campo, es que falta el parche, y
+   * enseñar un botón que va a dar 404 es peor que no enseñarlo. En cuanto
+   * el servidor lo mande, la columna aparece sola. */
+  const soportaAcceso = useMemo(
+    () => usuarios.some(u => u && u.acceso != null), [usuarios]);
+
   const visibles = useMemo(() => {
     const q = busca.trim().toLowerCase();
     return usuarios.filter((u) => {
@@ -261,10 +299,12 @@ export default function EquiposEnlazados({
       if (filtro === 'sinequipo' && eq && eq.activo) return false;
       if (!q) return true;
       return [u.username, u.first_name, u.last_name, u.role_label,
-              eq && eq.equipo]
+              eq && eq.equipo,
+              /* Para poder buscar «solo web» y que salgan los que lo son. */
+              soportaAcceso ? textoAcceso(accesoDe(u)) : null]
         .some(v => String(v || '').toLowerCase().includes(q));
     });
-  }, [usuarios, equipoDe, busca, filtro, rol]);
+  }, [usuarios, equipoDe, busca, filtro, rol, soportaAcceso]);
 
   const nombreDe = (u) => `${u.first_name || ''} ${u.last_name || ''}`.trim();
 
@@ -295,6 +335,9 @@ export default function EquiposEnlazados({
          <input id="f-ape"  class="swal2-input" placeholder="Apellido" maxlength="30">
          <input id="f-mail" class="swal2-input" placeholder="Correo (opcional)" type="email">
          <select id="f-rol" class="swal2-input">${opciones}</select>
+         ${soportaAcceso ? `<select id="f-acc-nuevo" class="swal2-input">${
+           ACCESOS.map(a => `<option value="${a.codigo}">${esc(a.etiqueta)}</option>`).join('')
+         }</select>` : ''}
          <p style="font-size:.85em;color:#64748b;margin-top:10px">
            La clave la genera el servidor y se muestra una sola vez.
          </p>`,
@@ -319,12 +362,17 @@ export default function EquiposEnlazados({
           Swal.showValidationMessage('Elige el rol que tendrá esta persona.');
           return false;
         }
+        const acc = document.getElementById('f-acc-nuevo');
         return {
           username,
           first_name: v('f-nom'),
           last_name: v('f-ape'),
           email: v('f-mail'),
           role: document.getElementById('f-rol').value,
+          /* Solo si la pantalla lo ofreció. Mandarlo a un servidor que no
+           * lo entiende lo ignoraría en silencio, y entonces la cuenta
+           * nacería abierta a los dos canales después de haber elegido uno. */
+          ...(acc ? { acceso: acc.value } : {}),
         };
       },
     });
@@ -502,6 +550,64 @@ export default function EquiposEnlazados({
     if (!ok) {
       Swal.fire('No se pudo cambiar el rol',
         res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.', 'error');
+      return;
+    }
+    await cargar();
+  };
+
+  /**
+   * Por dónde puede entrar esta cuenta.
+   *
+   * QUITAR UN CANAL CIERRA SU SESION; añadirlo, no. Quien restringe a
+   * alguien lo hace porque no quiere que siga ahí, y una sesión abierta
+   * sobrevive días: el cambio no serviría de nada hasta que esa persona
+   * decidiera salir. Al revés no hace falta —ampliar no deja a nadie donde
+   * no debía— y echar a alguien para darle MAS permiso sería gratuito.
+   * La decisión la toma el servidor; aquí solo se advierte de ella.
+   */
+  const cambiarAcceso = async (u) => {
+    const actual = accesoDe(u);
+    const opciones = ACCESOS.map(a =>
+      `<option value="${a.codigo}"${a.codigo === actual ? ' selected' : ''}>${esc(a.etiqueta)}</option>`
+    ).join('');
+
+    const { value: nuevo } = await Swal.fire({
+      title: `¿Desde dónde entra ${esc(u.username)}?`,
+      html:
+        `<select id="f-acc" class="swal2-input">${opciones}</select>
+         <div style="text-align:left;font-size:.85em;color:#64748b;margin-top:10px;line-height:1.6">
+           <b>Web y app</b> — entra por los dos sitios.<br>
+           <b>Solo web</b> — el navegador. Si intenta entrar desde la app, no la deja.<br>
+           <b>Solo app</b> — el celular. No podrá abrir esta web.
+         </div>
+         <p style="font-size:.85em;color:#b45309;margin-top:10px">
+           Si le quitas un canal se cierra su sesión, para que valga ahora
+           y no la próxima vez que entre.
+         </p>`,
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+      preConfirm: () => document.getElementById('f-acc').value,
+    });
+    if (!nuevo || nuevo === actual) return;
+
+    setOcupado(u.id);
+    const { ok, res } = await pedir(`${apiUsuarios}${u.id}/acceso/`,
+      { method: 'POST', body: JSON.stringify({ acceso: nuevo }), callar: [404] });
+    setOcupado(null);
+
+    if (!ok) {
+      /* Como en editar: un 404 no es un dato malo, es un servidor sin la
+       * parte, y el remedio es aplicar el parche, no revisar la cuenta. */
+      if (res && res.status === 404) {
+        Swal.fire('Este servidor no separa web y app todavía',
+          'Falta aplicar el parche de canales de acceso.', 'info');
+        return;
+      }
+      let detalle = res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.';
+      try { const j = await res.clone().json(); if (j.detail) detalle = j.detail; }
+      catch (err) { /* se queda el genérico */ }
+      Swal.fire('No se pudo cambiar', detalle, 'error');
       return;
     }
     await cargar();
@@ -701,6 +807,14 @@ export default function EquiposEnlazados({
                       {u.is_active
                         ? <span className="eqe-tag eqe-tag-act">Activo</span>
                         : <span className="eqe-tag eqe-tag-lib">Desactivado</span>}
+                      {/* Por dónde entra, debajo de si puede entrar: es la
+                          misma pregunta en dos pasos, y leerla junta evita
+                          abrir el diálogo solo para mirar. */}
+                      {soportaAcceso && (
+                        <div className={`eqe-sub${accesoDe(u) === 'ambos' ? '' : ' eqe-canal'}`}>
+                          {textoAcceso(accesoDe(u))}
+                        </div>
+                      )}
                     </td>
 
                     <td className="eqe-acc">
@@ -718,6 +832,13 @@ export default function EquiposEnlazados({
                           title="Cambiar el rol" onClick={() => cambiarRol(u)}>
                           <FaUserTag size={10} /> Rol
                         </button>
+                        {soportaAcceso && (
+                          <button type="button" className="eqe-mini" disabled={trabajando}
+                            title="Elegir si entra por la web, por la app o por los dos"
+                            onClick={() => cambiarAcceso(u)}>
+                            <FaGlobe size={10} /> Acceso
+                          </button>
+                        )}
                         <button type="button"
                           className={`eqe-mini${u.is_active ? ' eqe-mini-mal' : ' eqe-mini-ok'}`}
                           disabled={trabajando}
