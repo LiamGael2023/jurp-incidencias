@@ -51,6 +51,17 @@ log "cambio detectado: ${LOCAL:0:7} -> ${REMOTO:0:7}"
 git reset --hard --quiet "origin/$RAMA"
 
 log "instalando dependencias"
+# node_modules se borra ANTES, aunque `npm ci` diga que lo hace él.
+#
+# En este servidor falla al hacerlo: ENOTEMPTY rmdir node_modules/core-js/
+# internals, y el despliegue se queda parado. Le pasa a npm cuando el
+# directorio cambia mientras lo recorre —un antivirus, una indexación, o un
+# `npm` anterior que murió a medias—, y el remedio es siempre el mismo: un
+# rm -rf, que no recorre, borra.
+#
+# Cuesta unos segundos y ahorra una parada en seco cada vez que ocurre.
+# Nada se pierde: `npm ci` lo reinstala entero desde el lock.
+rm -rf node_modules
 npm ci --no-audit --no-fund
 
 log "construyendo"
