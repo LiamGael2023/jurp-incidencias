@@ -1,0 +1,125 @@
+{
+  "_fuente": "Cuadro de responsables por tramo entregado por JURP el 2026-11-04.",
+  "_nota": "Transcrito del cuadro. Un tramo puede tener varios responsables (III, V y X tienen dos empresas) y una empresa varios coordinadores. El orden de 'coordinadores' y 'celulares' se corresponde uno a uno. 'cuenta' se rellena al enlazar cada empresa con su usuario de PLUVIRA; null = todavia sin enlazar.",
+  "responsables": [
+    {
+      "tramo": "0",
+      "empresa": "JURP - PECH",
+      "coordinadores": ["ILICH LOPEZ"],
+      "celulares": ["962727211"],
+      "cuenta": null
+    },
+    {
+      "tramo": "I",
+      "empresa": "DESHIDRATADORA LIBERTAD",
+      "coordinadores": ["ANGEL AREVALO"],
+      "celulares": ["954462914"],
+      "cuenta": null
+    },
+    {
+      "tramo": "II",
+      "empresa": "HASS PERU",
+      "coordinadores": ["LUIS RODRIGUEZ", "LUISA GUTIERREZ GUZMAN"],
+      "celulares": ["943778120", "913358323"],
+      "cuenta": null
+    },
+    {
+      "tramo": "III",
+      "empresa": "HORTIFRUT",
+      "coordinadores": ["MIGUEL BARRAZA ARBULU", "ALEX VASQUEZ CALVANAPON"],
+      "celulares": ["949161291", "987989098"],
+      "cuenta": null
+    },
+    {
+      "tramo": "III",
+      "empresa": "AVO PERU",
+      "coordinadores": ["EMILIO ALVAREZ", "VICTOR ROMERO LUDEÑA"],
+      "celulares": ["987935576", "948310551"],
+      "cuenta": null
+    },
+    {
+      "tramo": "IV",
+      "empresa": "CAMPOSOL CHAO",
+      "coordinadores": ["JENNY MACEDO RODRIGUEZ", "JAVIER SILVA ROSALES", "FRANK RODRIGUEZ"],
+      "celulares": ["943525215", "938207916", "969219489"],
+      "cuenta": null
+    },
+    {
+      "tramo": "V",
+      "empresa": "ARATO PERU",
+      "coordinadores": ["IRINA VALDIVIEZO", "ALEXANDER CONTRERAS"],
+      "celulares": ["919298255", "970518874"],
+      "cuenta": null
+    },
+    {
+      "tramo": "V",
+      "empresa": "TALSA",
+      "coordinadores": ["EMILIO ALVAREZ", "VICTOR ROMERO LUDEÑA"],
+      "celulares": ["987935576", "948310551"],
+      "cuenta": null
+    },
+    {
+      "tramo": "VI",
+      "empresa": "CAMPOSOL VIRU",
+      "coordinadores": ["JENNY MACEDO RODRIGUEZ", "JAVIER SILVA ROSALES"],
+      "celulares": ["943525215", "938207916"],
+      "cuenta": null
+    },
+    {
+      "tramo": "VII",
+      "empresa": "NORTE VERDE",
+      "coordinadores": ["GUILLERMO ALEGRIA"],
+      "celulares": ["970100112"],
+      "cuenta": null
+    },
+    {
+      "tramo": "VIII",
+      "empresa": "SOCIEDAD AGRICOLA EL ARENAL",
+      "coordinadores": ["GENNER RODRIGUEZ"],
+      "celulares": ["953614051"],
+      "cuenta": null
+    },
+    {
+      "tramo": "IX",
+      "empresa": "VIRU S.A.",
+      "coordinadores": ["VANIA DE LA CRUZ", "YORDY AQUINO"],
+      "celulares": ["914421168", "953724781"],
+      "cuenta": null
+    },
+    {
+      "tramo": "X",
+      "empresa": "BEGGIE",
+      "coordinadores": ["EDWIN PAREDES", "YERSON ALAYO"],
+      "celulares": ["987129049", "981545340"],
+      "cuenta": null
+    },
+    {
+      "tramo": "X",
+      "empresa": "AGROBERRIES",
+      "coordinadores": ["JUANA MARIÑOS"],
+      "celulares": ["913355950"],
+      "cuenta": null
+    },
+    {
+      "tramo": "XI",
+      "empresa": "LAREDO",
+      "coordinadores": ["CARLOS GUZMAN RODRIGUEZ", "HENRY CUBA RODRIGUEZ"],
+      "celulares": ["981072008", "989174008"],
+      "cuenta": null
+    },
+    {
+      "tramo": "XII",
+      "empresa": "GREEN PERU",
+      "coordinadores": ["ROBERTO INFANTE", "MARTIN GARCIA"],
+      "celulares": ["946526804", "903231745"],
+      "cuenta": null
+    },
+    {
+      "tramo": "XIII",
+      "empresa": "DANPER",
+      "coordinadores": ["JHON JHONY LUJAN", "TONY ARAUJO"],
+      "celulares": ["953254195", "949144669"],
+      "cuenta": null
+    }
+  ]
+}
