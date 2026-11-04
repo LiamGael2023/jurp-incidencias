@@ -23,9 +23,10 @@ import MapaInventario from './MapaInventario';
 import ReportesInventario from './ReportesInventario';
 import CampaniasInventario from './CampaniasInventario';
 import MapaTematico from './MapaTematico';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt, FaMobileAlt, FaUserTag, FaWater, FaFlask, FaFileContract, FaGasPump } from 'react-icons/fa';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt, FaMobileAlt, FaUserTag, FaWater, FaFlask, FaFileContract, FaGasPump, FaRoute } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 import EquiposEnlazados from './EquiposEnlazados';
+import Monitoreos from './Monitoreos';
 import Hydrometrix from './Hydrometrix';
 
 /* HYDROMETRIX YA NO SALE FUERA. Esta tarjeta mandaba a
@@ -42,6 +43,12 @@ const MENU = [
   { clave: 'sec-pluvira', seccion: true, modulo: 'pluvira', apps: ['pluvira'] },
   { clave: 'mapa',         titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,  apps: ['pluvira'] },
   { clave: 'lista',        titulo: 'Incidentes',    icono: <FaListUl />,        apps: ['pluvira'] },
+  // Pegado a Incidentes porque es de donde salen los suyos: un hallazgo de
+  // un recorrido se registra con el mismo formulario y acaba en esa lista.
+  // Solo administración: quien reparte los tramos es Gerencia, y al que solo
+  // va a recorrer el suyo esta pantalla no le dice nada —lo suyo lo ve en la
+  // app, con sus tramos y nada más—.
+  { clave: 'monitoreos',   titulo: 'Monitoreos rutinarios', icono: <FaRoute />, apps: ['pluvira'], soloAdmin: true },
   { clave: 'vigilancia',   titulo: 'Vigilancia',    icono: <FaShieldAlt />,     apps: ['sentria'] },
   // SENTRIA tiene su propio padrón: no comparte cuentas con el sistema de
   // riego. Por eso es otra entrada de menú y no la misma pantalla con los
@@ -315,6 +322,15 @@ function App() {
       <div className="maq">
         <RailGIS {...propsRail} />
         <div className="maq-main"><Partes irAIncidente={irAIncidente} /></div>
+      </div>
+    );
+  }
+
+  if (vistaActual === 'monitoreos') {
+    return (
+      <div className="maq">
+        <RailGIS {...propsRail} />
+        <div className="maq-main"><Monitoreos /></div>
       </div>
     );
   }
