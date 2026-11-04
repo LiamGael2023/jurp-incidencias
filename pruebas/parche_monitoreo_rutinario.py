@@ -620,12 +620,26 @@ def rutinas(request):
         nombre=nombre[:140], fecha_inicio=inicio, fecha_fin=fin,
         notas=(datos.get('notas') or '').strip(),
         creada_por=request.user if getattr(request.user, 'pk', None) else None)
+    # EL REPARTO SE HEREDA DE LA RONDA ANTERIOR. Los tramos los recorre casi
+    # siempre la misma gente -es el coordinador de la empresa que esta en ese
+    # tramo-, asi que empezar cada mes con catorce desplegables vacios es
+    # repetir a mano una decision que ya estaba tomada. Lo heredado se puede
+    # cambiar; lo que no se puede es recordar catorce nombres cada vez.
+    previa = (RutinaMonitoreo.objects.exclude(pk=r.pk)
+              .order_by('-fecha_inicio', '-id').first())
+    antes = {}
+    if previa is not None:
+        antes = dict((x.tramo, x.usuario_id)
+                     for x in previa.tramos.all() if x.usuario_id)
+
     vistos = []
     for t in pedidos:
         if t in vistos:
             continue
         vistos.append(t)
-        TramoDeRutina.objects.create(rutina=r, tramo=t)
+        TramoDeRutina.objects.create(
+            rutina=r, tramo=t, usuario_id=antes.get(t),
+            asignado_en=timezone.now() if antes.get(t) else None)
     # Releer antes de responder. Lo que llego en la peticion son cadenas, y
     # el objeto en memoria las conserva: la base es la unica que sabe que
     # '2026-11-01' es una fecha.
@@ -716,12 +730,41 @@ def asignar(request, pk):
 @api_view(['GET'])
 @permission_classes([EsGerencia])
 def candidatos(request):
-    """Las cuentas que pueden recorrer tramos: el grupo mobile_gerencia."""
+    """Quien puede recorrer un tramo, y a quien se avisa de lo que aparezca.
+
+    RECORRE LA GENTE DEL CUADRO -los coordinadores de las empresas usuarias-,
+    que son quienes estan en el tramo todos los dias. Por eso la lista son
+    todas las cuentas moviles activas y no solo las de Gerencia.
+
+    SE AVISA A GERENCIA. Eso no se elige por tramo: es el grupo entero, y
+    va aparte para que la pantalla pueda decirlo sin inventarselo.
+
+    Se devuelve el grupo de cada cuenta porque el padron tiene homonimos y
+    cuentas repetidas -14 de los 31 coordinadores del cuadro tienen dos-, y
+    el grupo es lo unico que ayuda a distinguirlas desde fuera.
+    """
     from django.contrib.auth import get_user_model
     Usuario = get_user_model()
-    qs = (Usuario.objects.filter(groups__name=GRUPO_MONITOREO, is_active=True)
+
+    qs = (Usuario.objects
+          .filter(groups__name__startswith='mobile_', is_active=True)
+          .prefetch_related('groups')
+          .distinct()
           .order_by('username'))
-    return Response({'ok': True, 'results': [_persona(u) for u in qs]})
+
+    def con_grupo(u):
+        d = _persona(u)
+        grupos = sorted(g.name for g in u.groups.all())
+        d['grupo'] = grupos[0] if grupos else ''
+        return d
+
+    avisados = (Usuario.objects
+                .filter(groups__name=GRUPO_MONITOREO, is_active=True)
+                .distinct().order_by('username'))
+
+    return Response({'ok': True,
+                     'results': [con_grupo(u) for u in qs],
+                     'avisados': [_persona(u) for u in avisados]})
 
 
 @api_view(['GET'])

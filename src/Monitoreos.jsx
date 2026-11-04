@@ -23,7 +23,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FaPlus, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaRegCircle,
-  FaPhoneAlt, FaSave, FaLock, FaCalendarAlt,
+  FaPhoneAlt, FaSave, FaLock, FaCalendarAlt, FaBell,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { pedir } from './sesion';
@@ -69,6 +69,7 @@ export default function Monitoreos() {
   const [rutinas, setRutinas] = useState([]);
   const [elegida, setElegida] = useState(null);     // la rutina abierta
   const [candidatos, setCandidatos] = useState([]);
+  const [avisados, setAvisados] = useState([]);   // el grupo de Gerencia
   const [cargando, setCargando] = useState(true);
   const [fallo, setFallo] = useState('');
   const [soporte, setSoporte] = useState('probando'); // ok | no-soportado
@@ -104,6 +105,7 @@ export default function Monitoreos() {
     const lista = (r.datos && r.datos.results) || [];
     setRutinas(lista);
     setCandidatos((c.ok && c.datos && c.datos.results) || []);
+    setAvisados((c.ok && c.datos && c.datos.avisados) || []);
 
     const id = abrirId != null ? abrirId
       : (elegida ? elegida.id : (lista[0] && lista[0].id));
@@ -242,7 +244,7 @@ export default function Monitoreos() {
   if (soporte === 'no-soportado') {
     return (
       <div className="mon">
-        <Cabecera />
+        <Cabecera avisados={avisados} />
         <div className="mon-nota">
           Este servidor todavía no tiene los monitoreos rutinarios.
           Falta aplicar el parche en PLUVIRA.
@@ -253,7 +255,7 @@ export default function Monitoreos() {
 
   return (
     <div className="mon">
-      <Cabecera />
+      <Cabecera avisados={avisados} />
 
       <div className="mon-barra">
         <select className="mon-sel-rutina"
@@ -337,7 +339,7 @@ export default function Monitoreos() {
                   <th>Tramo</th>
                   <th>Quién lo recorre</th>
                   <th>Estado</th>
-                  <th>A quién avisar</th>
+                  <th>Empresa responsable del tramo</th>
                 </tr>
               </thead>
               <tbody>
@@ -362,9 +364,21 @@ export default function Monitoreos() {
                           {candidatos.map(c => (
                             <option key={c.id} value={c.id}>
                               {c.nombre} ({c.username})
+                              {c.grupo === 'mobile_gerencia' ? ' · gerencia' : ''}
                             </option>
                           ))}
                         </select>
+                        {/* A QUIÉN BUSCAR EN LA LISTA. El padrón tiene más de
+                            sesenta cuentas móviles y catorce de los treinta y
+                            un coordinadores tienen dos, así que sin tener
+                            delante el nombre del que corresponde a este tramo
+                            hay que ir a buscarlo al cuadro de papel. */}
+                        {!t.asignado && (t.contactos || []).length > 0 && (
+                          <div className="mon-sub mon-pista">
+                            del cuadro: {(t.contactos || [])
+                              .map(c => c.coordinador).join(' · ')}
+                          </div>
+                        )}
                         {t.visitas > 0 && (
                           <div className="mon-sub">
                             {t.visitas} registro{t.visitas === 1 ? '' : 's'}
@@ -415,13 +429,25 @@ export default function Monitoreos() {
   );
 }
 
-const Cabecera = () => (
+const Cabecera = ({ avisados = [] }) => (
   <div className="mon-cab">
     <h2><FaClipboardRoute /> Monitoreos rutinarios</h2>
     <p>
-      Una ronda con fecha de inicio y fin. Cada tramo del Canal Madre se
-      asigna a quien va a recorrerlo, y en la app registra lo que encontró —
-      sin novedad, o un hallazgo con el formulario de incidente de siempre.
+      Una ronda con fecha de inicio y fin. Cada tramo del Canal Madre lo
+      recorre el coordinador de su empresa usuaria, que en la app registra lo
+      que encontró — sin novedad, o un hallazgo con el formulario de
+      incidente de siempre.
+    </p>
+    {/* A QUIÉN SE AVISA NO ES UNA COLUMNA. Es el grupo de Gerencia entero y
+        es el mismo para los catorce tramos: repetirlo en cada fila sería
+        catorce veces el mismo dato ocupando el sitio del que sí cambia. */}
+    <p className="mon-avisa">
+      <FaBell size={11} /> Los hallazgos se avisan al grupo de <b>Gerencia</b>
+      {avisados.length > 0 && (
+        <span className="mon-sub">
+          {' '}— {avisados.map(a => a.nombre).join(', ')}
+        </span>
+      )}
     </p>
   </div>
 );

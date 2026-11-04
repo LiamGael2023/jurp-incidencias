@@ -11,10 +11,19 @@ import Monitoreos from '../../src/Monitoreos';
 
 localStorage.setItem('userToken', 'falso');
 
+/* Quien recorre: coordinadores de las empresas usuarias. Se incluyen dos
+ * cuentas de la MISMA persona -Emilio Alvarez-, que es el caso real: 14 de
+ * los 31 coordinadores del cuadro estan duplicados en el padron. */
 const CAND = [
-  { id: 11, username: 'i_camones', nombre: 'Ilich Lopez' },
-  { id: 12, username: 'cherrera', nombre: 'Cesar Herrera' },
-  { id: 13, username: 't_rosales', nombre: 'Teresa Rosales Sanchez' },
+  { id: 11, username: 'Aemilio', nombre: 'EMILIO ALVAREZ', grupo: 'mobile_usuarios' },
+  { id: 12, username: 'Ealvarez', nombre: 'Emilio Alvarez', grupo: 'mobile_usuarios' },
+  { id: 13, username: 'Lrodriguez', nombre: 'Luis Rodriguez', grupo: 'mobile_usuarios' },
+  { id: 14, username: 'cherrera', nombre: 'Cesar Herrera', grupo: 'mobile_gerencia' },
+];
+/* A quien se avisa: el grupo de Gerencia, igual para los catorce tramos. */
+const AVISADOS = [
+  { id: 14, username: 'cherrera', nombre: 'Cesar Herrera' },
+  { id: 15, username: 'i_camones', nombre: 'Ilich Lopez' },
 ];
 const TRAMOS = ['0','I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII']
   .map((t, i) => ({
@@ -37,7 +46,7 @@ const RUTINA = {
 
 window.fetch = async (url) => {
   const cuerpo =
-    url.includes('/candidatos/') ? { ok: true, results: CAND }
+    url.includes('/candidatos/') ? { ok: true, results: CAND, avisados: AVISADOS }
     : url.includes('/rutinas/1/') ? { ok: true, rutina: RUTINA }
     : url.includes('/rutinas/')   ? { ok: true, results: [RUTINA] }
     : { ok: true };

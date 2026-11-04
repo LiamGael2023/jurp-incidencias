@@ -211,6 +211,28 @@
 
 .mon-sub { margin-top: 3px; font-size: 11.5px; color: #64748b; }
 
+/* La pista de a quién buscar en el desplegable. Va en azul y no en gris
+   porque es una instrucción, no un dato más de la fila: desaparece en
+   cuanto el tramo está asignado. */
+.mon-pista { color: #1d4ed8; }
+
+/* A quién se avisa: una línea, no una columna. */
+.mon-avisa {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px !important;
+  padding: 8px 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #1e3a8a !important;
+}
+.mon-avisa svg { position: relative; top: 1px; }
+.mon-avisa .mon-sub { margin-top: 0; color: #1d4ed8; }
+
 .mon-estado {
   display: inline-flex;
   align-items: center;
