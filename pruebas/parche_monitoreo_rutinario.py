@@ -515,10 +515,38 @@ def _nombre(u):
     return entero or u.get_username()
 
 
-def _persona(u):
+def _normaliza(t):
+    """Sin tildes y en minusculas, para cruzar nombres escritos a mano."""
+    import unicodedata
+    t = unicodedata.normalize('NFKD', str(t or ''))
+    t = ''.join(c for c in t if not unicodedata.combining(c))
+    return ' '.join(t.lower().split())
+
+
+def _celulares():
+    """Nombre del coordinador -> su celular, sacado del cuadro.
+
+    POR QUE SE CRUZA POR NOMBRE Y NO HAY UN CAMPO EN LA CUENTA. El celular
+    ya esta en el cuadro de JURP, que es quien lo mantiene; copiarlo tambien
+    al usuario serian dos sitios donde corregirlo y uno de los dos
+    quedandose viejo. El cruce falla cuando el nombre de la cuenta no se
+    parece al del cuadro, y entonces no sale telefono -que es mejor que
+    sacar el de otro-.
+    """
+    salida = {}
+    for r in ResponsableTramo.objects.filter(activo=True):
+        if r.celular:
+            salida.setdefault(_normaliza(r.coordinador), r.celular)
+    return salida
+
+
+def _persona(u, tels=None):
     if u is None:
         return None
-    return {'id': u.pk, 'username': u.get_username(), 'nombre': _nombre(u)}
+    d = {'id': u.pk, 'username': u.get_username(), 'nombre': _nombre(u)}
+    if tels is not None:
+        d['celular'] = tels.get(_normaliza(d['nombre']), '')
+    return d
 
 
 def _es_gerencia(u):
@@ -547,12 +575,12 @@ def _visita(v):
     }
 
 
-def _tramo(tr, con_visitas=False):
+def _tramo(tr, con_visitas=False, tels=None):
     visitas = list(tr.visitas.all())
     d = {
         'id': tr.id,
         'tramo': tr.tramo,
-        'asignados': [_persona(u) for u in tr.usuarios.all()],
+        'asignados': [_persona(u, tels) for u in tr.usuarios.all()],
         'asignado_en': tr.asignado_en,
         'visitas': len(visitas),
         'hallazgos': len([v for v in visitas if not v.sin_novedad]),
@@ -564,7 +592,7 @@ def _tramo(tr, con_visitas=False):
     return d
 
 
-def _rutina(r, con_tramos=False):
+def _rutina(r, con_tramos=False, tels=None):
     d = {
         'id': r.id,
         'nombre': r.nombre,
@@ -582,7 +610,9 @@ def _rutina(r, con_tramos=False):
     d['recorridos'] = len([t for t in tramos if t.visitas.exists()])
     d['sin_asignar'] = len([t for t in tramos if not t.usuarios.exists()])
     if con_tramos:
-        d['tramos'] = [_tramo(t, con_visitas=True) for t in tramos]
+        if tels is None:
+            tels = _celulares()
+        d['tramos'] = [_tramo(t, con_visitas=True, tels=tels) for t in tramos]
     return d
 
 
@@ -780,8 +810,10 @@ def candidatos(request):
           .distinct()
           .order_by('username'))
 
+    tels = _celulares()
+
     def con_grupo(u):
-        d = _persona(u)
+        d = _persona(u, tels)
         grupos = sorted(g.name for g in u.groups.all())
         d['grupo'] = grupos[0] if grupos else ''
         return d
@@ -825,11 +857,13 @@ def mis_tramos(request):
                   rutina__fecha_inicio__lte=hoy,
                   rutina__fecha_fin__gte=hoy)
           .select_related('rutina'))
+    tels = _celulares()
     por_rutina = {}
     for tr in qs:
         por_rutina.setdefault(tr.rutina_id, {'rutina': _rutina(tr.rutina),
                                              'tramos': []})
-        por_rutina[tr.rutina_id]['tramos'].append(_tramo(tr, con_visitas=True))
+        por_rutina[tr.rutina_id]['tramos'].append(
+            _tramo(tr, con_visitas=True, tels=tels))
     for bloque in por_rutina.values():
         bloque['tramos'].sort(key=lambda t: ORDEN_TRAMO.get(t['tramo'], 99))
     return Response({'ok': True, 'results': list(por_rutina.values())})

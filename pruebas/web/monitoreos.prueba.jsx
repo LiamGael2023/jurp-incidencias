@@ -15,10 +15,17 @@ localStorage.setItem('userToken', 'falso');
  * cuentas de la MISMA persona -Emilio Alvarez-, que es el caso real: 14 de
  * los 31 coordinadores del cuadro estan duplicados en el padron. */
 const CAND = [
-  { id: 11, username: 'Aemilio', nombre: 'EMILIO ALVAREZ', grupo: 'mobile_usuarios' },
-  { id: 12, username: 'Ealvarez', nombre: 'Emilio Alvarez', grupo: 'mobile_usuarios' },
-  { id: 13, username: 'Lrodriguez', nombre: 'Luis Rodriguez', grupo: 'mobile_usuarios' },
-  { id: 14, username: 'cherrera', nombre: 'Cesar Herrera', grupo: 'mobile_gerencia' },
+  { id: 11, username: 'Aemilio', nombre: 'EMILIO ALVAREZ',
+    grupo: 'mobile_usuarios', celular: '987935576' },
+  { id: 12, username: 'Ealvarez', nombre: 'Emilio Alvarez',
+    grupo: 'mobile_usuarios', celular: '987935576' },
+  { id: 13, username: 'Lrodriguez', nombre: 'Luis Rodriguez',
+    grupo: 'mobile_usuarios', celular: '943778120' },
+  /* cherrera va SIN celular a proposito: es de Gerencia y no esta en el
+   * cuadro, asi que el cruce por nombre no le encuentra telefono. Es el
+   * caso que deja una ficha sin numero, y tiene que verse bien igual. */
+  { id: 14, username: 'cherrera', nombre: 'Cesar Herrera',
+    grupo: 'mobile_gerencia' },
 ];
 /* A quien se avisa: el grupo de Gerencia, igual para los catorce tramos. */
 const AVISADOS = [

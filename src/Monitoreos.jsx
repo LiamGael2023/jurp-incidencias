@@ -23,7 +23,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   FaPlus, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaRegCircle,
-  FaSave, FaLock, FaCalendarAlt, FaBell, FaTimes, FaSearch,
+  FaSave, FaLock, FaCalendarAlt, FaBell, FaTimes, FaSearch, FaPhoneAlt,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { pedir } from './sesion';
@@ -150,12 +150,17 @@ export default function Monitoreos() {
    * lo que ya venía asignado: una cuenta puede haberse desactivado después
    * de que se le asignara el tramo, y entonces no está en la lista pero su
    * nombre sí tiene que salir —si no, la ficha quedaría con un número—. */
-  const nombreDe = (id, tramo) => {
-    const c = candidatos.find(x => String(x.id) === String(id));
-    if (c) return c.nombre;
-    const a = (tramo.asignados || []).find(x => String(x.id) === String(id));
-    return a ? a.nombre : `#${id}`;
-  };
+  const nombreDe = (id, tramo) => fichaDe(id, tramo).nombre || `#${id}`;
+
+  /* El celular sale del cuadro, cruzado por nombre en el servidor. Cuando
+   * el nombre de la cuenta no se parece al del cuadro no hay teléfono, y
+   * entonces no se enseña ninguno: mejor que enseñar el de otro. */
+  const celularDe = (id, tramo) => fichaDe(id, tramo).celular || '';
+
+  const fichaDe = (id, tramo) =>
+    candidatos.find(x => String(x.id) === String(id))
+    || (tramo.asignados || []).find(x => String(x.id) === String(id))
+    || {};
 
   /* ── Acciones ──────────────────────────────────────────────────────── */
 
@@ -404,6 +409,17 @@ export default function Monitoreos() {
                             {elegido.map(id => (
                               <span key={id} className="mon-ficha">
                                 {nombreDe(id, t)}
+                                {/* El celular de quien recorre, marcable. En
+                                    una tablet en campo evita copiar nueve
+                                    cifras a mano, que es donde se equivoca
+                                    todo el mundo. */}
+                                {celularDe(id, t) && (
+                                  <a className="mon-tel"
+                                    href={`tel:${celularDe(id, t)}`}
+                                    onClick={e => e.stopPropagation()}>
+                                    <FaPhoneAlt size={8} /> {celularDe(id, t)}
+                                  </a>
+                                )}
                                 {!elegida.cerrada && (
                                   <button type="button" className="mon-quita"
                                     title="Quitar"
@@ -556,7 +572,8 @@ function ElegirPersona({ gente, onElegir, deshabilitado, rotulo }) {
      * encuentra lo mismo que «emilio alvarez». */
     const partes = t.split(/\s+/);
     return gente.filter((p) => {
-      const h = normaliza(`${p.nombre} ${p.username} ${p.grupo || ''}`);
+      const h = normaliza(
+        `${p.nombre} ${p.username} ${p.grupo || ''} ${p.celular || ''}`);
       return partes.every(x => h.includes(x));
     });
   }, [gente, texto]);
@@ -611,6 +628,7 @@ function ElegirPersona({ gente, onElegir, deshabilitado, rotulo }) {
             <span className="mon-sub">
               {p.username}
               {p.grupo === 'mobile_gerencia' ? ' · gerencia' : ''}
+              {p.celular ? ` · ${p.celular}` : ''}
             </span>
           </button>
         ))}
