@@ -253,6 +253,40 @@
 }
 .mon-ficha .mon-tel:hover { text-decoration: underline; }
 
+/* El lápiz solo se ve al pasar por la ficha: está ahí para cuando el número
+   está mal, que es raro, y mostrarlo siempre pondría catorce lápices
+   compitiendo con el dato que sí importa. */
+.mon-lapiz {
+  display: inline-flex;
+  padding: 2px;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+}
+.mon-ficha:hover .mon-lapiz, .mon-lapiz:focus { opacity: 1; }
+.mon-lapiz:hover { color: #1d4ed8; background: #e0e7ff; }
+
+/* Sin número sí se ve siempre: ahí no hay nada que leer y el hueco es el
+   aviso de que falta. */
+.mon-poner {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px dashed #fcd34d;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.mon-poner:hover { background: #fef3c7; border-style: solid; }
+.mon-poner:disabled, .mon-lapiz:disabled { opacity: .5; cursor: default; }
+
 .mon-quita {
   display: inline-flex;
   align-items: center;

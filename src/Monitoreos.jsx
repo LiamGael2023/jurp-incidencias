@@ -24,6 +24,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   FaPlus, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaRegCircle,
   FaSave, FaLock, FaCalendarAlt, FaBell, FaTimes, FaSearch, FaPhoneAlt,
+  FaPen,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { pedir } from './sesion';
@@ -264,6 +265,77 @@ export default function Monitoreos() {
     if (datos && datos.rutina) { setElegida(datos.rutina); setPendientes({}); }
   };
 
+  /**
+   * Escribe el celular de una persona y lo guarda en su cuenta.
+   *
+   * SE GUARDA EN LA CUENTA Y NO EN EL CUADRO. El cuadro es de JURP y dice a
+   * quién avisar POR TRAMO; esto es el número de una persona, que la sigue
+   * aunque cambie de tramo o no aparezca en el cuadro.
+   */
+  const pedirCelular = async (persona) => {
+    if (!persona || !persona.id) return;
+    const { value: numero } = await Swal.fire({
+      title: `Celular de ${esc(persona.nombre || persona.username)}`,
+      input: 'tel',
+      inputValue: persona.celular || '',
+      inputPlaceholder: '9XXXXXXXX',
+      inputAttributes: { maxlength: 12, inputmode: 'numeric' },
+      html: persona.celular_origen === 'cuadro'
+        ? '<p style="font-size:.85em;color:#64748b">Ahora sale del cuadro de '
+          + 'JURP. Lo que escribas aquí queda en su cuenta y manda sobre el '
+          + 'cuadro.</p>'
+        : '<p style="font-size:.85em;color:#64748b">Nueve dígitos, '
+          + 'empezando en 9. Déjalo vacío para quitarlo.</p>',
+      showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar',
+      inputValidator: (v) => {
+        const d = String(v || '').replace(/\D/g, '');
+        if (d && (d.length !== 9 || d[0] !== '9')) {
+          return 'Un celular son 9 dígitos y empieza en 9.';
+        }
+        return null;
+      },
+    });
+    if (numero === undefined) return;      // canceló
+
+    setOcupado(true);
+    const { ok, res, datos } = await pedir(`${API}telefono/`, {
+      method: 'POST',
+      body: JSON.stringify({ usuario: persona.id, celular: numero }),
+      callar: [404],
+    });
+    setOcupado(false);
+
+    if (!ok) {
+      if (res && res.status === 404) {
+        Swal.fire('Este servidor no lo admite todavía',
+          'Falta aplicar el parche de monitoreos en PLUVIRA.', 'info');
+        return;
+      }
+      let detalle = res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.';
+      try { const j = await res.clone().json(); if (j.detail) detalle = j.detail; }
+      catch { /* queda el genérico */ }
+      Swal.fire('No se pudo guardar', detalle, 'error');
+      return;
+    }
+
+    /* Se refresca en sitio en vez de recargar la rutina entera: recargar
+     * perdería el reparto que estuviera a medio hacer. */
+    const nueva = (datos && datos.persona) || null;
+    if (nueva) {
+      setCandidatos(cs => cs.map(c => (c.id === nueva.id ? { ...c, ...nueva } : c)));
+      setElegida(r => r && ({
+        ...r,
+        tramos: (r.tramos || []).map(x => ({
+          ...x,
+          asignados: (x.asignados || []).map(
+            a => (a.id === nueva.id ? { ...a, ...nueva } : a)),
+        })),
+      }));
+    }
+  };
+
   const cerrar = async () => {
     const r = await Swal.fire({
       icon: 'warning',
@@ -413,12 +485,31 @@ export default function Monitoreos() {
                                     una tablet en campo evita copiar nueve
                                     cifras a mano, que es donde se equivoca
                                     todo el mundo. */}
-                                {celularDe(id, t) && (
-                                  <a className="mon-tel"
-                                    href={`tel:${celularDe(id, t)}`}
-                                    onClick={e => e.stopPropagation()}>
-                                    <FaPhoneAlt size={8} /> {celularDe(id, t)}
-                                  </a>
+                                {celularDe(id, t) ? (
+                                  <>
+                                    <a className="mon-tel"
+                                      href={`tel:${celularDe(id, t)}`}
+                                      onClick={e => e.stopPropagation()}>
+                                      <FaPhoneAlt size={8} /> {celularDe(id, t)}
+                                    </a>
+                                    <button type="button" className="mon-lapiz"
+                                      title="Corregir el celular"
+                                      disabled={ocupado}
+                                      onClick={() => pedirCelular(fichaDe(id, t))}>
+                                      <FaPen size={8} />
+                                    </button>
+                                  </>
+                                ) : (
+                                  /* SIN NUMERO, UN BOTON PARA PONERLO. El
+                                     cruce con el cuadro no siempre acierta
+                                     -el cuadro dice «ILICH LOPEZ» y la
+                                     cuenta «Ilich Lopez Camones»- y hay
+                                     gente que recorre y no está en él. */
+                                  <button type="button" className="mon-poner"
+                                    disabled={ocupado}
+                                    onClick={() => pedirCelular(fichaDe(id, t))}>
+                                    <FaPhoneAlt size={8} /> poner celular
+                                  </button>
                                 )}
                                 {!elegida.cerrada && (
                                   <button type="button" className="mon-quita"

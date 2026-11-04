@@ -278,6 +278,36 @@ class VisitaMonitoreo(models.Model):
     def __str__(self):
         return '%s - %s' % (self.tramo_rutina,
                             'sin novedad' if self.sin_novedad else 'con hallazgo')
+
+
+class TelefonoUsuario(models.Model):
+    """El celular de una cuenta, escrito a mano.
+
+    POR QUE EXISTE SI EL CUADRO YA TRAE TELEFONOS. Porque el cruce por
+    nombre no siempre acierta -el cuadro dice "ILICH LOPEZ" y la cuenta se
+    llama "Ilich Lopez Camones"- y porque hay gente que recorre tramos y no
+    esta en el cuadro: los de Gerencia, por ejemplo.
+
+    MANDA SOBRE EL CUADRO. Si alguien se molesto en escribirlo aqui es
+    porque el del cuadro no servia o no estaba; volver a preferir el del
+    cuadro convertiria ese trabajo en algo que se deshace solo.
+    """
+
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='telefono_monitoreo', verbose_name='Usuario')
+    celular = models.CharField('Celular', max_length=20, blank=True, default='')
+    cambiado_en = models.DateTimeField('Cambiado el', auto_now=True)
+    cambiado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        blank=True, related_name='+', verbose_name='Cambiado por')
+
+    class Meta:
+        verbose_name = 'Celular de usuario'
+        verbose_name_plural = 'Celulares de usuario'
+
+    def __str__(self):
+        return '%s - %s' % (self.usuario, self.celular)
 '''
 
 
@@ -492,7 +522,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from .models import (ResponsableTramo, RutinaMonitoreo, TramoDeRutina,
-                     VisitaMonitoreo, TRAMOS_CANAL)
+                     VisitaMonitoreo, TelefonoUsuario, TRAMOS_CANAL)
 from .equipo_enlazado import EsGerencia
 from .permission import IsMobileRoleUser
 
@@ -523,21 +553,53 @@ def _normaliza(t):
     return ' '.join(t.lower().split())
 
 
-def _celulares():
-    """Nombre del coordinador -> su celular, sacado del cuadro.
+class Telefonos(object):
+    """De donde sale el celular de cada persona.
 
-    POR QUE SE CRUZA POR NOMBRE Y NO HAY UN CAMPO EN LA CUENTA. El celular
-    ya esta en el cuadro de JURP, que es quien lo mantiene; copiarlo tambien
-    al usuario serian dos sitios donde corregirlo y uno de los dos
-    quedandose viejo. El cruce falla cuando el nombre de la cuenta no se
-    parece al del cuadro, y entonces no sale telefono -que es mejor que
-    sacar el de otro-.
+    DOS FUENTES Y UN ORDEN. Primero el escrito a mano en la cuenta, y si no
+    hay, el del cuadro de JURP cruzado por nombre. El escrito a mano manda:
+    si alguien se molesto en ponerlo es porque el del cuadro no servia o no
+    estaba, y preferir el del cuadro convertiria ese trabajo en algo que se
+    deshace solo.
+
+    EL CRUCE ADMITE QUE UN NOMBRE SEA MAS LARGO QUE EL OTRO. El cuadro dice
+    "ILICH LOPEZ" y la cuenta se llama "Ilich Lopez Camones": exigiendo
+    igualdad exacta no salia telefono. Basta con que TODAS las palabras del
+    nombre corto esten en el largo, y que sean al menos dos -con una sola,
+    "Rodriguez" valdria para cinco personas distintas-.
     """
-    salida = {}
-    for r in ResponsableTramo.objects.filter(activo=True):
-        if r.celular:
-            salida.setdefault(_normaliza(r.coordinador), r.celular)
-    return salida
+
+    def __init__(self):
+        self.a_mano = {}
+        for t in TelefonoUsuario.objects.all():
+            if t.celular:
+                self.a_mano[t.usuario_id] = t.celular
+
+        self.cuadro = []
+        vistos = set()
+        for r in ResponsableTramo.objects.filter(activo=True):
+            clave = _normaliza(r.coordinador)
+            if r.celular and clave and clave not in vistos:
+                vistos.add(clave)
+                self.cuadro.append((set(clave.split()), r.celular))
+
+    def de(self, usuario, nombre):
+        propio = self.a_mano.get(getattr(usuario, 'pk', None))
+        if propio:
+            return propio, 'propio'
+        palabras = set(_normaliza(nombre).split())
+        if len(palabras) < 2:
+            return '', ''
+        for suyas, celular in self.cuadro:
+            if len(suyas) < 2:
+                continue
+            if suyas <= palabras or palabras <= suyas:
+                return celular, 'cuadro'
+        return '', ''
+
+
+def _celulares():
+    return Telefonos()
 
 
 def _persona(u, tels=None):
@@ -545,7 +607,10 @@ def _persona(u, tels=None):
         return None
     d = {'id': u.pk, 'username': u.get_username(), 'nombre': _nombre(u)}
     if tels is not None:
-        d['celular'] = tels.get(_normaliza(d['nombre']), '')
+        # `origen` dice si el numero se escribio a mano o salio del cuadro.
+        # La pantalla lo usa para ofrecer corregirlo sin que parezca que
+        # esta pisando un dato de JURP.
+        d['celular'], d['celular_origen'] = tels.de(u, d['nombre'])
     return d
 
 
@@ -837,6 +902,47 @@ def responsables(request):
     return Response({'ok': True, 'results': salida})
 
 
+@api_view(['POST'])
+@permission_classes([EsGerencia])
+def telefono(request):
+    """Escribe (o borra) el celular de una cuenta.
+
+    Se guarda en la cuenta y no en el cuadro: el cuadro es de JURP y dice a
+    quien avisar POR TRAMO; esto es el numero de una persona, que la sigue
+    aunque cambie de tramo o no este en el cuadro.
+    """
+    from django.contrib.auth import get_user_model
+
+    datos = request.data or {}
+    Usuario = get_user_model()
+    try:
+        destino = Usuario.objects.get(pk=datos.get('usuario'))
+    except (Usuario.DoesNotExist, ValueError, TypeError):
+        return Response({'ok': False, 'detail': 'No existe ese usuario.'},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    crudo = (datos.get('celular') or '').strip()
+    # Solo digitos y de nueve: es lo que es un celular en Peru. Guardar
+    # "996 123 456" y "996123456" como cosas distintas hace que marcar desde
+    # la ficha falle en unos y en otros sin motivo aparente.
+    limpio = ''.join(c for c in crudo if c.isdigit())
+    if limpio and (len(limpio) != 9 or not limpio.startswith('9')):
+        return Response(
+            {'ok': False,
+             'detail': 'Un celular son 9 digitos y empieza en 9.'},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    quien = getattr(request, 'user', None)
+    fila, _ = TelefonoUsuario.objects.get_or_create(usuario=destino)
+    fila.celular = limpio
+    fila.cambiado_por = quien if getattr(quien, 'pk', None) else None
+    fila.save()
+
+    return Response({'ok': True, 'usuario': destino.pk,
+                     'celular': limpio,
+                     'persona': _persona(destino, Telefonos())})
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # LA APP
 # ══════════════════════════════════════════════════════════════════════════
@@ -944,6 +1050,7 @@ IMPORT_URLS = ("from src.apps.core.monitoreo import (\\n"
                "    asignar as mon_asignar,\\n"
                "    candidatos as mon_candidatos,\\n"
                "    responsables as mon_responsables,\\n"
+               "    telefono as mon_telefono,\\n"
                "    mis_tramos as mon_mis_tramos,\\n"
                "    visitas as mon_visitas,\\n"
                ")\\n")
@@ -960,6 +1067,8 @@ RUTAS = (
     "        mon_candidatos, name='monitoreo_candidatos'),\n"
     "    url(r'^v1/mobile/monitoreo/responsables/$',\n"
     "        mon_responsables, name='monitoreo_responsables'),\n"
+    "    url(r'^v1/mobile/monitoreo/telefono/$',\n"
+    "        mon_telefono, name='monitoreo_telefono'),\n"
     "    url(r'^v1/mobile/monitoreo/mis-tramos/$',\n"
     "        mon_mis_tramos, name='monitoreo_mis_tramos'),\n"
     "    url(r'^v1/mobile/monitoreo/visitas/$',\n"
@@ -1255,6 +1364,82 @@ def paso_migracion(raiz, simulacro):
         nombre, anterior, len(CUADRO))
 
 
+
+# ══════════════════════════════════════════════════════════════════════════
+# 4b. el celular propio de cada cuenta
+# ══════════════════════════════════════════════════════════════════════════
+
+MIGRACION_TELEFONO = '''# -*- coding: utf-8 -*-
+# Lo escribe parche_monitoreo_rutinario.py.
+from __future__ import unicode_literals
+
+from django.conf import settings
+from django.db import migrations, models
+import django.db.models.deletion
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+        ('core', '%(anterior)s'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='TelefonoUsuario',
+            fields=[
+                ('id', models.AutoField(auto_created=True, primary_key=True,
+                                        serialize=False, verbose_name='ID')),
+                ('celular', models.CharField(blank=True, default='',
+                                             max_length=20,
+                                             verbose_name='Celular')),
+                ('cambiado_en', models.DateTimeField(
+                    auto_now=True, verbose_name='Cambiado el')),
+                ('cambiado_por', models.ForeignKey(
+                    blank=True, null=True,
+                    on_delete=django.db.models.deletion.SET_NULL,
+                    related_name='+', to=settings.AUTH_USER_MODEL,
+                    verbose_name='Cambiado por')),
+                ('usuario', models.OneToOneField(
+                    on_delete=django.db.models.deletion.CASCADE,
+                    related_name='telefono_monitoreo',
+                    to=settings.AUTH_USER_MODEL, verbose_name='Usuario')),
+            ],
+            options={
+                'verbose_name': 'Celular de usuario',
+                'verbose_name_plural': 'Celulares de usuario',
+            },
+        ),
+    ]
+'''
+
+
+def paso_telefono(raiz, simulacro):
+    """La tabla del celular escrito a mano, donde ya estaba lo demas."""
+    ruta = os.path.join(raiz, 'src/apps/core/models.py')
+    t = leer(ruta)
+    if 'class TramoDeRutina' not in t:
+        return True, 'no aplica (las tablas las pone el paso 1)'
+    if 'class TelefonoUsuario' not in t:
+        m = re.search(r'\n\nclass TelefonoUsuario\(models\.Model\):.*?return .%s - %s. % \(self\.usuario, self\.celular\)\n',
+                      MODELOS, re.S)
+        if not m:
+            return False, 'no encuentro TelefonoUsuario dentro del parche'
+        escribir(ruta, t.rstrip('\n') + '\n' + m.group(0), simulacro)
+
+    carpeta = os.path.join(raiz, 'src/apps/core/migrations')
+    previas = sorted(n[:-3] for n in os.listdir(carpeta)
+                     if n.endswith('.py') and n != '__init__.py')
+    if any('telefono_usuario' in n for n in previas):
+        return True, 'ya estaba'
+    anterior = previas[-1]
+    nombre = '{0:04d}_telefono_usuario.py'.format(int(anterior[:4]) + 1)
+    escribir(os.path.join(carpeta, nombre),
+             MIGRACION_TELEFONO % {'anterior': anterior}, simulacro)
+    return True, nombre
+
+
 def paso_modulo(raiz, simulacro):
     for rel, que in (('src/apps/core/equipo_enlazado.py', 'EsGerencia'),
                      ('src/apps/core/permission.py', 'IsMobileRoleUser')):
@@ -1271,8 +1456,33 @@ def paso_urls(raiz, simulacro):
     if not os.path.exists(ruta):
         return False, 'no existe {0}'.format(ruta)
     t = leer(ruta)
+
+    # YA ESTABA NO ES TODO O NADA. Las rutas se han ido anadiendo en
+    # tandas, y rendirse al encontrar la primera dejaba fuera a las nuevas
+    # en todo servidor ya parcheado -que son justamente los que hay-. Si el
+    # bloque esta pero le falta alguna, se mete solo la que falta.
     if 'mon_rutinas' in t:
-        return True, 'ya estaba'
+        sueltas = [
+            ('mon_telefono', 'telefono as mon_telefono,',
+             "    url(r'^v1/mobile/monitoreo/telefono/$',\n"
+             "        mon_telefono, name='monitoreo_telefono'),\n"),
+        ]
+        faltan = [x for x in sueltas if x[0] not in t]
+        if not faltan:
+            return True, 'ya estaba'
+        for nombre, importe, ruta_nueva in faltan:
+            m = re.search(r"^.*mis_tramos as mon_mis_tramos.*$", t, re.M)
+            if not m:
+                return False, ('el import de monitoreo no tiene la forma '
+                               'esperada; dime como quedo')
+            t = t[:m.start()] + '    ' + importe + '\n' + t[m.start():]
+            m2 = re.search(r"^\s*url\(r'\^v1/mobile/monitoreo/mis-tramos/\$',.*$",
+                           t, re.M)
+            if not m2:
+                return False, 'no encuentro la ruta de mis-tramos'
+            t = t[:m2.start()] + ruta_nueva + t[m2.start():]
+        escribir(ruta, t, simulacro)
+        return True, 'anadida(s) %s' % ', '.join(x[0] for x in faltan)
 
     lineas = t.splitlines(True)
     destino = None
@@ -1292,7 +1502,7 @@ def paso_urls(raiz, simulacro):
     t = ''.join(lineas[:destino]) + RUTAS + ''.join(lineas[destino:])
     t = insertar_linea(t, fin_de_imports(t), IMPORT_URLS.replace('\\n', '\n'))
     escribir(ruta, t, simulacro)
-    return True, 'import y 7 rutas anadidos'
+    return True, 'import y 8 rutas anadidos'
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1325,8 +1535,9 @@ def main():
         ('2 vigente()   ', paso_vigente),
         ('3 migracion   ', paso_migracion),
         ('4 varios      ', paso_varios),
-        ('5 monitoreo.py', paso_modulo),
-        ('6 urls.py     ', paso_urls),
+        ('5 telefono    ', paso_telefono),
+        ('6 monitoreo.py', paso_modulo),
+        ('7 urls.py     ', paso_urls),
     ]
     fallo = False
     for nombre, fn in pasos:

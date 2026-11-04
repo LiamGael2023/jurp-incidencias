@@ -52,7 +52,21 @@ const RUTINA = {
   total_tramos: 14, recorridos: 5, sin_asignar: 4, tramos: TRAMOS,
 };
 
-window.fetch = async (url) => {
+window.fetch = async (url, opc) => {
+  /* Guardar el celular de una cuenta. Es el caso que no se ve a voluntad en
+   * produccion: una persona que el cuadro no reconoce -cherrera, de
+   * Gerencia- y a la que hay que escribirle el numero a mano. */
+  if (url.includes('/telefono/')) {
+    const datos = JSON.parse((opc && opc.body) || '{}');
+    const limpio = String(datos.celular || '').replace(/\D/g, '');
+    const quien = CAND.find(c => c.id === datos.usuario) || {};
+    quien.celular = limpio;
+    return new Response(JSON.stringify({
+      ok: true,
+      persona: { ...quien, celular: limpio, celular_origen: 'propio' },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
   const cuerpo =
     url.includes('/candidatos/') ? { ok: true, results: CAND, avisados: AVISADOS }
     : url.includes('/rutinas/1/') ? { ok: true, rutina: RUTINA }
