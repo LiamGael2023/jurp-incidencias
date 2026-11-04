@@ -390,6 +390,34 @@ export default function EquiposEnlazados({
       Swal.fire('No se pudo crear', detalle, 'error');
       return;
     }
+    /* EL CANAL SE PONE DESPUÉS DE CREAR, en una segunda llamada.
+     *
+     * El endpoint de crear no sabe de canales: mandárselo en el mismo
+     * cuerpo lo ignoraría en silencio, y la cuenta nacería abierta a los
+     * dos sitios después de que alguien eligiera uno. Enseñarlo mal es peor
+     * que no ofrecerlo.
+     *
+     * Se busca al recién creado por su nombre de usuario —que es único por
+     * definición— porque la respuesta de crear trae las credenciales pero
+     * no el id. Y si algo falla se dice: una cuenta de servicio que debía
+     * quedar limitada a la web y quedó abierta no se nota hasta que alguien
+     * entra por donde no debía. */
+    if (datos.acceso && datos.acceso !== 'ambos') {
+      const buscado = String(datos.username).toLowerCase();
+      const l = await pedir(`${apiUsuarios}list/`, { callar: [403, 404] });
+      const nuevo = l.ok && l.datos && Array.isArray(l.datos.results)
+        ? l.datos.results.find(x => String(x.username).toLowerCase() === buscado)
+        : null;
+      const puesto = nuevo && (await pedir(`${apiUsuarios}${nuevo.id}/acceso/`,
+        { method: 'POST', body: JSON.stringify({ acceso: datos.acceso }),
+          callar: [404] })).ok;
+      if (!puesto) {
+        await Swal.fire('La cuenta se creó, pero sin limitar el acceso',
+          'Entra por la web y por la app. Ponle el canal con el botón '
+          + '«Acceso» de su fila.', 'warning');
+      }
+    }
+
     await cargar();
     if (resp && resp.credentials) {
       await mostrarCredenciales(resp.credentials, 'Usuario creado');
