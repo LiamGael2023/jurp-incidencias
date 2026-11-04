@@ -23,7 +23,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FaPlus, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaRegCircle,
-  FaPhoneAlt, FaSave, FaLock, FaCalendarAlt, FaBell,
+  FaSave, FaLock, FaCalendarAlt, FaBell,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { pedir } from './sesion';
@@ -339,7 +339,6 @@ export default function Monitoreos() {
                   <th>Tramo</th>
                   <th>Quién lo recorre</th>
                   <th>Estado</th>
-                  <th>Empresa responsable del tramo</th>
                 </tr>
               </thead>
               <tbody>
@@ -376,7 +375,8 @@ export default function Monitoreos() {
                         {!t.asignado && (t.contactos || []).length > 0 && (
                           <div className="mon-sub mon-pista">
                             del cuadro: {(t.contactos || [])
-                              .map(c => c.coordinador).join(' · ')}
+                              .map(c => `${c.coordinador} (${c.empresa})`)
+                              .join(' · ')}
                           </div>
                         )}
                         {t.visitas > 0 && (
@@ -399,24 +399,6 @@ export default function Monitoreos() {
                         )}
                       </td>
 
-                      <td className="mon-contactos">
-                        {(t.contactos || []).length === 0 && (
-                          <span className="mon-sub">sin contacto registrado</span>
-                        )}
-                        {(t.contactos || []).map((c, i) => (
-                          <div key={i} className="mon-contacto">
-                            <b>{c.empresa}</b>
-                            <span className="mon-sub">
-                              {c.coordinador}
-                              {c.celular && (
-                                <a className="mon-tel" href={`tel:${c.celular}`}>
-                                  <FaPhoneAlt size={9} /> {c.celular}
-                                </a>
-                              )}
-                            </span>
-                          </div>
-                        ))}
-                      </td>
                     </tr>
                   );
                 })}
