@@ -257,6 +257,66 @@
 .mon-quita:hover { color: #fff; background: #b91c1c; }
 .mon-quita:disabled { opacity: .4; cursor: default; }
 
+/* ── Buscador de personas ───────────────────────────────────────────── */
+.mon-abrir {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1d4ed8;
+  background: #fff;
+  border: 1px dashed #93c5fd;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.mon-abrir:hover { background: #eff6ff; border-style: solid; }
+.mon-abrir:disabled { opacity: .5; cursor: default; }
+
+.mon-buscador {
+  width: 340px;
+  max-width: 100%;
+  border: 1px solid #1d4ed8;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+.mon-busca {
+  width: 100%;
+  padding: 8px 11px;
+  font-size: 13px;
+  color: #0f172a;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  outline: none;
+  box-sizing: border-box;
+}
+
+/* Alto fijo con desplazamiento: la lista entera son sesenta y pico y
+   empujaria la fila siguiente fuera de la pantalla. Ocho cabe de sobra en
+   cualquier portatil y deja ver que hay mas debajo. */
+.mon-lista { max-height: 252px; overflow-y: auto; }
+
+.mon-opcion {
+  display: block;
+  width: 100%;
+  padding: 7px 11px;
+  text-align: left;
+  font-size: 13px;
+  color: #0f172a;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+}
+.mon-opcion:last-child { border-bottom: none; }
+.mon-opcion.act { background: #eff6ff; }
+.mon-opcion b { display: block; font-weight: 600; }
+.mon-opcion .mon-sub { margin-top: 1px; }
+
+.mon-vacio { padding: 12px; font-size: 12.5px; color: #64748b; }
+
 .mon-sub { margin-top: 3px; font-size: 11.5px; color: #64748b; }
 
 /* La pista de a quién buscar en el desplegable. Va en azul y no en gris

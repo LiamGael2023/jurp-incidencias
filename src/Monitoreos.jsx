@@ -20,10 +20,10 @@
  * tramo y hay que avisar. Esconderlos detrás de un clic es garantizar que
  * nadie los use.
  */
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   FaPlus, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaRegCircle,
-  FaSave, FaLock, FaCalendarAlt, FaBell, FaTimes,
+  FaSave, FaLock, FaCalendarAlt, FaBell, FaTimes, FaSearch,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { pedir } from './sesion';
@@ -417,25 +417,13 @@ export default function Monitoreos() {
                             ))}
                           </div>
                         )}
-                        <select className="mon-sel"
-                          value=""
-                          disabled={elegida.cerrada || ocupado}
-                          onChange={e => {
-                            if (!e.target.value) return;
-                            cambiar(t.tramo, [...elegido, e.target.value]);
-                          }}>
-                          <option value="">
-                            {elegido.length ? '+ añadir a alguien más' : '— sin asignar —'}
-                          </option>
-                          {candidatos
-                            .filter(c => !elegido.includes(String(c.id)))
-                            .map(c => (
-                              <option key={c.id} value={c.id}>
-                                {c.nombre} ({c.username})
-                                {c.grupo === 'mobile_gerencia' ? ' · gerencia' : ''}
-                              </option>
-                            ))}
-                        </select>
+                        <ElegirPersona
+                          gente={candidatos.filter(
+                            c => !elegido.includes(String(c.id)))}
+                          deshabilitado={elegida.cerrada || ocupado}
+                          rotulo={elegido.length ? 'Añadir a alguien más'
+                            : 'Asignar a alguien'}
+                          onElegir={(id) => cambiar(t.tramo, [...elegido, id])} />
                         {/* A QUIÉN BUSCAR EN LA LISTA. El padrón tiene más de
                             sesenta cuentas móviles y catorce de los treinta y
                             un coordinadores tienen dos, así que sin tener
@@ -515,3 +503,118 @@ const FaClipboardRoute = () => (
     <path d="M7.4 6h9.2" strokeDasharray="2 2.5" />
   </svg>
 );
+
+
+/* Normaliza para buscar: sin tildes y en minúsculas. El padrón tiene
+ * «Ludeña», «Mariños» y «Centurión», y quien escribe deprisa en una tablet
+ * no pone la tilde. */
+const normaliza = (t) => String(t || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+/**
+ * Elegir una persona de una lista larga, escribiendo.
+ *
+ * POR QUÉ NO UN <select>. El padrón pasa de sesenta cuentas móviles. Un
+ * desplegable nativo con sesenta opciones obliga a recorrerlas con la rueda
+ * buscando un apellido, y encima catorce de los coordinadores tienen DOS
+ * cuentas casi iguales —«Aemilio» y «Ealvarez» son la misma persona—, así
+ * que hay que leerlas con calma justo cuando menos se puede.
+ *
+ * POR QUÉ NO SELECT2. Es jQuery, y esto es React 19. Meter jQuery para un
+ * desplegable significa dos librerías manipulando el mismo DOM y un bulto
+ * que hay que cargar en cada pantalla.
+ *
+ * SE ABRE HACIA ABAJO EMPUJANDO LA FILA, no flotando. La tabla puede tener
+ * barra de desplazamiento, y un panel flotante dentro de un contenedor con
+ * overflow sale cortado: se ve media lista y no hay manera de llegar al
+ * resto.
+ */
+function ElegirPersona({ gente, onElegir, deshabilitado, rotulo }) {
+  const [abierto, setAbierto] = useState(false);
+  const [texto, setTexto] = useState('');
+  const [marcado, setMarcado] = useState(0);
+  const caja = useRef(null);
+  const campo = useRef(null);
+
+  useEffect(() => {
+    if (!abierto) return undefined;
+    const fuera = (e) => {
+      if (caja.current && !caja.current.contains(e.target)) setAbierto(false);
+    };
+    document.addEventListener('mousedown', fuera);
+    return () => document.removeEventListener('mousedown', fuera);
+  }, [abierto]);
+
+  useEffect(() => {
+    if (abierto && campo.current) campo.current.focus();
+  }, [abierto]);
+
+  const filtrada = useMemo(() => {
+    const t = normaliza(texto).trim();
+    if (!t) return gente;
+    /* Se buscan TODAS las palabras, en cualquier orden: «alvarez emilio»
+     * encuentra lo mismo que «emilio alvarez». */
+    const partes = t.split(/\s+/);
+    return gente.filter((p) => {
+      const h = normaliza(`${p.nombre} ${p.username} ${p.grupo || ''}`);
+      return partes.every(x => h.includes(x));
+    });
+  }, [gente, texto]);
+
+  const elegir = (p) => {
+    if (!p) return;
+    onElegir(String(p.id));
+    setTexto('');
+    setAbierto(false);
+  };
+
+  const teclas = (e) => {
+    if (e.key === 'Escape') { setAbierto(false); return; }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setMarcado(m => Math.min(m + 1, filtrada.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setMarcado(m => Math.max(m - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      elegir(filtrada[marcado]);
+    }
+  };
+
+  if (!abierto) {
+    return (
+      <button type="button" className="mon-abrir" disabled={deshabilitado}
+        onClick={() => { setAbierto(true); setMarcado(0); }}>
+        <FaSearch size={10} /> {rotulo}
+      </button>
+    );
+  }
+
+  return (
+    <div className="mon-buscador" ref={caja}>
+      <input ref={campo} className="mon-busca" type="text"
+        placeholder="Escribe un nombre o un usuario…"
+        value={texto}
+        onChange={(e) => { setTexto(e.target.value); setMarcado(0); }}
+        onKeyDown={teclas} />
+      <div className="mon-lista">
+        {filtrada.length === 0 && (
+          <div className="mon-vacio">Nadie coincide con «{texto}».</div>
+        )}
+        {filtrada.map((p, i) => (
+          <button key={p.id} type="button"
+            className={`mon-opcion${i === marcado ? ' act' : ''}`}
+            onMouseEnter={() => setMarcado(i)}
+            onClick={() => elegir(p)}>
+            <b>{p.nombre}</b>
+            <span className="mon-sub">
+              {p.username}
+              {p.grupo === 'mobile_gerencia' ? ' · gerencia' : ''}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
