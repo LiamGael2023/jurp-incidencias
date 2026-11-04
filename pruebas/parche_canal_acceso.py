@@ -350,6 +350,29 @@ def leer(ruta):
 
 
 def escribir(ruta, texto, simulacro):
+    """Escribe, pero solo si el resultado es Python valido.
+
+    POR QUE ESTA COMPROBACION. La primera version de este parche metio un
+    import a columna cero en mitad de una funcion y PLUVIRA se quedo sin
+    cargar el modulo de usuarios: la pantalla entera devolvia 500. El fallo
+    no estaba en lo que el parche decidia, sino en donde lo pegaba, y eso
+    `compile()` lo ve en un milisegundo.
+
+    Se comprueba ANTES de tocar el disco: si no compila, el archivo se queda
+    exactamente como estaba y el paso sale MAL con la linea del problema.
+    Un parche que se niega es un inconveniente; uno que deja el servidor
+    roto es una tarde.
+
+    Tambien corre en simulacro, que es justo donde interesa enterarse.
+    """
+    if ruta.endswith('.py'):
+        try:
+            compile(texto, ruta, 'exec')
+        except SyntaxError as e:
+            raise RuntimeError(
+                'lo que iba a escribir en {0} no es Python valido '
+                '(linea {1}: {2}). No se toco el archivo.'.format(
+                    os.path.basename(ruta), e.lineno, e.msg))
     if simulacro:
         return
     if os.path.exists(ruta):
@@ -358,32 +381,120 @@ def escribir(ruta, texto, simulacro):
         f.write(texto)
 
 
-def fin_de_imports(texto):
-    """El indice de linea justo despues del ultimo import de cabecera.
+# Los tres que reciben injertos. models.py no esta: su tabla ya migro, y
+# devolverlo dejaria la migracion 0029 aplicada sin modelo que la respalde
+# -y canal_acceso.py importando una clase que ya no existe-.
+INJERTADOS = (
+    'src/apps/api/urls.py',
+    'src/apps/api/views/mobile_users.py',
+    'src/apps/api/views/mobile_auth.py',
+)
 
-    Cuenta parentesis: `from x import (\\n a,\\n)` ocupa varias lineas y
-    meter algo en medio parte el import y el proyecto no arranca.
+
+def revertir(raiz):
+    """Devuelve los tres archivos injertados a su copia .bak.
+
+    Para volver a aplicar despues de un parche que salio mal: los pasos se
+    dan por hechos si encuentran su marca, asi que sin deshacer antes, un
+    segundo intento diria "ya estaba" y dejaria el fallo donde esta.
+    """
+    hechos = 0
+    for rel in INJERTADOS:
+        ruta = os.path.join(raiz, rel)
+        copia = ruta + '.bak'
+        if os.path.exists(copia):
+            shutil.copy2(copia, ruta)
+            print('  devuelto  {0}'.format(rel))
+            hechos += 1
+        else:
+            print('  sin copia {0}  (se queda como esta)'.format(rel))
+    print('')
+    print('{0} archivo(s) devueltos. La tabla, su migracion y canal_acceso.py'
+          .format(hechos))
+    print('se quedan: sin fila no limitan a nadie.')
+    return hechos
+
+
+def fin_de_imports(texto):
+    """El indice de linea justo despues del ultimo import DE LA CABECERA.
 
     No se ancla en `urlpatterns`: en Django 1.8 puede venir como lista, como
     `patterns('', ...)`, con `+=` o envuelto en format_suffix_patterns, y
-    anclar ahi seria adivinar una de las formas. El ultimo import de arriba
-    esta en cualquier fichero, venga como venga.
+    anclar ahi seria adivinar una de las formas. La cabecera esta en
+    cualquier fichero, venga como venga.
+
+    DOS COSAS QUE PARECEN DETALLE Y NO LO SON, las dos aprendidas rompiendo
+    PLUVIRA en produccion:
+
+    1. SOLO CUENTAN LOS IMPORTS A COLUMNA CERO. Estos proyectos importan
+       dentro de las funciones -`from django.db.models import Q` en mitad de
+       un metodo, para evitar ciclos-. Una version anterior de esto miraba
+       la linea pelada, tomaba ese import por el ultimo de arriba, y metia
+       el nuestro a columna cero EN MEDIO DE LA FUNCION: IndentationError y
+       el modulo entero sin cargar.
+
+    2. SE PARA EN LA PRIMERA LINEA DE CODIGO DE VERDAD. Aunque no hubiera
+       imports indentados, seguir mirando hasta el final busca problemas sin
+       necesidad: la cabecera se acaba donde empieza el codigo.
+
+    Cuenta parentesis porque `from x import (\\n a,\\n)` ocupa varias lineas,
+    y meter algo en medio parte el import.
     """
     lineas = texto.splitlines(True)
     fin = 0
+    i = 0
+    total = len(lineas)
+    comilla = None          # dentro del docstring del modulo
     abiertos = 0
-    dentro = False
-    for i, l in enumerate(lineas):
+    dentro_import = False
+
+    while i < total:
+        l = lineas[i]
         pelada = l.strip()
-        if not dentro and (pelada.startswith('import ')
-                           or pelada.startswith('from ')):
-            dentro = True
-            abiertos = 0
-        if dentro:
+
+        if comilla is not None:
+            i += 1
+            fin = i
+            if comilla in pelada:
+                comilla = None
+            continue
+
+        if dentro_import:
             abiertos += l.count('(') - l.count(')')
+            i += 1
             if abiertos <= 0:
-                dentro = False
-                fin = i + 1
+                dentro_import = False
+                fin = i
+            continue
+
+        if not pelada or pelada.startswith('#'):
+            i += 1
+            continue
+
+        if pelada[:3] in ('"""', "'''"):
+            marca = pelada[:3]
+            i += 1
+            fin = i
+            # Un docstring de una linea abre y cierra en la misma.
+            if marca not in pelada[3:]:
+                comilla = marca
+            continue
+
+        # Indentado = no es de la cabecera. Aqui se acaba.
+        if l[:1] in (' ', '\t'):
+            break
+
+        if pelada.startswith('import ') or pelada.startswith('from '):
+            dentro_import = True
+            abiertos = l.count('(') - l.count(')')
+            i += 1
+            if abiertos <= 0:
+                dentro_import = False
+                fin = i
+            continue
+
+        break                # primera sentencia de verdad
+
     return fin
 
 
@@ -555,6 +666,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--raiz', default='/var/www/envs/prod')
     p.add_argument('--aplicar', action='store_true')
+    p.add_argument('--revertir', action='store_true',
+                   help='devuelve los archivos injertados a su copia .bak')
     args = p.parse_args()
     simulacro = not args.aplicar
 
@@ -563,6 +676,15 @@ def main():
               '{0}/src/apps/api/urls.py'.format(args.raiz))
         print('Pasa la ruta buena con --raiz.')
         sys.exit(1)
+
+    if args.revertir:
+        print('Raiz: {0}'.format(args.raiz))
+        print('Modo: DESHACIENDO los injertos')
+        print('')
+        revertir(args.raiz)
+        print('')
+        print('Reinicia jurp_web y vuelve a correr el parche.')
+        return
 
     print('Raiz: {0}'.format(args.raiz))
     print('Modo: {0}'.format('SIMULACRO (no escribe nada)' if simulacro
