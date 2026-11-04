@@ -221,9 +221,32 @@ export default function Monitoreos() {
       { method: 'POST', body: JSON.stringify({ asignaciones }) });
     setOcupado(false);
 
-    if (!ok && !(datos && datos.rutina)) {
-      Swal.fire('No se pudo guardar',
-        res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.', 'error');
+    if (!ok) {
+      /* `pedir` deja `datos` en null siempre que la respuesta no fue 2xx,
+       * así que el motivo hay que sacarlo del cuerpo a mano. Sin esto el
+       * aviso decía «respondió 400» y se callaba el porqué, que es lo único
+       * que sirve para arreglarlo. */
+      let detalle = res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.';
+      try { const j = await res.clone().json(); if (j.detail) detalle = j.detail; }
+      catch { /* queda el genérico */ }
+      Swal.fire('No se pudo guardar', detalle, 'error');
+      return;
+    }
+
+    /* EL SERVIDOR PUEDE SER MÁS VIEJO QUE ESTA PANTALLA. El reparto de
+     * varias personas por tramo se manda en `usuarios`; un servidor sin ese
+     * parche lee el `usuario` suelto de antes, no lo encuentra, y deja el
+     * tramo VACÍO. Devuelve 200 y la pantalla, obediente, borraba las
+     * fichas: parecía que guardar no hacía nada cuando en realidad estaba
+     * desasignando.
+     *
+     * Se reconoce porque los tramos vuelven sin la clave `asignados`. En ese
+     * caso no se pisa lo que hay en pantalla y se dice qué falta. */
+    const vuelven = (datos && datos.rutina && datos.rutina.tramos) || [];
+    if (vuelven.length && !vuelven.some(x => x.asignados !== undefined)) {
+      Swal.fire('El servidor todavía no admite varios por tramo',
+        'Falta aplicar el parche de monitoreos en PLUVIRA y correr '
+        + '<code>migrate core</code>. No se guardó nada.', 'warning');
       return;
     }
     /* El servidor contesta 207 cuando guardó unas sí y otras no. Guardar a
