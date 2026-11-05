@@ -482,6 +482,14 @@
  * ilegible justo cuando se esta revisando un recorrido entero.
  *
  * Y con fondo distinto, para que no se confunda con el tramo siguiente. */
+/* Borrar va en rojo y aparte: no es «cerrar», es que desaparezca con los
+ * registros dentro. El color es el aviso antes del aviso. */
+.mon-btn-mal {
+  color: #b91c1c !important;
+  border-color: #fca5a5 !important;
+}
+.mon-btn-mal:hover:not(:disabled) { background: #fef2f2 !important; }
+
 .mon-desplegar {
   margin-left: 8px;
   display: inline-flex;

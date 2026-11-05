@@ -21,7 +21,7 @@
  * nadie los use.
  */
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { FaChevronDown, FaChevronUp, FaExternalLinkAlt,
+import { FaTrashAlt, FaChevronDown, FaChevronUp, FaExternalLinkAlt,
   FaPlus, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaRegCircle,
   FaSave, FaLock, FaLockOpen, FaCalendarAlt, FaBell, FaTimes, FaSearch, FaPhoneAlt,
   FaPen,
@@ -506,6 +506,97 @@ export default function Monitoreos({ irAIncidente }) {
    * tramos otra vez. Lo registrado no se toca en ninguno de los dos
    * sentidos.
    */
+  /* Borrar una rutina entera.
+   *
+   * ──────────────────────────────────────────────────────────────────
+   * ESTO NO ES «CERRAR»
+   * ──────────────────────────────────────────────────────────────────
+   *
+   * Cerrar deja la ronda como está y la saca del trabajo pendiente; esto
+   * la hace desaparecer con los registros de quien la recorrió dentro. Es
+   * para una rutina creada por error o de prueba, no para una que ya se
+   * anduvo — por eso va en rojo, aparte, y el servidor exige confirmar
+   * cuando hay algo que perder.
+   *
+   * SE PREGUNTA PRIMERO. El primer DELETE va sin confirmar justamente para
+   * que el servidor cuente qué hay dentro: así el aviso dice «43 registros
+   * y 1 hallazgo», que es lo que hace falta para decidir, en vez de un
+   * «¿seguro?» que nadie lee. */
+  const borrarRutina = async () => {
+    if (!elegida) return;
+
+    const tira = async (confirmar) => pedir(
+      `${API}rutinas/${elegida.id}/${confirmar ? '?confirmar=1' : ''}`,
+      { method: 'DELETE', callar: [404, 409] });
+
+    /* `pedir` solo devuelve `datos` cuando la respuesta fue correcta, y un
+     * 409 no lo es: ahí el cuerpo hay que leerlo a mano, y es justo el que
+     * trae la cuenta de lo que se va a perder. */
+    const cuerpoDe = async (res) => {
+      if (!res) return null;
+      try { return await res.clone().json(); } catch { return null; }
+    };
+
+    setOcupado(true);
+    const tanteo = await tira(false);
+    setOcupado(false);
+
+    const fallo = await cuerpoDe(tanteo.res);
+    // 409: hay registros dentro y el servidor dice cuántos.
+    const dentro = (tanteo.res && tanteo.res.status === 409) ? fallo : null;
+
+    if (tanteo.ok) {
+      await Swal.fire('Rutina borrada',
+        `«${esc(elegida.nombre)}» estaba vacía y se borró.`, 'success');
+      await cargar();
+      return;
+    }
+
+    if (!dentro) {
+      Swal.fire('No se pudo borrar',
+        (fallo && fallo.detail)
+          || (tanteo.res ? `El servidor respondió ${tanteo.res.status}.`
+                         : 'No se pudo consultar.'), 'error');
+      return;
+    }
+
+    const r = await Swal.fire({
+      icon: 'warning',
+      title: `¿Borrar «${esc(elegida.nombre)}»?`,
+      html: `Tiene <b>${dentro.registros} registro(s)</b>`
+        + (dentro.hallazgos
+            ? ` y <b>${dentro.hallazgos} hallazgo(s)</b>` : '')
+        + ' de los recorridos ya hechos. Se borran con ella y no hay vuelta'
+        + ' atrás.<br><br>'
+        + 'Los incidentes de los hallazgos NO se borran: vuelven a la lista'
+        + ' de Incidentes.<br><br>'
+        + 'Si solo quieres que deje de aparecer en la app, usa'
+        + ' <b>Cerrar rutina</b>.',
+      showCancelButton: true,
+      focusCancel: true,
+      confirmButtonText: 'Sí, borrarla',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#d63939',
+    });
+    if (!r.isConfirmed) return;
+
+    setOcupado(true);
+    const { ok, res, datos } = await tira(true);
+    setOcupado(false);
+    if (!ok) {
+      const porQue = await cuerpoDe(res);
+      Swal.fire('No se pudo borrar',
+        (porQue && porQue.detail)
+          || (res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.'),
+        'error');
+      return;
+    }
+    await Swal.fire('Rutina borrada',
+      `Se borró «${esc((datos && datos.borrada) || elegida.nombre)}».`,
+      'success');
+    await cargar();
+  };
+
   const alternarCierre = async () => {
     const cerrando = !elegida.cerrada;
     const r = await Swal.fire({
@@ -634,6 +725,11 @@ export default function Monitoreos({ irAIncidente }) {
                 {elegida.cerrada
                   ? <><FaLockOpen size={11} /> Reabrir rutina</>
                   : <><FaLock size={11} /> Cerrar rutina</>}
+              </button>
+              <button type="button" className="mon-btn mon-btn-mal"
+                onClick={borrarRutina} disabled={ocupado}
+                title="Borra la rutina y todo lo registrado en ella">
+                <FaTrashAlt size={11} /> Borrar
               </button>
             </div>
           </div>

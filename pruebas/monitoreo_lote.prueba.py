@@ -53,6 +53,7 @@ class Estados(object):
     HTTP_400_BAD_REQUEST = 400
     HTTP_403_FORBIDDEN = 403
     HTTP_404_NOT_FOUND = 404
+    HTTP_409_CONFLICT = 409
 
 
 def sin_decorar(*a, **k):
@@ -117,8 +118,10 @@ class Coleccion(object):
         return bool(self._filas)
 
     def filter(self, **kw):
-        pk = kw.get('pk')
-        return Coleccion([f for f in self._filas if getattr(f, 'pk', None) == pk])
+        fuera = list(self._filas)
+        for clave, valor in kw.items():
+            fuera = [f for f in fuera if getattr(f, clave, None) == valor]
+        return Coleccion(fuera)
 
     def exclude(self, **kw):
         if 'elemento' in kw:
@@ -129,6 +132,9 @@ class Coleccion(object):
     def values_list(self, campo, flat=False):
         return [getattr(f, campo) for f in self._filas]
 
+    def count(self):
+        return len(self._filas)
+
     def __iter__(self):
         return iter(self._filas)
 
@@ -137,8 +143,13 @@ class Coleccion(object):
 
 
 class Rutina(object):
+    _n = 0
+    _reg = {}
+
     def __init__(self, cerrada=False, empezada=True):
-        self.id = self.pk = 1
+        Rutina._n += 1
+        self.id = self.pk = Rutina._n
+        Rutina._reg[self.pk] = self
         self.nombre = 'Noviembre 2026'
         self.fecha_inicio = '2026-11-01'
         self.fecha_fin = '2026-11-30'
@@ -147,7 +158,16 @@ class Rutina(object):
         self.empezada = empezada
         self.creada_por = None
         self.creada_en = '2026-11-01T08:00:00Z'
-        self.tramos = Coleccion([])
+        self._tramos = []
+        self.tramos = Coleccion(self._tramos)
+        self.borrada = False
+
+    def delete(self):
+        # En la base se van en cascada; aqui basta con dejar constancia.
+        self.borrada = True
+        Rutina._reg.pop(self.pk, None)
+        for t in list(self._tramos):
+            Tramo._reg.pop(t.pk, None)
 
     def vigente(self):
         return not self.cerrada and self.empezada
@@ -166,6 +186,7 @@ class Tramo(object):
         self._visitas = []
         self.visitas = Coleccion(self._visitas)
         Tramo._reg[self.pk] = self
+        rutina._tramos.append(self)
 
 
 class GestorVisitas(object):
@@ -269,7 +290,8 @@ def cargar_modulo():
         'permission_classes': sin_decorar,
         'Response': Respuesta,
         'ResponsableTramo': None,
-        'RutinaMonitoreo': None,
+        'RutinaMonitoreo': type('R', (), {'objects': Gestor(Rutina._reg),
+                                          'DoesNotExist': NoExiste}),
         # DoesNotExist tiene que estar: el codigo lo captura por nombre, y
         # sin el la excepcion sube tal cual en vez de volverse un 404.
         'TramoDeRutina': type('M', (), {'objects': Gestor(Tramo._reg),
@@ -297,9 +319,11 @@ def cargar_modulo():
 
 
 class Peticion(object):
-    def __init__(self, usuario, datos):
+    def __init__(self, usuario, datos, consulta=None, metodo='POST'):
         self.user = usuario
         self.data = datos
+        self.GET = consulta or {}
+        self.method = metodo
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -328,6 +352,7 @@ OBRAS = ['Entrega  E%d' % n for n in range(11, 16)]
 
 def escenario(cerrada=False, empezada=True):
     Tramo._reg.clear()
+    Rutina._reg.clear()
     Visita._n = 0
     Visita._todas = []
     mon = cargar_modulo()
@@ -602,6 +627,49 @@ def prueba_sin_empezar():
     igual('empezada, entra', r.status_code, 201)
 
 
+def prueba_borrar():
+    print('\n16. borrar una rutina')
+    # Vacia: no se pierde nada, no hace falta confirmar.
+    mon, tr, ilich, _, jefe = escenario()
+    r = mon['rutina'](Peticion(jefe, {}, metodo='DELETE'), tr.rutina.pk)
+    igual('vacia, se borra', r.status_code, 200)
+    igual('dice cual', r.data['borrada'], 'Noviembre 2026')
+    igual('y queda borrada', tr.rutina.borrada, True)
+
+    # Con registros: se niega y DICE cuantos, para poder decidir antes.
+    mon, tr, ilich, _, jefe = escenario()
+    mon['visitas_lote'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'elementos': SUBTRAMOS}))
+    mon['visitas'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'elemento': 'Entrega  E12',
+        'sin_novedad': False, 'observacion': 'rota'}))
+
+    r = mon['rutina'](Peticion(jefe, {}, metodo='DELETE'), tr.rutina.pk)
+    igual('con registros, se niega', r.status_code, 409)
+    igual('cuenta los registros', r.data['registros'], 26)
+    igual('y los hallazgos', r.data['hallazgos'], 1)
+    igual('no la borro', tr.rutina.borrada, False)
+
+    # Confirmando, sí.
+    r = mon['rutina'](Peticion(jefe, {'confirmar': 1}, metodo='DELETE'),
+                      tr.rutina.pk)
+    igual('confirmada, se borra', r.status_code, 200)
+    igual('ahora si', tr.rutina.borrada, True)
+
+    # Y por la query, que es como lo manda un DELETE sin cuerpo.
+    mon, tr, ilich, _, jefe = escenario()
+    mon['visitas_lote'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'elementos': OBRAS}))
+    r = mon['rutina'](Peticion(jefe, {}, consulta={'confirmar': '1'},
+                               metodo='DELETE'), tr.rutina.pk)
+    igual('confirmar por la URL', r.status_code, 200)
+
+    # Una que no existe.
+    mon, tr, ilich, _, jefe = escenario()
+    r = mon['rutina'](Peticion(jefe, {}, metodo='DELETE'), 9999)
+    igual('la que no existe', r.status_code, 404)
+
+
 def main():
     print('Registro por elemento dentro del tramo')
     print('=' * 74)
@@ -611,7 +679,8 @@ def main():
                prueba_permisos, prueba_cuerpos_raros,
                prueba_compatibilidad, prueba_nombre_largo,
                prueba_numeracion, prueba_hallazgo_por_lote_numerado,
-               prueba_topic, prueba_aviso, prueba_sin_empezar]:
+               prueba_topic, prueba_aviso, prueba_sin_empezar,
+               prueba_borrar]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:

@@ -1039,7 +1039,7 @@ def rutinas(request):
                     status=status.HTTP_201_CREATED)
 
 
-@api_view(['GET', 'POST'])
+@api_view(['GET', 'POST', 'DELETE'])
 @permission_classes([EsGerencia])
 def rutina(request, pk):
     try:
@@ -1050,6 +1050,9 @@ def rutina(request, pk):
 
     if request.method == 'GET':
         return Response({'ok': True, 'rutina': _rutina(r, con_tramos=True)})
+
+    if request.method == 'DELETE':
+        return _borrar_rutina(request, r)
 
     datos = request.data or {}
     for campo in ('nombre', 'notas'):
@@ -1063,6 +1066,51 @@ def rutina(request, pk):
     r.save()
     r.refresh_from_db()          # igual que al crear: fechas, no cadenas
     return Response({'ok': True, 'rutina': _rutina(r, con_tramos=True)})
+
+
+def _borrar_rutina(request, r):
+    """Borra una rutina entera: sus tramos, su reparto y sus registros.
+
+    ESTO NO ES «CERRAR». Cerrar deja la ronda como esta y la saca del
+    trabajo pendiente; esto la hace desaparecer, con los 43 registros de
+    quien la recorrio dentro. Es para una rutina creada por error o de
+    prueba, no para una que ya se ando.
+
+    POR ESO HAY QUE CONFIRMAR CUANDO HAY ALGO DENTRO. Una rutina vacia se
+    borra sin mas -no se pierde nada-. Una con registros exige
+    `confirmar=1`, y la respuesta dice cuantos son: el que pulsa tiene que
+    poder saber que esta perdiendo ANTES de perderlo, no despues.
+
+    LOS INCIDENTES NO SE TOCAN. Un hallazgo es un incidente de campo con
+    sus fotos y su bitacora, y existe por si mismo: lo que se borra es la
+    fila que decia en que elemento aparecio. Esos incidentes vuelven a la
+    lista de Incidentes, que es de donde habian salido.
+    """
+    tramos = list(r.tramos.all())
+    registros = sum(t.visitas.count() for t in tramos)
+    hallazgos = sum(t.visitas.filter(sin_novedad=False).count()
+                    for t in tramos)
+
+    quiere = request.data.get('confirmar') if request.data else None
+    if quiere in (None, '', False, 'false', '0', 0):
+        quiere = request.GET.get('confirmar')
+    confirmado = str(quiere).lower() in ('1', 'true', 'si', 'yes')
+
+    if registros and not confirmado:
+        return Response(
+            {'ok': False,
+             'necesita_confirmar': True,
+             'registros': registros,
+             'hallazgos': hallazgos,
+             'detail': ('Esa rutina tiene %d registro(s) y %d hallazgo(s). '
+                        'Manda confirmar=1 para borrarla.'
+                        % (registros, hallazgos))},
+            status=status.HTTP_409_CONFLICT)
+
+    nombre = r.nombre
+    r.delete()          # los tramos y las visitas se van en cascada
+    return Response({'ok': True, 'borrada': nombre,
+                     'registros': registros, 'hallazgos': hallazgos})
 
 
 @api_view(['POST'])
