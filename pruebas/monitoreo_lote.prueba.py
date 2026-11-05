@@ -137,19 +137,20 @@ class Coleccion(object):
 
 
 class Rutina(object):
-    def __init__(self, cerrada=False):
+    def __init__(self, cerrada=False, empezada=True):
         self.id = self.pk = 1
         self.nombre = 'Noviembre 2026'
         self.fecha_inicio = '2026-11-01'
         self.fecha_fin = '2026-11-30'
         self.notas = ''
         self.cerrada = cerrada
+        self.empezada = empezada
         self.creada_por = None
         self.creada_en = '2026-11-01T08:00:00Z'
         self.tramos = Coleccion([])
 
     def vigente(self):
-        return not self.cerrada
+        return not self.cerrada and self.empezada
 
 
 class Tramo(object):
@@ -325,7 +326,7 @@ SUBTRAMOS = ['TRAMO II %d+%03d - %d+%03d CANAL'
 OBRAS = ['Entrega  E%d' % n for n in range(11, 16)]
 
 
-def escenario(cerrada=False):
+def escenario(cerrada=False, empezada=True):
     Tramo._reg.clear()
     Visita._n = 0
     Visita._todas = []
@@ -333,7 +334,7 @@ def escenario(cerrada=False):
     ilich = Usuario('ilich')
     otro = Usuario('otro')
     jefe = Usuario('gerencia', gerencia=True)
-    tr = Tramo('II', Rutina(cerrada=cerrada), [ilich])
+    tr = Tramo('II', Rutina(cerrada=cerrada, empezada=empezada), [ilich])
     return mon, tr, ilich, otro, jefe
 
 
@@ -578,6 +579,29 @@ def prueba_aviso():
     igual('no se mando nada', len(enviados), 0)
 
 
+def prueba_sin_empezar():
+    print('\n15. una rutina que todavia no empieza')
+    # La app ya las ENSEÑA -si no, el aviso llevaria a una pantalla donde la
+    # rutina no esta-, asi que el "no" tiene que estar aqui: un recorrido
+    # hecho el dia antes dejaria la ronda siguiente naciendo ya recorrida.
+    mon, tr, ilich, _, _ = escenario(empezada=False)
+    r = mon['visitas'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'sin_novedad': True}))
+    igual('la visita suelta se rechaza', r.status_code, 400)
+    igual('y lo dice', 'no empieza' in r.data['detail'], True)
+
+    r = mon['visitas_lote'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'elementos': OBRAS}))
+    igual('el lote tambien', r.status_code, 400)
+    igual('no escribio nada', len(tr._visitas), 0)
+
+    # Y cuando empieza, lo de siempre.
+    mon, tr, ilich, _, _ = escenario()
+    r = mon['visitas_lote'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'elementos': OBRAS}))
+    igual('empezada, entra', r.status_code, 201)
+
+
 def main():
     print('Registro por elemento dentro del tramo')
     print('=' * 74)
@@ -587,7 +611,7 @@ def main():
                prueba_permisos, prueba_cuerpos_raros,
                prueba_compatibilidad, prueba_nombre_largo,
                prueba_numeracion, prueba_hallazgo_por_lote_numerado,
-               prueba_topic, prueba_aviso]:
+               prueba_topic, prueba_aviso, prueba_sin_empezar]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:

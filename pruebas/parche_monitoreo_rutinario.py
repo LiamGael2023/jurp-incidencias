@@ -1267,17 +1267,26 @@ def mi_aviso(request):
 @api_view(['GET'])
 @permission_classes([IsMobileRoleUser])
 def mis_tramos(request):
-    """Lo que le toca recorrer a quien pregunta, en las rutinas vigentes.
+    """Lo que le toca recorrer a quien pregunta: hoy y lo que viene.
 
-    Solo las vigentes: una rutina cerrada o de otro mes no es trabajo
-    pendiente, y mezclarlas obliga a leer fechas en una pantalla de campo
-    para saber que hay que hacer hoy.
+    QUE ENTRA Y POR QUE. Lo cerrado y lo que ya paso no son trabajo
+    pendiente: mezclarlos obliga a leer fechas en una pantalla de campo
+    para saber que hay que hacer hoy. Pero lo que todavia no ha empezado SI
+    entra, y esto es lo que lo cambio:
+
+    el servidor avisa al telefono en cuanto se crea la rutina, y una rutina
+    se crea dias antes de que empiece. Con el filtro de antes, el aviso
+    llevaba a una pantalla donde esa rutina no estaba: el que lo recibia
+    tenia que creer que algo se habia roto, y no tenia forma de comprobar
+    que le habia tocado.
+
+    Las que no han empezado llegan con vigente=False, y la pantalla las
+    muestra diciendo cuando empiezan en vez de dejar registrar.
     """
     hoy = timezone.localtime(timezone.now()).date()
     qs = (TramoDeRutina.objects
           .filter(usuarios=request.user,
                   rutina__cerrada=False,
-                  rutina__fecha_inicio__lte=hoy,
                   rutina__fecha_fin__gte=hoy)
           .select_related('rutina'))
     tels = _celulares()
@@ -1317,6 +1326,18 @@ def _para_registrar(request, valor):
     if tr.rutina.cerrada:
         return None, Response(
             {'ok': False, 'detail': 'Esa rutina ya esta cerrada.'},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    # NI ANTES DE QUE EMPIECE. Ahora la app enseña las rutinas que estan
+    # por venir -para que el aviso lleve a algun sitio-, asi que hay que
+    # decir que no aqui: un recorrido hecho el dia antes quedaria contado en
+    # una ronda que todavia no habia empezado, y la ronda siguiente naceria
+    # ya "recorrida" sin que nadie hubiera ido.
+    if not tr.rutina.vigente():
+        return None, Response(
+            {'ok': False,
+             'detail': 'Esa rutina todavia no empieza (%s).'
+                       % tr.rutina.fecha_inicio},
             status=status.HTTP_400_BAD_REQUEST)
     return tr, None
 
