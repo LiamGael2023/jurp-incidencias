@@ -2549,6 +2549,58 @@ def paso_reparto(raiz, simulacro):
     return True, '{0}{1}'.format(nombre, '' if hecho_modelo else ' (y el modelo)')
 
 
+VIEJO_AVISO = """        _dispatch_hi_push(
+            entity_type='incident',
+            title='{0} REGISTRO DE INCIDENTE'.format(_emoji_for_severity(incident.severity)),
+            body='Incidente registrado en {0} | {1}'.format(
+                _incident_infra_name(incident),
+                _fmt_push_datetime(incident.created_at),
+            ),"""
+
+NUEVO_AVISO = """        # DE DONDE SALIO, PARA QUE EL AVISO LO DIGA.
+        #
+        # El mismo formulario sirve para un incidente de campo y para un
+        # hallazgo de recorrido, y la visita que lo convierte en hallazgo se
+        # enlaza DESPUES: para cuando existe, el aviso ya salio diciendo
+        # "REGISTRO DE INCIDENTE". Por eso la app marca el origen al crearlo.
+        #
+        # Si no viene el campo -una app vieja-, se comporta como siempre.
+        _de_monitoreo = str(
+            (request.data or {}).get('origen', '')).lower() == 'monitoreo'
+        _que_es = 'MONITOREO' if _de_monitoreo else 'INCIDENTE'
+        _que_fue = 'Monitoreo' if _de_monitoreo else 'Incidente'
+
+        _dispatch_hi_push(
+            entity_type='incident',
+            title='{0} REGISTRO DE {1}'.format(
+                _emoji_for_severity(incident.severity), _que_es),
+            body='{0} registrado en {1} | {2}'.format(
+                _que_fue,
+                _incident_infra_name(incident),
+                _fmt_push_datetime(incident.created_at),
+            ),"""
+
+
+def paso_aviso_incidente(raiz, simulacro):
+    """Que el aviso diga "MONITOREO" cuando el incidente sale de un recorrido."""
+    ruta = os.path.join(raiz, 'src/apps/api/views/hi_incidents.py')
+    if not os.path.exists(ruta):
+        return False, 'no existe {0}'.format(ruta)
+    t = leer(ruta)
+    if '_de_monitoreo' in t:
+        return True, 'ya estaba'
+    if t.count(VIEJO_AVISO) != 1:
+        # NO SE TOCA A CIEGAS. Este es un archivo del nucleo que no escribio
+        # este parche: si el aviso ya no tiene esa forma exacta, alguien lo
+        # cambio, y sustituir por aproximacion ahi es como se rompe el aviso
+        # de TODOS los incidentes.
+        return False, ('el aviso de hi_incidents.py no tiene la forma '
+                       'esperada ({0} coincidencias); no se toca'
+                       .format(t.count(VIEJO_AVISO)))
+    escribir(ruta, t.replace(VIEJO_AVISO, NUEVO_AVISO), simulacro)
+    return True, 'el aviso distingue monitoreo de incidente'
+
+
 def paso_modulo(raiz, simulacro):
     for rel, que in (('src/apps/core/equipo_enlazado.py', 'EsGerencia'),
                      ('src/apps/core/permission.py', 'IsMobileRoleUser')):
@@ -2660,8 +2712,9 @@ def main():
         ('6 elemento    ', paso_elemento),
         ('7 numeracion  ', paso_numero),
         ('8 reparto     ', paso_reparto),
-        ('9 monitoreo.py', paso_modulo),
-        ('10 urls.py    ', paso_urls),
+        ('9 aviso       ', paso_aviso_incidente),
+        ('10 monitoreo.py', paso_modulo),
+        ('11 urls.py    ', paso_urls),
     ]
     fallo = False
     for nombre, fn in pasos:
