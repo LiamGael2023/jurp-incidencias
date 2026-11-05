@@ -27,6 +27,7 @@ import { FaChevronDown, FaChevronUp, FaExternalLinkAlt,
   FaPen,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
+import { simboloDeElemento } from './simbolos';
 import { pedir } from './sesion';
 import './Monitoreos.css';
 
@@ -238,13 +239,31 @@ export default function Monitoreos({ irAIncidente }) {
             {lista.map(v => (
               <tr key={v.id} className={v.sin_novedad ? undefined : 'mon-con-hallazgo'}>
                 <td>
-                  <div className="mon-el-nombre">
-                    {v.elemento || 'Todo el tramo'}
-                  </div>
-                  <div className="mon-sub">
-                    {v.tipo_elemento === 'obra' ? 'Obra de arte'
-                      : v.tipo_elemento === 'subtramo' ? 'Sub-tramo'
-                      : 'Tramo entero'}
+                  {/* EL SIMBOLO AL LADO. Cuarenta filas de texto se leen
+                    * todas iguales; el simbolo deja ver de un vistazo que
+                    * en esta franja hay un tunel y aqui al lado una canoa,
+                    * que es como se reconoce el recorrido. Es la misma
+                    * simbologia del inventario y del panel de capas, para
+                    * que la misma estructura se vea igual en las tres
+                    * pantallas. */}
+                  <div className="mon-el-fila">
+                    {(() => {
+                      const sim = simboloDeElemento(v.elemento, v.tipo_elemento);
+                      return sim
+                        ? <img className="mon-el-sim" src={sim.src}
+                               alt={sim.nombre} title={sim.nombre} />
+                        : <span className="mon-el-sim mon-el-sin" />;
+                    })()}
+                    <div>
+                      <div className="mon-el-nombre">
+                        {v.elemento || 'Todo el tramo'}
+                      </div>
+                      <div className="mon-sub">
+                        {v.tipo_elemento === 'obra' ? 'Obra de arte'
+                          : v.tipo_elemento === 'subtramo' ? 'Sub-tramo'
+                          : 'Tramo entero'}
+                      </div>
+                    </div>
                   </div>
                 </td>
                 <td>

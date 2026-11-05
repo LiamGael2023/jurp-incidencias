@@ -534,6 +534,13 @@
   color: #0f172a;
   line-height: 1.3;
 }
+/* El simbolo y el nombre, en linea. Ancho fijo tambien cuando no hay
+ * simbolo -una estacion hidrometrica no tiene- para que los nombres queden
+ * alineados: una columna con sangrias distintas se lee peor que sin icono. */
+.mon-el-fila { display: flex; align-items: flex-start; gap: 8px; }
+.mon-el-sim { width: 20px; height: 20px; flex: 0 0 20px; object-fit: contain; }
+.mon-el-sin { display: inline-block; }
+
 .mon-el-ok  { font-size: 11.5px; font-weight: 600; color: #15803d; }
 .mon-el-mal { font-size: 11.5px; font-weight: 700; color: #b91c1c; }
 
