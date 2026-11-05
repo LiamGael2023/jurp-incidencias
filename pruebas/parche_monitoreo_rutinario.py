@@ -713,6 +713,45 @@ def _es_gerencia(u):
         return False
 
 
+def _cuentas_moviles():
+    """Las cuentas de campo, con su nombre partido en palabras."""
+    from django.contrib.auth import get_user_model
+    Usuario = get_user_model()
+    qs = (Usuario.objects
+          .filter(groups__name__startswith='mobile_', is_active=True)
+          .distinct())
+    return [(u, set(_normaliza(_nombre(u)).split())) for u in qs]
+
+
+def _del_cuadro(tramo, cuentas):
+    """Las cuentas que el cuadro senala para un tramo, SI NO HAY DUDA.
+
+    El cuadro guarda nombres escritos a mano -"EMILIO ALVAREZ (AVO PERU)"-,
+    no cuentas, asi que hay que cruzarlos. Se usa la misma regla que ya
+    cruza los celulares: sin tildes, en minusculas, y una lista de palabras
+    contenida en la otra, con dos palabras como minimo.
+
+    Y SOLO SI SALE UNA. Catorce de los treinta y un coordinadores del
+    padron tienen dos cuentas, y algunos no tienen ninguna: asignar "la
+    primera que aparezca" pondria a una persona a responder por un tramo
+    que no es suyo y le mandaria el aviso al telefono. Cuando hay duda se
+    deja vacio, que es lo que ya hace hoy, y la pantalla sigue enseñando el
+    nombre del cuadro debajo para que un humano elija.
+    """
+    fuera, puestos = [], set()
+    for r in ResponsableTramo.objects.filter(tramo=tramo, activo=True):
+        suyas = set(_normaliza(r.coordinador).split())
+        if len(suyas) < 2:
+            continue
+        caben = [u for u, palabras in cuentas
+                 if len(palabras) >= 2
+                 and (suyas <= palabras or palabras <= suyas)]
+        if len(caben) == 1 and caben[0].pk not in puestos:
+            puestos.add(caben[0].pk)
+            fuera.append(caben[0])
+    return fuera
+
+
 def _contactos(tramo):
     return [{'empresa': r.empresa, 'coordinador': r.coordinador,
              'celular': r.celular}
@@ -1027,6 +1066,28 @@ def rutinas(request):
             ids = [u.pk for u in x.usuarios.all()]
             if ids:
                 antes[x.tramo] = ids
+    heredados = len(antes)
+
+    # Y LO QUE NO CUBRE NINGUNA RONDA, DEL CUADRO.
+    #
+    # Hace falta en dos momentos que son el mismo: la primera rutina que se
+    # crea, y cuando se han borrado las anteriores. Sin esto, ahi salen los
+    # catorce tramos vacios y hay que repartirlos a mano aunque el cuadro
+    # diga desde hace anos quien recorre cada uno.
+    #
+    # Solo entra donde el cruce de nombres no deja duda; donde la hay, el
+    # tramo nace vacio y la pantalla sigue enseñando el nombre del cuadro
+    # debajo para que lo elija un humano.
+    cuentas = None
+    for t in pedidos:
+        if t in antes:
+            continue
+        if cuentas is None:
+            cuentas = _cuentas_moviles()
+        ids = [u.pk for u in _del_cuadro(t, cuentas)]
+        if ids:
+            antes[t] = ids
+    del_cuadro = len(antes) - heredados
 
     vistos = []
     reparto = {}
@@ -1050,7 +1111,8 @@ def rutinas(request):
     # el objeto en memoria las conserva: la base es la unica que sabe que
     # '2026-11-01' es una fecha.
     r.refresh_from_db()
-    return Response({'ok': True, 'rutina': _rutina(r, con_tramos=True)},
+    return Response({'ok': True, 'rutina': _rutina(r, con_tramos=True),
+                     'heredados': heredados, 'del_cuadro': del_cuadro},
                     status=status.HTTP_201_CREATED)
 
 

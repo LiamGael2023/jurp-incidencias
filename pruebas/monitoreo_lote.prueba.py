@@ -62,6 +62,19 @@ def sin_decorar(*a, **k):
     return envoltura
 
 
+class Responsable(object):
+    """Una fila del cuadro de JURP: tramo, empresa y coordinador."""
+    _todos = []
+
+    def __init__(self, tramo, empresa, coordinador):
+        self.tramo = tramo
+        self.empresa = empresa
+        self.coordinador = coordinador
+        self.celular = ''
+        self.activo = True
+        Responsable._todos.append(self)
+
+
 class Usuario(object):
     _n = 0
     _reg = {}
@@ -360,7 +373,8 @@ def cargar_modulo():
         'api_view': sin_decorar,
         'permission_classes': sin_decorar,
         'Response': Respuesta,
-        'ResponsableTramo': None,
+        'ResponsableTramo': type('RT', (), {
+            'objects': Coleccion(Responsable._todos)}),
         'RutinaMonitoreo': type('R', (), {
             'objects': Gestor(Rutina._reg, crear=_crear_rutina),
             'DoesNotExist': NoExiste}),
@@ -385,6 +399,9 @@ def cargar_modulo():
 
     # El andamio va DESPUES de ejecutar: asi se reemplazan solo las piezas
     # que hablan con la base de datos, y el codigo medido es el de verdad.
+    ns['_cuentas_moviles'] = lambda: [
+        (u, set(ns['_normaliza'](u.first_name or u.username).split()))
+        for u in Usuario._reg.values()]
     ns['_es_gerencia'] = lambda u: getattr(u, 'es_gerencia', False)
     ns['_celulares'] = lambda: {}
     ns['_contactos'] = lambda t: []
@@ -429,6 +446,7 @@ def escenario(cerrada=False, empezada=True):
     Tramo._reg.clear()
     Rutina._reg.clear()
     Usuario._reg.clear()
+    Responsable._todos[:] = []
     Visita._n = 0
     Visita._todas = []
     mon = cargar_modulo()
@@ -785,6 +803,44 @@ def prueba_herencia():
     igual('el I, con el cambio reciente', quien['I'], ['caro'])
 
 
+def prueba_cuadro():
+    print('\n18. sin ninguna ronda anterior, tira del cuadro')
+    Tramo._reg.clear(); Rutina._reg.clear(); Usuario._reg.clear()
+    Responsable._todos[:] = []
+    mon = cargar_modulo()
+    jefe = Usuario('gerencia', gerencia=True)
+
+    # Dos cuentas con nombre completo, como en el padron.
+    emilio = Usuario('ealvarez'); emilio.first_name = 'Emilio Alvarez'
+    frank = Usuario('frodriguez'); frank.first_name = 'Frank Rodriguez'
+    # Y un homonimo: dos cuentas para la misma persona del cuadro.
+    jav1 = Usuario('jsilva'); jav1.first_name = 'Javier Silva Rosales'
+    jav2 = Usuario('javier.silva'); jav2.first_name = 'Javier Silva Rosales'
+
+    Responsable('0', 'AVO PERU', 'EMILIO ALVAREZ')
+    Responsable('I', 'CAMPOSOL', 'FRANK RODRIGUEZ')
+    Responsable('II', 'CAMPOSOL', 'JAVIER SILVA ROSALES')   # dos cuentas
+    Responsable('III', 'VIRU S.A.', 'ALGUIEN SIN CUENTA')
+
+    r = mon['rutinas'](Peticion(jefe, {
+        'nombre': 'La primera', 'fecha_inicio': '2026-11-01',
+        'fecha_fin': '2026-11-30', 'tramos': ['0', 'I', 'II', 'III']}))
+    igual('se crea', r.status_code, 201)
+    igual('nada heredado', r.data['heredados'], 0)
+    igual('dos del cuadro', r.data['del_cuadro'], 2)
+
+    nueva = [x for x in Rutina._reg.values() if x.nombre == 'La primera'][0]
+    quien = {t.tramo: sorted(u.username for u in t.usuarios.all())
+             for t in nueva._tramos}
+    igual('el 0, de su coordinador', quien['0'], ['ealvarez'])
+    igual('el I tambien', quien['I'], ['frodriguez'])
+    # LO QUE NO SE HACE: con dos cuentas para el mismo nombre no se elige
+    # una, porque elegir mal pone a alguien a responder por un tramo ajeno
+    # y ademas le manda el aviso.
+    igual('con dos cuentas, vacio', quien['II'], [])
+    igual('sin cuenta, vacio', quien['III'], [])
+
+
 def main():
     print('Registro por elemento dentro del tramo')
     print('=' * 74)
@@ -795,7 +851,7 @@ def main():
                prueba_compatibilidad, prueba_nombre_largo,
                prueba_numeracion, prueba_hallazgo_por_lote_numerado,
                prueba_topic, prueba_aviso, prueba_sin_empezar,
-               prueba_borrar, prueba_herencia]:
+               prueba_borrar, prueba_herencia, prueba_cuadro]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:

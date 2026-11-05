@@ -376,6 +376,26 @@ export default function Monitoreos({ irAIncidente }) {
       return;
     }
     await cargar(resp && resp.rutina && resp.rutina.id);
+
+    /* DE DONDE SALIO EL REPARTO, DICHO.
+     *
+     * Heredar de la ronda anterior es repetir una decisión que ya se tomó;
+     * sacarlo del cuadro es que el sistema CRUZÓ nombres escritos a mano
+     * con cuentas, y eso hay que mirarlo antes de darlo por bueno. No son
+     * lo mismo y la pantalla no debería presentarlos igual. */
+    const delCuadro = resp && resp.del_cuadro;
+    if (delCuadro) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Rutina creada',
+        html: `${resp.heredados ? `${resp.heredados} tramo(s) vienen de la `
+          + 'ronda anterior, y ' : ''}`
+          + `<b>${delCuadro} tramo(s) se asignaron desde el cuadro</b>`
+          + ' de JURP, cruzando el nombre del coordinador con su cuenta.'
+          + '<br><br>Revísalos: donde el nombre coincidía con dos cuentas'
+          + ' —o con ninguna— el tramo quedó vacío a propósito.',
+      });
+    }
   };
 
   const guardarAsignaciones = async () => {
