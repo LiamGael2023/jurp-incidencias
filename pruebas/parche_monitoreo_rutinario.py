@@ -2836,23 +2836,40 @@ def paso_suelto(raiz, simulacro):
     if 'class VisitaMonitoreo' not in t:
         return True, 'no aplica (las tablas las pone el paso 1)'
 
+    # SOLO DENTRO DE VisitaMonitoreo. Mirar el archivo entero era el error:
+    # «tramo = models.CharField('Tramo'» ya esta en ResponsableTramo, en
+    # RepartoDeTramo y en TramoDeRutina, asi que el paso se daba por hecho
+    # sin haber tocado VisitaMonitoreo. La migracion si se escribia, y el
+    # resultado era una columna en la base que el modelo no conocia: cada
+    # lectura de una visita reventaba con AttributeError y la pantalla
+    # devolvia 500.
+    i = t.index('class VisitaMonitoreo')
+    j = t.find('\nclass ', i + 1)
+    bloque = t[i:j if j != -1 else len(t)]
+
     hecho_modelo = True
-    if "tramo = models.CharField('Tramo'" not in t:
+    if "tramo = models.CharField('Tramo'" not in bloque:
         viejo = ("    tramo_rutina = models.ForeignKey(\n"
                  "        TramoDeRutina, on_delete=models.CASCADE, "
                  "related_name='visitas',\n"
                  "        verbose_name='Tramo de rutina')\n")
-        if t.count(viejo) != 1:
+        if bloque.count(viejo) != 1:
             return False, ('no encuentro tramo_rutina con la forma esperada; '
                            'pegame el modelo y lo hago a mano')
-        escribir(ruta, t.replace(viejo, SUELTO_BLOQUE), simulacro)
+        escribir(ruta, t[:i] + bloque.replace(viejo, SUELTO_BLOQUE)
+                 + t[i + len(bloque):], simulacro)
         hecho_modelo = False
 
     carpeta = os.path.join(raiz, 'src/apps/core/migrations')
     previas = sorted(n[:-3] for n in os.listdir(carpeta)
                      if n.endswith('.py') and n != '__init__.py')
     if any('hallazgo_suelto' in n for n in previas):
-        return True, 'ya estaba'
+        # QUE SE VEA QUE SE TOCO EL MODELO. Un servidor que se quedo con la
+        # migracion puesta y el modelo sin el campo -el fallo de arriba- se
+        # arregla justo aqui, y decir «ya estaba» haria creer que el parche
+        # no hizo nada cuando acaba de arreglarlo.
+        return True, ('ya estaba' if hecho_modelo
+                      else 'el modelo (la migracion ya estaba)')
     anterior = previas[-1]
     nombre = '{0:04d}_hallazgo_suelto.py'.format(int(anterior[:4]) + 1)
     escribir(os.path.join(carpeta, nombre),
