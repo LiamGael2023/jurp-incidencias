@@ -535,6 +535,49 @@ def prueba_hallazgo_por_lote_numerado():
     igual('el otro no', porClave['Entrega  E13']['numero'], None)
 
 
+def prueba_topic():
+    print('\n13. el topic personal de cada usuario')
+    mon, tr, ilich, _, _ = escenario()
+    igual('normal', mon['topic_de'](ilich), 'user_%d_ilich' % ilich.pk)
+
+    correo = Usuario('Luis.Rodriguez@hassperu.com')
+    t = mon['topic_de'](correo)
+    # FCM solo admite [a-zA-Z0-9-_.~%]: la arroba tiene que desaparecer o el
+    # envio se rechaza y el aviso no llega sin que nadie se entere.
+    igual('sin arroba', '@' in t, False)
+    igual('en minusculas', t, 'user_%d_luis.rodriguez_hassperu.com' % correo.pk)
+    igual('lleva el id delante', t.startswith('user_%d_' % correo.pk), True)
+    igual('sin usuario', mon['topic_de'](None), '')
+
+
+def prueba_aviso():
+    print('\n14. el aviso de una rutina nueva')
+    mon, tr, ilich, otro, _ = escenario()
+    enviados = []
+    mon['_mandar_push'] = lambda payload: (enviados.append(payload), True)[1]
+
+    rutina = tr.rutina
+    n = mon['avisar_de_rutina'](rutina, {ilich: ['II'], otro: ['V', 'IX']})
+    igual('uno por persona, no por tramo', n, 2)
+    igual('mandados', len(enviados), 2)
+
+    porTopic = {p['topic']: p for p in enviados}
+    uno = porTopic['user_%d_ilich' % ilich.pk]
+    igual('titulo', uno['title'], 'Tienes un nuevo Monitoreo Rutinario')
+    igual('un tramo, en singular', uno['body'], 'Tramo II - Noviembre 2026')
+    igual('entity_type', uno['data']['entity_type'], 'monitoreo_rutina')
+
+    dos = porTopic['user_%d_otro' % otro.pk]
+    igual('dos tramos, en plural', dos['body'], 'Tramos V, IX - Noviembre 2026')
+
+    # Nadie sin tramos, y nadie sin topic: mandar a '' seria un envio que el
+    # servicio acepta y nadie recibe.
+    enviados[:] = []
+    igual('sin tramos no se avisa',
+          mon['avisar_de_rutina'](rutina, {ilich: []}), 0)
+    igual('no se mando nada', len(enviados), 0)
+
+
 def main():
     print('Registro por elemento dentro del tramo')
     print('=' * 74)
@@ -543,7 +586,8 @@ def main():
                prueba_segunda_pasada, prueba_hallazgo_mudo_en_lote,
                prueba_permisos, prueba_cuerpos_raros,
                prueba_compatibilidad, prueba_nombre_largo,
-               prueba_numeracion, prueba_hallazgo_por_lote_numerado]:
+               prueba_numeracion, prueba_hallazgo_por_lote_numerado,
+               prueba_topic, prueba_aviso]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:

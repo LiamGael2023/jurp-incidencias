@@ -596,7 +596,15 @@ tocar ni una linea del camino por el que hoy entran todos los incidentes de
 campo, que ademas ya tiene su cola offline resuelta.
 """
 
+import json
+import logging
+import os
 import re
+
+try:
+    import urllib.request as _urlreq
+except ImportError:          # por si alguna vez corre en python 2
+    import urllib2 as _urlreq
 
 from django.db import transaction
 from django.utils import timezone
@@ -709,6 +717,112 @@ def _contactos(tramo):
     return [{'empresa': r.empresa, 'coordinador': r.coordinador,
              'celular': r.celular}
             for r in ResponsableTramo.objects.filter(tramo=tramo, activo=True)]
+
+
+logger = logging.getLogger(__name__)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# AVISAR AL TELEFONO
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Por push_service, igual que los incidentes. Hablar con el de dos formas
+# distintas es asegurarse de que un dia una de las dos deje de funcionar y
+# nadie sepa cual: mismas variables de entorno, mismo endpoint, mismo
+# payload {title, body, data, topic}. El sonido y el canal los pone el, asi
+# que este aviso suena como suena un incidente, sin inventar nada.
+#
+# A CADA UNO EL SUYO, Y NO AL GRUPO. Avisar a group_mobile_usuarios haria
+# sonar sesenta y cinco telefonos para que sesenta y cuatro miren y vean que
+# no les toca; a la tercera vez nadie mira. El reparto es por persona, asi
+# que el aviso tambien.
+#
+# El topic personal lo decide ESTE servidor y el telefono lo pregunta al
+# arrancar (mi-aviso/). Si la regla viviera tambien en la app, el dia que
+# una de las dos cambiara los avisos se irian a un topic al que nadie esta
+# suscrito y no fallaria nada: simplemente no llegarian.
+
+SOLO_DE_TOPIC = re.compile('[^a-zA-Z0-9_.~%-]')
+
+
+def topic_de(usuario):
+    """El topic personal de un usuario, o '' si no se puede.
+
+    FCM solo admite [a-zA-Z0-9-_.~%] en el nombre, y aqui hay usuarios cuyo
+    nombre es un correo -luis.rodriguez@hassperu.com-, asi que lo que no
+    encaja se sustituye. Se incluye el id porque dos nombres distintos
+    pueden quedar iguales al sustituir y acabarian compartiendo avisos.
+    """
+    if usuario is None or not getattr(usuario, 'pk', None):
+        return ''
+    limpio = SOLO_DE_TOPIC.sub('_', (usuario.username or '').strip().lower())
+    return 'user_{0}_{1}'.format(usuario.pk, limpio[:60])
+
+
+def _mandar_push(payload):
+    """Lo mismo que hace hi_incidents, con las mismas variables."""
+    if os.environ.get('PUSH_SERVICE_ENABLED', 'false').lower() != 'true':
+        logger.debug('Push deshabilitado; no se avisa del monitoreo')
+        return False
+
+    base = os.environ.get('PUSH_SERVICE_BASE_URL',
+                          'http://push_service:8080').rstrip('/')
+    ficha = os.environ.get('PUSH_SERVICE_INTERNAL_TOKEN', '')
+    espera = float(os.environ.get('PUSH_SERVICE_TIMEOUT_SECONDS', '2.0'))
+
+    req = _urlreq.Request(
+        base + '/push/notify',
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json',
+                 'X-Internal-Token': ficha},
+        method='POST')
+    try:
+        resp = _urlreq.urlopen(req, timeout=espera)
+        try:
+            codigo = resp.getcode()
+        finally:
+            resp.close()
+        if codigo >= 400:
+            logger.warning('Push monitoreo status=%s topic=%s',
+                           codigo, payload.get('topic'))
+            return False
+        return True
+    except Exception as exc:
+        # QUE NO SE CAIGA LA RUTINA POR UN AVISO. Si push_service no
+        # responde, la rutina ya esta creada y repartida: perder el aviso es
+        # molesto, perder el reparto seria tener que rehacerlo a mano.
+        logger.exception('Error avisando del monitoreo: %s', exc)
+        return False
+
+
+def avisar_de_rutina(rutina, por_usuario):
+    """Avisa a cada uno de los tramos que le han tocado.
+
+    `por_usuario` es {usuario: [tramos]}. Un aviso por persona, con sus
+    tramos dentro: quien recorre tres no quiere tres notificaciones, y el
+    cuerpo con los tramos ahorra abrir la app solo para ver si le afecta.
+    """
+    mandados = 0
+    for usuario, tramos in por_usuario.items():
+        topic = topic_de(usuario)
+        if not topic or not tramos:
+            continue
+        cuales = ', '.join(sorted(set(tramos), key=lambda t: ORDEN_TRAMO.get(t, 99)))
+        cuerpo = 'Tramo {0} - {1}'.format(cuales, rutina.nombre) \
+            if len(set(tramos)) == 1 \
+            else 'Tramos {0} - {1}'.format(cuales, rutina.nombre)
+        if _mandar_push({
+                'title': 'Tienes un nuevo Monitoreo Rutinario',
+                'body': cuerpo,
+                'data': {
+                    'entity_type': 'monitoreo_rutina',
+                    'rutina_id': str(rutina.pk),
+                    'rutina': rutina.nombre,
+                    'tramos': cuales,
+                },
+                'topic': topic}):
+            mandados += 1
+    return mandados
 
 
 def _numerar(v):
@@ -900,6 +1014,7 @@ def rutinas(request):
                 antes[x.tramo] = ids
 
     vistos = []
+    reparto = {}
     for t in pedidos:
         if t in vistos:
             continue
@@ -909,6 +1024,13 @@ def rutinas(request):
             asignado_en=timezone.now() if antes.get(t) else None)
         if antes.get(t):
             nuevo.usuarios.add(*antes[t])
+            for u in nuevo.usuarios.all():
+                reparto.setdefault(u, []).append(t)
+
+    # EL AVISO VA AL FINAL, cuando la rutina ya esta en la base. Mandarlo
+    # antes seria avisar de algo que todavia puede fallar al crearse, y hay
+    # gente que sale al canal por un aviso.
+    avisar_de_rutina(r, reparto)
     # Releer antes de responder. Lo que llego en la peticion son cadenas, y
     # el objeto en memoria las conserva: la base es la unica que sabe que
     # '2026-11-01' es una fecha.
@@ -968,7 +1090,7 @@ def asignar(request, pk):
                         status=status.HTTP_400_BAD_REQUEST)
 
     Usuario = get_user_model()
-    cambios, fallos = [], []
+    cambios, fallos, reparto = [], [], {}
     for item in lote:
         item = item or {}
         tramo = str(item.get('tramo') or '').strip().upper()
@@ -1001,6 +1123,11 @@ def asignar(request, pk):
                           % (tramo, ', '.join(malos)))
             continue
 
+        # SOLO A QUIEN ENTRA. Esta pantalla se guarda entera cada vez, asi
+        # que sin la diferencia un retoque en el tramo V volveria a avisar a
+        # los catorce; a la tercera vez nadie mira el aviso.
+        tenian = set(tr.usuarios.values_list('pk', flat=True))
+
         # Django 1.8 no tiene .set(): se vacia y se vuelve a llenar.
         tr.usuarios.clear()
         if gente:
@@ -1008,6 +1135,12 @@ def asignar(request, pk):
         tr.asignado_en = timezone.now() if gente else None
         tr.save(update_fields=['asignado_en'])
         cambios.append(tramo)
+
+        for u in gente:
+            if u.pk not in tenian:
+                reparto.setdefault(u, []).append(tramo)
+
+    avisar_de_rutina(r, reparto)
 
     return Response({'ok': not fallos, 'cambiados': cambios, 'fallos': fallos,
                      'rutina': _rutina(r, con_tramos=True)},
@@ -1111,6 +1244,25 @@ def telefono(request):
 # ══════════════════════════════════════════════════════════════════════════
 # LA APP
 # ══════════════════════════════════════════════════════════════════════════
+
+@api_view(['GET'])
+@permission_classes([IsMobileRoleUser])
+def mi_aviso(request):
+    """A que topic tiene que suscribirse este telefono para sus avisos.
+
+    POR QUE LO PREGUNTA Y NO LO CALCULA. La regla del nombre vive solo
+    aqui: si la app tambien la tuviera, el dia que una de las dos cambiara
+    los avisos se irian a un topic al que nadie esta suscrito, y no
+    fallaria nada -simplemente no llegarian, que es la peor forma de
+    fallar-.
+
+    Y se pregunta al ARRANCAR, no solo al entrar. El login ya trae un
+    `user_topic` que la app sabe leer, pero quien inicio sesion hace tres
+    meses no va a volver a hacerlo: esperarlo seria dejar sin avisos a
+    todos los que ya estan dentro.
+    """
+    return Response({'ok': True, 'topic': topic_de(request.user)})
+
 
 @api_view(['GET'])
 @permission_classes([IsMobileRoleUser])
@@ -1499,6 +1651,7 @@ IMPORT_URLS = ("from src.apps.core.monitoreo import (\\n"
                "    visitas_lote as mon_visitas_lote,\\n"
                "    hallazgos as mon_hallazgos,\\n"
                "    elementos as mon_elementos,\\n"
+               "    mi_aviso as mon_mi_aviso,\\n"
                ")\\n")
 
 RUTAS = (
@@ -1526,7 +1679,9 @@ RUTAS = (
     "    url(r'^v1/mobile/monitoreo/hallazgos/$',\n"
     "        mon_hallazgos, name='monitoreo_hallazgos'),\n"
     "    url(r'^v1/mobile/monitoreo/tramos/(?P<pk>[0-9]+)/elementos/$',\n"
-    "        mon_elementos, name='monitoreo_elementos'),\n")
+    "        mon_elementos, name='monitoreo_elementos'),\n"
+    "    url(r'^v1/mobile/monitoreo/mi-aviso/$',\n"
+    "        mon_mi_aviso, name='monitoreo_mi_aviso'),\n")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -2076,6 +2231,9 @@ def paso_urls(raiz, simulacro):
             ('mon_elementos', 'elementos as mon_elementos,',
              "    url(r'^v1/mobile/monitoreo/tramos/(?P<pk>[0-9]+)/elementos/$',\n"
              "        mon_elementos, name='monitoreo_elementos'),\n"),
+            ('mon_mi_aviso', 'mi_aviso as mon_mi_aviso,',
+             "    url(r'^v1/mobile/monitoreo/mi-aviso/$',\n"
+             "        mon_mi_aviso, name='monitoreo_mi_aviso'),\n"),
         ]
         faltan = [x for x in sueltas if x[0] not in t]
         if not faltan:
@@ -2112,7 +2270,7 @@ def paso_urls(raiz, simulacro):
     t = ''.join(lineas[:destino]) + RUTAS + ''.join(lineas[destino:])
     t = insertar_linea(t, fin_de_imports(t), IMPORT_URLS.replace('\\n', '\n'))
     escribir(ruta, t, simulacro)
-    return True, 'import y 11 rutas anadidos'
+    return True, 'import y 12 rutas anadidos'
 
 
 # ══════════════════════════════════════════════════════════════════════════
