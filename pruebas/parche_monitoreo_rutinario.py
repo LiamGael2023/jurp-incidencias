@@ -2942,17 +2942,47 @@ def paso_urls(raiz, simulacro):
 
 # ══════════════════════════════════════════════════════════════════════════
 
+# Donde esta el proyecto, segun desde donde se mire.
+#
+# EL MISMO ARBOL TIENE DOS NOMBRES: en el servidor es
+# /var/www/envs/prod y dentro del contenedor jurp_web es /app, que es
+# donde se ejecuta esto casi siempre -el parche se copia con `docker cp` y
+# se corre con `docker exec`-. Dar por bueno uno de los dos hacia que el
+# parche se plantara con un «no parece el proyecto de PLUVIRA» que suena a
+# ruta equivocada cuando lo que faltaba era un --raiz.
+CANDIDATAS = ('/var/www/envs/prod', '/app')
+
+
+def buscar_raiz():
+    """La primera candidata que tenga el urls.py, o None."""
+    for c in CANDIDATAS:
+        if os.path.isfile(os.path.join(c, 'src/apps/api/urls.py')):
+            return c
+    return None
+
+
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--raiz', default='/var/www/envs/prod')
+    p.add_argument('--raiz', default=None)
     p.add_argument('--aplicar', action='store_true')
     p.add_argument('--revertir', action='store_true')
     args = p.parse_args()
     simulacro = not args.aplicar
 
-    if not os.path.isfile(os.path.join(args.raiz, 'src/apps/api/urls.py')):
+    if args.raiz is None:
+        args.raiz = buscar_raiz()
+        if args.raiz is None:
+            print('No encuentro el proyecto de PLUVIRA. Mire en:')
+            for c in CANDIDATAS:
+                print('  - {0}/src/apps/api/urls.py'.format(c))
+            print('\nSi esta en otro sitio, pasalo con --raiz.')
+            sys.exit(1)
+    elif not os.path.isfile(os.path.join(args.raiz, 'src/apps/api/urls.py')):
         print('No parece el proyecto de PLUVIRA: no hay '
               '{0}/src/apps/api/urls.py'.format(args.raiz))
+        otra = buscar_raiz()
+        if otra:
+            print('Pero si lo hay en {0}: prueba --raiz {0}'.format(otra))
         sys.exit(1)
 
     if args.revertir:
