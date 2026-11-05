@@ -64,10 +64,12 @@ def sin_decorar(*a, **k):
 
 class Usuario(object):
     _n = 0
+    _reg = {}
 
     def __init__(self, nombre, gerencia=False):
         Usuario._n += 1
         self.pk = self.id = Usuario._n
+        Usuario._reg[self.pk] = self
         self.username = nombre
         self.first_name = nombre
         self.last_name = ''
@@ -132,8 +134,20 @@ class Coleccion(object):
     def values_list(self, campo, flat=False):
         return [getattr(f, campo) for f in self._filas]
 
+    def select_related(self, *a):
+        return self
+
     def count(self):
         return len(self._filas)
+
+    def add(self, *cosas):
+        # El ORM admite objetos o pks; el codigo de verdad pasa pks al
+        # heredar el reparto, asi que aqui hay que resolverlos.
+        for c in cosas:
+            self._filas.append(Usuario._reg[c] if isinstance(c, int) else c)
+
+    def clear(self):
+        del self._filas[:]
 
     def __iter__(self):
         return iter(self._filas)
@@ -162,6 +176,11 @@ class Rutina(object):
         self.tramos = Coleccion(self._tramos)
         self.borrada = False
 
+    def refresh_from_db(self):
+        # En la base releer convierte las cadenas en fechas; aqui no hay
+        # nada que convertir.
+        pass
+
     def delete(self):
         # En la base se van en cascada; aqui basta con dejar constancia.
         self.borrada = True
@@ -171,6 +190,20 @@ class Rutina(object):
 
     def vigente(self):
         return not self.cerrada and self.empezada
+
+
+def _crear_tramo(**kw):
+    return Tramo(kw['tramo'], kw['rutina'], [])
+
+
+def _crear_rutina(**kw):
+    r = Rutina()
+    r.nombre = kw.get('nombre') or r.nombre
+    r.fecha_inicio = kw.get('fecha_inicio') or r.fecha_inicio
+    r.fecha_fin = kw.get('fecha_fin') or r.fecha_fin
+    r.notas = kw.get('notas') or ''
+    r.creada_por = kw.get('creada_por')
+    return r
 
 
 class Tramo(object):
@@ -243,12 +276,43 @@ class SinTransaccion(object):
 
 
 class Gestor(object):
-    def __init__(self, registro, clase=None):
+    def __init__(self, registro, crear=None, filas=None):
         self._reg = registro
-        self._clase = clase
+        self._crear = crear
+        self._filas = filas
+
+    @property
+    def filas(self):
+        return list(self._reg.values()) if self._filas is None else self._filas
 
     def select_related(self, *a):
         return self
+
+    def exclude(self, **kw):
+        pk = kw.get('pk')
+        return Gestor(self._reg, self._crear,
+                      [f for f in self.filas if f.pk != pk])
+
+    def order_by(self, *campos):
+        fuera = list(self.filas)
+        for campo in reversed(campos):
+            rev = campo.startswith('-')
+            clave = campo.lstrip('-')
+            fuera.sort(key=lambda f: getattr(f, clave) or 0, reverse=rev)
+        return Gestor(self._reg, self._crear, fuera)
+
+    def all(self):
+        return self
+
+    def __iter__(self):
+        return iter(self.filas)
+
+    def __getitem__(self, corte):
+        return self.filas[corte]
+
+    def first(self):
+        f = self.filas
+        return f[0] if f else None
 
     def get(self, pk=None, **kw):
         if pk is None:
@@ -258,9 +322,10 @@ class Gestor(object):
         return self._reg[pk]
 
     def create(self, **kw):
+        if self._crear is not None:
+            return self._crear(**kw)
         v = Visita(**kw)
-        tr = kw['tramo_rutina']
-        tr._visitas.append(v)
+        kw['tramo_rutina']._visitas.append(v)
         return v
 
 
@@ -284,18 +349,28 @@ def cargar_modulo():
 
     ns = {
         're': re,
-        'timezone': None,
+        # timezone.now() se usa al crear tramos y al numerar; localtime
+        # solo tiene que devolver algo con .date() y .year.
+        'timezone': type('TZ', (), {
+            'now': staticmethod(lambda: datetime.datetime(2026, 11, 4, 10, 0)),
+            'localtime': staticmethod(lambda f=None: f or datetime.datetime(
+                2026, 11, 4, 10, 0)),
+        }),
         'status': Estados,
         'api_view': sin_decorar,
         'permission_classes': sin_decorar,
         'Response': Respuesta,
         'ResponsableTramo': None,
-        'RutinaMonitoreo': type('R', (), {'objects': Gestor(Rutina._reg),
-                                          'DoesNotExist': NoExiste}),
+        'RutinaMonitoreo': type('R', (), {
+            'objects': Gestor(Rutina._reg, crear=_crear_rutina),
+            'DoesNotExist': NoExiste}),
         # DoesNotExist tiene que estar: el codigo lo captura por nombre, y
         # sin el la excepcion sube tal cual en vez de volverse un 404.
-        'TramoDeRutina': type('M', (), {'objects': Gestor(Tramo._reg),
-                                        'DoesNotExist': NoExiste}),
+        'TramoDeRutina': type('M', (), {
+            'objects': Gestor(Tramo._reg, crear=_crear_tramo),
+            'DoesNotExist': NoExiste}),
+        'Usuario': type('U', (), {'objects': Gestor(Usuario._reg),
+                                  'DoesNotExist': NoExiste}),
         'transaction': SinTransaccion(),
         'VisitaMonitoreo': type('V', (), {
             'objects': GestorVisitas(),
@@ -353,6 +428,7 @@ OBRAS = ['Entrega  E%d' % n for n in range(11, 16)]
 def escenario(cerrada=False, empezada=True):
     Tramo._reg.clear()
     Rutina._reg.clear()
+    Usuario._reg.clear()
     Visita._n = 0
     Visita._todas = []
     mon = cargar_modulo()
@@ -670,6 +746,45 @@ def prueba_borrar():
     igual('la que no existe', r.status_code, 404)
 
 
+def prueba_herencia():
+    print('\n17. el reparto que se hereda al crear una rutina')
+    Tramo._reg.clear(); Rutina._reg.clear(); Usuario._reg.clear()
+    mon = cargar_modulo()
+    jefe = Usuario('gerencia', gerencia=True)
+    ana, beto, caro = Usuario('ana'), Usuario('beto'), Usuario('caro')
+
+    # Ronda de hace dos meses: el reparto completo de siempre.
+    vieja = Rutina()
+    vieja.nombre, vieja.fecha_inicio = 'Septiembre', '2026-09-01'
+    Tramo('0', vieja, [ana])
+    Tramo('I', vieja, [beto])
+    Tramo('II', vieja, [caro])
+
+    # Y una ronda corta de prueba, mas reciente, con UN tramo puesto.
+    corta = Rutina()
+    corta.nombre, corta.fecha_inicio = 'prueba', '2026-10-01'
+    Tramo('I', corta, [caro])          # el I cambio de manos
+    for t in ('0', 'II'):
+        Tramo(t, corta, [])            # estos nacieron vacios
+
+    r = mon['rutinas'](Peticion(jefe, {
+        'nombre': 'Noviembre', 'fecha_inicio': '2026-11-01',
+        'fecha_fin': '2026-11-30', 'tramos': ['0', 'I', 'II']}))
+    igual('se crea', r.status_code, 201)
+
+    nueva = [x for x in Rutina._reg.values() if x.nombre == 'Noviembre'][0]
+    quien = {}
+    for t in nueva._tramos:
+        quien[t.tramo] = sorted(u.username for u in t.usuarios.all())
+
+    # LO QUE SE ROMPIA: la ronda corta solo tenia el I, y antes eso dejaba
+    # el 0 y el II vacios aunque llevaran meses asignados.
+    igual('el 0 viene de la ronda vieja', quien['0'], ['ana'])
+    igual('el II tambien', quien['II'], ['caro'])
+    # Y el I se queda con el cambio mas reciente, no con el de hace meses.
+    igual('el I, con el cambio reciente', quien['I'], ['caro'])
+
+
 def main():
     print('Registro por elemento dentro del tramo')
     print('=' * 74)
@@ -680,7 +795,7 @@ def main():
                prueba_compatibilidad, prueba_nombre_largo,
                prueba_numeracion, prueba_hallazgo_por_lote_numerado,
                prueba_topic, prueba_aviso, prueba_sin_empezar,
-               prueba_borrar]:
+               prueba_borrar, prueba_herencia]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:

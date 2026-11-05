@@ -999,16 +999,31 @@ def rutinas(request):
         nombre=nombre[:140], fecha_inicio=inicio, fecha_fin=fin,
         notas=(datos.get('notas') or '').strip(),
         creada_por=request.user if getattr(request.user, 'pk', None) else None)
-    # EL REPARTO SE HEREDA DE LA RONDA ANTERIOR. Los tramos los recorre casi
-    # siempre la misma gente -es el coordinador de la empresa que esta en ese
-    # tramo-, asi que empezar cada mes con catorce desplegables vacios es
-    # repetir a mano una decision que ya estaba tomada. Lo heredado se puede
-    # cambiar; lo que no se puede es recordar catorce nombres cada vez.
-    previa = (RutinaMonitoreo.objects.exclude(pk=r.pk)
-              .order_by('-fecha_inicio', '-id').first())
+    # EL REPARTO SE HEREDA, TRAMO POR TRAMO Y NO RONDA POR RONDA.
+    #
+    # Los tramos los recorre casi siempre la misma gente -es el coordinador
+    # de la empresa que esta en ese tramo-, asi que empezar cada mes con
+    # catorce desplegables vacios es repetir a mano una decision que ya
+    # estaba tomada.
+    #
+    # Antes se copiaba de LA rutina anterior, en singular, y eso se rompia
+    # en cuanto la anterior era una ronda corta o de prueba con un solo
+    # tramo puesto: los otros trece nacian vacios aunque llevaran meses
+    # asignados a la misma persona. Ahora cada tramo busca hacia atras hasta
+    # encontrar la ultima ronda en la que ALGUIEN lo recorrio, asi que una
+    # ronda a medias ya no borra lo que no toco.
+    #
+    # Se miran las diez ultimas: con catorce tramos y rondas mensuales eso
+    # es casi un ano, y mas atras el reparto ya no dice nada del presente.
     antes = {}
-    if previa is not None:
+    anteriores = list(RutinaMonitoreo.objects.exclude(pk=r.pk)
+                      .order_by('-fecha_inicio', '-id')[:10])
+    for previa in anteriores:
+        if len(antes) >= len(pedidos):
+            break
         for x in previa.tramos.all():
+            if x.tramo in antes:
+                continue          # ya lo llenó una ronda más reciente
             ids = [u.pk for u in x.usuarios.all()]
             if ids:
                 antes[x.tramo] = ids
