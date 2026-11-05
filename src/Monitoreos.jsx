@@ -545,51 +545,33 @@ export default function Monitoreos({ irAIncidente }) {
   const borrarRutina = async () => {
     if (!elegida) return;
 
-    const tira = async (confirmar) => pedir(
-      `${API}rutinas/${elegida.id}/${confirmar ? '?confirmar=1' : ''}`,
-      { method: 'DELETE', callar: [404, 409] });
-
-    /* `pedir` solo devuelve `datos` cuando la respuesta fue correcta, y un
-     * 409 no lo es: ahí el cuerpo hay que leerlo a mano, y es justo el que
-     * trae la cuenta de lo que se va a perder. */
-    const cuerpoDe = async (res) => {
-      if (!res) return null;
-      try { return await res.clone().json(); } catch { return null; }
-    };
-
-    setOcupado(true);
-    const tanteo = await tira(false);
-    setOcupado(false);
-
-    const fallo = await cuerpoDe(tanteo.res);
-    // 409: hay registros dentro y el servidor dice cuántos.
-    const dentro = (tanteo.res && tanteo.res.status === 409) ? fallo : null;
-
-    if (tanteo.ok) {
-      await Swal.fire('Rutina borrada',
-        `«${esc(elegida.nombre)}» estaba vacía y se borró.`, 'success');
-      await cargar();
-      return;
-    }
-
-    if (!dentro) {
-      Swal.fire('No se pudo borrar',
-        (fallo && fallo.detail)
-          || (tanteo.res ? `El servidor respondió ${tanteo.res.status}.`
-                         : 'No se pudo consultar.'), 'error');
-      return;
-    }
+    /* QUÉ HAY DENTRO, SIN PREGUNTARLE AL SERVIDOR.
+     *
+     * La rutina que se está mirando ya trae sus tramos con el número de
+     * registros, así que la cuenta sale de lo que hay en pantalla. Antes se
+     * tanteaba con un DELETE sin confirmar para que el servidor la diera, y
+     * eso tenía un efecto feo: una rutina vacía se borraba en ese tanteo,
+     * sin preguntar nada. Borrar es borrar, y siempre se pregunta. */
+    const tramos = (elegida.tramos || []);
+    const registros = tramos.reduce(
+      (n, t) => n + (t.visitas || 0), 0);
+    const hallazgos = tramos.reduce(
+      (n, t) => n + (t.elementos_con_hallazgo || t.hallazgos || 0), 0);
 
     const r = await Swal.fire({
       icon: 'warning',
       title: `¿Borrar «${esc(elegida.nombre)}»?`,
-      html: `Tiene <b>${dentro.registros} registro(s)</b>`
-        + (dentro.hallazgos
-            ? ` y <b>${dentro.hallazgos} hallazgo(s)</b>` : '')
-        + ' de los recorridos ya hechos. Se borran con ella y no hay vuelta'
-        + ' atrás.<br><br>'
-        + 'Los incidentes de los hallazgos NO se borran: vuelven a la lista'
-        + ' de Incidentes.<br><br>'
+      html: (registros
+        ? `Tiene <b>${registros} registro(s)</b>`
+          + (hallazgos ? ` y <b>${hallazgos} hallazgo(s)</b>` : '')
+          + ' de los recorridos ya hechos. Se borran con ella y no hay'
+          + ' vuelta atrás.<br><br>'
+          + 'Los incidentes de los hallazgos NO se borran: vuelven a la'
+          + ' lista de Incidentes.<br><br>'
+        : 'No tiene ningún recorrido registrado, así que no se pierde'
+          + ' nada de campo.<br><br>')
+        + 'El reparto de los tramos tampoco se pierde: vive aparte y lo'
+        + ' hereda la siguiente rutina.<br><br>'
         + 'Si solo quieres que deje de aparecer en la app, usa'
         + ' <b>Cerrar rutina</b>.',
       showCancelButton: true,
@@ -601,10 +583,14 @@ export default function Monitoreos({ irAIncidente }) {
     if (!r.isConfirmed) return;
 
     setOcupado(true);
-    const { ok, res, datos } = await tira(true);
+    const { ok, res, datos } = await pedir(
+      `${API}rutinas/${elegida.id}/?confirmar=1`,
+      { method: 'DELETE', callar: [404, 409] });
     setOcupado(false);
+
     if (!ok) {
-      const porQue = await cuerpoDe(res);
+      let porQue = null;
+      try { porQue = await res.clone().json(); } catch { /* no es JSON */ }
       Swal.fire('No se pudo borrar',
         (porQue && porQue.detail)
           || (res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.'),
