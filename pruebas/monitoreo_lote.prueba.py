@@ -53,6 +53,7 @@ class Estados(object):
     HTTP_400_BAD_REQUEST = 400
     HTTP_403_FORBIDDEN = 403
     HTTP_404_NOT_FOUND = 404
+    HTTP_207_MULTI_STATUS = 207
     HTTP_409_CONFLICT = 409
 
 
@@ -60,6 +61,28 @@ def sin_decorar(*a, **k):
     def envoltura(fn):
         return fn
     return envoltura
+
+
+class Reparto(object):
+    """El reparto vigente de un tramo, al margen de la ronda."""
+    _reg = {}
+
+    def __init__(self, tramo):
+        self.tramo = tramo
+        self._usuarios = []
+        self.usuarios = Coleccion(self._usuarios)
+        Reparto._reg[tramo] = self
+
+
+class GestorReparto(object):
+    def all(self):
+        return list(Reparto._reg.values())
+
+    def get_or_create(self, tramo=None, **kw):
+        t = tramo if tramo is not None else kw.get('tramo')
+        if t in Reparto._reg:
+            return Reparto._reg[t], False
+        return Reparto(t), True
 
 
 class Responsable(object):
@@ -234,6 +257,9 @@ class Tramo(object):
         Tramo._reg[self.pk] = self
         rutina._tramos.append(self)
 
+    def save(self, update_fields=None):
+        pass
+
 
 class GestorVisitas(object):
     """Lo poco del ORM que usa _numerar: select_for_update, filter por ano,
@@ -328,11 +354,18 @@ class Gestor(object):
         return f[0] if f else None
 
     def get(self, pk=None, **kw):
-        if pk is None:
-            pk = kw.get('pk')
-        if pk not in self._reg:
+        if pk is not None or 'pk' in kw:
+            clave = pk if pk is not None else kw['pk']
+            if clave not in self._reg:
+                raise NoExiste()
+            return self._reg[clave]
+        # Por otros campos: asignar() busca el tramo por (rutina, tramo).
+        fuera = list(self.filas)
+        for clave, valor in kw.items():
+            fuera = [f for f in fuera if getattr(f, clave, None) == valor]
+        if not fuera:
             raise NoExiste()
-        return self._reg[pk]
+        return fuera[0]
 
     def create(self, **kw):
         if self._crear is not None:
@@ -346,6 +379,43 @@ class NoExiste(Exception):
     pass
 
 
+def _plantar_django_falso():
+    """Un django minimo en sys.modules, para los imports de dentro.
+
+    Algunas funciones importan django DENTRO del cuerpo
+    -`from django.contrib.auth import get_user_model`-, y eso no lo quita
+    el recorte de imports de arriba, que solo mira la columna cero. Sin
+    esto no se puede medir ni `asignar` ni nada que resuelva usuarios.
+    """
+    import types
+    if 'django.contrib.auth' in sys.modules:
+        return
+
+    class GestorUsuarios(object):
+        def get(self, pk=None, **kw):
+            if pk is None:
+                pk = kw.get('pk')
+            if pk not in Usuario._reg:
+                raise NoExiste()
+            return Usuario._reg[pk]
+
+        def filter(self, **kw):
+            return Coleccion(list(Usuario._reg.values()))
+
+    UsuarioFalso = type('U', (), {'objects': GestorUsuarios(),
+                                  'DoesNotExist': NoExiste})
+
+    django = types.ModuleType('django')
+    contrib = types.ModuleType('django.contrib')
+    auth = types.ModuleType('django.contrib.auth')
+    auth.get_user_model = lambda: UsuarioFalso
+    contrib.auth = auth
+    django.contrib = contrib
+    sys.modules['django'] = django
+    sys.modules['django.contrib'] = contrib
+    sys.modules['django.contrib.auth'] = auth
+
+
 def cargar_modulo():
     """Ejecuta el monitoreo.py que escribe el parche, con el andamio puesto."""
     aqui = os.path.dirname(os.path.abspath(__file__))
@@ -354,6 +424,7 @@ def cargar_modulo():
     parche = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(parche)
 
+    _plantar_django_falso()
     fuente = parche.MODULO
     # Fuera los imports de Django y del proyecto: el resto es el codigo que
     # se quiere medir, intacto.
@@ -375,6 +446,7 @@ def cargar_modulo():
         'Response': Respuesta,
         'ResponsableTramo': type('RT', (), {
             'objects': Coleccion(Responsable._todos)}),
+        'RepartoDeTramo': type('RDT', (), {'objects': GestorReparto()}),
         'RutinaMonitoreo': type('R', (), {
             'objects': Gestor(Rutina._reg, crear=_crear_rutina),
             'DoesNotExist': NoExiste}),
@@ -447,6 +519,7 @@ def escenario(cerrada=False, empezada=True):
     Rutina._reg.clear()
     Usuario._reg.clear()
     Responsable._todos[:] = []
+    Reparto._reg.clear()
     Visita._n = 0
     Visita._todas = []
     mon = cargar_modulo()
@@ -841,6 +914,44 @@ def prueba_cuadro():
     igual('sin cuenta, vacio', quien['III'], [])
 
 
+def prueba_reparto_sobrevive():
+    print('\n19. el reparto sobrevive al borrado de su rutina')
+    Tramo._reg.clear(); Rutina._reg.clear(); Usuario._reg.clear()
+    Responsable._todos[:] = []; Reparto._reg.clear()
+    mon = cargar_modulo()
+    jefe = Usuario('gerencia', gerencia=True)
+    cesar = Usuario('cherrera'); cesar.first_name = 'Cesar Herrera'
+
+    r1 = mon['rutinas'](Peticion(jefe, {
+        'nombre': 'Primera', 'fecha_inicio': '2026-11-01',
+        'fecha_fin': '2026-11-30', 'tramos': ['IV']}))
+    igual('se crea', r1.status_code, 201)
+    rut = [x for x in Rutina._reg.values() if x.nombre == 'Primera'][0]
+
+    r2 = mon['asignar'](Peticion(jefe, {
+        'asignaciones': [{'tramo': 'IV', 'usuarios': [cesar.pk]}]}), rut.pk)
+    igual('se asigna', r2.status_code, 200)
+    igual('queda en el reparto vigente',
+          [u.username for u in Reparto._reg['IV'].usuarios.all()], ['cherrera'])
+
+    r3 = mon['rutina'](Peticion(jefe, {'confirmar': 1}, metodo='DELETE'),
+                       rut.pk)
+    igual('se borra la rutina', r3.status_code, 200)
+    igual('y no queda ninguna', len(Rutina._reg), 0)
+
+    # LO QUE SE ROMPIA: la siguiente nacia vacia, porque la decision se
+    # habia ido con la ronda.
+    r4 = mon['rutinas'](Peticion(jefe, {
+        'nombre': 'Segunda', 'fecha_inicio': '2026-12-01',
+        'fecha_fin': '2026-12-31', 'tramos': ['IV']}))
+    igual('se crea la siguiente', r4.status_code, 201)
+    nueva = [x for x in Rutina._reg.values() if x.nombre == 'Segunda'][0]
+    quien = {t.tramo: sorted(u.username for u in t.usuarios.all())
+             for t in nueva._tramos}
+    igual('Cesar sigue en el IV', quien['IV'], ['cherrera'])
+    igual('contado como heredado', r4.data['heredados'], 1)
+
+
 def main():
     print('Registro por elemento dentro del tramo')
     print('=' * 74)
@@ -851,7 +962,8 @@ def main():
                prueba_compatibilidad, prueba_nombre_largo,
                prueba_numeracion, prueba_hallazgo_por_lote_numerado,
                prueba_topic, prueba_aviso, prueba_sin_empezar,
-               prueba_borrar, prueba_herencia, prueba_cuadro]:
+               prueba_borrar, prueba_herencia, prueba_cuadro,
+               prueba_reparto_sobrevive]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:

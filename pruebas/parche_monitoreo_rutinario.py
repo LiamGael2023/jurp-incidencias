@@ -322,6 +322,39 @@ class VisitaMonitoreo(models.Model):
                             'sin novedad' if self.sin_novedad else 'con hallazgo')
 
 
+class RepartoDeTramo(models.Model):
+    """Quien recorre cada tramo, al margen de la ronda.
+
+    POR QUE NO VIVE EN LA RUTINA. Vivia ahi, y el reparto se heredaba
+    leyendo las rondas anteriores. Funcionaba hasta que alguien borraba una
+    ronda: la asignacion se iba con ella, y la siguiente rutina nacia vacia
+    aunque se acabara de decidir quien recorre ese tramo. Asignar a alguien
+    a un tramo es una decision que dura meses; la ronda es de un mes.
+
+    NO SUSTITUYE AL CUADRO. El cuadro -ResponsableTramo- es la empresa
+    usuaria y su coordinador, con nombres escritos a mano, y lo mantiene
+    JURP. Esto son CUENTAS, y lo escribe quien reparte en la pantalla de
+    monitoreos. Cuando esto no sabe de un tramo, se cae al cuadro.
+
+    Una fila por tramo, que es lo que es: el reparto de hoy, no su
+    historia. Lo que paso en cada ronda ya esta en la ronda.
+    """
+
+    tramo = models.CharField('Tramo', max_length=6, choices=OPCIONES_TRAMO,
+                             unique=True)
+    usuarios = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, related_name='tramos_habituales',
+        blank=True, verbose_name='Quien lo recorre')
+    actualizado_en = models.DateTimeField('Actualizado', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Reparto de tramo'
+        verbose_name_plural = 'Reparto de tramos'
+
+    def __str__(self):
+        return 'Tramo {0}'.format(self.tramo)
+
+
 class TelefonoUsuario(models.Model):
     """El celular de una cuenta, escrito a mano.
 
@@ -352,6 +385,43 @@ class TelefonoUsuario(models.Model):
         return '%s - %s' % (self.usuario, self.celular)
 '''
 
+
+
+# RepartoDeTramo, para un models.py que ya tiene las demas tablas.
+REPARTO_BLOQUE = '''class RepartoDeTramo(models.Model):
+    """Quien recorre cada tramo, al margen de la ronda.
+
+    POR QUE NO VIVE EN LA RUTINA. Vivia ahi, y el reparto se heredaba
+    leyendo las rondas anteriores. Funcionaba hasta que alguien borraba una
+    ronda: la asignacion se iba con ella, y la siguiente rutina nacia vacia
+    aunque se acabara de decidir quien recorre ese tramo. Asignar a alguien
+    a un tramo es una decision que dura meses; la ronda es de un mes.
+
+    NO SUSTITUYE AL CUADRO. El cuadro -ResponsableTramo- es la empresa
+    usuaria y su coordinador, con nombres escritos a mano, y lo mantiene
+    JURP. Esto son CUENTAS, y lo escribe quien reparte en la pantalla de
+    monitoreos. Cuando esto no sabe de un tramo, se cae al cuadro.
+
+    Una fila por tramo, que es lo que es: el reparto de hoy, no su
+    historia. Lo que paso en cada ronda ya esta en la ronda.
+    """
+
+    tramo = models.CharField('Tramo', max_length=6, choices=OPCIONES_TRAMO,
+                             unique=True)
+    usuarios = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, related_name='tramos_habituales',
+        blank=True, verbose_name='Quien lo recorre')
+    actualizado_en = models.DateTimeField('Actualizado', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Reparto de tramo'
+        verbose_name_plural = 'Reparto de tramos'
+
+    def __str__(self):
+        return 'Tramo {0}'.format(self.tramo)
+
+
+'''
 
 
 # El bloque de arriba, tal cual, para meterlo en un models.py que ya
@@ -613,8 +683,9 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .models import (ResponsableTramo, RutinaMonitoreo, TramoDeRutina,
-                     VisitaMonitoreo, TelefonoUsuario, TRAMOS_CANAL)
+from .models import (RepartoDeTramo, ResponsableTramo, RutinaMonitoreo,
+                     TramoDeRutina, VisitaMonitoreo, TelefonoUsuario,
+                     TRAMOS_CANAL)
 from .equipo_enlazado import EsGerencia
 from .permission import IsMobileRoleUser
 
@@ -711,6 +782,21 @@ def _es_gerencia(u):
         return u.groups.filter(name=GRUPO_MONITOREO).exists()
     except Exception:
         return False
+
+
+def guardar_reparto(tramo, gente):
+    """Deja constancia de quien recorre un tramo, al margen de la ronda."""
+    try:
+        fila, _ = RepartoDeTramo.objects.get_or_create(tramo=tramo)
+        fila.usuarios.clear()       # Django 1.8 no tiene .set()
+        if gente:
+            fila.usuarios.add(*gente)
+    except Exception as exc:
+        # QUE NO SE CAIGA LA ASIGNACION POR ESTO. Lo que el usuario pidio
+        # -repartir la ronda- ya esta hecho; esto es memoria para la
+        # siguiente, y perderla es molesto, no grave.
+        logger.exception('No se pudo guardar el reparto del tramo %s: %s',
+                         tramo, exc)
 
 
 def _cuentas_moviles():
@@ -1055,6 +1141,17 @@ def rutinas(request):
     # Se miran las diez ultimas: con catorce tramos y rondas mensuales eso
     # es casi un ano, y mas atras el reparto ya no dice nada del presente.
     antes = {}
+
+    # 1. EL REPARTO VIGENTE, que es lo que alguien decidio por ultima vez y
+    #    no depende de que su ronda siga existiendo.
+    for fila in RepartoDeTramo.objects.all():
+        ids = [u.pk for u in fila.usuarios.all()]
+        if ids:
+            antes[fila.tramo] = ids
+
+    # 2. Las rondas anteriores, para lo que el reparto todavia no sepa: un
+    #    servidor recien parcheado lo tiene lleno por la migracion, pero
+    #    esto cubre lo que entre por otro camino.
     anteriores = list(RutinaMonitoreo.objects.exclude(pk=r.pk)
                       .order_by('-fecha_inicio', '-id')[:10])
     for previa in anteriores:
@@ -1068,7 +1165,7 @@ def rutinas(request):
                 antes[x.tramo] = ids
     heredados = len(antes)
 
-    # Y LO QUE NO CUBRE NINGUNA RONDA, DEL CUADRO.
+    # 3. Y LO QUE NO CUBRE NADA DE ESO, DEL CUADRO.
     #
     # Hace falta en dos momentos que son el mismo: la primera rutina que se
     # crea, y cuando se han borrado las anteriores. Sin esto, ahi salen los
@@ -1264,6 +1361,12 @@ def asignar(request, pk):
         for u in gente:
             if u.pk not in tenian:
                 reparto.setdefault(u, []).append(tramo)
+
+        # EL REPARTO SE GUARDA FUERA DE LA RONDA. Si viviera solo aqui,
+        # borrar esta rutina se llevaria por delante la decision de quien
+        # recorre el tramo, y la siguiente naceria vacia aunque se acabara
+        # de tomar.
+        guardar_reparto(tramo, gente)
 
     avisar_de_rutina(r, reparto)
 
@@ -2342,6 +2445,110 @@ def paso_numero(raiz, simulacro):
     return True, '{0}{1}'.format(nombre, '' if hecho_modelo else ' (y el modelo)')
 
 
+MIGRACION_REPARTO = """# -*- coding: utf-8 -*-
+# Lo escribe parche_monitoreo_rutinario.py.
+from __future__ import unicode_literals
+
+from django.conf import settings
+from django.db import migrations, models
+
+
+def desde_las_rondas(apps, schema_editor):
+    '''El reparto que hay hoy, sacado de las rondas que existen.
+
+    Se mira de la ronda mas reciente a la mas vieja y se toma, para cada
+    tramo, la primera en la que alguien lo recorria. A partir de aqui el
+    reparto vive en su propia tabla y ya no depende de que esas rondas
+    sigan existiendo, que es justo lo que se rompia al borrar una.
+    '''
+    Rutina = apps.get_model('core', 'RutinaMonitoreo')
+    Reparto = apps.get_model('core', 'RepartoDeTramo')
+    puesto = set()
+    for r in Rutina.objects.order_by('-fecha_inicio', '-id'):
+        for t in r.tramos.all():
+            if t.tramo in puesto:
+                continue
+            ids = list(t.usuarios.values_list('pk', flat=True))
+            if not ids:
+                continue
+            fila, _ = Reparto.objects.get_or_create(tramo=t.tramo)
+            fila.usuarios.add(*ids)
+            puesto.add(t.tramo)
+
+
+def deshacer(apps, schema_editor):
+    # La tabla se va entera; esto existe para poder revertir sin reventar.
+    pass
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('core', '%(anterior)s'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='RepartoDeTramo',
+            fields=[
+                ('id', models.AutoField(auto_created=True, primary_key=True,
+                                        serialize=False, verbose_name='ID')),
+                ('tramo', models.CharField(
+                    max_length=6, unique=True, verbose_name='Tramo',
+                    choices=[('0', 'Tramo 0'), ('I', 'Tramo I'),
+                             ('II', 'Tramo II'), ('III', 'Tramo III'),
+                             ('IV', 'Tramo IV'), ('V', 'Tramo V'),
+                             ('VI', 'Tramo VI'), ('VII', 'Tramo VII'),
+                             ('VIII', 'Tramo VIII'), ('IX', 'Tramo IX'),
+                             ('X', 'Tramo X'), ('XI', 'Tramo XI'),
+                             ('XII', 'Tramo XII'), ('XIII', 'Tramo XIII')])),
+                ('actualizado_en', models.DateTimeField(
+                    auto_now=True, verbose_name='Actualizado')),
+                ('usuarios', models.ManyToManyField(
+                    blank=True, related_name='tramos_habituales',
+                    to=settings.AUTH_USER_MODEL,
+                    verbose_name='Quien lo recorre')),
+            ],
+            options={
+                'verbose_name': 'Reparto de tramo',
+                'verbose_name_plural': 'Reparto de tramos',
+            },
+        ),
+        migrations.RunPython(desde_las_rondas, deshacer),
+    ]
+"""
+
+
+def paso_reparto(raiz, simulacro):
+    """Que el reparto viva fuera de la ronda y no se vaya al borrarla."""
+    ruta = os.path.join(raiz, 'src/apps/core/models.py')
+    if not os.path.exists(ruta):
+        return False, 'no existe {0}'.format(ruta)
+    t = leer(ruta)
+    if 'class TramoDeRutina' not in t:
+        return True, 'no aplica (las tablas las pone el paso 1)'
+
+    hecho_modelo = True
+    if 'class RepartoDeTramo' not in t:
+        ancla = 'class TelefonoUsuario(models.Model):'
+        if t.count(ancla) != 1:
+            return False, ('no encuentro TelefonoUsuario una sola vez; '
+                           'pegame el modelo y lo hago a mano')
+        escribir(ruta, t.replace(ancla, REPARTO_BLOQUE + ancla), simulacro)
+        hecho_modelo = False
+
+    carpeta = os.path.join(raiz, 'src/apps/core/migrations')
+    previas = sorted(n[:-3] for n in os.listdir(carpeta)
+                     if n.endswith('.py') and n != '__init__.py')
+    if any('reparto_tramo' in n for n in previas):
+        return True, 'ya estaba'
+    anterior = previas[-1]
+    nombre = '{0:04d}_reparto_tramo.py'.format(int(anterior[:4]) + 1)
+    escribir(os.path.join(carpeta, nombre),
+             MIGRACION_REPARTO % {'anterior': anterior}, simulacro)
+    return True, '{0}{1}'.format(nombre, '' if hecho_modelo else ' (y el modelo)')
+
+
 def paso_modulo(raiz, simulacro):
     for rel, que in (('src/apps/core/equipo_enlazado.py', 'EsGerencia'),
                      ('src/apps/core/permission.py', 'IsMobileRoleUser')):
@@ -2452,8 +2659,9 @@ def main():
         ('5 telefono    ', paso_telefono),
         ('6 elemento    ', paso_elemento),
         ('7 numeracion  ', paso_numero),
-        ('8 monitoreo.py', paso_modulo),
-        ('9 urls.py     ', paso_urls),
+        ('8 reparto     ', paso_reparto),
+        ('9 monitoreo.py', paso_modulo),
+        ('10 urls.py    ', paso_urls),
     ]
     fallo = False
     for nombre, fn in pasos:
