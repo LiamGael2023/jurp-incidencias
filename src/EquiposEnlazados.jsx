@@ -41,10 +41,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FaMobileAlt, FaSearch, FaSyncAlt, FaUnlock, FaExclamationTriangle,
   FaCheckCircle, FaHistory, FaUserPlus, FaKey, FaUserSlash, FaUserCheck,
-  FaUserTag, FaPen, FaGlobe,
+  FaUserTag, FaPen, FaGlobe, FaUserShield,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import { pedir } from './sesion';
+import PermisosPantalla from './PermisosPantalla';
 import './EquiposEnlazados.css';
 
 /* POR QUE ESTO SON PROPIEDADES Y NO CONSTANTES. La misma pantalla sirve a
@@ -184,6 +185,10 @@ export default function EquiposEnlazados({
   const [usuarios, setUsuarios] = useState([]);
   const [equipos, setEquipos] = useState([]);
   const [roles, setRoles] = useState([]);
+  /* La rejilla de permisos, abierta sobre la pantalla: null, {modo:'rol'}
+   * o {modo:'usuario', usuario}. Un estado y no dos booleanos porque los
+   * dos no pueden estar abiertos a la vez y con booleanos si podrian. */
+  const [permisos, setPermisos] = useState(null);
   const [sinIdentificar, setSinIdentificar] = useState(null);
   const [cargando, setCargando] = useState(false);
   const [fallo, setFallo] = useState('');
@@ -750,6 +755,16 @@ export default function EquiposEnlazados({
           disabled={cargando || ocupado === 'nuevo'}>
           <FaUserPlus size={12} /> Nuevo usuario
         </button>
+        {/* LOS PERMISOS SE CONFIGURAN POR ROL, y por eso este boton esta
+          * arriba y no en cada fila: tocarlos persona por persona con
+          * treinta cuentas es treinta veces la misma decision. En la fila
+          * esta la EXCEPCION, que es lo que de verdad es individual. */}
+        <button type="button" className="eqe-btn"
+          onClick={() => setPermisos({ modo: 'rol' })}
+          disabled={cargando || !roles.length}
+          title="Qué pantallas ve cada rol y qué puede hacer dentro">
+          <FaUserShield size={11} /> Permisos por rol
+        </button>
         <button type="button" className="eqe-btn" onClick={cargar} disabled={cargando}>
           <FaSyncAlt size={11} /> Actualizar
         </button>
@@ -860,6 +875,11 @@ export default function EquiposEnlazados({
                           title="Cambiar el rol" onClick={() => cambiarRol(u)}>
                           <FaUserTag size={10} /> Rol
                         </button>
+                        <button type="button" className="eqe-mini" disabled={trabajando}
+                          title="Darle o quitarle pantallas, por encima de su rol"
+                          onClick={() => setPermisos({ modo: 'usuario', usuario: u })}>
+                          <FaUserShield size={10} /> Pantallas
+                        </button>
                         {soportaAcceso && (
                           <button type="button" className="eqe-mini" disabled={trabajando}
                             title="Elegir si entra por la web, por la app o por los dos"
@@ -890,6 +910,15 @@ export default function EquiposEnlazados({
             </tbody>
           </table>
         </div>
+      )}
+
+      {permisos && (
+        <PermisosPantalla
+          modo={permisos.modo}
+          usuario={permisos.usuario}
+          roles={roles}
+          onCerrar={() => setPermisos(null)}
+        />
       )}
     </div>
   );

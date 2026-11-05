@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { cargarPermisos, olvidarPermisos, puedoVer, hayPermisos }
+  from './permisos';
 import './App.css';
 import MapaChavimochic from './Mapa';
 import Login from './Login';
@@ -144,6 +146,12 @@ function App() {
     () => !appDeURL() && !localStorage.getItem('userToken')
   );
 
+  /* Un contador, no un booleano: se incrementa cuando los permisos
+   * cambian para que el menú se vuelva a pintar. Los permisos viven fuera
+   * de React —los consultan pantallas que no son hijas unas de otras— y
+   * esto es lo único que React necesita saber de ellos. */
+  const [versionPermisos, setVersionPermisos] = useState(0);
+
   const [menuPerfilAbierto, setMenuPerfilAbierto] = useState(false);
   const [menuLateralAbierto, setMenuLateralAbierto] = useState(true);
   const [vistaActual, setVistaActual] = useState(
@@ -156,6 +164,22 @@ function App() {
     const desdeURL = appDeURL();
     if (desdeURL) localStorage.setItem('appElegida', desdeURL);
   }, []);
+
+  /* Los permisos, en cuanto hay sesión.
+   *
+   * SIN ESPERARLOS PARA PINTAR. Mientras no se sepan, `puedoVer` dice que
+   * sí a todo: el menú sale entero y, si resulta que algo no le tocaba, se
+   * esconde un instante después. Al revés —esconderlo todo hasta saber—
+   * daría una pantalla vacía en cada carga y en cada corte de red, que es
+   * mucho peor que un parpadeo. */
+  useEffect(() => {
+    if (!token) return;
+    let vivo = true;
+    cargarPermisos(true).then(() => {
+      if (vivo) setVersionPermisos((v) => v + 1);
+    });
+    return () => { vivo = false; };
+  }, [token]);
   // ID del incidente que se debe abrir automáticamente al entrar a la vista
   // Incidentes (usado por el enlace desde el Panel de Maquinaria).
   const [incidenteAbrir, setIncidenteAbrir] = useState(null);
@@ -169,11 +193,41 @@ function App() {
   // login no lo dijo, se deja a la vista, que es lo de hoy.
   const menuVisible = MENU.filter((m) => {
     if (!m.apps.includes(appElegida)) return false;
+
+    /* LA REJILLA MANDA SOBRE soloAdmin. Cuando el servidor sirve permisos
+     * por pantalla, esa es la respuesta: `soloAdmin` era la aproximación
+     * que había mientras no existía nada mejor, y mantener las dos reglas
+     * a la vez daría pantallas que se dan por un lado y se quitan por el
+     * otro sin que nadie sepa cuál gana. Los rótulos de sección no tienen
+     * permiso propio: se quedan, y abajo se quitan los que se queden
+     * huérfanos. */
+    if (hayPermisos() && !m.seccion) return puedoVer(m.clave);
+
     if (!m.soloAdmin) return true;
     let marca = null;
     try { marca = localStorage.getItem('userEsAdmin'); } catch { marca = null; }
     return marca !== 'no';
+  }).filter((m, i, lista) => {
+    // Un rótulo de sección sin ninguna pantalla debajo es una cabecera
+    // suelta: se entiende como que algo falta y no como que no hay nada.
+    if (!m.seccion) return true;
+    const siguiente = lista[i + 1];
+    return !!siguiente && !siguiente.seccion;
   });
+
+  /* Si la pantalla abierta deja de estar permitida, se sale de ella.
+   * Quedarse dentro enseñaría una pantalla llena de 403 a quien ya no
+   * tiene por qué verla. `versionPermisos` está en las dependencias
+   * porque es lo que avisa de que la respuesta ya llegó. */
+  useEffect(() => {
+    if (!token || !hayPermisos()) return;
+    if (puedoVer(vistaActual)) return;
+    const primera = menuVisible.find((m) => !m.seccion);
+    setVistaActual(primera ? primera.clave : vistaInicial(appElegida));
+    // menuVisible se recalcula en cada render; va fuera a propósito para
+    // no re-disparar esto en bucle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, vistaActual, appElegida, versionPermisos]);
 
   // Sale de la intro y deja una entrada en el historial, para que el boton
   // "atras" del navegador regrese a NEXHIDRO.
@@ -221,6 +275,8 @@ function App() {
     // De qué padrón salió el token que se acaba de tirar. Dejarla puesta
     // haría que la siguiente sesión arrastrara el origen de la anterior.
     localStorage.removeItem('authOrigen');
+    // Los permisos de quien se va no son los del que entre después.
+    olvidarPermisos();
     setToken(null);
     setNombreUsuario('');
     setMenuPerfilAbierto(false);

@@ -27,6 +27,7 @@ import { FaTrashAlt, FaChevronDown, FaChevronUp, FaExternalLinkAlt,
   FaPen,
 } from 'react-icons/fa';
 import Swal from 'sweetalert2';
+import { loQuePuedo } from './permisos';
 import { simboloDeElemento } from './simbolos';
 import { pedir } from './sesion';
 import './Monitoreos.css';
@@ -87,6 +88,19 @@ const ICONO = {
 };
 
 export default function Monitoreos({ irAIncidente }) {
+  /* QUE PUEDE HACER AQUI QUIEN ESTA MIRANDO.
+   *
+   * Esto solo esconde botones. El permiso de verdad lo comprueba el
+   * servidor en cada peticion -ahi vive el 403-, y las dos piezas se
+   * necesitan: solo el servidor da una pantalla llena de botones que
+   * fallan, y solo esto da una puerta con el cartel puesto y sin
+   * cerradura.
+   *
+   * Los hallazgos son otra pantalla con su propia rejilla, asi que
+   * borrarlos se pregunta aparte: hay quien reparte tramos y no tiene por
+   * que poder borrar lo que encontro su cuadrilla. */
+  const permiso = loQuePuedo('monitoreos');
+  const permisoHallazgo = loQuePuedo('hallazgos');
   const [rutinas, setRutinas] = useState([]);
   const [elegida, setElegida] = useState(null);     // la rutina abierta
   const [candidatos, setCandidatos] = useState([]);
@@ -285,12 +299,14 @@ export default function Monitoreos({ irAIncidente }) {
                             <FaExternalLinkAlt size={10} /> Gestionar el hallazgo
                           </button>
                         )}
-                        <button type="button" className="mon-borrar-hallazgo"
-                          onClick={() => borrarHallazgo(v, t.id)}
-                          disabled={ocupado}
-                          title="Borrar este hallazgo">
-                          <FaTrashAlt size={10} /> Borrar
-                        </button>
+                        {permisoHallazgo.borrar && (
+                          <button type="button" className="mon-borrar-hallazgo"
+                            onClick={() => borrarHallazgo(v, t.id)}
+                            disabled={ocupado}
+                            title="Borrar este hallazgo">
+                            <FaTrashAlt size={10} /> Borrar
+                          </button>
+                        )}
                       </div>
                     </>
                   )}
@@ -775,10 +791,12 @@ export default function Monitoreos({ irAIncidente }) {
           ))}
         </select>
 
-        <button type="button" className="mon-nueva" onClick={crear}
-          disabled={ocupado}>
-          <FaPlus size={12} /> Nueva rutina
-        </button>
+        {permiso.crear && (
+          <button type="button" className="mon-nueva" onClick={crear}
+            disabled={ocupado}>
+            <FaPlus size={12} /> Nueva rutina
+          </button>
+        )}
         <button type="button" className="mon-btn" onClick={() => cargar()}
           disabled={cargando}>
           <FaSyncAlt size={11} /> Actualizar
@@ -821,23 +839,27 @@ export default function Monitoreos({ irAIncidente }) {
                 <span className="mon-tag mon-tag-viva">Vigente</span>)}
             </div>
             <div className="mon-resumen-acc">
-              {hayCambios && (
+              {hayCambios && permiso.editar && (
                 <button type="button" className="mon-guardar"
                   onClick={guardarAsignaciones} disabled={ocupado}>
                   <FaSave size={11} /> Guardar asignaciones
                 </button>
               )}
-              <button type="button" className="mon-btn"
-                onClick={alternarCierre} disabled={ocupado}>
-                {elegida.cerrada
-                  ? <><FaLockOpen size={11} /> Reabrir rutina</>
-                  : <><FaLock size={11} /> Cerrar rutina</>}
-              </button>
-              <button type="button" className="mon-btn mon-btn-mal"
-                onClick={borrarRutina} disabled={ocupado}
-                title="Borra la rutina y todo lo registrado en ella">
-                <FaTrashAlt size={11} /> Borrar
-              </button>
+              {permiso.editar && (
+                <button type="button" className="mon-btn"
+                  onClick={alternarCierre} disabled={ocupado}>
+                  {elegida.cerrada
+                    ? <><FaLockOpen size={11} /> Reabrir rutina</>
+                    : <><FaLock size={11} /> Cerrar rutina</>}
+                </button>
+              )}
+              {permiso.borrar && (
+                <button type="button" className="mon-btn mon-btn-mal"
+                  onClick={borrarRutina} disabled={ocupado}
+                  title="Borra la rutina y todo lo registrado en ella">
+                  <FaTrashAlt size={11} /> Borrar
+                </button>
+              )}
             </div>
           </div>
 
@@ -1037,15 +1059,17 @@ export default function Monitoreos({ irAIncidente }) {
                                     <FaExternalLinkAlt size={10} /> Gestionar el hallazgo
                                   </button>
                                 )}
-                                <button
-                                  type="button"
-                                  className="mon-borrar-hallazgo"
-                                  onClick={() => borrarHallazgo(v, t.id)}
-                                  disabled={ocupado}
-                                  title="Borrar este hallazgo"
-                                >
-                                  <FaTrashAlt size={10} /> Borrar
-                                </button>
+                                {permisoHallazgo.borrar && (
+                                  <button
+                                    type="button"
+                                    className="mon-borrar-hallazgo"
+                                    onClick={() => borrarHallazgo(v, t.id)}
+                                    disabled={ocupado}
+                                    title="Borrar este hallazgo"
+                                  >
+                                    <FaTrashAlt size={10} /> Borrar
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ))}
