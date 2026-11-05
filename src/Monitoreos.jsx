@@ -276,14 +276,22 @@ export default function Monitoreos({ irAIncidente }) {
                       {v.observacion && (
                         <div className="mon-sub">{v.observacion}</div>
                       )}
-                      {v.incidente && (
-                        <button type="button" className="mon-ver-inc"
-                          onClick={() => irAIncidente && irAIncidente(v.incidente)}
-                          disabled={!irAIncidente}
-                          title="Abrir el hallazgo para gestionarlo">
-                          <FaExternalLinkAlt size={10} /> Gestionar el hallazgo
+                      <div className="mon-hallazgo-botones">
+                        {v.incidente && (
+                          <button type="button" className="mon-ver-inc"
+                            onClick={() => irAIncidente && irAIncidente(v.incidente)}
+                            disabled={!irAIncidente}
+                            title="Abrir el hallazgo para gestionarlo">
+                            <FaExternalLinkAlt size={10} /> Gestionar el hallazgo
+                          </button>
+                        )}
+                        <button type="button" className="mon-borrar-hallazgo"
+                          onClick={() => borrarHallazgo(v, t.id)}
+                          disabled={ocupado}
+                          title="Borrar este hallazgo">
+                          <FaTrashAlt size={10} /> Borrar
                         </button>
-                      )}
+                      </div>
                     </>
                   )}
                 </td>
@@ -306,6 +314,16 @@ export default function Monitoreos({ irAIncidente }) {
       return;
     }
     setDesglose(d => ({ ...d, [id]: { abierto: true, cargando: true } }));
+    await traerDesglose(id);
+  };
+
+  /* Pide los elementos de un tramo y los deja en el estado.
+   *
+   * Aparte de `alternarDesglose` porque también se usa al borrar un
+   * hallazgo: ahí el panel ya está abierto y lo que hace falta es que
+   * diga lo que dice ahora el servidor, no cerrarlo y que el que borró
+   * tenga que volver a abrirlo para comprobar. */
+  const traerDesglose = async (id) => {
     const { ok, res, datos } = await pedir(`${API}tramos/${id}/elementos/`,
       { callar: [403, 404] });
     if (!ok) {
@@ -321,6 +339,89 @@ export default function Monitoreos({ irAIncidente }) {
       ...d,
       [id]: { abierto: true, lista: (datos && datos.results) || [] },
     }));
+  };
+
+  /* Borra un hallazgo: el registro del recorrido y, si se pide, su
+   * incidente.
+   *
+   * ──────────────────────────────────────────────────────────────────
+   * DOS BOTONES PORQUE SON DOS COSAS
+   * ──────────────────────────────────────────────────────────────────
+   *
+   * Lo que aquí se llama «hallazgo» son dos registros: la fila que dice
+   * en qué elemento apareció —con su HALLAZGO-NNN— y el incidente de
+   * campo con sus fotos, su bitácora y su costeo.
+   *
+   * Quitarlo del recorrido deja el incidente vivo, en la lista de
+   * Incidentes, que es de donde salió: sirve cuando el hallazgo estaba
+   * bien pero se registró en el elemento equivocado. Borrarlo todo es
+   * para una prueba o un error, y no hay vuelta atrás.
+   *
+   * Juntar las dos en un solo «¿seguro?» obligaría a elegir sin saber
+   * qué se lleva por delante, y las fotos de campo no se recuperan. */
+  const borrarHallazgo = async (v, tramoId) => {
+    const r = await Swal.fire({
+      icon: 'warning',
+      title: '¿Borrar este hallazgo?',
+      html: `<b>${esc(v.codigo || 'Hallazgo')}</b>`
+        + `<div style="margin:6px 0 14px;color:#5b6b7f">`
+        + `${esc(v.elemento || 'Todo el tramo')}</div>`
+        + (v.incidente
+          ? 'Puedes <b>quitarlo del recorrido</b> —el elemento vuelve a'
+            + ' quedar sin revisar y el incidente sigue vivo en la lista de'
+            + ' <b>Incidentes</b>—, o <b>borrarlo todo</b>, incluido el'
+            + ' incidente con sus fotos y su bitácora.<br><br>'
+            + 'Borrarlo todo no tiene vuelta atrás.'
+          : 'Este hallazgo no tiene ningún incidente enlazado, así que'
+            + ' solo se borra el registro del recorrido.'),
+      showCancelButton: true,
+      showDenyButton: !!v.incidente,
+      focusCancel: true,
+      confirmButtonText: v.incidente ? 'Quitar del recorrido' : 'Sí, borrarlo',
+      denyButtonText: 'Borrar todo',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#b45309',
+      denyButtonColor: '#d63939',
+    });
+    if (!r.isConfirmed && !r.isDenied) return;
+    const conIncidente = r.isDenied;
+
+    setOcupado(true);
+    const { ok, res, datos } = await pedir(
+      `${API}hallazgos/${v.id}/${conIncidente ? '?incidente=1' : ''}`,
+      { method: 'DELETE', callar: [400, 403, 404] });
+    setOcupado(false);
+
+    if (!ok) {
+      let porQue = null;
+      try { porQue = await res.clone().json(); } catch { /* no es JSON */ }
+      Swal.fire('No se pudo borrar',
+        (porQue && porQue.detail)
+          || (res && res.status === 404
+            ? 'Este servidor todavía no permite borrar hallazgos. Aplica el '
+              + 'parche de monitoreos.'
+            : res ? `El servidor respondió ${res.status}.` : 'Sin respuesta.'),
+        'error');
+      return;
+    }
+
+    /* EL SERVIDOR PUEDE HABER BORRADO SOLO LA MITAD. Si algo colgado del
+     * incidente está protegido, la fila se va igual y el incidente se
+     * queda: decirlo es la diferencia entre creer que no quedó nada y
+     * saber dónde sigue estando. */
+    const aviso = datos && datos.detail;
+    await Swal.fire(
+      aviso ? 'Borrado a medias' : 'Hallazgo borrado',
+      aviso || (conIncidente
+        ? 'Se borró el hallazgo y su incidente.'
+        : 'Se quitó del recorrido. El incidente sigue en la lista de '
+          + 'Incidentes.'),
+      aviso ? 'warning' : 'success');
+
+    await cargar();
+    if (tramoId && desglose[tramoId] && desglose[tramoId].abierto) {
+      await traerDesglose(tramoId);
+    }
   };
 
   /* ── Acciones ──────────────────────────────────────────────────────── */
@@ -915,17 +1016,7 @@ export default function Monitoreos({ irAIncidente }) {
                               {v.codigo && (
                                 <div className="mon-sub mon-codigo">{v.codigo}</div>
                               )}
-                              {v.incidente ? (
-                                <button
-                                  type="button"
-                                  className="mon-ver-inc"
-                                  onClick={() => irAIncidente && irAIncidente(v.incidente)}
-                                  disabled={!irAIncidente}
-                                  title="Abrir el hallazgo para gestionarlo"
-                                >
-                                  <FaExternalLinkAlt size={10} /> Gestionar el hallazgo
-                                </button>
-                              ) : (
+                              {!v.incidente && (
                                 /* Un hallazgo sin incidente es el que se
                                  * registro en masivo con observacion: no
                                  * hay nada que abrir, y decirlo evita que
@@ -934,6 +1025,28 @@ export default function Monitoreos({ irAIncidente }) {
                                   sin incidente enlazado
                                 </div>
                               )}
+                              <div className="mon-hallazgo-botones">
+                                {v.incidente && (
+                                  <button
+                                    type="button"
+                                    className="mon-ver-inc"
+                                    onClick={() => irAIncidente && irAIncidente(v.incidente)}
+                                    disabled={!irAIncidente}
+                                    title="Abrir el hallazgo para gestionarlo"
+                                  >
+                                    <FaExternalLinkAlt size={10} /> Gestionar el hallazgo
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="mon-borrar-hallazgo"
+                                  onClick={() => borrarHallazgo(v, t.id)}
+                                  disabled={ocupado}
+                                  title="Borrar este hallazgo"
+                                >
+                                  <FaTrashAlt size={10} /> Borrar
+                                </button>
+                              </div>
                             </div>
                           ))}
                       </td>

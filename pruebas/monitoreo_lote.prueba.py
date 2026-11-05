@@ -144,6 +144,45 @@ class Visita(object):
     def save(self, update_fields=None):
         pass
 
+    def delete(self):
+        # En la base la fila se va y el incidente queda (SET_NULL); aqui
+        # basta con sacarla de las dos listas donde esta.
+        self.borrada = True
+        if self in Visita._todas:
+            Visita._todas.remove(self)
+        tr = self.tramo_rutina
+        if tr is not None and self in tr._visitas:
+            tr._visitas.remove(self)
+
+
+class Incidente(object):
+    """Un HIIncident de mentira: lo justo para enlazarlo y para borrarlo."""
+
+    _n = 0
+    _reg = {}
+
+    def __init__(self):
+        Incidente._n += 1
+        self.id = self.pk = Incidente._n
+        Incidente._reg[self.pk] = self
+        self.borrado = False
+
+    def delete(self):
+        self.borrado = True
+        Incidente._reg.pop(self.pk, None)
+
+
+class _Borrables(object):
+    """Lo que devuelve un filter() cuando solo se le va a pedir delete()."""
+
+    def __init__(self, filas):
+        self._filas = filas
+
+    def delete(self):
+        for f in list(self._filas):
+            f.delete()
+        return (len(self._filas), {})
+
 
 class Coleccion(object):
     """Lo poquito del ORM que usa el codigo: all, filter, exists, values_list."""
@@ -278,6 +317,17 @@ class GestorVisitas(object):
 
     def select_for_update(self):
         return self
+
+    def select_related(self, *a):
+        return self
+
+    def get(self, pk=None, **kw):
+        if pk is None:
+            pk = kw.get('pk')
+        for f in self.filas:
+            if f.pk == pk:
+                return f
+        raise NoExiste()
 
     def filter(self, **kw):
         fuera = list(self.filas)
@@ -425,6 +475,31 @@ def _plantar_django_falso():
     UsuarioFalso = type('U', (), {'objects': GestorUsuarios(),
                                   'DoesNotExist': NoExiste})
 
+    # EL HI_INCIDENTS FALSO. `visitas` y `hallazgo` lo importan dentro del
+    # cuerpo para enlazar y para borrar el incidente; sin el no se puede
+    # medir ni una cosa ni la otra.
+    class GestorIncidentes(object):
+        def get(self, pk=None, **kw):
+            if pk is None:
+                pk = kw.get('pk')
+            if pk not in Incidente._reg:
+                raise NoExiste()
+            return Incidente._reg[pk]
+
+        def filter(self, **kw):
+            pk = kw.get('pk')
+            return _Borrables([Incidente._reg[pk]]
+                              if pk in Incidente._reg else [])
+
+    IncidenteFalso = type('I', (), {'objects': GestorIncidentes(),
+                                    'DoesNotExist': NoExiste})
+
+    hi = types.ModuleType('src.apps.hi_incidents.models')
+    hi.HIIncident = IncidenteFalso
+    for nombre in ('src', 'src.apps', 'src.apps.hi_incidents'):
+        sys.modules.setdefault(nombre, types.ModuleType(nombre))
+    sys.modules['src.apps.hi_incidents.models'] = hi
+
     django = types.ModuleType('django')
     contrib = types.ModuleType('django.contrib')
     auth = types.ModuleType('django.contrib.auth')
@@ -480,6 +555,7 @@ def cargar_modulo():
         'transaction': SinTransaccion(),
         'VisitaMonitoreo': type('V', (), {
             'objects': GestorVisitas(),
+            'DoesNotExist': NoExiste,
             'TRAMO': 'tramo', 'SUBTRAMO': 'subtramo', 'OBRA': 'obra'}),
         'TelefonoUsuario': None,
         'TRAMOS_CANAL': ('0', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII',
@@ -540,6 +616,8 @@ def escenario(cerrada=False, empezada=True):
     Usuario._reg.clear()
     Responsable._todos[:] = []
     Reparto._reg.clear()
+    Incidente._reg.clear()
+    Incidente._n = 0
     Visita._n = 0
     Visita._todas = []
     mon = cargar_modulo()
@@ -1009,6 +1087,67 @@ def prueba_extraordinaria():
     igual('a quien no le toca, si', r.status_code, 201)
 
 
+def prueba_borrar_hallazgo():
+    print('\n21. borrar un hallazgo')
+    mon, tr, ilich, _, jefe = escenario()
+    inc = Incidente()
+
+    # Un hallazgo de verdad, con su incidente enlazado.
+    r = mon['visitas'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'elemento': 'Entrega  E12',
+        'sin_novedad': False, 'observacion': 'rota', 'incidente': inc.pk}))
+    igual('se registra', r.status_code, 201)
+    v = Visita._todas[-1]
+    igual('con su codigo', r.data['visita']['codigo'][:13], 'HALLAZGO-001-')
+
+    # 1. QUITARLO DEL RECORRIDO: la fila se va, el incidente se queda.
+    r = mon['hallazgo'](Peticion(jefe, {}, metodo='DELETE'), v.pk)
+    igual('se borra', r.status_code, 200)
+    igual('dice cual', r.data['borrado'][:13], 'HALLAZGO-001-')
+    igual('el incidente NO se toco', r.data['incidente_borrado'], False)
+    igual('y sigue vivo', inc.borrado, False)
+    igual('el elemento vuelve a estar sin registrar',
+          [x.elemento for x in tr._visitas], [])
+
+    # 2. CON EL INCIDENTE: no queda nada.
+    mon, tr, ilich, _, jefe = escenario()
+    inc = Incidente()
+    mon['visitas'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'elemento': 'Entrega  E13',
+        'sin_novedad': False, 'observacion': 'rota', 'incidente': inc.pk}))
+    v = Visita._todas[-1]
+    r = mon['hallazgo'](Peticion(jefe, {}, consulta={'incidente': '1'},
+                                 metodo='DELETE'), v.pk)
+    igual('se borra con todo', r.status_code, 200)
+    igual('el incidente tambien', r.data['incidente_borrado'], True)
+    igual('y ya no esta', inc.borrado, True)
+
+    # 3. UN «SIN NOVEDAD» NO SE BORRA DESDE AQUI: es una fila del parte.
+    mon, tr, ilich, _, jefe = escenario()
+    mon['visitas_lote'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'elementos': OBRAS}))
+    limpia = Visita._todas[-1]
+    r = mon['hallazgo'](Peticion(jefe, {}, metodo='DELETE'), limpia.pk)
+    igual('sin novedad, se niega', r.status_code, 400)
+    igual('y sigue ahi', len(tr._visitas), 5)
+
+    # 4. Uno que no existe.
+    r = mon['hallazgo'](Peticion(jefe, {}, metodo='DELETE'), 99999)
+    igual('el que no existe', r.status_code, 404)
+
+    # 5. Un hallazgo extraordinario -sin ronda- tambien se borra.
+    mon, tr, ilich, _, jefe = escenario()
+    inc = Incidente()
+    mon['visitas'](Peticion(ilich, {
+        'tramo': 'IX', 'elemento': 'Entrega  E40', 'sin_novedad': False,
+        'observacion': 'talud', 'incidente': inc.pk}))
+    v = Visita._todas[-1]
+    r = mon['hallazgo'](Peticion(jefe, {}, consulta={'incidente': '1'},
+                                 metodo='DELETE'), v.pk)
+    igual('el extraordinario tambien', r.status_code, 200)
+    igual('con su incidente', inc.borrado, True)
+
+
 def main():
     print('Registro por elemento dentro del tramo')
     print('=' * 74)
@@ -1020,7 +1159,8 @@ def main():
                prueba_numeracion, prueba_hallazgo_por_lote_numerado,
                prueba_topic, prueba_aviso, prueba_sin_empezar,
                prueba_borrar, prueba_herencia, prueba_cuadro,
-               prueba_reparto_sobrevive, prueba_extraordinaria]:
+               prueba_reparto_sobrevive, prueba_extraordinaria,
+               prueba_borrar_hallazgo]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:

@@ -1845,6 +1845,84 @@ def hallazgos(request):
     return Response({'ok': True, 'results': fuera})
 
 
+@api_view(['DELETE'])
+@permission_classes([EsGerencia])
+def hallazgo(request, pk):
+    """Borra un hallazgo: la fila del recorrido y, si se pide, su incidente.
+
+    DOS COSAS DISTINTAS CON UN SOLO NOMBRE
+    --------------------------------------
+    Lo que la pantalla llama «hallazgo» son en realidad dos registros: la
+    fila de monitoreo -que dice en que tramo y en que elemento aparecio, y
+    le pone su HALLAZGO-NNN- y el incidente de campo que creo el formulario,
+    con sus fotos, su bitacora y su costeo.
+
+    Borrar lo primero sin lo segundo es QUITARLO DEL RECORRIDO: el elemento
+    vuelve a quedar sin revisar y el incidente sigue vivo, pero en la lista
+    de Incidentes, que es de donde habia salido. Sirve cuando el hallazgo
+    estaba bien pero se registro en el elemento equivocado.
+
+    Borrar los dos es que no quedo nada. Sirve para una prueba o un error,
+    y se pide aparte -`?incidente=1`- porque no hay vuelta atras: las fotos
+    de campo no se recuperan.
+
+    POR QUE NO SE BORRA EL INCIDENTE POR DEFECTO. Es la misma regla que al
+    borrar una rutina entera: lo que esta pantalla gobierna es el
+    recorrido, no el expediente del incidente. Quien quiera llevarse el
+    expediente tiene que decirlo.
+    """
+    try:
+        v = (VisitaMonitoreo.objects
+             .select_related('tramo_rutina')
+             .get(pk=pk))
+    except VisitaMonitoreo.DoesNotExist:
+        return Response({'ok': False, 'detail': 'No existe ese hallazgo.'},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    if v.sin_novedad:
+        # UN «SIN NOVEDAD» NO SE BORRA DESDE AQUI. Es una de las
+        # cuatrocientas filas del parte, y quitarla a mano dejaria el
+        # recorrido diciendo que ese elemento no se anduvo cuando si se
+        # anduvo. El parte se deshace borrando la rutina, no fila a fila.
+        return Response(
+            {'ok': False,
+             'detail': 'Eso no es un hallazgo: es un elemento sin novedad.'},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    pedido = request.GET.get('incidente')
+    if pedido is None and request.data:
+        pedido = request.data.get('incidente')
+    tambien = str(pedido).lower() in ('1', 'true', 'si', 'yes')
+
+    codigo = _codigo_hallazgo(v)
+    id_inc = v.incidente_id
+    borrado = False
+    aviso = ''
+
+    with transaction.atomic():
+        v.delete()
+        if tambien and id_inc:
+            from src.apps.hi_incidents.models import HIIncident
+            try:
+                HIIncident.objects.filter(pk=id_inc).delete()
+                borrado = True
+            except Exception as e:
+                # UN INCIDENTE QUE NO SE DEJA BORRAR NO TUMBA LO DEMAS. Si
+                # algo colgado de el esta protegido -un parte diario, una
+                # valorizacion-, Django lanza aqui. La fila de monitoreo ya
+                # se fue y eso es lo que se pedia primero; del incidente se
+                # dice la verdad en vez de deshacerlo todo y dejar al que
+                # pulso sin saber que paso.
+                aviso = ('El incidente %s no se pudo borrar (%s). El '
+                         'hallazgo si se quito del recorrido.'
+                         % (id_inc, e))
+
+    return Response({'ok': True, 'borrado': codigo,
+                     'incidente': id_inc,
+                     'incidente_borrado': borrado,
+                     'detail': aviso})
+
+
 TOPE_LOTE = 400
 
 
@@ -1981,6 +2059,7 @@ IMPORT_URLS = ("from src.apps.core.monitoreo import (\\n"
                "    visitas as mon_visitas,\\n"
                "    visitas_lote as mon_visitas_lote,\\n"
                "    hallazgos as mon_hallazgos,\\n"
+               "    hallazgo as mon_hallazgo,\\n"
                "    elementos as mon_elementos,\\n"
                "    mi_aviso as mon_mi_aviso,\\n"
                ")\\n")
@@ -2009,6 +2088,9 @@ RUTAS = (
     "        mon_visitas_lote, name='monitoreo_visitas_lote'),\n"
     "    url(r'^v1/mobile/monitoreo/hallazgos/$',\n"
     "        mon_hallazgos, name='monitoreo_hallazgos'),\n"
+    # Lleva pk, asi que no choca con la de arriba: hallazgos/$ trae el $.
+    "    url(r'^v1/mobile/monitoreo/hallazgos/(?P<pk>[0-9]+)/$',\n"
+    "        mon_hallazgo, name='monitoreo_hallazgo'),\n"
     "    url(r'^v1/mobile/monitoreo/tramos/(?P<pk>[0-9]+)/elementos/$',\n"
     "        mon_elementos, name='monitoreo_elementos'),\n"
     "    url(r'^v1/mobile/monitoreo/mi-aviso/$',\n"
@@ -2810,6 +2892,9 @@ def paso_urls(raiz, simulacro):
             ('mon_hallazgos', 'hallazgos as mon_hallazgos,',
              "    url(r'^v1/mobile/monitoreo/hallazgos/$',\n"
              "        mon_hallazgos, name='monitoreo_hallazgos'),\n"),
+            ('mon_hallazgo,', 'hallazgo as mon_hallazgo,',
+             "    url(r'^v1/mobile/monitoreo/hallazgos/(?P<pk>[0-9]+)/$',\n"
+             "        mon_hallazgo, name='monitoreo_hallazgo'),\n"),
             ('mon_elementos', 'elementos as mon_elementos,',
              "    url(r'^v1/mobile/monitoreo/tramos/(?P<pk>[0-9]+)/elementos/$',\n"
              "        mon_elementos, name='monitoreo_elementos'),\n"),
@@ -2852,7 +2937,7 @@ def paso_urls(raiz, simulacro):
     t = ''.join(lineas[:destino]) + RUTAS + ''.join(lineas[destino:])
     t = insertar_linea(t, fin_de_imports(t), IMPORT_URLS.replace('\\n', '\n'))
     escribir(ruta, t, simulacro)
-    return True, 'import y 12 rutas anadidos'
+    return True, 'import y 13 rutas anadidos'
 
 
 # ══════════════════════════════════════════════════════════════════════════
