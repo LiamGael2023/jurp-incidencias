@@ -21,7 +21,7 @@
  * nadie los use.
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import {
+import { FaExternalLinkAlt,
   FaPlus, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaRegCircle,
   FaSave, FaLock, FaLockOpen, FaCalendarAlt, FaBell, FaTimes, FaSearch, FaPhoneAlt,
   FaPen,
@@ -85,7 +85,7 @@ const ICONO = {
   pendiente: <FaRegCircle size={11} />,
 };
 
-export default function Monitoreos() {
+export default function Monitoreos({ irAIncidente }) {
   const [rutinas, setRutinas] = useState([]);
   const [elegida, setElegida] = useState(null);     // la rutina abierta
   const [candidatos, setCandidatos] = useState([]);
@@ -622,6 +622,51 @@ export default function Monitoreos() {
                             {t.elementos_revisados} elementos revisados
                           </div>
                         )}
+
+                        {/* QUE se encontro, y como llegar a atenderlo.
+                          *
+                          * Decir «1 elemento con hallazgo» y pararse ahi
+                          * obliga a ir a Incidentes, buscar cual de los
+                          * ocho es y cruzarlo de memoria. El hallazgo YA es
+                          * un incidente -lo crea el mismo formulario de
+                          * campo-, asi que desde aqui se abre su gestion
+                          * directamente, con su costeo y su parte diario.
+                          *
+                          * El servidor manda en `detalle` solo los
+                          * hallazgos cuando responde a esta pantalla: los
+                          * «sin novedad» son cientos y ya van contados
+                          * arriba. */}
+                        {(t.detalle || [])
+                          .filter(v => v && !v.sin_novedad)
+                          .map(v => (
+                            <div key={v.id} className="mon-hallazgo">
+                              <div className="mon-hallazgo-que">
+                                {v.elemento || 'Todo el tramo'}
+                              </div>
+                              {v.observacion && (
+                                <div className="mon-sub">{v.observacion}</div>
+                              )}
+                              {v.incidente ? (
+                                <button
+                                  type="button"
+                                  className="mon-ver-inc"
+                                  onClick={() => irAIncidente && irAIncidente(v.incidente)}
+                                  disabled={!irAIncidente}
+                                  title="Abrir el incidente para gestionarlo"
+                                >
+                                  <FaExternalLinkAlt size={10} /> Gestionar el incidente
+                                </button>
+                              ) : (
+                                /* Un hallazgo sin incidente es el que se
+                                 * registro en masivo con observacion: no
+                                 * hay nada que abrir, y decirlo evita que
+                                 * alguien lo busque en Incidentes. */
+                                <div className="mon-sub mon-pista">
+                                  sin incidente enlazado
+                                </div>
+                              )}
+                            </div>
+                          ))}
                       </td>
 
                     </tr>

@@ -695,7 +695,7 @@ def _visita(v):
     }
 
 
-def _tramo(tr, con_visitas=False, tels=None):
+def _tramo(tr, con_visitas=False, tels=None, solo_hallazgos=False):
     visitas = list(tr.visitas.all())
 
     # LO REVISADO POR DENTRO. Recorrer el Tramo II es recorrer sus 25
@@ -727,7 +727,19 @@ def _tramo(tr, con_visitas=False, tels=None):
         'contactos': _contactos(tr.tramo),
     }
     if con_visitas:
-        d['detalle'] = [_visita(v) for v in visitas]
+        # SOLO LOS HALLAZGOS PARA LA PANTALLA DE ADMINISTRACION.
+        #
+        # Esa pantalla pide la rutina ENTERA, y una rutina entera son 14
+        # tramos con hasta 201 elementos cada uno: mas de mil filas de JSON
+        # para pintar un numero que ya viene contado arriba. Lo que el
+        # administrador necesita ver uno a uno es lo que se encontro, que
+        # son unos pocos y hay que ir a atenderlos.
+        #
+        # La app recibe el detalle COMPLETO, porque lo necesita: es como
+        # sabe que elementos tiene ya registrados y cuales le faltan.
+        d['detalle'] = [_visita(v) for v in visitas
+                        if not (solo_hallazgos and v.sin_novedad)]
+        d['detalle_solo_hallazgos'] = bool(solo_hallazgos)
     return d
 
 
@@ -751,7 +763,8 @@ def _rutina(r, con_tramos=False, tels=None):
     if con_tramos:
         if tels is None:
             tels = _celulares()
-        d['tramos'] = [_tramo(t, con_visitas=True, tels=tels) for t in tramos]
+        d['tramos'] = [_tramo(t, con_visitas=True, tels=tels,
+                              solo_hallazgos=True) for t in tramos]
     return d
 
 

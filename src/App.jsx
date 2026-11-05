@@ -330,7 +330,7 @@ function App() {
     return (
       <div className="maq">
         <RailGIS {...propsRail} />
-        <div className="maq-main"><Monitoreos /></div>
+        <div className="maq-main"><Monitoreos irAIncidente={irAIncidente} /></div>
       </div>
     );
   }
