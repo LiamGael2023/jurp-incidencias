@@ -57,7 +57,7 @@ const MENU = [
   // Solo administración: quien reparte los tramos es Gerencia, y al que solo
   // va a recorrer el suyo esta pantalla no le dice nada —lo suyo lo ve en la
   // app, con sus tramos y nada más—.
-  { clave: 'monitoreos',   titulo: 'Monitoreos rutinarios', icono: <FaRoute />, apps: ['pluvira'], soloAdmin: true },
+  { clave: 'monitoreos',   titulo: 'Monitoreo de Sistema Hidráulico', icono: <FaRoute />, apps: ['pluvira'], soloAdmin: true },
   { clave: 'vigilancia',   titulo: 'Vigilancia',    icono: <FaShieldAlt />,     apps: ['sentria'] },
   // SENTRIA tiene su propio padrón: no comparte cuentas con el sistema de
   // riego. Por eso es otra entrada de menú y no la misma pantalla con los

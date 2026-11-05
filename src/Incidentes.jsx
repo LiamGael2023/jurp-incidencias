@@ -1092,7 +1092,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto, fuente = 'incidentes' 
         <div className="tbl-row align-items-center">
           <div className="tbl-col">
             <div className="tbl-page-pretitle">
-              {esHallazgos ? 'Monitoreos Rutinarios' : 'Gestión de Campo'}
+              {esHallazgos ? 'Monitoreo de Sistema Hidráulico' : 'Gestión de Campo'}
             </div>
             <h2 className="tbl-page-title">
               {esHallazgos ? 'Hallazgos de Recorrido' : 'Incidentes y Reportes'}

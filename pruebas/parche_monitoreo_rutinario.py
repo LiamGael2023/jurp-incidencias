@@ -1716,7 +1716,7 @@ def elementos(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([EsGerencia])
+@permission_classes([IsMobileRoleUser])
 def hallazgos(request):
     """Los hallazgos de los recorridos, para su propia pantalla.
 

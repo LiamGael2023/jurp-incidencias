@@ -960,7 +960,7 @@ export default function Monitoreos({ irAIncidente }) {
 
 const Cabecera = ({ avisados = [] }) => (
   <div className="mon-cab">
-    <h2><FaClipboardRoute /> Monitoreos rutinarios</h2>
+    <h2><FaClipboardRoute /> Monitoreo de Sistema Hidráulico</h2>
     <p>
       Una ronda con fecha de inicio y fin. Cada tramo del Canal Madre lo
       recorre el coordinador de su empresa usuaria, que en la app registra lo
