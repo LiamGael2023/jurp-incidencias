@@ -125,6 +125,8 @@ class Visita(object):
         self.id = self.pk = Visita._n
         self.numero = kw.get('numero')
         self.tramo_rutina = kw.get('tramo_rutina')
+        self.tramo_rutina_id = getattr(self.tramo_rutina, 'pk', None)
+        self.tramo = kw.get('tramo', '')
         self.usuario = kw.get('usuario')
         self.tipo_elemento = kw.get('tipo_elemento', 'tramo')
         self.elemento = kw.get('elemento', '')
@@ -243,6 +245,7 @@ def _crear_rutina(**kw):
 
 
 class Tramo(object):
+    """Un tramo de una rutina."""
     _reg = {}
 
     def __init__(self, rotulo, rutina, usuarios):
@@ -299,7 +302,10 @@ class GestorVisitas(object):
 
     def create(self, **kw):
         v = Visita(**kw)
-        kw['tramo_rutina']._visitas.append(v)
+        # Una visita extraordinaria no cuelga de ninguna ronda.
+        tr = kw.get('tramo_rutina')
+        if tr is not None:
+            tr._visitas.append(v)
         return v
 
 
@@ -348,6 +354,20 @@ class Gestor(object):
 
     def __getitem__(self, corte):
         return self.filas[corte]
+
+    def filter(self, **kw):
+        fuera = list(self.filas)
+        for clave, valor in kw.items():
+            if clave == 'usuarios':
+                fuera = [f for f in fuera
+                         if valor in list(getattr(f, 'usuarios', []))]
+            elif '__' in clave:
+                # rutina__cerrada, rutina__fecha_inicio__lte: para la
+                # prueba basta con no descartar nada por estas.
+                continue
+            else:
+                fuera = [f for f in fuera if getattr(f, clave, None) == valor]
+        return Gestor(self._reg, self._crear, fuera)
 
     def first(self):
         f = self.filas
@@ -952,6 +972,43 @@ def prueba_reparto_sobrevive():
     igual('contado como heredado', r4.data['heredados'], 1)
 
 
+def prueba_extraordinaria():
+    print('\n20. un hallazgo sin rutina abierta')
+    mon, tr, ilich, otro, _ = escenario()
+
+    # El tramo IX no es de nadie en ninguna ronda: se puede registrar.
+    r = mon['visitas'](Peticion(ilich, {
+        'tramo': 'IX', 'elemento': 'Entrega  E40', 'sin_novedad': False,
+        'observacion': 'talud caido', 'incidente': None}))
+    igual('se registra', r.status_code, 201)
+    igual('queda en su tramo', r.data['visita']['tramo'], 'IX')
+    igual('marcada como extraordinaria',
+          r.data['visita']['extraordinaria'], True)
+    igual('y se numera', r.data['visita']['numero'], 1)
+    igual('sin ronda que devolver', r.data['tramo'], None)
+
+    # Un tramo que no existe no cuela.
+    r = mon['visitas'](Peticion(ilich, {
+        'tramo': 'XXV', 'elemento': 'algo', 'sin_novedad': False}))
+    igual('tramo inventado', r.status_code, 400)
+
+    # Y SI ESE TRAMO SI LE TOCA EN UNA RONDA ABIERTA, se le manda al
+    # recorrido: con los dos caminos abiertos, lo del Tramo II apareceria
+    # unas veces dentro de la ronda y otras fuera.
+    r = mon['visitas'](Peticion(ilich, {
+        'tramo': 'II', 'elemento': 'Canoa C2D', 'sin_novedad': False,
+        'observacion': 'algo'}))
+    igual('el tramo que le toca se rechaza', r.status_code, 409)
+    igual('y le dice cual es su recorrido',
+          r.data['tramo_rutina'], tr.pk)
+
+    # A otra persona, ese mismo tramo no le toca: puede.
+    r = mon['visitas'](Peticion(otro, {
+        'tramo': 'II', 'elemento': 'Canoa C2D', 'sin_novedad': False,
+        'observacion': 'algo'}))
+    igual('a quien no le toca, si', r.status_code, 201)
+
+
 def main():
     print('Registro por elemento dentro del tramo')
     print('=' * 74)
@@ -963,7 +1020,7 @@ def main():
                prueba_numeracion, prueba_hallazgo_por_lote_numerado,
                prueba_topic, prueba_aviso, prueba_sin_empezar,
                prueba_borrar, prueba_herencia, prueba_cuadro,
-               prueba_reparto_sobrevive]:
+               prueba_reparto_sobrevive, prueba_extraordinaria]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:

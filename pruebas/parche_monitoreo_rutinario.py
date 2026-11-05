@@ -256,9 +256,20 @@ class VisitaMonitoreo(models.Model):
     las visitas ya registradas lo siguen siendo sin tocarlas.
     """
 
+    # SIN RUTINA TAMBIEN SE PUEDE. Entre una ronda y la siguiente la gente
+    # sigue yendo al canal, y lo que encuentra no deja de existir porque no
+    # haya una rutina abierta: se registra igual, amarrado a su tramo y a su
+    # elemento, con su numero de hallazgo. Esas visitas no cuelgan de
+    # ninguna ronda, y por eso `tramo_rutina` puede ir vacio.
+    #
+    # `tramo` se rellena SIEMPRE -tambien en las de una ronda, de donde se
+    # copia al guardarlas-, para no tener que preguntar en dos sitios
+    # distintos de que tramo es una visita segun como entro.
     tramo_rutina = models.ForeignKey(
         TramoDeRutina, on_delete=models.CASCADE, related_name='visitas',
-        verbose_name='Tramo de rutina')
+        null=True, blank=True, verbose_name='Tramo de rutina')
+    tramo = models.CharField('Tramo', max_length=6, choices=OPCIONES_TRAMO,
+                             blank=True, default='', db_index=True)
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
         blank=True, related_name='visitas_monitoreo', verbose_name='Registro')
@@ -385,6 +396,25 @@ class TelefonoUsuario(models.Model):
         return '%s - %s' % (self.usuario, self.celular)
 '''
 
+
+
+# El tramo suelto de una visita extraordinaria, para un models.py que ya
+# tiene VisitaMonitoreo.
+SUELTO_BLOQUE = '''    # SIN RUTINA TAMBIEN SE PUEDE. Entre una ronda y la siguiente la gente
+    # sigue yendo al canal, y lo que encuentra no deja de existir porque no
+    # haya una rutina abierta: se registra igual, amarrado a su tramo y a su
+    # elemento, con su numero de hallazgo. Esas visitas no cuelgan de
+    # ninguna ronda, y por eso `tramo_rutina` puede ir vacio.
+    #
+    # `tramo` se rellena SIEMPRE -tambien en las de una ronda, de donde se
+    # copia al guardarlas-, para no tener que preguntar en dos sitios
+    # distintos de que tramo es una visita segun como entro.
+    tramo_rutina = models.ForeignKey(
+        TramoDeRutina, on_delete=models.CASCADE, related_name='visitas',
+        null=True, blank=True, verbose_name='Tramo de rutina')
+    tramo = models.CharField('Tramo', max_length=6, choices=OPCIONES_TRAMO,
+                             blank=True, default='', db_index=True)
+'''
 
 
 # RepartoDeTramo, para un models.py que ya tiene las demas tablas.
@@ -998,6 +1028,8 @@ def _codigo_hallazgo(v):
 def _visita(v):
     return {
         'id': v.id,
+        'tramo': v.tramo or (v.tramo_rutina.tramo if v.tramo_rutina_id else ''),
+        'extraordinaria': not v.tramo_rutina_id,
         'numero': v.numero,
         'codigo': _codigo_hallazgo(v),
         'tipo_elemento': v.tipo_elemento,
@@ -1576,6 +1608,40 @@ def _para_registrar(request, valor):
 PROGRESIVA = re.compile('[0-9][ ]*[+][ ]*[0-9]')
 
 
+def _tramo_suelto(request, valor):
+    """Comprueba un hallazgo extraordinario: sin rutina, pero con tramo.
+
+    Devuelve (tramo, None) o ('', respuesta).
+
+    SE NIEGA SI ESA PERSONA SI TIENE ESE TRAMO EN UNA RONDA ABIERTA. El
+    recorrido es el camino cuando existe: dejar los dos abiertos a la vez
+    haria que lo encontrado en el Tramo II apareciera unas veces dentro de
+    la ronda y otras fuera, segun por donde se entrara, y el parte de la
+    ronda quedaria incompleto sin que nadie lo notara.
+    """
+    tramo = (valor or '').strip().upper()
+    if tramo not in TRAMOS_CANAL:
+        return '', Response(
+            {'ok': False, 'detail': 'Ese tramo no existe: %s' % (valor,)},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    hoy = timezone.localtime(timezone.now()).date()
+    tocaba = TramoDeRutina.objects.filter(
+        tramo=tramo,
+        usuarios=request.user,
+        rutina__cerrada=False,
+        rutina__fecha_inicio__lte=hoy,
+        rutina__fecha_fin__gte=hoy).first()
+    if tocaba is not None:
+        return '', Response(
+            {'ok': False,
+             'tramo_rutina': tocaba.pk,
+             'detail': ('Ese tramo te toca en la rutina "%s": registralo '
+                        'desde el recorrido.' % tocaba.rutina.nombre)},
+            status=status.HTTP_409_CONFLICT)
+    return tramo, None
+
+
 def _lee_elemento(d):
     """Que se reviso, segun el cuerpo de la peticion.
 
@@ -1611,9 +1677,18 @@ def visitas(request):
     que una de las dos se quede atras.
     """
     datos = request.data or {}
-    tr, mal = _para_registrar(request, datos.get('tramo_rutina'))
-    if mal is not None:
-        return mal
+
+    # SIN RUTINA TAMBIEN SE PUEDE: entre una ronda y la siguiente la gente
+    # sigue yendo al canal. Se manda `tramo` en vez de `tramo_rutina`.
+    tr, suelto = None, ''
+    if datos.get('tramo_rutina'):
+        tr, mal = _para_registrar(request, datos.get('tramo_rutina'))
+        if mal is not None:
+            return mal
+    else:
+        suelto, mal = _tramo_suelto(request, datos.get('tramo'))
+        if mal is not None:
+            return mal
 
     sin_novedad = datos.get('sin_novedad')
     sin_novedad = True if sin_novedad is None else bool(sin_novedad)
@@ -1642,6 +1717,7 @@ def visitas(request):
     tipo_elemento, elemento = _lee_elemento(datos)
     v = VisitaMonitoreo.objects.create(
         tramo_rutina=tr,
+        tramo=tr.tramo if tr is not None else suelto,
         usuario=request.user if getattr(request.user, 'pk', None) else None,
         tipo_elemento=tipo_elemento,
         elemento=elemento,
@@ -1652,7 +1728,7 @@ def visitas(request):
         incidente=incidente)
     _numerar(v)
     return Response({'ok': True, 'visita': _visita(v),
-                     'tramo': _tramo(tr, con_visitas=True)},
+                     'tramo': _tramo(tr, con_visitas=True) if tr else None},
                     status=status.HTTP_201_CREATED)
 
 
@@ -1736,18 +1812,23 @@ def hallazgos(request):
 
     rut = request.GET.get('rutina')
     if rut:
+        # Filtrar por ronda deja fuera los extraordinarios, que es lo
+        # correcto: no son de ninguna.
         qs = qs.filter(tramo_rutina__rutina_id=rut)
 
     fuera = []
     for v in qs:
+        # Puede no haber ronda: un hallazgo extraordinario se registra
+        # entre una y otra, y entonces solo tiene tramo.
         tr = v.tramo_rutina
         fuera.append({
             'id': v.id,
             'numero': v.numero,
             'codigo': _codigo_hallazgo(v),
             'incidente': v.incidente_id,
-            'tramo': tr.tramo,
-            'tramo_rutina': tr.id,
+            'extraordinaria': tr is None,
+            'tramo': v.tramo or (tr.tramo if tr else ''),
+            'tramo_rutina': tr.id if tr else None,
             'elemento': v.elemento,
             'tipo_elemento': v.tipo_elemento,
             'observacion': v.observacion,
@@ -1755,7 +1836,7 @@ def hallazgos(request):
             'longitude': str(v.longitude) if v.longitude is not None else None,
             'registrada_en': v.creada_en,
             'por': _persona(v.usuario),
-            'rutina': {
+            'rutina': None if tr is None else {
                 'id': tr.rutina_id,
                 'nombre': tr.rutina.nombre,
                 'cerrada': tr.rutina.cerrada,
@@ -1862,6 +1943,7 @@ def visitas_lote(request):
         vistos.add(clave)
         nueva = VisitaMonitoreo.objects.create(
             tramo_rutina=tr,
+            tramo=tr.tramo,
             usuario=usuario,
             tipo_elemento=tipo,
             elemento=clave,
@@ -2601,6 +2683,101 @@ def paso_aviso_incidente(raiz, simulacro):
     return True, 'el aviso distingue monitoreo de incidente'
 
 
+MIGRACION_SUELTO = """# -*- coding: utf-8 -*-
+# Lo escribe parche_monitoreo_rutinario.py.
+from __future__ import unicode_literals
+
+from django.db import migrations, models
+import django.db.models.deletion
+
+
+def copiar_el_tramo(apps, schema_editor):
+    '''Las visitas que ya existen sacan su tramo de la ronda de la que cuelgan.
+
+    A partir de aqui `tramo` esta puesto en todas, vengan de una ronda o
+    no, y nadie tiene que preguntar en dos sitios distintos de que tramo es
+    una visita segun como entro.
+    '''
+    Visita = apps.get_model('core', 'VisitaMonitoreo')
+    for v in Visita.objects.select_related('tramo_rutina').all():
+        if v.tramo_rutina_id and not v.tramo:
+            v.tramo = v.tramo_rutina.tramo
+            v.save(update_fields=['tramo'])
+
+
+def deshacer(apps, schema_editor):
+    # La columna se va entera; esto existe para poder revertir.
+    pass
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('core', '%(anterior)s'),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='visitamonitoreo',
+            name='tramo',
+            field=models.CharField(
+                blank=True, db_index=True, default='', max_length=6,
+                verbose_name='Tramo',
+                choices=[('0', 'Tramo 0'), ('I', 'Tramo I'),
+                         ('II', 'Tramo II'), ('III', 'Tramo III'),
+                         ('IV', 'Tramo IV'), ('V', 'Tramo V'),
+                         ('VI', 'Tramo VI'), ('VII', 'Tramo VII'),
+                         ('VIII', 'Tramo VIII'), ('IX', 'Tramo IX'),
+                         ('X', 'Tramo X'), ('XI', 'Tramo XI'),
+                         ('XII', 'Tramo XII'), ('XIII', 'Tramo XIII')]),
+        ),
+        migrations.AlterField(
+            model_name='visitamonitoreo',
+            name='tramo_rutina',
+            field=models.ForeignKey(
+                blank=True, null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name='visitas', to='core.TramoDeRutina',
+                verbose_name='Tramo de rutina'),
+        ),
+        migrations.RunPython(copiar_el_tramo, deshacer),
+    ]
+"""
+
+
+def paso_suelto(raiz, simulacro):
+    """Que se pueda registrar un hallazgo sin rutina abierta."""
+    ruta = os.path.join(raiz, 'src/apps/core/models.py')
+    if not os.path.exists(ruta):
+        return False, 'no existe {0}'.format(ruta)
+    t = leer(ruta)
+    if 'class VisitaMonitoreo' not in t:
+        return True, 'no aplica (las tablas las pone el paso 1)'
+
+    hecho_modelo = True
+    if "tramo = models.CharField('Tramo'" not in t:
+        viejo = ("    tramo_rutina = models.ForeignKey(\n"
+                 "        TramoDeRutina, on_delete=models.CASCADE, "
+                 "related_name='visitas',\n"
+                 "        verbose_name='Tramo de rutina')\n")
+        if t.count(viejo) != 1:
+            return False, ('no encuentro tramo_rutina con la forma esperada; '
+                           'pegame el modelo y lo hago a mano')
+        escribir(ruta, t.replace(viejo, SUELTO_BLOQUE), simulacro)
+        hecho_modelo = False
+
+    carpeta = os.path.join(raiz, 'src/apps/core/migrations')
+    previas = sorted(n[:-3] for n in os.listdir(carpeta)
+                     if n.endswith('.py') and n != '__init__.py')
+    if any('hallazgo_suelto' in n for n in previas):
+        return True, 'ya estaba'
+    anterior = previas[-1]
+    nombre = '{0:04d}_hallazgo_suelto.py'.format(int(anterior[:4]) + 1)
+    escribir(os.path.join(carpeta, nombre),
+             MIGRACION_SUELTO % {'anterior': anterior}, simulacro)
+    return True, '{0}{1}'.format(nombre, '' if hecho_modelo else ' (y el modelo)')
+
+
 def paso_modulo(raiz, simulacro):
     for rel, que in (('src/apps/core/equipo_enlazado.py', 'EsGerencia'),
                      ('src/apps/core/permission.py', 'IsMobileRoleUser')):
@@ -2712,9 +2889,10 @@ def main():
         ('6 elemento    ', paso_elemento),
         ('7 numeracion  ', paso_numero),
         ('8 reparto     ', paso_reparto),
-        ('9 aviso       ', paso_aviso_incidente),
-        ('10 monitoreo.py', paso_modulo),
-        ('11 urls.py    ', paso_urls),
+        ('9 sin rutina  ', paso_suelto),
+        ('10 aviso      ', paso_aviso_incidente),
+        ('11 monitoreo.py', paso_modulo),
+        ('12 urls.py    ', paso_urls),
     ]
     fallo = False
     for nombre, fn in pasos:
