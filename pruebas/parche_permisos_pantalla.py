@@ -753,10 +753,11 @@ RUTAS_NUEVAS = (
 # herramientas (las mismas del parche de monitoreos, ya probadas)
 # ══════════════════════════════════════════════════════════════════════════
 
+# `config/settings.py` NO esta aqui: se busca, porque no siempre esta en
+# esa ruta. Lo restaura `revertir` por su cuenta.
 TOCADOS = (
     'src/apps/core/models.py',
     'src/apps/api/urls.py',
-    'config/settings.py',
 )
 
 
@@ -789,19 +790,74 @@ def escribir(ruta, texto, simulacro):
         f.write(texto.encode('utf-8'))
 
 
+# LA MISMA QUE parche_monitoreo_rutinario.py, letra por letra.
+#
+# Tenia aqui una version corta que no contaba los parentesis, y con un
+# import de varias lineas en columna cero -los que escribe el otro
+# parche- decia que los imports acababan DENTRO del parentesis. Lo que
+# se escribia no compilaba, `escribir` se negaba -para eso esta- y el
+# paso moria con un «reviento» que no decia nada de la causa.
+#
+# Aquella version salio de romper PLUVIRA de esta misma manera. Copiarla
+# es mejor que volver a escribirla: el error ya se cometio una vez.
 def fin_de_imports(texto):
-    """La linea despues del ultimo import de COLUMNA CERO.
+    """El indice de linea justo despues del ultimo import DE LA CABECERA.
 
-    Solo columna cero: un `from django.db import transaction` dentro de
-    una funcion no es el final de los imports del archivo, y tomarlo por
-    tal mete el nuestro en medio de un cuerpo.
+    Solo cuentan los imports a columna cero -estos proyectos importan dentro
+    de las funciones- y se para en la primera sentencia de verdad. Las dos
+    reglas salieron de romper PLUVIRA metiendo un import en mitad de un
+    metodo.
     """
     lineas = texto.splitlines(True)
-    ultimo = 0
-    for i, l in enumerate(lineas):
-        if re.match(r'^(import |from )', l):
-            ultimo = i + 1
-    return ultimo
+    fin, i, total = 0, 0, len(texto.splitlines(True))
+    comilla, abiertos, dentro = None, 0, False
+
+    while i < total:
+        l = lineas[i]
+        pelada = l.strip()
+
+        if comilla is not None:
+            i += 1
+            fin = i
+            if comilla in pelada:
+                comilla = None
+            continue
+
+        if dentro:
+            abiertos += l.count('(') - l.count(')')
+            i += 1
+            if abiertos <= 0:
+                dentro = False
+                fin = i
+            continue
+
+        if not pelada or pelada.startswith('#'):
+            i += 1
+            continue
+
+        if pelada[:3] in ('"""', "'''"):
+            marca = pelada[:3]
+            i += 1
+            fin = i
+            if marca not in pelada[3:]:
+                comilla = marca
+            continue
+
+        if l[:1] in (' ', '\t'):
+            break
+
+        if pelada.startswith('import ') or pelada.startswith('from '):
+            dentro = True
+            abiertos = l.count('(') - l.count(')')
+            i += 1
+            if abiertos <= 0:
+                dentro = False
+                fin = i
+            continue
+
+        break
+
+    return fin
 
 
 def insertar_linea(texto, donde, linea):
@@ -810,6 +866,10 @@ def insertar_linea(texto, donde, linea):
 
 
 def revertir(raiz):
+    settings = buscar_settings(raiz)
+    if settings and os.path.exists(settings + '.bak'):
+        shutil.copy2(settings + '.bak', settings)
+        print('[OK ] restaurado {0}'.format(os.path.relpath(settings, raiz)))
     for rel in TOCADOS:
         ruta = os.path.join(raiz, rel)
         if os.path.exists(ruta + '.bak'):
@@ -897,6 +957,75 @@ def paso_urls(raiz, simulacro):
 CAMINO_MIDDLEWARE = "'src.apps.core.permisos_pantalla.PermisosDePantalla',"
 
 
+def buscar_settings(raiz):
+    """Donde vive de verdad el settings.py de este proyecto.
+
+    NO SE ADIVINA LA RUTA. `config/settings.py` es lo normal, pero tambien
+    existen `config/settings/base.py`, `src/config/settings.py` y el
+    nombre del proyecto por carpeta. Dar una por buena y fallar deja un
+    mensaje -«no existe config/settings.py»- que suena a proyecto roto
+    cuando lo unico que pasa es que esta en otro sitio.
+
+    Se pregunta a manage.py, que es quien lo sabe: ahi esta escrito el
+    DJANGO_SETTINGS_MODULE de verdad. Si no se puede leer, se prueban las
+    rutas corrientes, y de todas ellas solo vale la que tenga una lista de
+    middleware: en un settings partido en varios archivos, el que importa
+    es ese y no el que lleva el nombre.
+    """
+    candidatas = []
+
+    for arranque in ('manage.py', 'config/wsgi.py', 'src/config/wsgi.py'):
+        ruta = os.path.join(raiz, arranque)
+        if not os.path.exists(ruta):
+            continue
+        try:
+            texto = leer(ruta)
+        except Exception:
+            continue
+        for m in re.finditer(r"DJANGO_SETTINGS_MODULE[^\n]*?['\"]([\w.]+)['\"]",
+                             texto):
+            punteado = m.group(1).replace('.', os.sep)
+            candidatas.append(punteado + '.py')
+            candidatas.append(os.path.join(punteado, '__init__.py'))
+            for hoja in ('base.py', 'produccion.py', 'production.py',
+                         'prod.py', 'common.py'):
+                candidatas.append(os.path.join(punteado, hoja))
+
+    candidatas += [
+        'config/settings.py',
+        os.path.join('config', 'settings', 'base.py'),
+        os.path.join('config', 'settings', '__init__.py'),
+        'src/config/settings.py',
+        'settings.py',
+    ]
+
+    # Y si nada de eso, cualquier settings.py del arbol que tenga la lista.
+    for base, carpetas, archivos in os.walk(raiz):
+        carpetas[:] = [c for c in carpetas
+                       if c not in ('.git', 'node_modules', 'staticfiles',
+                                    'media', '__pycache__', 'venv', '.venv')]
+        for n in archivos:
+            if n in ('settings.py', 'base.py'):
+                candidatas.append(os.path.relpath(
+                    os.path.join(base, n), raiz))
+
+    vistas = set()
+    for rel in candidatas:
+        if rel in vistas:
+            continue
+        vistas.add(rel)
+        ruta = os.path.join(raiz, rel)
+        if not os.path.isfile(ruta):
+            continue
+        try:
+            if re.search(r'^(MIDDLEWARE_CLASSES|MIDDLEWARE)\s*=\s*[\[(]',
+                         leer(ruta), re.M):
+                return ruta
+        except Exception:
+            continue
+    return None
+
+
 def paso_settings(raiz, simulacro):
     """Mete el middleware en su lista, el ULTIMO.
 
@@ -905,9 +1034,10 @@ def paso_settings(raiz, simulacro):
     existe y el permiso se resolveria siempre contra un anonimo. Como
     ponerlo al final cumple eso siempre, se pone al final.
     """
-    ruta = os.path.join(raiz, 'config/settings.py')
-    if not os.path.exists(ruta):
-        return False, 'no existe {0}'.format(ruta)
+    ruta = buscar_settings(raiz)
+    if ruta is None:
+        return False, ('no encuentro ningun settings con MIDDLEWARE; '
+                       'dime donde esta y lo meto ahi')
     t = leer(ruta)
     if 'PermisosDePantalla' in t:
         return True, 'ya estaba'
@@ -926,7 +1056,8 @@ def paso_settings(raiz, simulacro):
     sangria = re.match(r'[ \t]*', t[anterior + 1:fin]).group(0) or '    '
     t = t[:fin] + '\n' + sangria + CAMINO_MIDDLEWARE + t[fin:]
     escribir(ruta, t, simulacro)
-    return True, 'middleware anadido a {0}'.format(m.group(1))
+    return True, '{0} de {1}'.format(
+        m.group(1), os.path.relpath(ruta, raiz))
 
 
 # ══════════════════════════════════════════════════════════════════════════

@@ -551,6 +551,36 @@ urlpatterns = [
 ]
 '''
 
+# EL urls.py DEL SERVIDOR DE VERDAD, que es otra cosa: el parche de
+# monitoreos ya le metio un import de VARIAS LINEAS en columna cero. Ahi
+# es donde esto fallo en produccion.
+URLS_CON_MONITOREOS = '''# -*- coding: utf-8 -*-
+"""Las rutas de la API."""
+from django.conf.urls import url
+
+from src.apps.api.views import algo
+from src.apps.core.monitoreo import (
+    rutinas as mon_rutinas,
+    rutina as mon_rutina,
+    mis_tramos as mon_mis_tramos,
+)
+
+urlpatterns = [
+    url(r'^v1/mobile/algo/$', algo, name='algo'),
+    url(r'^v1/mobile/monitoreo/rutinas/$', mon_rutinas, name='mr'),
+]
+'''
+
+MANAGE_PY = '''#!/usr/bin/env python
+import os
+import sys
+
+if __name__ == '__main__':
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.ajustes')
+    from django.core.management import execute_from_command_line
+    execute_from_command_line(sys.argv)
+'''
+
 SETTINGS_VIRGEN = '''# -*- coding: utf-8 -*-
 DEBUG = False
 
@@ -580,6 +610,8 @@ def plantar():
     poner(raiz, 'src/apps/core/models.py', MODELS_VIRGEN)
     poner(raiz, 'src/apps/api/urls.py', URLS_VIRGEN)
     poner(raiz, 'config/settings.py', SETTINGS_VIRGEN)
+    poner(raiz, 'manage.py', MANAGE_PY.replace('config.ajustes',
+                                               'config.settings'))
     poner(raiz, 'src/apps/core/migrations/__init__.py', '')
     poner(raiz, 'src/apps/core/migrations/0001_initial.py', MIGRACION_VIRGEN)
     poner(raiz, 'src/apps/core/equipo_enlazado.py',
@@ -702,6 +734,94 @@ def diferencias(a, b):
         k for k in b if k in a and a[k] != b[k])
 
 
+def prueba_urls_con_import_largo():
+    print('\n16. urls.py con un import de varias lineas (el del servidor)')
+    # ────────────────────────────────────────────────────────────────
+    # ESTO ES LO QUE FALLO EN PRODUCCION
+    # ────────────────────────────────────────────────────────────────
+    #
+    # `fin_de_imports` no contaba los parentesis, asi que con
+    #
+    #     from src.apps.core.monitoreo import (
+    #         rutinas as mon_rutinas,     <- decia que acababan AQUI
+    #
+    # el import nuevo se colaba entre el parentesis y su contenido. El
+    # archivo dejaba de compilar, `escribir` se negaba -para eso esta- y
+    # el paso moria con un «reviento» que no hablaba de la causa. El
+    # resultado: modulo escrito, migracion puesta y CERO rutas.
+    raiz = plantar()
+    try:
+        poner(raiz, 'src/apps/api/urls.py', URLS_CON_MONITOREOS)
+        ok, que = P.paso_urls(raiz, False)
+        igual('el paso se aplica', ok, True)
+
+        u = sacar(raiz, 'src/apps/api/urls.py')
+        cierto('la ruta esta', 'permisos/mios/' in u)
+        cierto('el import esta', 'perm_mios' in u)
+        cierto('y el de monitoreos sigue entero',
+               'rutinas as mon_rutinas' in u)
+        # Lo unico que de verdad importa: que siga siendo Python.
+        compile(u, 'urls.py', 'exec')
+
+        # Y dos veces no duplica.
+        ok, que = P.paso_urls(raiz, False)
+        igual('la segunda vez, nada', (ok, que), (True, 'ya estaba'))
+        igual('una sola vez', sacar(raiz, 'src/apps/api/urls.py')
+              .count('permisos/mios/'), 1)
+    finally:
+        shutil.rmtree(raiz)
+
+
+def prueba_settings_en_otro_sitio():
+    print('\n17. el settings no siempre esta en config/settings.py')
+    # En el servidor no estaba ahi, y el paso moria diciendo «no existe
+    # config/settings.py», que suena a proyecto roto cuando lo unico que
+    # pasa es que vive en otra carpeta. Ahora se le pregunta a manage.py,
+    # que es quien lo sabe.
+    for donde, modulo in (('config/ajustes.py', 'config.ajustes'),
+                          ('config/settings/base.py', 'config.settings'),
+                          ('miproyecto/settings.py', 'miproyecto.settings')):
+        raiz = plantar()
+        try:
+            os.remove(os.path.join(raiz, 'config/settings.py'))
+            carpeta = os.path.join(raiz, os.path.dirname(donde))
+            if not os.path.isdir(carpeta):
+                os.makedirs(carpeta)
+            poner(raiz, donde, SETTINGS_VIRGEN)
+            poner(raiz, 'manage.py',
+                  MANAGE_PY.replace('config.ajustes', modulo))
+
+            ok, que = P.paso_settings(raiz, False)
+            igual('con %s' % donde, ok, True)
+            s = sacar(raiz, donde)
+            cierto('%s: quedo dentro' % donde, 'PermisosDePantalla' in s)
+            compile(s, 'settings.py', 'exec')
+        finally:
+            shutil.rmtree(raiz)
+
+    # Y un settings partido en varios archivos: manda el que tiene la
+    # lista, no el que lleva el nombre.
+    raiz = plantar()
+    try:
+        os.remove(os.path.join(raiz, 'config/settings.py'))
+        os.makedirs(os.path.join(raiz, 'config/settings'))
+        poner(raiz, 'config/settings/__init__.py',
+              'from .base import *  # noqa\n')
+        poner(raiz, 'config/settings/base.py', SETTINGS_VIRGEN)
+        poner(raiz, 'manage.py',
+              MANAGE_PY.replace('config.ajustes', 'config.settings'))
+
+        ok, que = P.paso_settings(raiz, False)
+        igual('partido en varios', ok, True)
+        cierto('fue al que tiene la lista',
+               'PermisosDePantalla' in sacar(raiz, 'config/settings/base.py'))
+        igual('y no al __init__',
+              'PermisosDePantalla' in sacar(raiz, 'config/settings/__init__.py'),
+              False)
+    finally:
+        shutil.rmtree(raiz)
+
+
 def main():
     print('Permisos por pantalla')
     print('=' * 74)
@@ -712,7 +832,8 @@ def main():
                prueba_middleware_apunta, prueba_tabla_que_no_esta,
                prueba_guardar_rol, prueba_mios,
                prueba_pasos, prueba_pasos_idempotentes,
-               prueba_settings_lista]:
+               prueba_settings_lista, prueba_urls_con_import_largo,
+               prueba_settings_en_otro_sitio]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:
