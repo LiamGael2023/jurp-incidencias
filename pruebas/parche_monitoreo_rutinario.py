@@ -1255,6 +1255,65 @@ def visitas(request):
                     status=status.HTTP_201_CREATED)
 
 
+# La progresiva que lleva dentro la clave de un elemento: "TRAMO II 38+600
+# - 38+800 CANAL" o "Entrega  E3F (38+445.00)". Se exige el "+" porque sin
+# el, "TRAMO 0 25+000 - 25+200" encontraria primero el 0 del nombre del
+# tramo y toda la lista saldria desordenada.
+EN_PROGRESIVA = re.compile('([0-9]+)[ ]*[+][ ]*([0-9]+(?:[.][0-9]+)?)')
+
+
+def _metros(clave):
+    """Donde empieza el elemento, en metros, para poder ordenarlo.
+
+    Es la misma regla que usa la app para ordenar la lista del recorrido:
+    quien mira esta pantalla y el que camina el tramo tienen que ver los
+    elementos en el mismo orden, o no estan hablando de lo mismo.
+    """
+    m = EN_PROGRESIVA.search(clave or '')
+    if not m:
+        return -1.0
+    return float(m.group(1)) * 1000 + float(m.group(2))
+
+
+@api_view(['GET'])
+@permission_classes([EsGerencia])
+def elementos(request, pk):
+    """Todo lo registrado en un tramo, elemento por elemento.
+
+    POR QUE NO VIENE YA EN LA RUTINA. La pantalla de monitoreos pide la
+    rutina entera, y una rutina entera son 14 tramos con hasta 201
+    elementos: mas de mil filas para pintar unos contadores. Esto se pide
+    solo del tramo que se despliega, que es cuando de verdad se mira.
+
+    Van en el orden en que se caminan -por progresiva, y a igual progresiva
+    la franja antes que lo que hay dentro-, igual que en la app.
+
+    OJO CON LO QUE NO ESTA: aqui solo salen los elementos con fila. Los que
+    nadie ha revisado todavia no existen para el servidor, porque la lista
+    completa vive en el KMZ que lleva la app. Por eso se manda tambien
+    cuantos van, y la pantalla lo dice en vez de dar a entender que el
+    tramo tiene solo estos.
+    """
+    try:
+        tr = (TramoDeRutina.objects
+              .select_related('rutina')
+              .get(pk=pk))
+    except (TramoDeRutina.DoesNotExist, ValueError, TypeError):
+        return Response({'ok': False, 'detail': 'No existe ese tramo.'},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    visitas = list(tr.visitas.all().select_related('usuario'))
+    visitas.sort(key=lambda v: (
+        _metros(v.elemento) < 0,
+        _metros(v.elemento) if _metros(v.elemento) >= 0 else 0,
+        0 if v.tipo_elemento == VisitaMonitoreo.SUBTRAMO else 1,
+        v.elemento or '',
+        v.id))
+    return Response({'ok': True,
+                     'tramo': _tramo(tr),
+                     'results': [_visita(v) for v in visitas]})
+
+
 @api_view(['GET'])
 @permission_classes([EsGerencia])
 def hallazgos(request):
@@ -1439,6 +1498,7 @@ IMPORT_URLS = ("from src.apps.core.monitoreo import (\\n"
                "    visitas as mon_visitas,\\n"
                "    visitas_lote as mon_visitas_lote,\\n"
                "    hallazgos as mon_hallazgos,\\n"
+               "    elementos as mon_elementos,\\n"
                ")\\n")
 
 RUTAS = (
@@ -1464,7 +1524,9 @@ RUTAS = (
     "    url(r'^v1/mobile/monitoreo/visitas/lote/$',\n"
     "        mon_visitas_lote, name='monitoreo_visitas_lote'),\n"
     "    url(r'^v1/mobile/monitoreo/hallazgos/$',\n"
-    "        mon_hallazgos, name='monitoreo_hallazgos'),\n")
+    "        mon_hallazgos, name='monitoreo_hallazgos'),\n"
+    "    url(r'^v1/mobile/monitoreo/tramos/(?P<pk>[0-9]+)/elementos/$',\n"
+    "        mon_elementos, name='monitoreo_elementos'),\n")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -2011,6 +2073,9 @@ def paso_urls(raiz, simulacro):
             ('mon_hallazgos', 'hallazgos as mon_hallazgos,',
              "    url(r'^v1/mobile/monitoreo/hallazgos/$',\n"
              "        mon_hallazgos, name='monitoreo_hallazgos'),\n"),
+            ('mon_elementos', 'elementos as mon_elementos,',
+             "    url(r'^v1/mobile/monitoreo/tramos/(?P<pk>[0-9]+)/elementos/$',\n"
+             "        mon_elementos, name='monitoreo_elementos'),\n"),
         ]
         faltan = [x for x in sueltas if x[0] not in t]
         if not faltan:
@@ -2047,7 +2112,7 @@ def paso_urls(raiz, simulacro):
     t = ''.join(lineas[:destino]) + RUTAS + ''.join(lineas[destino:])
     t = insertar_linea(t, fin_de_imports(t), IMPORT_URLS.replace('\\n', '\n'))
     escribir(ruta, t, simulacro)
-    return True, 'import y 10 rutas anadidos'
+    return True, 'import y 11 rutas anadidos'
 
 
 # ══════════════════════════════════════════════════════════════════════════

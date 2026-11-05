@@ -20,8 +20,8 @@
  * tramo y hay que avisar. Esconderlos detrás de un clic es garantizar que
  * nadie los use.
  */
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { FaExternalLinkAlt,
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { FaChevronDown, FaChevronUp, FaExternalLinkAlt,
   FaPlus, FaSyncAlt, FaCheckCircle, FaExclamationTriangle, FaRegCircle,
   FaSave, FaLock, FaLockOpen, FaCalendarAlt, FaBell, FaTimes, FaSearch, FaPhoneAlt,
   FaPen,
@@ -91,6 +91,13 @@ export default function Monitoreos({ irAIncidente }) {
   const [candidatos, setCandidatos] = useState([]);
   const [avisados, setAvisados] = useState([]);   // el grupo de Gerencia
   const [cargando, setCargando] = useState(true);
+  /* El desglose de un tramo: id → { cargando, fallo, lista }.
+   *
+   * SE PIDE AL DESPLEGAR, no con la rutina. Una rutina entera son 14 tramos
+   * con hasta 201 elementos cada uno; traerlos todos para que casi siempre
+   * se mire uno sería más de mil filas de JSON por carga de pantalla. Una
+   * vez traído se queda: volver a plegar y desplegar no vuelve a pedirlo. */
+  const [desglose, setDesglose] = useState({});
   const [fallo, setFallo] = useState('');
   const [soporte, setSoporte] = useState('probando'); // ok | no-soportado
   const [ocupado, setOcupado] = useState(false);
@@ -182,6 +189,120 @@ export default function Monitoreos({ irAIncidente }) {
     candidatos.find(x => String(x.id) === String(id))
     || (tramo.asignados || []).find(x => String(x.id) === String(id))
     || {};
+
+  /* Cuándo se registró, en corto: lo que importa al revisar es el día y la
+   * hora, no el año, que es el de la rutina que se está mirando. */
+  const cuando = (iso) => {
+    if (!iso) return '';
+    const f = new Date(iso);
+    if (Number.isNaN(f.getTime())) return '';
+    return f.toLocaleString('es-PE', {
+      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    });
+  };
+
+  /* El desglose de un tramo: qué elementos se revisaron y cómo. */
+  const pintarDesglose = (t, estado) => {
+    if (estado.cargando) {
+      return <div className="mon-desglose-aviso">Cargando el desglose…</div>;
+    }
+    if (estado.fallo) {
+      return <div className="mon-desglose-aviso mon-mal">{estado.fallo}</div>;
+    }
+    const lista = estado.lista || [];
+    if (lista.length === 0) {
+      return <div className="mon-desglose-aviso">Todavía no hay nada registrado en este tramo.</div>;
+    }
+    return (
+      <div className="mon-desglose">
+        {/* LO QUE NO ESTÁ, DICHO. Aquí solo salen los elementos con fila:
+          * los que nadie ha revisado no existen para el servidor, porque la
+          * lista completa vive en el KMZ que lleva la app. Callarlo haría
+          * leer «el tramo II tiene 43 elementos» cuando lo que dice es «43
+          * están revisados». */}
+        <div className="mon-desglose-aviso">
+          {lista.length} elemento{lista.length === 1 ? '' : 's'} registrado
+          {lista.length === 1 ? '' : 's'} en el tramo {t.tramo}, en el orden
+          en que se caminan. Los que falten por revisar no aparecen todavía.
+        </div>
+        <table className="mon-desglose-tabla">
+          <thead>
+            <tr>
+              <th>Elemento</th>
+              <th>Resultado</th>
+              <th>Quién</th>
+              <th>Cuándo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lista.map(v => (
+              <tr key={v.id} className={v.sin_novedad ? undefined : 'mon-con-hallazgo'}>
+                <td>
+                  <div className="mon-el-nombre">
+                    {v.elemento || 'Todo el tramo'}
+                  </div>
+                  <div className="mon-sub">
+                    {v.tipo_elemento === 'obra' ? 'Obra de arte'
+                      : v.tipo_elemento === 'subtramo' ? 'Sub-tramo'
+                      : 'Tramo entero'}
+                  </div>
+                </td>
+                <td>
+                  {v.sin_novedad ? (
+                    <span className="mon-el-ok">Sin novedad</span>
+                  ) : (
+                    <>
+                      <span className="mon-el-mal">Con hallazgo</span>
+                      {v.codigo && <div className="mon-codigo">{v.codigo}</div>}
+                      {v.observacion && (
+                        <div className="mon-sub">{v.observacion}</div>
+                      )}
+                      {v.incidente && (
+                        <button type="button" className="mon-ver-inc"
+                          onClick={() => irAIncidente && irAIncidente(v.incidente)}
+                          disabled={!irAIncidente}
+                          title="Abrir el hallazgo para gestionarlo">
+                          <FaExternalLinkAlt size={10} /> Gestionar el hallazgo
+                        </button>
+                      )}
+                    </>
+                  )}
+                </td>
+                <td className="mon-sub">{v.por ? v.por.nombre : '—'}</td>
+                <td className="mon-sub">{cuando(v.registrada_en)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  /* Despliega un tramo y trae sus elementos la primera vez. */
+  const alternarDesglose = async (tramo) => {
+    const id = tramo.id;
+    const ya = desglose[id];
+    if (ya && !ya.fallo) {
+      setDesglose(d => ({ ...d, [id]: { ...ya, abierto: !ya.abierto } }));
+      return;
+    }
+    setDesglose(d => ({ ...d, [id]: { abierto: true, cargando: true } }));
+    const { ok, res, datos } = await pedir(`${API}tramos/${id}/elementos/`,
+      { callar: [403, 404] });
+    if (!ok) {
+      /* Un 404 aquí es un servidor sin esta parte del parche, no un tramo
+       * que no existe: el tramo lo acabamos de sacar de la misma rutina. */
+      const porQue = res && res.status === 404
+        ? 'Este servidor todavía no sirve el desglose. Aplica el parche de monitoreos.'
+        : (res ? `El servidor respondió ${res.status}.` : 'No se pudo consultar.');
+      setDesglose(d => ({ ...d, [id]: { abierto: true, fallo: porQue } }));
+      return;
+    }
+    setDesglose(d => ({
+      ...d,
+      [id]: { abierto: true, lista: (datos && datos.results) || [] },
+    }));
+  };
 
   /* ── Acciones ──────────────────────────────────────────────────────── */
 
@@ -514,9 +635,33 @@ export default function Monitoreos({ irAIncidente }) {
                     ? pendientes[t.tramo]
                     : (t.asignados || []).map(a => String(a.id));
                   const cambiado = pendientes[t.tramo] !== undefined;
+                  const abierto = desglose[t.id] && desglose[t.id].abierto;
                   return (
-                    <tr key={t.id} className={cambiado ? 'mon-cambiado' : undefined}>
-                      <td className="mon-tramo">{t.tramo}</td>
+                    /* Dos filas por tramo: la suya y, debajo, su desglose.
+                     * Van bajo un Fragment porque una tabla no admite nada
+                     * entre <tbody> y <tr>, y el desglose necesita el ancho
+                     * entero -el nombre de un sub-tramo no cabe en una
+                     * celda de tres-. */
+                    <Fragment key={t.id}>
+                    <tr className={cambiado ? 'mon-cambiado' : undefined}>
+                      <td className="mon-tramo">
+                        {t.tramo}
+                        {/* DESPLEGAR EL TRAMO. La fila dice cuantos van;
+                          * esto dice CUALES y como se evaluo cada uno, que
+                          * es lo que hace falta para revisar un recorrido
+                          * o para responder "cuando se miro la entrega
+                          * E12". Se pide solo al abrirlo. */}
+                        {t.visitas > 0 && (
+                          <button type="button" className="mon-desplegar"
+                            onClick={() => alternarDesglose(t)}
+                            title="Ver los elementos revisados">
+                            {desglose[t.id] && desglose[t.id].abierto
+                              ? <FaChevronUp size={9} />
+                              : <FaChevronDown size={9} />}
+                            {t.elementos_revisados || t.visitas}
+                          </button>
+                        )}
+                      </td>
 
                       <td>
                         {/* FICHAS Y NO UNA LISTA MULTIPLE. Un <select
@@ -673,6 +818,14 @@ export default function Monitoreos({ irAIncidente }) {
                       </td>
 
                     </tr>
+                    {abierto && (
+                      <tr className="mon-fila-desglose">
+                        <td colSpan={3}>
+                          {pintarDesglose(t, desglose[t.id])}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
