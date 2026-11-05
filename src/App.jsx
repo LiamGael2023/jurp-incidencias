@@ -43,8 +43,17 @@ const MENU = [
   { clave: 'sec-pluvira', seccion: true, modulo: 'pluvira', apps: ['pluvira'] },
   { clave: 'mapa',         titulo: 'Monitoreo GIS', icono: <FaMapMarkedAlt />,  apps: ['pluvira'] },
   { clave: 'lista',        titulo: 'Incidentes',    icono: <FaListUl />,        apps: ['pluvira'] },
+  // Los hallazgos de recorrido van aparte, con su propia numeración
+  // (HALLAZGO-007-04112026) y sin mezclarse con Incidentes: el mismo
+  // registro bajo dos códigos distintos es la forma más rápida de que dos
+  // personas discutan sobre cuál es el bueno. Se atienden igual —el mismo
+  // costeo y el mismo parte diario—, y lo hacen con la misma pantalla.
+  //
+  // No es soloAdmin: quien recorre un tramo tiene que poder volver a lo que
+  // encontró, y lo que ve es lo mismo que en Incidentes.
+  { clave: 'hallazgos',    titulo: 'Hallazgos de recorrido', icono: <FaClipboardCheck />, apps: ['pluvira'] },
   // Pegado a Incidentes porque es de donde salen los suyos: un hallazgo de
-  // un recorrido se registra con el mismo formulario y acaba en esa lista.
+  // un recorrido se registra con el mismo formulario.
   // Solo administración: quien reparte los tramos es Gerencia, y al que solo
   // va a recorrer el suyo esta pantalla no le dice nada —lo suyo lo ve en la
   // app, con sus tramos y nada más—.
@@ -219,9 +228,12 @@ function App() {
   };
 
   // Navega a la vista Incidentes y solicita abrir un incidente concreto.
-  const irAIncidente = (incidenteId) => {
+  const irAIncidente = (incidenteId, donde) => {
     setIncidenteAbrir(incidenteId);
-    setVistaActual('lista');
+    // Desde Monitoreos se salta a Hallazgos, no a Incidentes: ahí es donde
+    // vive ese registro ahora, y mandar a la otra lista llevaría a una
+    // pantalla donde ya no está.
+    setVistaActual(donde === 'hallazgos' ? 'hallazgos' : 'lista');
   };
 
   // Lo mismo para el inventario: desde la tabla de evaluaciones se salta al
@@ -330,7 +342,9 @@ function App() {
     return (
       <div className="maq">
         <RailGIS {...propsRail} />
-        <div className="maq-main"><Monitoreos irAIncidente={irAIncidente} /></div>
+        <div className="maq-main">
+          <Monitoreos irAIncidente={(id) => irAIncidente(id, 'hallazgos')} />
+        </div>
       </div>
     );
   }
@@ -434,6 +448,24 @@ function App() {
       <div className="est">
         <RailGIS {...propsRail} />
         <div className="est-main"><Estadisticas /></div>
+      </div>
+    );
+  }
+
+  // Los hallazgos usan la MISMA pantalla que los incidentes: se gestionan
+  // igual, y duplicar mil líneas de costeo sería firmar que un día el de un
+  // lado tenga una corrección que el otro no.
+  if (vistaActual === 'hallazgos') {
+    return (
+      <div className="inc">
+        <RailGIS {...propsRail} />
+        <div className="inc-main">
+          <Incidentes
+            fuente="hallazgos"
+            incidenteAbrir={incidenteAbrir}
+            onIncidenteAbierto={() => setIncidenteAbrir(null)}
+          />
+        </div>
       </div>
     );
   }

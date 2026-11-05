@@ -281,6 +281,20 @@ class VisitaMonitoreo(models.Model):
     elemento = models.CharField('Elemento', max_length=160, blank=True,
                                 default='', db_index=True)
 
+    # SU PROPIA NUMERACION. Un hallazgo se atiende como un incidente -con
+    # su costeo y su parte diario- pero vive aparte, y aparte quiere decir
+    # con codigo propio: HALLAZGO-007-04112026, no el correlativo de los
+    # incidentes, donde los numeros irian a saltos porque entre dos
+    # hallazgos hay decenas de incidentes de otra procedencia.
+    #
+    # Se guarda, no se calcula al leer. Un codigo que se deduce de la
+    # posicion en una lista cambia en cuanto algo de antes desaparece, y
+    # este va impreso en un parte diario.
+    #
+    # Solo lo llevan los hallazgos: una franja sin novedad no se numera.
+    numero = models.PositiveIntegerField('Numero de hallazgo', null=True,
+                                         blank=True, db_index=True)
+
     sin_novedad = models.BooleanField('Sin novedad', default=True)
     observacion = models.TextField('Observacion', blank=True, default='')
 
@@ -342,6 +356,22 @@ class TelefonoUsuario(models.Model):
 
 # El bloque de arriba, tal cual, para meterlo en un models.py que ya
 # tiene VisitaMonitoreo sin los campos del elemento.
+NUMERO_BLOQUE = '''    # SU PROPIA NUMERACION. Un hallazgo se atiende como un incidente -con
+    # su costeo y su parte diario- pero vive aparte, y aparte quiere decir
+    # con codigo propio: HALLAZGO-007-04112026, no el correlativo de los
+    # incidentes, donde los numeros irian a saltos porque entre dos
+    # hallazgos hay decenas de incidentes de otra procedencia.
+    #
+    # Se guarda, no se calcula al leer. Un codigo que se deduce de la
+    # posicion en una lista cambia en cuanto algo de antes desaparece, y
+    # este va impreso en un parte diario.
+    #
+    # Solo lo llevan los hallazgos: una franja sin novedad no se numera.
+    numero = models.PositiveIntegerField('Numero de hallazgo', null=True,
+                                         blank=True, db_index=True)
+
+'''
+
 ELEMENTO_BLOQUE = '''    TRAMO = 'tramo'
     SUBTRAMO = 'subtramo'
     OBRA = 'obra'
@@ -568,6 +598,7 @@ campo, que ademas ya tiene su cola offline resuelta.
 
 import re
 
+from django.db import transaction
 from django.utils import timezone
 
 from rest_framework import status
@@ -680,9 +711,56 @@ def _contactos(tramo):
             for r in ResponsableTramo.objects.filter(tramo=tramo, activo=True)]
 
 
+def _numerar(v):
+    """Le pone su correlativo al hallazgo. Los sin novedad no se numeran.
+
+    El maximo del ano se lee CON BLOQUEO. Dos personas en dos tramos
+    distintos pueden registrar un hallazgo en el mismo segundo, y sin el
+    bloqueo las dos leerian el mismo maximo y se irian con el mismo numero,
+    que es justo lo que un codigo no puede permitirse.
+    """
+    if v.sin_novedad or v.numero:
+        return v
+    cuando = v.creada_en or timezone.now()
+    with transaction.atomic():
+        ultimo = (VisitaMonitoreo.objects
+                  .select_for_update()
+                  .filter(numero__isnull=False, creada_en__year=cuando.year)
+                  .order_by('-numero')
+                  .first())
+        v.numero = (ultimo.numero if ultimo else 0) + 1
+        v.save(update_fields=['numero'])
+    return v
+
+
+def _local(f):
+    """La fecha como la ve quien la mira, no como la guarda la base.
+
+    El codigo lleva la fecha dentro, y un hallazgo de las 20:30 de Trujillo
+    es del dia siguiente en UTC: sin esto, el codigo del parte no
+    coincidiria con el dia que figura al lado.
+    """
+    if f is None:
+        return timezone.now()
+    try:
+        return timezone.localtime(f)
+    except (ValueError, AttributeError):
+        return f
+
+
+def _codigo_hallazgo(v):
+    """HALLAZGO-007-04112026, con el mismo formato que usan los incidentes."""
+    if v.sin_novedad or not v.numero:
+        return ''
+    f = _local(v.creada_en)
+    return 'HALLAZGO-%03d-%02d%02d%d' % (v.numero, f.day, f.month, f.year)
+
+
 def _visita(v):
     return {
         'id': v.id,
+        'numero': v.numero,
+        'codigo': _codigo_hallazgo(v),
         'tipo_elemento': v.tipo_elemento,
         'elemento': v.elemento,
         'sin_novedad': v.sin_novedad,
@@ -1171,9 +1249,59 @@ def visitas(request):
         latitude=datos.get('latitude') or None,
         longitude=datos.get('longitude') or None,
         incidente=incidente)
+    _numerar(v)
     return Response({'ok': True, 'visita': _visita(v),
                      'tramo': _tramo(tr, con_visitas=True)},
                     status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([EsGerencia])
+def hallazgos(request):
+    """Los hallazgos de los recorridos, para su propia pantalla.
+
+    DEVUELVE EL CONTEXTO, NO EL INCIDENTE. El incidente ya lo sirve
+    hi-incidents/, que es de donde salen las tarjetas, las fotos, el estado
+    y el costeo. Repetir aqui ese serializador seria mantener dos versiones
+    del mismo incidente y que una se quede atras.
+
+    Lo que falta alli y se manda desde aqui es de DONDE sale: que rutina,
+    que tramo, que elemento, quien lo vio y con que numero propio. La
+    pantalla cruza las dos cosas por el id del incidente.
+    """
+    qs = (VisitaMonitoreo.objects
+          .filter(sin_novedad=False)
+          .select_related('tramo_rutina', 'tramo_rutina__rutina', 'usuario')
+          .order_by('-id'))
+
+    rut = request.GET.get('rutina')
+    if rut:
+        qs = qs.filter(tramo_rutina__rutina_id=rut)
+
+    fuera = []
+    for v in qs:
+        tr = v.tramo_rutina
+        fuera.append({
+            'id': v.id,
+            'numero': v.numero,
+            'codigo': _codigo_hallazgo(v),
+            'incidente': v.incidente_id,
+            'tramo': tr.tramo,
+            'tramo_rutina': tr.id,
+            'elemento': v.elemento,
+            'tipo_elemento': v.tipo_elemento,
+            'observacion': v.observacion,
+            'latitude': str(v.latitude) if v.latitude is not None else None,
+            'longitude': str(v.longitude) if v.longitude is not None else None,
+            'registrada_en': v.creada_en,
+            'por': _persona(v.usuario),
+            'rutina': {
+                'id': tr.rutina_id,
+                'nombre': tr.rutina.nombre,
+                'cerrada': tr.rutina.cerrada,
+            },
+        })
+    return Response({'ok': True, 'results': fuera})
 
 
 TOPE_LOTE = 400
@@ -1272,7 +1400,7 @@ def visitas_lote(request):
             omitidas.append(clave)
             continue
         vistos.add(clave)
-        creadas.append(VisitaMonitoreo.objects.create(
+        nueva = VisitaMonitoreo.objects.create(
             tramo_rutina=tr,
             usuario=usuario,
             tipo_elemento=tipo,
@@ -1280,7 +1408,11 @@ def visitas_lote(request):
             sin_novedad=sn,
             observacion=obs,
             latitude=lat,
-            longitude=lng))
+            longitude=lng)
+        # Por el lote casi todo entra sin novedad, pero un hallazgo con
+        # observacion tambien puede venir por aqui, y tiene que numerarse
+        # igual: el codigo no depende de por donde entro.
+        creadas.append(_numerar(nueva))
 
     tr = TramoDeRutina.objects.select_related('rutina').get(pk=tr.pk)
     return Response({'ok': True,
@@ -1306,6 +1438,7 @@ IMPORT_URLS = ("from src.apps.core.monitoreo import (\\n"
                "    mis_tramos as mon_mis_tramos,\\n"
                "    visitas as mon_visitas,\\n"
                "    visitas_lote as mon_visitas_lote,\\n"
+               "    hallazgos as mon_hallazgos,\\n"
                ")\\n")
 
 RUTAS = (
@@ -1329,7 +1462,9 @@ RUTAS = (
     # Antes de visitas/ no, pero DESPUES si: Django prueba en orden y
     # visitas/$ lleva el $, asi que no se traga visitas/lote/.
     "    url(r'^v1/mobile/monitoreo/visitas/lote/$',\n"
-    "        mon_visitas_lote, name='monitoreo_visitas_lote'),\n")
+    "        mon_visitas_lote, name='monitoreo_visitas_lote'),\n"
+    "    url(r'^v1/mobile/monitoreo/hallazgos/$',\n"
+    "        mon_hallazgos, name='monitoreo_hallazgos'),\n")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1765,6 +1900,85 @@ def paso_elemento(raiz, simulacro):
     return True, '{0}{1}'.format(nombre, '' if hecho_modelo else ' (y el modelo)')
 
 
+MIGRACION_NUMERO = """# -*- coding: utf-8 -*-
+# Lo escribe parche_monitoreo_rutinario.py.
+from __future__ import unicode_literals
+
+from django.db import migrations, models
+
+
+def numerar(apps, schema_editor):
+    '''Los hallazgos que ya estaban se numeran por orden de llegada.
+
+    Por ano y en orden de id, que es el orden en que se registraron. Hacerlo
+    aqui y no al leer es lo que hace que el codigo no cambie nunca: si se
+    dedujera de la posicion en una lista, borrar uno antiguo renumeraria
+    todos los de despues, y esos numeros ya estan impresos en partes.
+    '''
+    Visita = apps.get_model('core', 'VisitaMonitoreo')
+    por_anio = {}
+    for v in Visita.objects.filter(sin_novedad=False).order_by('id'):
+        anio = v.creada_en.year if v.creada_en else 0
+        por_anio[anio] = por_anio.get(anio, 0) + 1
+        v.numero = por_anio[anio]
+        v.save(update_fields=['numero'])
+
+
+def desnumerar(apps, schema_editor):
+    # La columna se va entera con el AddField; esto existe para que la
+    # migracion sea reversible sin reventar.
+    pass
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('core', '%(anterior)s'),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='visitamonitoreo',
+            name='numero',
+            field=models.PositiveIntegerField(
+                blank=True, db_index=True, null=True,
+                verbose_name='Numero de hallazgo'),
+        ),
+        migrations.RunPython(numerar, desnumerar),
+    ]
+"""
+
+
+def paso_numero(raiz, simulacro):
+    """Que el hallazgo tenga su propio correlativo."""
+    ruta = os.path.join(raiz, 'src/apps/core/models.py')
+    if not os.path.exists(ruta):
+        return False, 'no existe {0}'.format(ruta)
+    t = leer(ruta)
+    if 'class VisitaMonitoreo' not in t:
+        return True, 'no aplica (las tablas las pone el paso 1)'
+
+    hecho_modelo = True
+    if 'numero = models.PositiveIntegerField' not in t:
+        ancla = "    sin_novedad = models.BooleanField('Sin novedad', default=True)"
+        if t.count(ancla) != 1:
+            return False, ('no encuentro sin_novedad una sola vez en '
+                           'VisitaMonitoreo; pegame el modelo y lo hago a mano')
+        escribir(ruta, t.replace(ancla, NUMERO_BLOQUE + ancla), simulacro)
+        hecho_modelo = False
+
+    carpeta = os.path.join(raiz, 'src/apps/core/migrations')
+    previas = sorted(n[:-3] for n in os.listdir(carpeta)
+                     if n.endswith('.py') and n != '__init__.py')
+    if any('numero_hallazgo' in n for n in previas):
+        return True, 'ya estaba'
+    anterior = previas[-1]
+    nombre = '{0:04d}_numero_hallazgo.py'.format(int(anterior[:4]) + 1)
+    escribir(os.path.join(carpeta, nombre),
+             MIGRACION_NUMERO % {'anterior': anterior}, simulacro)
+    return True, '{0}{1}'.format(nombre, '' if hecho_modelo else ' (y el modelo)')
+
+
 def paso_modulo(raiz, simulacro):
     for rel, que in (('src/apps/core/equipo_enlazado.py', 'EsGerencia'),
                      ('src/apps/core/permission.py', 'IsMobileRoleUser')):
@@ -1794,6 +2008,9 @@ def paso_urls(raiz, simulacro):
             ('mon_visitas_lote', 'visitas_lote as mon_visitas_lote,',
              "    url(r'^v1/mobile/monitoreo/visitas/lote/$',\n"
              "        mon_visitas_lote, name='monitoreo_visitas_lote'),\n"),
+            ('mon_hallazgos', 'hallazgos as mon_hallazgos,',
+             "    url(r'^v1/mobile/monitoreo/hallazgos/$',\n"
+             "        mon_hallazgos, name='monitoreo_hallazgos'),\n"),
         ]
         faltan = [x for x in sueltas if x[0] not in t]
         if not faltan:
@@ -1830,7 +2047,7 @@ def paso_urls(raiz, simulacro):
     t = ''.join(lineas[:destino]) + RUTAS + ''.join(lineas[destino:])
     t = insertar_linea(t, fin_de_imports(t), IMPORT_URLS.replace('\\n', '\n'))
     escribir(ruta, t, simulacro)
-    return True, 'import y 9 rutas anadidos'
+    return True, 'import y 10 rutas anadidos'
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1865,8 +2082,9 @@ def main():
         ('4 varios      ', paso_varios),
         ('5 telefono    ', paso_telefono),
         ('6 elemento    ', paso_elemento),
-        ('7 monitoreo.py', paso_modulo),
-        ('8 urls.py     ', paso_urls),
+        ('7 numeracion  ', paso_numero),
+        ('8 monitoreo.py', paso_modulo),
+        ('9 urls.py     ', paso_urls),
     ]
     fallo = False
     for nombre, fn in pasos:

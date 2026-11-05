@@ -257,3 +257,33 @@
   .inc .tbl-page-body { padding: 0 14px 14px !important; }
   .inc .tbl-row-cards { grid-template-columns: 1fr !important; }
 }
+
+/* ── De donde sale un hallazgo de recorrido ───────────────────────────────
+ *
+ * Va en morado, que es el color con el que el mapa de la app pinta el tramo
+ * propio: quien usa las dos cosas reconoce de que esta hablando sin leer la
+ * etiqueta. */
+.inc-origen {
+  margin-top: 8px;
+  padding: 6px 9px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: #6b21a8;
+  background: #faf2fe;
+  border: 1px solid #e9d5ff;
+  border-radius: 6px;
+  line-height: 1.3;
+}
+.inc-origen .tbl-icon { color: #a855f7; }
+.inc-origen-rutina {
+  margin-left: auto;
+  padding: 1px 7px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #7e22ce;
+  background: #f3e8ff;
+  border-radius: 10px;
+}

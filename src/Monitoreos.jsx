@@ -646,15 +646,18 @@ export default function Monitoreos({ irAIncidente }) {
                               {v.observacion && (
                                 <div className="mon-sub">{v.observacion}</div>
                               )}
+                              {v.codigo && (
+                                <div className="mon-sub mon-codigo">{v.codigo}</div>
+                              )}
                               {v.incidente ? (
                                 <button
                                   type="button"
                                   className="mon-ver-inc"
                                   onClick={() => irAIncidente && irAIncidente(v.incidente)}
                                   disabled={!irAIncidente}
-                                  title="Abrir el incidente para gestionarlo"
+                                  title="Abrir el hallazgo para gestionarlo"
                                 >
-                                  <FaExternalLinkAlt size={10} /> Gestionar el incidente
+                                  <FaExternalLinkAlt size={10} /> Gestionar el hallazgo
                                 </button>
                               ) : (
                                 /* Un hallazgo sin incidente es el que se

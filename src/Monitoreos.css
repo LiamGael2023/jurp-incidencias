@@ -440,6 +440,16 @@
 .mon-ver-inc:hover:not(:disabled) { background: #dceafb; }
 .mon-ver-inc:disabled { opacity: .5; cursor: default; }
 
+/* El codigo propio del hallazgo, en monoespaciado: es un identificador que
+ * se copia y se dicta, y en proporcional los ceros y la O se confunden. */
+.mon-codigo {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #b91c1c;
+  letter-spacing: .3px;
+}
+
 /* ── Dentro del diálogo de crear ────────────────────────────────────── */
 .mon-lbl {
   display: block;

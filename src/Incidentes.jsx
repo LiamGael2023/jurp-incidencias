@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { 
+import { FaRoute, 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
   FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash, FaCheckCircle, FaFilter, FaSearch, FaListUl, FaTruck, FaPen
@@ -53,8 +53,35 @@ import { pedir } from './sesion';
 const Portal = ({ children }) => createPortal(children, document.body);
 
 
-function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
+/* `fuente` decide QUE lista se ve, no como se gestiona.
+ *
+ * ──────────────────────────────────────────────────────────────────────
+ * POR QUE UNA PROP Y NO UNA PANTALLA NUEVA
+ * ──────────────────────────────────────────────────────────────────────
+ *
+ * Un hallazgo de recorrido se atiende exactamente igual que un incidente:
+ * mismo costeo, mismo parte diario, misma bitácora, mismos cierres. Eso son
+ * mil líneas de esta pantalla, y copiarlas para los hallazgos sería firmar
+ * que dentro de tres meses el costeo de un lado tenga una corrección que el
+ * otro no, y que nadie sepa cuál de las dos es la buena.
+ *
+ * Lo único que de verdad cambia es cuáles salen y con qué código:
+ *
+ *   'incidentes' → todo lo que NO viene de un recorrido.
+ *   'hallazgos'  → solo lo que sí, con su numeración propia
+ *                  (HALLAZGO-007-04112026) y de qué tramo y elemento salió.
+ *
+ * Se reparten el conjunto: un incidente está en una lista o en la otra,
+ * nunca en las dos, porque tener el mismo registro con dos códigos es la
+ * manera más rápida de que dos personas discutan sobre cuál es.
+ */
+function Incidentes({ incidenteAbrir, onIncidenteAbierto, fuente = 'incidentes' }) {
+  const esHallazgos = fuente === 'hallazgos';
   const [incidentes, setIncidentes] = useState([]);
+  /* id de incidente → de dónde salió. Lo manda monitoreo/hallazgos/, que no
+   * repite el incidente -ese ya lo sirve hi-incidents/- sino el contexto que
+   * allí no existe: rutina, tramo, elemento y el correlativo propio. */
+  const [hallazgos, setHallazgos] = useState(null);
   const [incidentesCerrados, setIncidentesCerrados] = useState([]);  // IDs cerrados (operations)
   const [cargando, setCargando] = useState(true);
   const [paginaActual, setPaginaActual] = useState(1);
@@ -351,6 +378,33 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
   const galeriaSiguiente = () => setGaleriaIndex(i => Math.min(galeriaMedia.length - 1, i + 1));
 
   useEffect(() => { obtenerIncidentes(); }, []);
+
+  /* Los hallazgos se piden SIEMPRE, no solo en su pantalla: Incidentes los
+   * necesita para dejarlos fuera. Si la petición falla -un servidor sin el
+   * parche de monitoreos responde 404- se queda en lista vacía y todo sigue
+   * como antes de que esto existiera, que es el comportamiento correcto
+   * cuando no se sabe. */
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const token = localStorage.getItem('userToken');
+        const res = await fetch('/api/v1/mobile/monitoreo/hallazgos/', {
+          headers: { Authorization: `Token ${token}` },
+        });
+        if (!res.ok) { if (vivo) setHallazgos({}); return; }
+        const j = await res.json();
+        const porIncidente = {};
+        (j.results || []).forEach(h => {
+          if (h && h.incidente) porIncidente[h.incidente] = h;
+        });
+        if (vivo) setHallazgos(porIncidente);
+      } catch (e) {
+        if (vivo) setHallazgos({});
+      }
+    })();
+    return () => { vivo = false; };
+  }, []);
 
   // Carga los IDs de incidentes cerrados (marca persistente en operations).
   useEffect(() => {
@@ -962,7 +1016,25 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
 
 
   // ── Aplica los filtros antes de paginar ────────────────────────────────
-  const incidentesFiltrados = incidentes.filter(inc => {
+  /* El reparto. Mientras los hallazgos no hayan llegado (null) no se quita
+   * nada en Incidentes: esconder filas que luego reaparecen se lee como un
+   * fallo. En la pantalla de hallazgos es al revés y no se muestra nada
+   * hasta saberlo, porque ahí lo de más NO es suyo. */
+  const incidentesDeLaFuente = incidentes.filter(inc => {
+    const esDeRecorrido = !!(hallazgos && hallazgos[inc.id]);
+    if (esHallazgos) return esDeRecorrido;
+    return hallazgos === null ? true : !esDeRecorrido;
+  }).map(inc => {
+    const h = hallazgos && hallazgos[inc.id];
+    if (!h) return inc;
+    // Su numeración propia, que es la que lleva impresa el parte. Si el
+    // servidor no la mandó, se queda la del incidente antes que una tarjeta
+    // sin código.
+    return { ...inc, hallazgo: h,
+             codigoIncidente: h.codigo || inc.codigoIncidente };
+  });
+
+  const incidentesFiltrados = incidentesDeLaFuente.filter(inc => {
     if (filtroTipo && inc.tipoBase !== filtroTipo) return false;
     if (filtroEstado) {
       // "Cerrado" no es un estado de JURP: es la marca de cierre del costeo.
@@ -978,14 +1050,14 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
     if (filtroGravedad && inc.gravedad !== filtroGravedad) return false;
     if (busqueda.trim()) {
       const q = busqueda.toLowerCase().trim();
-      const texto = `${inc.codigoIncidente} ${inc.codigo} ${inc.lugar} ${inc.tipo} ${inc.usuario}`.toLowerCase();
+      const texto = `${inc.codigoIncidente} ${inc.codigo} ${inc.lugar} ${inc.tipo} ${inc.usuario} ${inc.hallazgo ? `${inc.hallazgo.tramo} ${inc.hallazgo.elemento}` : ''}`.toLowerCase();
       if (!texto.includes(q)) return false;
     }
     return true;
   });
 
   // Lista de tipos presentes (para el select), ordenada.
-  const tiposDisponibles = [...new Set(incidentes.map(i => i.tipoBase))].sort();
+  const tiposDisponibles = [...new Set(incidentesDeLaFuente.map(i => i.tipoBase))].sort();
   incidentesFiltradosRef.current = incidentesFiltrados;
   const hayFiltros = filtroTipo || filtroEstado || filtroGravedad || busqueda.trim();
   const limpiarFiltros = () => { setFiltroTipo(''); setFiltroEstado(''); setFiltroGravedad(''); setBusqueda(''); setPaginaActual(1); };
@@ -1019,8 +1091,12 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
       <div className="tbl-page-header">
         <div className="tbl-row align-items-center">
           <div className="tbl-col">
-            <div className="tbl-page-pretitle">Gestión de Campo</div>
-            <h2 className="tbl-page-title">Incidentes y Reportes</h2>
+            <div className="tbl-page-pretitle">
+              {esHallazgos ? 'Monitoreos Rutinarios' : 'Gestión de Campo'}
+            </div>
+            <h2 className="tbl-page-title">
+              {esHallazgos ? 'Hallazgos de Recorrido' : 'Incidentes y Reportes'}
+            </h2>
           </div>
           <div className="tbl-col-auto" style={{ display: 'flex', gap: '8px' }}>
             <button className="tbl-btn" onClick={abrirModalReporte} disabled={cargando || incidentes.length === 0}
@@ -1108,6 +1184,25 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto }) {
                     <h3 className="tbl-card-title" title={inc.tipo} style={{ fontSize:'1.4rem', fontWeight:800, color:'#0f172a', lineHeight:'1.25', display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', overflow:'hidden', minHeight:'2.5em', marginBottom:'10px' }}>{inc.tipo}</h3>
                     <div className="tbl-text-muted tbl-mb-2"><FaMapMarkerAlt className="tbl-icon tbl-text-blue" /><strong>{inc.codigo}</strong><br/><span style={{paddingLeft: '20px', fontSize: '0.85rem'}}>{inc.lugar}</span></div>
                     <div className="tbl-text-muted"><FaCalendarAlt className="tbl-icon" /> {inc.fecha}</div>
+                    {/* DE DONDE SALIO. Un hallazgo sin su tramo y su
+                      * elemento es un incidente mas: lo que lo distingue es
+                      * que alguien estaba recorriendo el Tramo II y lo
+                      * encontro en la Canoa C2D, y eso es lo que hay que
+                      * tener delante al atenderlo. */}
+                    {inc.hallazgo && (
+                      <div className="inc-origen">
+                        <FaRoute className="tbl-icon" />
+                        <span>
+                          <strong>Tramo {inc.hallazgo.tramo}</strong>
+                          {inc.hallazgo.elemento ? ` · ${inc.hallazgo.elemento}` : ''}
+                        </span>
+                        {inc.hallazgo.rutina && inc.hallazgo.rutina.nombre && (
+                          <span className="inc-origen-rutina">
+                            {inc.hallazgo.rutina.nombre}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="tbl-card-footer">
                     <div className="tbl-media-icons">{inc.imagesCount > 0 && <span title="Fotos"><FaImage /> {inc.imagesCount}</span>}{inc.videosCount > 0 && <span title="Videos"><FaVideo /> {inc.videosCount}</span>}</div>

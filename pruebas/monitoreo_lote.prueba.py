@@ -27,6 +27,7 @@ Lo que comprueba, que es lo que puede salir mal de verdad:
 """
 from __future__ import print_function
 
+import datetime
 import importlib.util
 import os
 import re
@@ -78,10 +79,12 @@ class Usuario(object):
 
 class Visita(object):
     _n = 0
+    _todas = []
 
     def __init__(self, **kw):
         Visita._n += 1
         self.id = self.pk = Visita._n
+        self.numero = kw.get('numero')
         self.tramo_rutina = kw.get('tramo_rutina')
         self.usuario = kw.get('usuario')
         self.tipo_elemento = kw.get('tipo_elemento', 'tramo')
@@ -92,7 +95,13 @@ class Visita(object):
         self.longitude = kw.get('longitude')
         self.incidente = kw.get('incidente')
         self.incidente_id = getattr(self.incidente, 'id', None)
-        self.creada_en = '2026-11-04T10:00:00Z'
+        # Fecha de verdad: la numeracion agrupa por ano y el codigo lleva
+        # el dia dentro, asi que una cadena no sirve para medir esto.
+        self.creada_en = datetime.datetime(2026, 11, 4, 10, 0, 0)
+        Visita._todas.append(self)
+
+    def save(self, update_fields=None):
+        pass
 
 
 class Coleccion(object):
@@ -158,6 +167,59 @@ class Tramo(object):
         Tramo._reg[self.pk] = self
 
 
+class GestorVisitas(object):
+    """Lo poco del ORM que usa _numerar: select_for_update, filter por ano,
+    order_by y first. Sin esto no se puede medir la numeracion, que es
+    justo lo que no puede salir mal en un codigo."""
+
+    def __init__(self, filas=None):
+        self._filas = filas
+
+    @property
+    def filas(self):
+        return Visita._todas if self._filas is None else self._filas
+
+    def select_for_update(self):
+        return self
+
+    def filter(self, **kw):
+        fuera = list(self.filas)
+        if kw.get('numero__isnull') is False:
+            fuera = [f for f in fuera if f.numero is not None]
+        if 'creada_en__year' in kw:
+            fuera = [f for f in fuera
+                     if f.creada_en and f.creada_en.year == kw['creada_en__year']]
+        if 'sin_novedad' in kw:
+            fuera = [f for f in fuera if f.sin_novedad == kw['sin_novedad']]
+        return GestorVisitas(fuera)
+
+    def order_by(self, campo):
+        rev = campo.startswith('-')
+        clave = campo.lstrip('-')
+        return GestorVisitas(sorted(self.filas,
+                                    key=lambda f: getattr(f, clave) or 0,
+                                    reverse=rev))
+
+    def first(self):
+        return self.filas[0] if self.filas else None
+
+    def create(self, **kw):
+        v = Visita(**kw)
+        kw['tramo_rutina']._visitas.append(v)
+        return v
+
+
+class SinTransaccion(object):
+    def atomic(self):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
 class Gestor(object):
     def __init__(self, registro, clase=None):
         self._reg = registro
@@ -211,8 +273,9 @@ def cargar_modulo():
         # sin el la excepcion sube tal cual en vez de volverse un 404.
         'TramoDeRutina': type('M', (), {'objects': Gestor(Tramo._reg),
                                         'DoesNotExist': NoExiste}),
+        'transaction': SinTransaccion(),
         'VisitaMonitoreo': type('V', (), {
-            'objects': Gestor(Tramo._reg),
+            'objects': GestorVisitas(),
             'TRAMO': 'tramo', 'SUBTRAMO': 'subtramo', 'OBRA': 'obra'}),
         'TelefonoUsuario': None,
         'TRAMOS_CANAL': ('0', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII',
@@ -265,6 +328,7 @@ OBRAS = ['Entrega  E%d' % n for n in range(11, 16)]
 def escenario(cerrada=False):
     Tramo._reg.clear()
     Visita._n = 0
+    Visita._todas = []
     mon = cargar_modulo()
     ilich = Usuario('ilich')
     otro = Usuario('otro')
@@ -423,6 +487,54 @@ def prueba_nombre_largo():
     igual('recortado a 160', len(tr._visitas[0].elemento), 160)
 
 
+def prueba_numeracion():
+    print('\n11. la numeracion propia del hallazgo')
+    mon, tr, ilich, _, _ = escenario()
+    codigos = []
+    for i in (3, 7, 11):
+        r = mon['visitas'](Peticion(ilich, {
+            'tramo_rutina': tr.pk, 'elemento': SUBTRAMOS[i],
+            'sin_novedad': False, 'observacion': 'algo'}))
+        codigos.append((r.data['visita']['numero'], r.data['visita']['codigo']))
+    igual('correlativos seguidos', [n for n, c in codigos], [1, 2, 3])
+    igual('formato del codigo', codigos[0][1], 'HALLAZGO-001-04112026')
+    igual('y el tercero', codigos[2][1], 'HALLAZGO-003-04112026')
+
+    # Lo que se cierra sin novedad NO entra en la serie: si entrara, el
+    # primer hallazgo del tramo 0 seria el numero 180.
+    r = mon['visitas_lote'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'elementos': SUBTRAMOS}))
+    igual('el masivo no numera',
+          [v['numero'] for v in r.data['visitas']],
+          [None] * len(r.data['visitas']))
+    igual('ni les pone codigo',
+          sorted(set(v['codigo'] for v in r.data['visitas'])), [''])
+
+    # Y el que viene despues sigue por donde iba la serie, no por el id.
+    r = mon['visitas'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'elemento': 'Entrega  E99',
+        'sin_novedad': False, 'observacion': 'posterior al masivo'}))
+    igual('sigue la serie', r.data['visita']['numero'], 4)
+
+
+def prueba_hallazgo_por_lote_numerado():
+    print('\n12. un hallazgo que entra por el lote tambien se numera')
+    mon, tr, ilich, _, _ = escenario()
+    r = mon['visitas_lote'](Peticion(ilich, {
+        'tramo_rutina': tr.pk,
+        'elementos': [
+            {'elemento': 'Entrega  E12', 'sin_novedad': False,
+             'observacion': 'tapada'},
+            'Entrega  E13',
+        ]}))
+    igual('status', r.status_code, 201)
+    porClave = {v['elemento']: v for v in r.data['visitas']}
+    igual('el hallazgo lleva numero', porClave['Entrega  E12']['numero'], 1)
+    igual('y codigo', porClave['Entrega  E12']['codigo'],
+          'HALLAZGO-001-04112026')
+    igual('el otro no', porClave['Entrega  E13']['numero'], None)
+
+
 def main():
     print('Registro por elemento dentro del tramo')
     print('=' * 74)
@@ -430,7 +542,8 @@ def main():
                prueba_no_pisa_hallazgo, prueba_repetidos_del_kmz,
                prueba_segunda_pasada, prueba_hallazgo_mudo_en_lote,
                prueba_permisos, prueba_cuerpos_raros,
-               prueba_compatibilidad, prueba_nombre_largo]:
+               prueba_compatibilidad, prueba_nombre_largo,
+               prueba_numeracion, prueba_hallazgo_por_lote_numerado]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:
