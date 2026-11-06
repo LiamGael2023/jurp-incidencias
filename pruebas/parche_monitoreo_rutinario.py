@@ -1572,7 +1572,37 @@ def mis_tramos(request):
             _tramo(tr, con_visitas=True, tels=tels))
     for bloque in por_rutina.values():
         bloque['tramos'].sort(key=lambda t: ORDEN_TRAMO.get(t['tramo'], 99))
-    return Response({'ok': True, 'results': list(por_rutina.values())})
+
+    # ─────────────────────────────────────────────────────────────────
+    # MIS TRAMOS DE SIEMPRE, haya rutina o no
+    # ─────────────────────────────────────────────────────────────────
+    #
+    # El reparto dice quien recorre cada tramo al margen de las rondas, y
+    # eso no deja de ser verdad porque hoy no haya ninguna abierta: quien
+    # lleva el Tramo V lo lleva en enero y en agosto.
+    #
+    # Sirve para el hallazgo fuera de ronda. Sin esto, la app tiene que
+    # enseñar los catorce tramos y pedirle a alguien que esta en el canal,
+    # con una mano en el telefono, que elija el suyo de una lista; y el
+    # dia que se equivoque, el hallazgo queda en un tramo que no es y lo
+    # descubre quien lo lea tres semanas despues.
+    #
+    # Va DENTRO de mis-tramos y no en un endpoint aparte porque es la
+    # misma pregunta -«que me toca a mi»- y porque una llamada menos en
+    # el canal es una llamada menos que falla.
+    mios = []
+    try:
+        mios = sorted(
+            RepartoDeTramo.objects.filter(usuarios=request.user)
+            .values_list('tramo', flat=True),
+            key=lambda t: ORDEN_TRAMO.get(t, 99))
+    except Exception as exc:
+        # Un servidor con el codigo puesto y la tabla no: que no se lleve
+        # por delante lo que esta pantalla hace desde siempre.
+        logger.warning('No se pudo leer el reparto: %s', exc)
+
+    return Response({'ok': True, 'results': list(por_rutina.values()),
+                     'mios': mios})
 
 
 def _para_registrar(request, valor):

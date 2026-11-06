@@ -32,6 +32,7 @@ import importlib.util
 import os
 import re
 import sys
+import datetime as dt
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -75,8 +76,31 @@ class Reparto(object):
 
 
 class GestorReparto(object):
+    def __init__(self, filas=None):
+        self._filas = filas
+
+    @property
+    def filas(self):
+        return list(Reparto._reg.values()) if self._filas is None \
+            else self._filas
+
     def all(self):
-        return list(Reparto._reg.values())
+        return self.filas
+
+    def filter(self, **kw):
+        fuera = self.filas
+        for clave, valor in kw.items():
+            if clave == 'usuarios':
+                fuera = [f for f in fuera if valor in list(f.usuarios.all())]
+            else:
+                fuera = [f for f in fuera if getattr(f, clave, None) == valor]
+        return GestorReparto(fuera)
+
+    def values_list(self, campo, flat=False):
+        return [getattr(f, campo) for f in self.filas]
+
+    def __iter__(self):
+        return iter(self.filas)
 
     def get_or_create(self, tramo=None, **kw):
         t = tramo if tramo is not None else kw.get('tramo')
@@ -182,6 +206,55 @@ class _Borrables(object):
         for f in list(self._filas):
             f.delete()
         return (len(self._filas), {})
+
+
+def _cumple(fila, clave, valor):
+    """Resuelve un `rutina__cerrada` o un `rutina__fecha_fin__gte`."""
+    partes = clave.split('__')
+    operador = None
+    if partes[-1] in ('lte', 'gte', 'lt', 'gt', 'in'):
+        operador = partes.pop()
+
+    actual = fila
+    for parte in partes:
+        actual = getattr(actual, parte, None)
+        if actual is None:
+            # Un campo que el modelo falso no tiene: no se descarta por
+            # algo que esta prueba no sabe medir.
+            return True
+
+    if operador is None:
+        return actual == valor
+
+    # LAS FECHAS DEL FALSO SON TEXTO. El modelo de verdad guarda `date` y
+    # el codigo compara con `date`; aqui se escriben como '2026-11-01'
+    # para que las pruebas se lean. Se convierten antes de comparar en
+    # vez de saltarse la condicion, que es lo que hacia que la ventana de
+    # vigencia no se midiera nunca.
+    if isinstance(actual, str) and isinstance(valor, dt.date):
+        try:
+            actual = dt.date(*[int(x) for x in actual.split('-')])
+        except Exception:
+            return True
+    try:
+        pass
+    except Exception:
+        return True
+
+    try:
+        if operador == 'lte':
+            return actual <= valor
+        if operador == 'gte':
+            return actual >= valor
+        if operador == 'lt':
+            return actual < valor
+        if operador == 'gt':
+            return actual > valor
+        return actual in valor
+    except TypeError:
+        # Tipos que este falso no sabe comparar: no se descarta la fila
+        # por algo que la prueba no puede medir.
+        return True
 
 
 class Coleccion(object):
@@ -412,9 +485,12 @@ class Gestor(object):
                 fuera = [f for f in fuera
                          if valor in list(getattr(f, 'usuarios', []))]
             elif '__' in clave:
-                # rutina__cerrada, rutina__fecha_inicio__lte: para la
-                # prueba basta con no descartar nada por estas.
-                continue
+                # CERRADA SI IMPORTA. Antes esto se saltaba todas las
+                # condiciones con doble guion y la prueba no podia medir
+                # que una rutina cerrada deja de salir en mis-tramos,
+                # que es justo lo que hace falta comprobar el dia que se
+                # registra un hallazgo fuera de ronda.
+                fuera = [f for f in fuera if _cumple(f, clave, valor)]
             else:
                 fuera = [f for f in fuera if getattr(f, clave, None) == valor]
         return Gestor(self._reg, self._crear, fuera)
@@ -1114,6 +1190,52 @@ def prueba_vaciar_un_tramo():
     igual('y el II NACE VACIO, no resucita a Luis', quien['II'], [])
 
 
+def prueba_mis_tramos_de_siempre():
+    print('\n23. mis-tramos dice cuales son mios, haya rutina o no')
+    # PARA EL HALLAZGO FUERA DE RONDA. Enseñarle los catorce tramos a
+    # quien siempre recorre el V es pedirle que acierte en una lista, en
+    # el canal y con una mano en el telefono. El reparto ya sabe cual es
+    # el suyo, y eso no deja de ser verdad porque hoy no haya ronda.
+    Tramo._reg.clear(); Rutina._reg.clear(); Usuario._reg.clear()
+    Responsable._todos[:] = []; Reparto._reg.clear()
+    mon = cargar_modulo()
+    jefe = Usuario('gerencia', gerencia=True)
+    cesar = Usuario('cherrera'); cesar.first_name = 'Cesar Herrera'
+    luis = Usuario('lrodriguez'); luis.first_name = 'Luis Rodriguez'
+
+    r = mon['rutinas'](Peticion(jefe, {
+        'nombre': 'Primera', 'fecha_inicio': '2026-11-01',
+        'fecha_fin': '2026-11-30', 'tramos': ['0', 'V', 'II']}))
+    una_rut = [x for x in Rutina._reg.values() if x.nombre == 'Primera'][0]
+    mon['asignar'](Peticion(jefe, {'asignaciones': [
+        {'tramo': 'V', 'usuarios': [cesar.pk]},
+        {'tramo': '0', 'usuarios': [cesar.pk]},
+        {'tramo': 'II', 'usuarios': [luis.pk]}]}), una_rut.pk)
+
+    r = mon['mis_tramos'](Peticion(cesar, {}))
+    igual('responde', r.status_code, 200)
+    igual('con la rutina abierta', len(r.data['results']), 1)
+    # EN ORDEN DE CANAL, no alfabetico: el 0 va antes que el V, y "II"
+    # ordenado como texto se colaria entre medias.
+    igual('y con sus tramos', r.data['mios'], ['0', 'V'])
+    igual('los de Luis son otros', mon['mis_tramos'](Peticion(luis, {})).data['mios'],
+          ['II'])
+
+    # CERRADA LA RUTINA, LOS TRAMOS SIGUEN SIENDO SUYOS. Es justo el
+    # momento en que hace falta: sin ronda abierta es cuando se registra
+    # un hallazgo extraordinario.
+    una_rut.cerrada = True
+    r = mon['mis_tramos'](Peticion(cesar, {}))
+    igual('ya no hay nada que recorrer', len(r.data['results']), 0)
+    igual('pero sus tramos siguen', r.data['mios'], ['0', 'V'])
+
+    # Y quien no lleva ninguno no recibe ninguno: la app le enseña los
+    # catorce, que es lo unico honesto.
+    nadie = Usuario('nuevo')
+    igual('el que no lleva ninguno',
+          mon['mis_tramos'](Peticion(nadie, {})).data['mios'], [])
+
+
 def prueba_extraordinaria():
     print('\n20. un hallazgo sin rutina abierta')
     mon, tr, ilich, otro, _ = escenario()
@@ -1224,7 +1346,8 @@ def main():
                prueba_topic, prueba_aviso, prueba_sin_empezar,
                prueba_borrar, prueba_herencia, prueba_cuadro,
                prueba_reparto_sobrevive, prueba_extraordinaria,
-               prueba_borrar_hallazgo, prueba_vaciar_un_tramo]:
+               prueba_borrar_hallazgo, prueba_vaciar_un_tramo,
+               prueba_mis_tramos_de_siempre]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:
