@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { FaRoute, 
   FaSyncAlt, FaEye, FaMapMarkerAlt, 
   FaCalendarAlt, FaCamera, FaVideo, 
-  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash, FaCheckCircle, FaFilter, FaSearch, FaListUl, FaTruck, FaPen
+  FaImage, FaChevronLeft, FaChevronRight, FaTimes, FaPlus, FaFileInvoice, FaSave, FaFilePdf, FaFileExcel, FaDownload, FaUser, FaTrash, FaTrashAlt, FaCheckCircle, FaFilter, FaSearch, FaListUl, FaTruck, FaPen
 } from 'react-icons/fa';
 import './Incidentes.css';
 import Swal from 'sweetalert2';
@@ -384,11 +384,29 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto, fuente = 'incidentes' 
    * parche de monitoreos responde 404- se queda en lista vacía y todo sigue
    * como antes de que esto existiera, que es el comportamiento correcto
    * cuando no se sabe. */
+  const cargarHallazgos = async () => {
+    try {
+      const token = localStorage.getItem('userToken');
+      const res = await fetch('/api/v1/mobile/monitoreo/hallazgos/', {
+        headers: { Authorization: `Token ${token}` },
+      });
+      if (!res.ok) { setHallazgos({}); return; }
+      const j = await res.json();
+      const porIncidente = {};
+      (j.results || []).forEach(h => {
+        if (h && h.incidente) porIncidente[h.incidente] = h;
+      });
+      setHallazgos(porIncidente);
+    } catch {
+      setHallazgos({});
+    }
+  };
+
   useEffect(() => {
     let vivo = true;
     (async () => {
+      const token = localStorage.getItem('userToken');
       try {
-        const token = localStorage.getItem('userToken');
         const res = await fetch('/api/v1/mobile/monitoreo/hallazgos/', {
           headers: { Authorization: `Token ${token}` },
         });
@@ -399,12 +417,92 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto, fuente = 'incidentes' 
           if (h && h.incidente) porIncidente[h.incidente] = h;
         });
         if (vivo) setHallazgos(porIncidente);
-      } catch (e) {
+      } catch {
         if (vivo) setHallazgos({});
       }
     })();
     return () => { vivo = false; };
   }, []);
+
+  /* Borrar un hallazgo desde SU pantalla.
+   *
+   * ──────────────────────────────────────────────────────────────────
+   * POR QUE TAMBIEN AQUI, Y NO SOLO EN LA RUTINA
+   * ──────────────────────────────────────────────────────────────────
+   *
+   * El otro botón vive en el desglose de la rutina, y eso deja sin
+   * salida a los hallazgos EXTRAORDINARIOS: se registran justo cuando
+   * no hay ninguna rutina abierta, así que no salen en ningún desglose
+   * y no había dónde pulsar. Lo mismo pasa con los de una rutina ya
+   * borrada.
+   *
+   * Aquí es además donde uno está cuando se da cuenta de que sobra.
+   *
+   * Son dos registros y se borran por separado, igual que allí: quitarlo
+   * del recorrido deja el incidente vivo en la lista de Incidentes —de
+   * donde salió—, y borrarlo todo no tiene vuelta atrás. */
+  const borrarHallazgo = async (inc) => {
+    const h = inc.hallazgo;
+    if (!h || !h.id) return;
+
+    const r = await Swal.fire({
+      icon: 'warning',
+      title: '¿Borrar este hallazgo?',
+      html: `<b>${h.codigo || inc.codigoIncidente || 'Hallazgo'}</b>`
+        + `<div style="margin:6px 0 14px;color:#5b6b7f">`
+        + `Tramo ${h.tramo || '—'}${h.elemento ? ` · ${h.elemento}` : ''}</div>`
+        + 'Puedes <b>quitarlo del recorrido</b> —deja de contar como'
+        + ' hallazgo y el incidente sigue vivo en la lista de'
+        + ' <b>Incidentes</b>—, o <b>borrarlo todo</b>, incluido el'
+        + ' incidente con sus fotos y su bitácora.<br><br>'
+        + 'Borrarlo todo no tiene vuelta atrás.',
+      showCancelButton: true,
+      showDenyButton: true,
+      focusCancel: true,
+      confirmButtonText: 'Quitar del recorrido',
+      denyButtonText: 'Borrar todo',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#b45309',
+      denyButtonColor: '#d63939',
+    });
+    if (!r.isConfirmed && !r.isDenied) return;
+    const conIncidente = r.isDenied;
+
+    try {
+      const token = localStorage.getItem('userToken');
+      const res = await fetch(
+        `/api/v1/mobile/monitoreo/hallazgos/${h.id}/${conIncidente ? '?incidente=1' : ''}`,
+        { method: 'DELETE', headers: { Authorization: `Token ${token}` } });
+
+      if (!res.ok) {
+        let porQue = null;
+        try { porQue = await res.clone().json(); } catch { /* no es JSON */ }
+        Swal.fire('No se pudo borrar',
+          (porQue && porQue.detail)
+            || (res.status === 404
+              ? 'Este servidor todavía no permite borrar hallazgos. Aplica '
+                + 'el parche de monitoreos.'
+              : `El servidor respondió ${res.status}.`),
+          'error');
+        return;
+      }
+
+      const datos = await res.json().catch(() => null);
+      const aviso = datos && datos.detail;
+      await Swal.fire(
+        aviso ? 'Borrado a medias' : 'Hallazgo borrado',
+        aviso || (conIncidente
+          ? 'Se borró el hallazgo y su incidente.'
+          : 'Se quitó del recorrido. El incidente sigue en la lista de '
+            + 'Incidentes.'),
+        aviso ? 'warning' : 'success');
+
+      await cargarHallazgos();
+      await obtenerIncidentes();
+    } catch (e) {
+      Swal.fire('No se pudo borrar', String(e), 'error');
+    }
+  };
 
   // Carga los IDs de incidentes cerrados (marca persistente en operations).
   useEffect(() => {
@@ -1212,7 +1310,16 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto, fuente = 'incidentes' 
                     </div>
                   </div>
                   <div className="tbl-card-btn-bottom" style={{ borderBottom:'1px solid #c9dff2' }} onClick={() => verBitacora(inc)}><FaListUl /> Ver bitácora</div>
-                  <div className="tbl-card-btn-bottom" onClick={() => abrirModal(inc)}><FaEye /> Gestionar / Parte Diario</div>
+                  <div className="tbl-card-btn-bottom" style={esHallazgos && inc.hallazgo ? { borderBottom:'1px solid #c9dff2' } : undefined} onClick={() => abrirModal(inc)}><FaEye /> Gestionar / Parte Diario</div>
+                  {/* EN GRIS Y EL ULTIMO. Lo que se hace casi siempre con un
+                      hallazgo es atenderlo, no borrarlo; el rojo aparece en
+                      el aviso, que es donde se decide. */}
+                  {esHallazgos && inc.hallazgo && (
+                    <div className="tbl-card-btn-bottom inc-borrar"
+                      onClick={() => borrarHallazgo(inc)}>
+                      <FaTrashAlt /> Borrar hallazgo
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

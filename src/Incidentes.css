@@ -256,3 +256,14 @@
 
 .icon-spin { animation: spin 1s linear infinite; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
+/* Borrar un hallazgo. En gris y el ultimo de los tres botones: lo que se
+ * hace casi siempre con un hallazgo es atenderlo. El rojo aparece al
+ * pasar por encima y en el aviso, que es donde se decide. */
+.tbl-card-btn-bottom.inc-borrar {
+  color: #6c7a91;
+  font-weight: 600;
+}
+.tbl-card-btn-bottom.inc-borrar:hover {
+  color: #d63939;
+  background: #fdeaea;
+}
