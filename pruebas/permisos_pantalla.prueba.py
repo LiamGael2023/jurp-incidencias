@@ -200,13 +200,28 @@ def sin_decorar(*a, **k):
 
 
 class Peticion(object):
+    """Una peticion de mentira. Por defecto, DE UN NAVEGADOR.
+
+    El `navegador=True` por defecto no es pereza: casi todas las pruebas
+    miden la rejilla, y la rejilla solo se aplica a la web. Quien quiera
+    medir la app pone `navegador=False`, que es lo que de verdad manda el
+    telefono: ni Sec-Fetch, ni Origin, y un User-Agent de Dart.
+    """
+
     def __init__(self, usuario=None, datos=None, metodo='GET', ruta='/',
-                 token=None):
+                 token=None, consulta=None, navegador=True):
         self.user = usuario
         self.data = datos or {}
         self.method = metodo
         self.path = ruta
+        self.GET = consulta or {}
         self.META = {}
+        if navegador:
+            self.META['HTTP_SEC_FETCH_SITE'] = 'same-origin'
+            self.META['HTTP_USER_AGENT'] = (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0')
+        else:
+            self.META['HTTP_USER_AGENT'] = 'Dart/3.5 (dart:io)'
         if token:
             self.META['HTTP_AUTHORIZATION'] = 'Token %s' % token
 
@@ -822,6 +837,87 @@ def prueba_settings_en_otro_sitio():
         shutil.rmtree(raiz)
 
 
+def prueba_la_app_no_entra_en_la_rejilla():
+    print('\n18. la app de campo no entra en la rejilla')
+    # ─────────────────────────────────────────────────────────────────
+    # ESTO ROMPIO EL CAMPO
+    # ─────────────────────────────────────────────────────────────────
+    #
+    # PLUVIRA entra por LAS MISMAS URL que la web. Con la rejilla
+    # vigilando a los dos, configurar el rol `mobile_usuario` -que es
+    # justo lo que se va a hacer- deja a todos los telefonos sin poder
+    # reportar. Y falla callando: la cola sin conexion reintenta igual
+    # ante un 403 que ante un corte de red, y enseña «Intenta en una
+    # zona con mejor señal». El parte se queda en el telefono y nadie
+    # sospecha del servidor.
+    m = cargar_modulo()
+
+    # Un rol configurado SIN permiso de incidentes: el caso que rompia.
+    FilaRol(rol='mobile_usuario', pantalla='monitoreos', ver=True)
+    juan = Usuario('juan', roles=['mobile_usuario'])
+    guardia = m['PermisosDePantalla']()
+
+    def pide(ruta, metodo, navegador):
+        return guardia.process_request(
+            Peticion(juan, metodo=metodo, ruta=ruta, navegador=navegador))
+
+    # Desde el TELEFONO: pasa todo.
+    igual('el telefono reporta un incidente',
+          pide('/api/v1/mobile/hi-incidents/', 'POST', False), None)
+    igual('el telefono lee la lista',
+          pide('/api/v1/mobile/hi-incidents/list/', 'GET', False), None)
+    igual('y registra una visita',
+          pide('/api/v1/mobile/monitoreo/visitas/', 'POST', False), None)
+
+    # Desde el NAVEGADOR: manda la rejilla.
+    r = pide('/api/v1/mobile/hi-incidents/list/', 'GET', True)
+    igual('la web sin permiso, 403', getattr(r, 'status_code', None), 403)
+    igual('la web con permiso, pasa',
+          pide('/api/v1/mobile/monitoreo/rutinas/', 'GET', True), None)
+
+    # LO DEL CAMPO NO SE VIGILA NUNCA, ni aunque la deteccion fallara.
+    # Si un dia un proxy limpia las cabeceras, lo que NO puede pasar es
+    # que un parte de campo se quede sin subir.
+    igual('crear incidente, libre tambien desde el navegador',
+          pide('/api/v1/mobile/hi-incidents/', 'POST', True), None)
+    igual('el login, libre',
+          pide('/api/v1/mobile/auth/login/', 'POST', True), None)
+    igual('registrar una visita, libre',
+          pide('/api/v1/mobile/monitoreo/visitas/', 'POST', True), None)
+
+    # Y la web SI se vigila en lo que es suyo: gestionar el costeo de ese
+    # mismo incidente no es reportarlo desde el canal.
+    r = pide('/api/v1/mobile/operations/incidentes/gestion/', 'POST', True)
+    igual('gestionar costeo desde la web, 403',
+          getattr(r, 'status_code', None), 403)
+
+
+def prueba_quien_es_navegador():
+    print('\n19. como se reconoce un navegador')
+    m = cargar_modulo()
+    es = m['del_navegador']
+
+    class P(object):
+        def __init__(self, **kw):
+            self.META = kw
+
+    igual('Sec-Fetch-Site', es(P(HTTP_SEC_FETCH_SITE='same-origin')), True)
+    igual('Origin', es(P(HTTP_ORIGIN='https://sistema.jriegopresurizado.org.pe')),
+          True)
+    igual('User-Agent de Chrome',
+          es(P(HTTP_USER_AGENT='Mozilla/5.0 (X11; Linux) Chrome/131')), True)
+    igual('User-Agent de Safari',
+          es(P(HTTP_USER_AGENT='Mozilla/5.0 (iPhone) Safari/605')), True)
+
+    igual('el cliente de Dart NO',
+          es(P(HTTP_USER_AGENT='Dart/3.5 (dart:io)')), False)
+    igual('sin cabeceras, NO', es(P()), False)
+    # Un curl tampoco es un navegador, asi que se comporta como la app.
+    # Es el precio de poder distinguirlos sin cambiar la app; esta dicho
+    # en el modulo y en la guia.
+    igual('curl tampoco', es(P(HTTP_USER_AGENT='curl/8.4.0')), False)
+
+
 def main():
     print('Permisos por pantalla')
     print('=' * 74)
@@ -833,7 +929,9 @@ def main():
                prueba_guardar_rol, prueba_mios,
                prueba_pasos, prueba_pasos_idempotentes,
                prueba_settings_lista, prueba_urls_con_import_largo,
-               prueba_settings_en_otro_sitio]:
+               prueba_settings_en_otro_sitio,
+               prueba_la_app_no_entra_en_la_rejilla,
+               prueba_quien_es_navegador]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:

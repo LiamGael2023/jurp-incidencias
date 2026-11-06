@@ -433,6 +433,76 @@ _COMPILADAS = tuple((re.compile(p), pant, acc) for p, pant, acc in RUTAS)
 
 PREFIJO = '/api/v1/mobile/'
 
+# ══════════════════════════════════════════════════════════════════════════
+# LA APP DE CAMPO NO ENTRA EN LA REJILLA
+# ══════════════════════════════════════════════════════════════════════════
+#
+# PLUVIRA entra por LAS MISMAS URL que la web: el telefono reporta un
+# incidente con POST /hi-incidents/, igual que la web lo lee con
+# GET /hi-incidents/list/. Si la rejilla manda sobre las dos, el dia que
+# alguien configure el rol `mobile_usuario` -que es exactamente lo que se
+# va a hacer- todos los telefonos del canal dejan de poder reportar.
+#
+# Y FALLA CALLANDO. La cola sin conexion de la app guarda lo que no pudo
+# subir y reintenta; ante un 403 reintenta igual que ante un corte de red
+# y enseña «Hubo un error al sincronizar. Intenta en una zona con mejor
+# señal.». O sea: el parte se queda en el telefono, la pantalla culpa a la
+# cobertura, y nadie mira el servidor porque nadie sospecha del servidor.
+#
+# UNA PANTALLA ES UNA COSA DE LA WEB. Lo que gobierna a la app es su rol
+# movil, como siempre. Asi que la rejilla solo se aplica a lo que llega
+# DE UN NAVEGADOR.
+#
+# Como se reconoce: las cabeceras `Sec-Fetch-*` y `Origin` las pone el
+# navegador solo, y el User-Agent de todos ellos lleva «Mozilla». El
+# cliente http de Dart no manda ninguna de las tres: se presenta como
+# «Dart/3.5 (dart:io)».
+#
+# HASTA DONDE LLEGA ESTO, dicho claro: quien sepa quitar esa cabecera se
+# salta la rejilla. Pero no gana nada que su ROL MOVIL no le diera ya
+# -los permisos de siempre siguen en cada vista-, y lo que se juega al
+# apretar mas es que el canal se quede sin poder reportar. La rejilla es
+# un control de lo que cada quien ve y toca en la web, no una muralla
+# contra un usuario hostil que ya tiene credenciales.
+NAVEGADOR = ('HTTP_SEC_FETCH_SITE', 'HTTP_SEC_FETCH_MODE', 'HTTP_SEC_FETCH_DEST',
+             'HTTP_ORIGIN')
+
+
+def del_navegador(request):
+    m = request.META
+    for c in NAVEGADOR:
+        if m.get(c):
+            return True
+    return 'Mozilla' in (m.get('HTTP_USER_AGENT') or '')
+
+
+# LO QUE NO SE VIGILA NUNCA, venga de donde venga.
+#
+# Son las rutas por las que el campo mete su trabajo. Si la deteccion de
+# arriba fallara alguna vez -un navegador raro, un proxy que limpia
+# cabeceras-, lo que NO puede pasar es que un reporte de campo se quede
+# sin subir. Lo demas puede esperar a que alguien lo note; esto no.
+#
+# `POST /hi-incidents/` esta aqui y no cuesta nada: la web no crea
+# incidentes por ahi, solo los lee y los gestiona. Crear es cosa del
+# telefono.
+SIEMPRE_LIBRES = (
+    r'^/api/v1/mobile/auth/',
+    r'^/api/v1/mobile/hi-incidents/$',
+    r'^/api/v1/mobile/hi-report-files',
+    r'^/api/v1/mobile/devices/',
+    r'^/api/v1/mobile/monitoreo/(mis-tramos|visitas|mi-aviso|telefono)/',
+)
+
+_LIBRES = tuple(re.compile(p) for p in SIEMPRE_LIBRES)
+
+
+def siempre_libre(ruta):
+    for p in _LIBRES:
+        if p.search(ruta):
+            return True
+    return False
+
 # Lo que llega y no esta en el mapa, para poder anadirlo sabiendo que
 # existe en vez de adivinando. Se queda en memoria y se consulta por
 # `permisos/rutas/`; no se guarda en la base porque es una ayuda de
@@ -487,6 +557,14 @@ class PermisosDePantalla(object):
     def process_request(self, request):
         ruta = request.path or ''
         if not ruta.startswith(PREFIJO):
+            return None
+
+        # La app de campo va por su rol movil, no por la rejilla. Ver el
+        # bloque largo de arriba: vigilarla deja al canal sin poder
+        # reportar, y falla callando.
+        if not del_navegador(request):
+            return None
+        if siempre_libre(ruta):
             return None
 
         pantalla, accion = que_toca(ruta, request.method)
@@ -718,6 +796,8 @@ def rutas(request):
     return Response({'ok': True,
                      'rutas': [{'patron': p, 'pantalla': pant,
                                 'accion': acc} for p, pant, acc in RUTAS],
+                     'siempre_libres': list(SIEMPRE_LIBRES),
+                     'solo_navegador': True,
                      'por_metodo': POR_METODO,
                      'sin_mapear': sorted(SIN_MAPEAR)})
 '''
