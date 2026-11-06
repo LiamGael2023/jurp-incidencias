@@ -1050,6 +1050,70 @@ def prueba_reparto_sobrevive():
     igual('contado como heredado', r4.data['heredados'], 1)
 
 
+def prueba_vaciar_un_tramo():
+    print('\n22. vaciar un tramo es una decision, no una laguna')
+    # ─────────────────────────────────────────────────────────────────
+    # LO QUE PASABA EN PRODUCCION
+    # ─────────────────────────────────────────────────────────────────
+    #
+    # Quitabas a los cuatro que recorrian un tramo, guardabas, y a la
+    # siguiente rutina estaban otra vez. La fila de reparto se guardaba
+    # vacia, pero la herencia miraba solo los ids: una fila sin nadie se
+    # saltaba, el tramo caia al paso de «las rondas anteriores» y la
+    # ronda de antes resucitaba exactamente a los que se acababan de
+    # quitar.
+    #
+    # Como la pantalla no dice de donde sale cada ficha, lo que se veia
+    # era que guardar no servia para nada.
+    Tramo._reg.clear(); Rutina._reg.clear(); Usuario._reg.clear()
+    Responsable._todos[:] = []; Reparto._reg.clear()
+    mon = cargar_modulo()
+    jefe = Usuario('gerencia', gerencia=True)
+    cesar = Usuario('cherrera'); cesar.first_name = 'Cesar Herrera'
+    luis = Usuario('lrodriguez'); luis.first_name = 'Luis Rodriguez'
+
+    r = mon['rutinas'](Peticion(jefe, {
+        'nombre': 'Primera', 'fecha_inicio': '2026-11-01',
+        'fecha_fin': '2026-11-30', 'tramos': ['0', 'II']}))
+    igual('se crea', r.status_code, 201)
+    una = [x for x in Rutina._reg.values() if x.nombre == 'Primera'][0]
+
+    mon['asignar'](Peticion(jefe, {'asignaciones': [
+        {'tramo': '0', 'usuarios': [cesar.pk, luis.pk]},
+        {'tramo': 'II', 'usuarios': [luis.pk]}]}), una.pk)
+    igual('el 0 tiene dos',
+          sorted(u.username for u in Reparto._reg['0'].usuarios.all()),
+          ['cherrera', 'lrodriguez'])
+
+    # UNA SEGUNDA RUTINA, que hereda. Esto es lo que hacia falta para
+    # reproducirlo: el tramo se vacia en la rutina de AHORA, pero la de
+    # ANTES sigue teniendo a la gente, y es de ahi de donde resucitaba.
+    r15 = mon['rutinas'](Peticion(jefe, {
+        'nombre': 'Segunda', 'fecha_inicio': '2026-12-01',
+        'fecha_fin': '2026-12-31', 'tramos': ['0', 'II']}))
+    igual('la segunda hereda', r15.status_code, 201)
+    dos = [x for x in Rutina._reg.values() if x.nombre == 'Segunda'][0]
+
+    # Ahora: en el 0 se queda solo Cesar, y el II se VACIA entero.
+    mon['asignar'](Peticion(jefe, {'asignaciones': [
+        {'tramo': '0', 'usuarios': [cesar.pk]},
+        {'tramo': 'II', 'usuarios': []}]}), dos.pk)
+    igual('el 0 queda con uno',
+          [u.username for u in Reparto._reg['0'].usuarios.all()], ['cherrera'])
+    igual('el II queda vacio',
+          [u.username for u in Reparto._reg['II'].usuarios.all()], [])
+
+    # Y LA SIGUIENTE RUTINA TIENE QUE RESPETAR LAS DOS COSAS.
+    r2 = mon['rutinas'](Peticion(jefe, {
+        'nombre': 'Tercera', 'fecha_inicio': '2027-01-01',
+        'fecha_fin': '2027-01-31', 'tramos': ['0', 'II']}))
+    nueva = [x for x in Rutina._reg.values() if x.nombre == 'Tercera'][0]
+    quien = {t.tramo: sorted(u.username for u in t.usuarios.all())
+             for t in nueva._tramos}
+    igual('el 0 hereda solo a Cesar', quien['0'], ['cherrera'])
+    igual('y el II NACE VACIO, no resucita a Luis', quien['II'], [])
+
+
 def prueba_extraordinaria():
     print('\n20. un hallazgo sin rutina abierta')
     mon, tr, ilich, otro, _ = escenario()
@@ -1160,7 +1224,7 @@ def main():
                prueba_topic, prueba_aviso, prueba_sin_empezar,
                prueba_borrar, prueba_herencia, prueba_cuadro,
                prueba_reparto_sobrevive, prueba_extraordinaria,
-               prueba_borrar_hallazgo]:
+               prueba_borrar_hallazgo, prueba_vaciar_un_tramo]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:

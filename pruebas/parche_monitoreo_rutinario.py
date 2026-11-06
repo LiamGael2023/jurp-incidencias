@@ -1176,7 +1176,19 @@ def rutinas(request):
 
     # 1. EL REPARTO VIGENTE, que es lo que alguien decidio por ultima vez y
     #    no depende de que su ronda siga existiendo.
+    #
+    # VACIO ES UNA DECISION, NO UNA LAGUNA. Si un tramo tiene fila de
+    # reparto, esa fila MANDA aunque no tenga a nadie: alguien entro, quito
+    # a los que habia y guardo.
+    #
+    # Antes esto miraba solo los ids y una fila vacia se saltaba, asi que el
+    # tramo caia al paso 2 y la ronda anterior resucitaba a los que acababan
+    # de quitarse. Vaciar un tramo era imposible: se quitaban, se guardaba,
+    # y a la siguiente rutina estaban otra vez. Y como la pantalla no
+    # distingue de donde salio cada ficha, parecia que guardar no servia.
+    decididos = set()
     for fila in RepartoDeTramo.objects.all():
+        decididos.add(fila.tramo)
         ids = [u.pk for u in fila.usuarios.all()]
         if ids:
             antes[fila.tramo] = ids
@@ -1187,11 +1199,13 @@ def rutinas(request):
     anteriores = list(RutinaMonitoreo.objects.exclude(pk=r.pk)
                       .order_by('-fecha_inicio', '-id')[:10])
     for previa in anteriores:
-        if len(antes) >= len(pedidos):
+        # Parar en cuanto todos los tramos pedidos tengan respuesta, sea
+        # gente o sea el vacio que alguien decidio.
+        if all((t in antes or t in decididos) for t in pedidos):
             break
         for x in previa.tramos.all():
-            if x.tramo in antes:
-                continue          # ya lo llenó una ronda más reciente
+            if x.tramo in antes or x.tramo in decididos:
+                continue          # ya lo decidio el reparto o una ronda
             ids = [u.pk for u in x.usuarios.all()]
             if ids:
                 antes[x.tramo] = ids
@@ -1209,7 +1223,7 @@ def rutinas(request):
     # debajo para que lo elija un humano.
     cuentas = None
     for t in pedidos:
-        if t in antes:
+        if t in antes or t in decididos:
             continue
         if cuentas is None:
             cuentas = _cuentas_moviles()
