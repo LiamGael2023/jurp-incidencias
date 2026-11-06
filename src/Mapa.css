@@ -1,0 +1,13 @@
+
+/* El codigo del hallazgo, bajo su tramo y elemento. En fucsia, el mismo
+ * color que los lleva en el mapa y en la app: la misma cosa tiene que
+ * verse igual en las tres pantallas. */
+.gis-hall-cod {
+  display: block;
+  margin-top: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: .2px;
+  color: #d500f9;
+  opacity: .95;
+}

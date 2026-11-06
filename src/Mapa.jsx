@@ -262,8 +262,23 @@ function ClusterIncidentes({ incidentes, onSeleccionar }) {
       },
     });
     for (const inc of incidentes) {
-      const m = L.marker([inc.lat, inc.lng], { icon: crearIconoIncidente(inc.gravedad, inc.estado), gravedad: inc.gravedad, estado: inc.estado });
-      m.bindTooltip(inc.tipo || 'Incidente', { direction: 'top', offset: [0, -14], className: 'tooltip-infra' });
+      /* EL HALLAZGO SE VE DISTINTO. Mismo fucsia que en la app y en la
+       * lista de al lado: la misma cosa tiene que verse igual en las
+       * tres pantallas, o cada una enseña un sistema diferente. */
+      const icono = inc.esHallazgo
+        ? L.divIcon({
+            html: '<div style="background:#d500f9;width:16px;height:16px;'
+              + 'border-radius:50%;border:2.5px solid #fff;'
+              + 'box-shadow:0 0 10px #d500f9cc"></div>',
+            className: 'icono-vacio', iconSize: [16, 16], iconAnchor: [8, 8],
+          })
+        : crearIconoIncidente(inc.gravedad, inc.estado);
+      const m = L.marker([inc.lat, inc.lng], { icon: icono, gravedad: inc.gravedad, estado: inc.estado });
+      m.bindTooltip(
+        inc.esHallazgo
+          ? `Hallazgo · ${inc.tipo || ''}`.trim()
+          : (inc.tipo || 'Incidente'),
+        { direction: 'top', offset: [0, -14], className: 'tooltip-infra' });
       m.on('click', () => onSeleccionar(inc));
       grupo.addLayer(m);
     }
@@ -355,9 +370,28 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [cargandoHoras, setCargandoHoras] = useState(false);
   const inputKmzRef = useRef(null);
 
-  const [capas, setCapas] = useState({ Incidentes_Nuevos: true, Incidentes_Atencion: true, Lluvias: true, Davis: true, Canales: true });
+  const [capas, setCapas] = useState({ Incidentes_Nuevos: true, Incidentes_Atencion: true, Hallazgos: true, Lluvias: true, Davis: true, Canales: true });
   const [capasKMZ, setCapasKMZ] = useState(KMZ_CAPAS_DEFAULT);
   const [incidentesAPI, setIncidentesAPI] = useState([]);
+
+  /* Cuáles de esos incidentes son HALLAZGOS de un recorrido.
+   *
+   * ──────────────────────────────────────────────────────────────────
+   * SON LA MISMA TABLA, Y NO SON LO MISMO
+   * ──────────────────────────────────────────────────────────────────
+   *
+   * Un hallazgo se crea con el formulario de incidente, así que para
+   * `hi-incidents/` es un incidente más y aquí salían mezclados: el
+   * contador decía 12 juntando las dos cosas y la lista los intercalaba.
+   *
+   * Lo que los distingue vive en monitoreo: la visita que los ató a un
+   * tramo y a un elemento. Por eso se pregunta aparte.
+   *
+   * Y ESTO ES TAMBIÉN LO QUE HACE QUE UN BORRADO SE VEA. Al quitar un
+   * hallazgo «del recorrido» su visita desaparece pero el incidente
+   * sigue vivo —es lo que se pidió—. Sin esta consulta el mapa seguía
+   * enseñándolo como hallazgo, y parecía que borrar no servía de nada. */
+  const [hallazgosPorInc, setHallazgosPorInc] = useState({});
   const [lluviasAPI, setLluviasAPI] = useState([]);
   const [cargandoAPIs, setCargandoAPIs] = useState(false);
   const [alerta, setAlerta] = useState(null);   // contingencia activa
@@ -376,7 +410,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [rawRecursos, setRawRecursos] = useState({ pers: [], mats: [], maqs: [] });
   const [grupoAbierto, setGrupoAbierto] = useState(null); // 'personal' | 'maquinaria' | 'insumos' | null
   const [incSeleccionado, setIncSeleccionado] = useState(null); // incidente filtrado en panel recursos
-  const [panelMin, setPanelMin] = useState({ incidentes: false, recursos: false, infra: false });
+  const [panelMin, setPanelMin] = useState({ incidentes: false, hallazgos: false, recursos: false, infra: false });
   const toggleMin = (k) => setPanelMin(p => ({ ...p, [k]: !p[k] }));
   const [filtroEstadoInc, setFiltroEstadoInc] = useState('');   // '' | 'pat' | 'eat' | 'ate'
   const [ultimaAct, setUltimaAct] = useState(null);             // timestamp real de la última carga
@@ -733,18 +767,48 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
 
   // Los que se dibujan en el mapa, según las capas activas
   const incEnMapa = useMemo(() => {
-    if (!capas.Incidentes_Nuevos && !capas.Incidentes_Atencion) return [];
-    return incFiltrados.filter(i => (capas.Incidentes_Nuevos && i.estado !== 'eat') || (capas.Incidentes_Atencion && i.estado === 'eat'));
-  }, [incFiltrados, capas.Incidentes_Nuevos, capas.Incidentes_Atencion]);
+    return incFiltrados
+      .map(i => ({ ...i, esHallazgo: !!hallazgosPorInc[i.id] }))
+      .filter(i => {
+        // Cada capa manda sobre lo suyo: apagar «Incidentes» ya no apaga
+        // los hallazgos, que es lo que pasaba al ir todos en el mismo saco.
+        if (i.esHallazgo) return capas.Hallazgos;
+        if (!capas.Incidentes_Nuevos && !capas.Incidentes_Atencion) return false;
+        return (capas.Incidentes_Nuevos && i.estado !== 'eat')
+          || (capas.Incidentes_Atencion && i.estado === 'eat');
+      });
+  }, [incFiltrados, capas.Incidentes_Nuevos, capas.Incidentes_Atencion, capas.Hallazgos, hallazgosPorInc]);
 
   // Los que se listan en el panel, ordenados del más reciente al más viejo
+  const esHallazgo = useCallback(
+    (inc) => !!hallazgosPorInc[inc.id], [hallazgosPorInc]);
+
+  /* Dos listas de la misma fuente. Lo que no es hallazgo es incidente:
+   * así ninguno se queda sin aparecer en ninguna de las dos, que es el
+   * fallo que no se nota hasta que falta justo el que importaba. */
   const incLista = useMemo(() => {
-    const l = filtroEstadoInc ? incFiltrados.filter(i => i.estado === filtroEstadoInc) : incFiltrados;
+    const base = incFiltrados.filter(i => !hallazgosPorInc[i.id]);
+    const l = filtroEstadoInc ? base.filter(i => i.estado === filtroEstadoInc) : base;
     return [...l].sort((a, b) => b.timestamp - a.timestamp);
-  }, [incFiltrados, filtroEstadoInc]);
-  const incPend = incidentesAPI.filter(i => i.estado === 'pat').length;
-  const incEnAte = incidentesAPI.filter(i => i.estado === 'eat').length;
-  const incAte = incidentesAPI.filter(i => i.estado === 'ate').length;
+  }, [incFiltrados, filtroEstadoInc, hallazgosPorInc]);
+
+  const hallLista = useMemo(() => {
+    const base = incFiltrados.filter(i => hallazgosPorInc[i.id]);
+    const l = filtroEstadoInc ? base.filter(i => i.estado === filtroEstadoInc) : base;
+    return [...l].sort((a, b) => b.timestamp - a.timestamp)
+      .map(i => ({ ...i, hallazgo: hallazgosPorInc[i.id] }));
+  }, [incFiltrados, filtroEstadoInc, hallazgosPorInc]);
+
+  const soloIncidentes = useMemo(
+    () => incidentesAPI.filter(i => !hallazgosPorInc[i.id]),
+    [incidentesAPI, hallazgosPorInc]);
+  const soloHallazgos = useMemo(
+    () => incidentesAPI.filter(i => hallazgosPorInc[i.id]),
+    [incidentesAPI, hallazgosPorInc]);
+
+  const incPend = soloIncidentes.filter(i => i.estado === 'pat').length;
+  const incEnAte = soloIncidentes.filter(i => i.estado === 'eat').length;
+  const incAte = soloIncidentes.filter(i => i.estado === 'ate').length;
   // Solo cuentan las que tienen lecturas hoy: una sin datos no es un 0 mm.
   const conDatos = lluviasAPI.filter(l => !l.sinDatos);
   const sinDatosN = lluviasAPI.length - conDatos.length;
@@ -824,6 +888,26 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
         '/api/v1/mobile/hi-incidents/list/', { json: false });
       if (resInc && resInc.ok) { const dataInc = await resInc.json(); const tm = { '1': 'Rebose y/o Colapso de canoa o alcantarilla', '2': 'Ingreso de sedimentos al Canal Madre', '3': 'Desborde Canal Madre', '4': 'Desborde Lateral 10', '5': 'Rotura de Canal', '6': 'Interrupción del flujo en el canal en tramos con retenciones', '7': 'Presencia de palizada en canal Madre', '8': 'Corte de camino de acceso y/o servicio', '9': 'Rotura de embalse de usuario', '10': 'Incremento de caudal', '11': 'Erosión de obras de defensa ribereña', '12': 'Desborde e inundación', '13': 'Lluvia', '14': 'Otros' };
         setIncidentesAPI((dataInc.results || []).map(inc => { const lat = parseFloat(inc.latitude_marker || inc.latitude), lng = parseFloat(inc.longitude_marker || inc.longitude); let tp = tm[inc.type?.toString()] || 'Incidente'; const at = inc.another_type; if (at && at.trim() && (tp === 'Otro' || tp === 'Otros')) tp = `Otro (${at.trim()})`; const f = new Date(inc.created_at); const codigoIncidente = `INCIDENTE-${String(inc.id).padStart(3,'0')}-${String(f.getDate()).padStart(2,'0')}${String(f.getMonth()+1).padStart(2,'0')}${f.getFullYear()}`; return { id: inc.id, codigoIncidente, lat, lng, tipo: tp, estado: inc.status || 'pat', gravedad: inc.severity || 'lev', descripcion: inc.description || '', usuario: inc.user?.username || '', lugar: inc.location_text || '', fecha: new Date(inc.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }), timestamp: new Date(inc.created_at).getTime(), imagenUrl: inc.thumbnail || inc.image || null, codigo: inc.code || 'Sin Código' }; }).filter(i => !isNaN(i.lat) && !isNaN(i.lng) && i.lat !== 0)); }
+      /* Los hallazgos, para poder separarlos. Si este servidor no los
+       * tiene, el mapa se comporta como antes: todo junto bajo
+       * «Incidentes», que es lo que había. */
+      try {
+        const { res: resHall } = await pedir(
+          '/api/v1/mobile/monitoreo/hallazgos/', { json: false, callar: [403, 404] });
+        if (resHall && resHall.ok) {
+          const dataHall = await resHall.json();
+          const porInc = {};
+          (dataHall.results || []).forEach(h => {
+            if (h && h.incidente) porInc[h.incidente] = h;
+          });
+          setHallazgosPorInc(porInc);
+        } else {
+          setHallazgosPorInc({});
+        }
+      } catch {
+        setHallazgosPorInc({});
+      }
+
       // Pluviómetros y estaciones Davis: las dos alimentan el mapa.
       const [resPlu, resDav] = await Promise.all([
         fetch('/api/v1/mobile/devices/?device_type=pluviometro', { headers: { 'Authorization': `Token ${token}` } }),
@@ -1674,7 +1758,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           <span className="gis-kpi-ico" style={{ background: 'rgba(245,159,10,.16)', color: '#f5b455' }}>⚠️</span>
           <span>
             <span className="gis-kpi-label">Incidentes</span>
-            <span className="gis-kpi-valor">{incidentesAPI.length}<small>{incPend} pend · {incEnAte} aten · {incAte} res</small></span>
+            <span className="gis-kpi-valor">{soloIncidentes.length}<small>{incPend} pend · {incEnAte} aten · {incAte} res
+              {soloHallazgos.length > 0 && <> · <b style={{ color: '#d500f9' }}>{soloHallazgos.length} hallazgo{soloHallazgos.length === 1 ? '' : 's'}</b></>}
+            </small></span>
           </span>
         </div>
         <div className="gis-kpi gis-glass">
@@ -1835,6 +1921,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
               <div className="gis-capas-titulo">General</div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Canales} onChange={() => toggleCapa('Canales')} /> Trazado de canales</label></div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={() => { toggleCapa('Incidentes_Atencion'); toggleCapa('Incidentes_Nuevos'); }} /> Incidentes</label></div>
+              <div className="gis-capa"><label><input type="checkbox" checked={capas.Hallazgos} onChange={() => toggleCapa('Hallazgos')} /> Hallazgos de recorrido</label></div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Lluvias} onChange={() => toggleCapa('Lluvias')} /> Pluviómetros</label></div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Davis} onChange={() => toggleCapa('Davis')} /> Estaciones Davis</label></div>
               <div className="gis-capa" style={{ paddingLeft: 21 }}>
@@ -2049,6 +2136,53 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             </div>
           </>}
         </div>
+
+        {/* ── Hallazgos de recorrido ──
+          *
+          * Panel propio y no una pestaña dentro de Incidentes: son el
+          * parte de un recorrido del canal, no una incidencia que entró
+          * sola. Quien mira esta pantalla busca una cosa o la otra, y
+          * mezcladas obligaba a leerse las doce para encontrar las dos
+          * que importaban. */}
+        {soloHallazgos.length > 0 && (
+          <div className="gis-tarjeta gis-glass">
+            <div className="gis-tarjeta-head">
+              <span className="gis-sub" style={{ color: '#d500f9' }}>
+                Hallazgos de recorrido ({hallLista.length})
+              </span>
+              <button className="gis-btn-plegar" onClick={() => toggleMin('hallazgos')}
+                title={panelMin.hallazgos ? 'Expandir' : 'Minimizar'}>
+                {panelMin.hallazgos ? <FaChevronDown /> : <FaChevronUp />}
+              </button>
+            </div>
+            {!panelMin.hallazgos && (
+              <div className="gis-lista-inc">
+                {hallLista.length === 0 && <div className="gis-detalle-vacio" style={{ padding: '4px 16px 12px' }}>Sin hallazgos para este filtro</div>}
+                {hallLista.map(inc => {
+                  const [color, texto] = badge(inc.estado);
+                  const activo = incSeleccionado && incSeleccionado.id === inc.id;
+                  const h = inc.hallazgo || {};
+                  return (
+                    <button key={inc.id} className={`gis-inc-item ${activo ? 'activo' : ''}`}
+                      onClick={() => seleccionarIncidente(inc)}>
+                      <span className="gis-inc-dot" style={{ background: '#d500f9' }} />
+                      <span className="gis-inc-txt">
+                        <b>{inc.tipo}</b>
+                        <span>
+                          {h.tramo ? `Tramo ${h.tramo}` : ''}
+                          {h.elemento ? ` · ${h.elemento}` : ''}
+                          {!h.tramo && !h.elemento ? (inc.lugar || inc.codigo) : ''}
+                        </span>
+                        {h.codigo && <span className="gis-hall-cod">{h.codigo}</span>}
+                      </span>
+                      <span className="gis-inc-estado" style={{ color, borderColor: `${color}55`, background: `${color}18` }}>{texto}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Recursos ── */}
         <div className="gis-tarjeta gis-glass">
