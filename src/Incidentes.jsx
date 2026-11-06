@@ -1340,7 +1340,20 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto, fuente = 'incidentes' 
         sujeto={incidenteActivo && {
           ...incidenteActivo,
           titulo: incidenteActivo.codigoIncidente,
-          subtitulo: `${incidenteActivo.tipo} en ${incidenteActivo.codigo}`,
+          /* EL LUGAR CUANDO NO HAY CODIGO.
+           *
+           * `codigo` es el del inventario de infraestructura, y un
+           * hallazgo registrado desde el recorrido no lo lleva: la app no
+           * puede inventarlo sin arriesgarse a que el servidor lo
+           * rechace. Entonces aqui salia «... en Sin Código», que no dice
+           * nada y encima suena a error.
+           *
+           * El lugar sí está —«TRAMO 0 0 - 0+200 TUNEL»— y es lo que hay
+           * que leer para saber de qué se habla. */
+          subtitulo: `${incidenteActivo.tipo} en ${
+            incidenteActivo.codigo && incidenteActivo.codigo !== 'Sin Código'
+              ? incidenteActivo.codigo
+              : (incidenteActivo.lugar || 'ubicación sin código')}`,
           detalle: incidenteActivo.lugar,
           bloqueado: incidentesCerrados.includes(incidenteActivo.id),
           textoCerrado: 'Incidencia cerrada',
