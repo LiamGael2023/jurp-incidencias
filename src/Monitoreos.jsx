@@ -113,6 +113,19 @@ export default function Monitoreos({ irAIncidente }) {
    * se mire uno sería más de mil filas de JSON por carga de pantalla. Una
    * vez traído se queda: volver a plegar y desplegar no vuelve a pedirlo. */
   const [desglose, setDesglose] = useState({});
+
+  /* Los hallazgos registrados FUERA de cualquier rutina.
+   *
+   * ──────────────────────────────────────────────────────────────────
+   * SI NO SE ENSEÑAN AQUÍ, NO SE ENSEÑAN EN NINGUNA PARTE
+   * ──────────────────────────────────────────────────────────────────
+   *
+   * Un hallazgo extraordinario se registra justo cuando no hay ronda
+   * abierta, así que no cuelga de ninguna y no aparece en ningún
+   * desglose. Pero esta es la pantalla donde Gerencia mira el estado del
+   * canal: que lo que se encontró un martes cualquiera no salga aquí es
+   * como no haberlo encontrado. */
+  const [sueltos, setSueltos] = useState([]);
   const [fallo, setFallo] = useState('');
   const [soporte, setSoporte] = useState('probando'); // ok | no-soportado
   const [ocupado, setOcupado] = useState(false);
@@ -121,9 +134,13 @@ export default function Monitoreos({ irAIncidente }) {
 
   const cargar = useCallback(async (abrirId) => {
     setCargando(true); setFallo('');
-    const [r, c] = await Promise.all([
+    const [r, c, h] = await Promise.all([
       pedir(`${API}rutinas/`, { callar: [403, 404] }),
       pedir(`${API}candidatos/`, { callar: [403, 404] }),
+      // Los hallazgos, para sacar los que no cuelgan de ninguna ronda. Va
+      // en la misma tanda: son tres peticiones que ya se hacían juntas y
+      // una más no cambia la espera.
+      pedir(`${API}hallazgos/`, { callar: [403, 404] }),
     ]);
     setCargando(false);
 
@@ -147,6 +164,8 @@ export default function Monitoreos({ irAIncidente }) {
     const lista = (r.datos && r.datos.results) || [];
     setRutinas(lista);
     setCandidatos((c.ok && c.datos && c.datos.results) || []);
+    setSueltos(
+      ((h.ok && h.datos && h.datos.results) || []).filter(x => x && !x.rutina));
     setAvisados((c.ok && c.datos && c.datos.avisados) || []);
 
     const id = abrirId != null ? abrirId
@@ -434,6 +453,9 @@ export default function Monitoreos({ irAIncidente }) {
           + 'Incidentes.'),
       aviso ? 'warning' : 'success');
 
+    // `cargar()` relee las rutinas Y los hallazgos sueltos, así que el
+    // bloque de arriba se actualiza solo. El desglose va aparte porque
+    // no se vuelve a pedir si nadie lo tiene abierto.
     await cargar();
     if (tramoId && desglose[tramoId] && desglose[tramoId].abierto) {
       await traerDesglose(tramoId);
@@ -810,6 +832,44 @@ export default function Monitoreos({ irAIncidente }) {
         <div className="mon-nota">
           Todavía no hay ninguna rutina. Crea la primera: nace con los 14
           tramos del Canal Madre listos para repartir.
+        </div>
+      )}
+
+      {!cargando && !!sueltos.length && (
+        <div className="mon-sueltos">
+          <div className="mon-sueltos-cab">
+            <FaExclamationTriangle size={13} />
+            <b>{sueltos.length} hallazgo{sueltos.length === 1 ? '' : 's'} fuera
+              de rutina</b>
+            <span>registrados cuando no había ninguna ronda abierta</span>
+          </div>
+          <div className="mon-sueltos-lista">
+            {sueltos.map(h => (
+              <div key={h.id} className="mon-suelto">
+                <span className="mon-suelto-tramo">Tramo {h.tramo}</span>
+                <span className="mon-suelto-el">{h.elemento || '—'}</span>
+                <span className="mon-suelto-cod">{h.codigo}</span>
+                <span className="mon-suelto-quien">
+                  {(h.usuario && (h.usuario.nombre || h.usuario.username)) || ''}
+                </span>
+                {h.incidente ? (
+                  <button type="button" className="mon-ver-inc"
+                    onClick={() => irAIncidente && irAIncidente(h.incidente)}
+                    disabled={!irAIncidente}
+                    title="Abrir el hallazgo para gestionarlo">
+                    <FaExternalLinkAlt size={10} /> Gestionar
+                  </button>
+                ) : <span className="mon-sub mon-pista">sin incidente</span>}
+                {permisoHallazgo.borrar && (
+                  <button type="button" className="mon-borrar-hallazgo"
+                    onClick={() => borrarHallazgo(h, null)}
+                    disabled={ocupado} title="Borrar este hallazgo">
+                    <FaTrashAlt size={10} /> Borrar
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

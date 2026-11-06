@@ -1889,6 +1889,48 @@ def hallazgos(request):
     return Response({'ok': True, 'results': fuera})
 
 
+def _borrar_incidente(HIIncident, id_inc):
+    """Borra el incidente, y antes lo que lo tenga agarrado.
+
+    LAS CLAVES PROTEGIDAS. La bitacora -HIIncidentTimeLine- apunta al
+    incidente con on_delete=PROTECT, que es lo correcto: un incidente con
+    historia no debe desaparecer por accidente desde cualquier sitio. Pero
+    cuando ALGUIEN PIDE BORRARLO TODO, esa historia es justo lo que
+    tambien sobra, y Django se planta con
+
+        Cannot delete some instances of model 'HIIncident' because they
+        are referenced through a protected foreign key
+
+    Se le pregunta a la propia excepcion que es lo que estorba y se borra
+    eso primero. Se pregunta en vez de escribir aqui la lista de modelos
+    porque esa lista cambia -manana alguien añade otra tabla colgando del
+    incidente- y una lista desactualizada falla igual pero sin decir por
+    que.
+
+    Tres vueltas como mucho: si lo protegido tiene a su vez algo
+    protegido, se resuelve en cadena, y si no se acaba en tres es que hay
+    un ciclo y mejor parar y decirlo que dar vueltas.
+    """
+    try:
+        from django.db.models.deletion import ProtectedError
+    except ImportError:          # Django muy viejo
+        ProtectedError = Exception
+
+    for _ in range(3):
+        try:
+            HIIncident.objects.filter(pk=id_inc).delete()
+            return
+        except ProtectedError as e:
+            estorban = list(getattr(e, 'protected_objects', []) or [])
+            if not estorban:
+                raise
+            for obj in estorban:
+                obj.delete()
+
+    # La ultima, sin red: si vuelve a fallar, que suba y se diga.
+    HIIncident.objects.filter(pk=id_inc).delete()
+
+
 @api_view(['DELETE'])
 @permission_classes([EsGerencia])
 def hallazgo(request, pk):
@@ -1948,7 +1990,7 @@ def hallazgo(request, pk):
         if tambien and id_inc:
             from src.apps.hi_incidents.models import HIIncident
             try:
-                HIIncident.objects.filter(pk=id_inc).delete()
+                _borrar_incidente(HIIncident, id_inc)
                 borrado = True
             except Exception as e:
                 # UN INCIDENTE QUE NO SE DEJA BORRAR NO TUMBA LO DEMAS. Si

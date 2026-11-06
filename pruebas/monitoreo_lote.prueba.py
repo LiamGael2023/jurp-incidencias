@@ -179,6 +179,20 @@ class Visita(object):
             tr._visitas.remove(self)
 
 
+class Protegido(object):
+    """Una fila de bitacora que agarra al incidente con PROTECT."""
+
+    def __init__(self, incidente):
+        self.incidente = incidente
+        self.borrada = False
+        incidente._protegen.append(self)
+
+    def delete(self):
+        self.borrada = True
+        if self in self.incidente._protegen:
+            self.incidente._protegen.remove(self)
+
+
 class Incidente(object):
     """Un HIIncident de mentira: lo justo para enlazarlo y para borrarlo."""
 
@@ -190,8 +204,16 @@ class Incidente(object):
         self.id = self.pk = Incidente._n
         Incidente._reg[self.pk] = self
         self.borrado = False
+        # Lo que lo tiene agarrado con on_delete=PROTECT: en el servidor
+        # de verdad es HIIncidentTimeLine, la bitacora.
+        self._protegen = []
 
     def delete(self):
+        if self._protegen:
+            raise ProtegidoError(
+                "Cannot delete some instances of model 'HIIncident' because "
+                "they are referenced through a protected foreign key",
+                list(self._protegen))
         self.borrado = True
         Incidente._reg.pop(self.pk, None)
 
@@ -523,6 +545,14 @@ class Gestor(object):
 
 class NoExiste(Exception):
     pass
+
+
+class ProtegidoError(Exception):
+    """El ProtectedError de Django, con su lista de estorbos."""
+
+    def __init__(self, mensaje, protected_objects):
+        Exception.__init__(self, mensaje)
+        self.protected_objects = protected_objects
 
 
 def _plantar_django_falso():
@@ -1307,6 +1337,26 @@ def prueba_borrar_hallazgo():
     igual('se borra con todo', r.status_code, 200)
     igual('el incidente tambien', r.data['incidente_borrado'], True)
     igual('y ya no esta', inc.borrado, True)
+
+    # 2b. CON LA BITACORA DELANTE. En el servidor de verdad,
+    #     HIIncidentTimeLine agarra al incidente con on_delete=PROTECT, y
+    #     Django se planta: «Cannot delete some instances of model
+    #     'HIIncident' because they are referenced through a protected
+    #     foreign key». Quien pidio borrarlo TODO tambien queria esa
+    #     historia fuera.
+    mon, tr, ilich, _, jefe = escenario()
+    inc = Incidente()
+    bitacora = Protegido(inc)
+    mon['visitas'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'elemento': 'Entrega  E14',
+        'sin_novedad': False, 'observacion': 'rota', 'incidente': inc.pk}))
+    v = Visita._todas[-1]
+    r = mon['hallazgo'](Peticion(jefe, {}, consulta={'incidente': '1'},
+                                 metodo='DELETE'), v.pk)
+    igual('con bitacora, se borra igual', r.status_code, 200)
+    igual('el incidente se fue', inc.borrado, True)
+    igual('y su bitacora tambien', bitacora.borrada, True)
+    igual('sin quejarse', r.data.get('detail', ''), '')
 
     # 3. UN «SIN NOVEDAD» NO SE BORRA DESDE AQUI: es una fila del parte.
     mon, tr, ilich, _, jefe = escenario()
