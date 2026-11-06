@@ -1860,6 +1860,20 @@ def hallazgos(request):
         # correcto: no son de ninguna.
         qs = qs.filter(tramo_rutina__rutina_id=rut)
 
+    # POR TRAMO, SIN RONDA. Lo pide la app al volver a entrar a un tramo
+    # fuera de recorrido: sin esto, los hallazgos que ella misma acababa
+    # de registrar desaparecian de la lista al salir y volver, y el
+    # elemento se veia como si nadie hubiera encontrado nada.
+    #
+    # `sueltos=1` deja ademas fuera los de cualquier ronda: en esa
+    # pantalla no hay recorrido, y mezclarlos haria creer que lo de una
+    # rutina de hace dos meses es de ahora.
+    tramo = (request.GET.get('tramo') or '').strip().upper()
+    if tramo:
+        qs = qs.filter(tramo=tramo)
+    if request.GET.get('sueltos') in ('1', 'true', 'si'):
+        qs = qs.filter(tramo_rutina__isnull=True)
+
     fuera = []
     for v in qs:
         # Puede no haber ronda: un hallazgo extraordinario se registra

@@ -433,6 +433,18 @@ class GestorVisitas(object):
                      if f.creada_en and f.creada_en.year == kw['creada_en__year']]
         if 'sin_novedad' in kw:
             fuera = [f for f in fuera if f.sin_novedad == kw['sin_novedad']]
+        # Los filtros de la pantalla de hallazgos: por tramo, por ronda y
+        # «solo los sueltos».
+        if 'tramo' in kw:
+            fuera = [f for f in fuera
+                     if getattr(f, 'tramo', None) == kw['tramo']]
+        if kw.get('tramo_rutina__isnull') is True:
+            fuera = [f for f in fuera if f.tramo_rutina is None]
+        if 'tramo_rutina__rutina_id' in kw:
+            fuera = [f for f in fuera
+                     if f.tramo_rutina is not None
+                     and f.tramo_rutina.rutina.pk
+                     == kw['tramo_rutina__rutina_id']]
         return GestorVisitas(fuera)
 
     def order_by(self, campo):
@@ -444,6 +456,12 @@ class GestorVisitas(object):
 
     def first(self):
         return self.filas[0] if self.filas else None
+
+    def __iter__(self):
+        return iter(self.filas)
+
+    def __len__(self):
+        return len(self.filas)
 
     def create(self, **kw):
         v = Visita(**kw)
@@ -1266,6 +1284,49 @@ def prueba_mis_tramos_de_siempre():
           mon['mis_tramos'](Peticion(nadie, {})).data['mios'], [])
 
 
+def prueba_hallazgos_de_un_tramo():
+    print('\n24. los hallazgos sueltos de un tramo')
+    # LA APP LOS PIDE AL VOLVER A ENTRAR. Sin esto, los hallazgos que
+    # acababa de registrar fuera de ronda desaparecian de la lista al
+    # salir y volver: el elemento se veia limpio y lo natural era
+    # reportar otra vez lo mismo.
+    mon, tr, ilich, _, jefe = escenario()
+
+    # Uno dentro de la ronda y dos sueltos, en dos tramos distintos.
+    mon['visitas'](Peticion(ilich, {
+        'tramo_rutina': tr.pk, 'elemento': 'Canoa C2D',
+        'sin_novedad': False, 'observacion': 'de la ronda'}))
+    mon['visitas'](Peticion(ilich, {
+        'tramo': 'IX', 'elemento': 'Entrega  E40',
+        'sin_novedad': False, 'observacion': 'suelto del IX'}))
+    mon['visitas'](Peticion(ilich, {
+        'tramo': 'XI', 'elemento': 'Toma T3',
+        'sin_novedad': False, 'observacion': 'suelto del XI'}))
+
+    todos = mon['hallazgos'](Peticion(jefe, {}))
+    igual('sin filtro salen los tres', len(todos.data['results']), 3)
+
+    solo_ix = mon['hallazgos'](Peticion(jefe, {},
+                                        consulta={'tramo': 'IX',
+                                                  'sueltos': '1'}))
+    igual('del IX, uno', len(solo_ix.data['results']), 1)
+    igual('y es el suyo', solo_ix.data['results'][0]['elemento'],
+          'Entrega  E40')
+
+    # El de la ronda NO sale con sueltos=1, aunque sea del mismo tramo:
+    # en esa pantalla no hay recorrido, y mezclarlos haria creer que lo
+    # de una rutina de hace dos meses es de ahora.
+    delaronda = mon['hallazgos'](Peticion(jefe, {},
+                                          consulta={'tramo': tr.tramo,
+                                                    'sueltos': '1'}))
+    igual('el de la ronda no se cuela', len(delaronda.data['results']), 0)
+
+    # Sin sueltos=1, el mismo tramo si lo trae.
+    conronda = mon['hallazgos'](Peticion(jefe, {},
+                                         consulta={'tramo': tr.tramo}))
+    igual('pero sin el filtro, si', len(conronda.data['results']), 1)
+
+
 def prueba_extraordinaria():
     print('\n20. un hallazgo sin rutina abierta')
     mon, tr, ilich, otro, _ = escenario()
@@ -1397,7 +1458,8 @@ def main():
                prueba_borrar, prueba_herencia, prueba_cuadro,
                prueba_reparto_sobrevive, prueba_extraordinaria,
                prueba_borrar_hallazgo, prueba_vaciar_un_tramo,
-               prueba_mis_tramos_de_siempre]:
+               prueba_mis_tramos_de_siempre,
+               prueba_hallazgos_de_un_tramo]:
         fn()
     print('\n' + '=' * 74)
     if FALLOS:
