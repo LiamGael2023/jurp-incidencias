@@ -780,9 +780,6 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   }, [incFiltrados, capas.Incidentes_Nuevos, capas.Incidentes_Atencion, capas.Hallazgos, hallazgosPorInc]);
 
   // Los que se listan en el panel, ordenados del más reciente al más viejo
-  const esHallazgo = useCallback(
-    (inc) => !!hallazgosPorInc[inc.id], [hallazgosPorInc]);
-
   /* Dos listas de la misma fuente. Lo que no es hallazgo es incidente:
    * así ninguno se queda sin aparecer en ninguna de las dos, que es el
    * fallo que no se nota hasta que falta justo el que importaba. */
