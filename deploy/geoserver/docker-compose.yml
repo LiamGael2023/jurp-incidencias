@@ -78,7 +78,13 @@ services:
       - ${GS_RASTERS:-/var/www/geodatos}:/datos/rasters:ro
 
       # Los limites de peticiones concurrentes.
-      - ./control-flow.properties:/opt/geoserver_data/control-flow.properties:ro
+      #
+      # EL NOMBRE ES `controlflow.properties`, TODO JUNTO. El plugin se
+      # llama control-flow y el archivo no: puesto con guion se monta, se
+      # lee con `cat` y GeoServer sigue diciendo «Control-flow inactive,
+      # there are no configured rules», porque mira otro nombre. Una hora
+      # buscando una codificacion que no era el problema.
+      - ./controlflow.properties:/opt/geoserver_data/controlflow.properties:ro
 
     healthcheck:
       # `web/wicket/...` no vale: responde tambien a medio arrancar. El

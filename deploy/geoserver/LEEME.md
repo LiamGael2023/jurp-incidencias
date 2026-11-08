@@ -202,7 +202,7 @@ Por orden de probabilidad:
 3. **Xmx corto** — mira `docker stats geoserver`: si está pegado al techo
    todo el rato, súbelo (pero mira antes el `free -h`).
 4. **Demasiadas peticiones a la vez.** Para eso está
-   `control-flow.properties`; bajar `ows.wms.getmap` encola en vez de
+   `controlflow.properties`; bajar `ows.wms.getmap` encola en vez de
    tumbar.
 
 ## Respaldo
