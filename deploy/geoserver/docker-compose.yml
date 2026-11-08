@@ -1,0 +1,106 @@
+# GeoServer para NEXHYDRO.
+#
+# ══════════════════════════════════════════════════════════════════════
+# SE ARRANCA DESDE deploy/geoserver/, EN EL LINODE
+# ══════════════════════════════════════════════════════════════════════
+#
+#   cd /var/www/envs/front/repo/deploy/geoserver
+#   cp env.ejemplo .env        # y se edita: la clave, y el RAM
+#   docker compose up -d
+#
+# Los pasos completos -incluida la preparacion de la ortofoto, que es lo
+# que de verdad decide si esto va rapido o va mal- estan en LEEME.md.
+
+services:
+  geoserver:
+    # COMPRUEBA EL TAG ANTES DE LEVANTARLO. Este es el que habia al
+    # escribir esto; la lista vigente esta en
+    # https://repo.osgeo.org/#browse/browse:geoserver-docker
+    # Un tag que no existe falla al tirar la imagen, no al arrancar, asi
+    # que se ve en el acto.
+    image: docker.osgeo.org/geoserver:2.26.2
+    container_name: geoserver
+    restart: unless-stopped
+
+    # SOLO EN LOCALHOST. GeoServer NO se expone a internet por su cuenta:
+    # trae su panel de administracion con admin/geoserver de fabrica y hay
+    # bots que lo buscan por puerto. Lo publica nginx, que es quien sabe
+    # cerrar /geoserver/web/ al mundo. Sin el 127.0.0.1 de delante, Docker
+    # abre el 8080 en TODAS las interfaces y se salta el cortafuegos de
+    # ufw sin avisar: es el fallo mas comun de este montaje.
+    ports:
+      - "127.0.0.1:8085:8080"
+
+    environment:
+      # La clave del admin, en el .env. Se aplica en el PRIMER arranque,
+      # cuando se crea el directorio de datos; despues se cambia desde el
+      # panel, no aqui.
+      GEOSERVER_ADMIN_USER: "${GEOSERVER_ADMIN_USER:-admin}"
+      GEOSERVER_ADMIN_PASSWORD: "${GEOSERVER_ADMIN_PASSWORD:?pon una clave en .env}"
+
+      # LA MEMORIA, AJUSTADA AL SERVIDOR. GeoServer es Java: si no se le
+      # pone techo, la JVM calcula uno por su cuenta a partir del RAM de
+      # la maquina y se queda con una cuarta parte. En un Linode donde ya
+      # corren Django, Postgres y el front, eso acaba con el OOM killer
+      # matando a Postgres -no a GeoServer- y con nadie entendiendo por
+      # que se cayo la base.
+      #
+      # Regla: Xmx no mas de la MITAD del RAM libre que reporte `free -h`.
+      JAVA_OPTS: >-
+        -Xms${GS_XMS:-512m}
+        -Xmx${GS_XMX:-1g}
+        -XX:+UseG1GC
+        -XX:MaxGCPauseMillis=200
+        -Djava.awt.headless=true
+        -DGEOSERVER_CSRF_WHITELIST=${GS_HOST:-localhost}
+
+      # El contexto por el que lo publica nginx. Si cambia la ruta en
+      # nginx, cambia aqui tambien o los enlaces del panel apuntaran a
+      # sitios que no existen.
+      PROXY_BASE_URL: "${GS_PROXY_BASE:-http://localhost/geoserver}"
+
+      # Las extensiones que si hacen falta para una ortofoto grande.
+      # `control-flow` limita cuantas peticiones pesadas atiende a la vez:
+      # sin el, diez personas moviendo el mapa a la vez tumban la JVM.
+      INSTALL_EXTENSIONS: "true"
+      STABLE_EXTENSIONS: "control-flow,gdal"
+
+    volumes:
+      # El directorio de datos: capas, estilos, usuarios y claves. Es lo
+      # unico que hay que respaldar.
+      - ./datos:/opt/geoserver_data
+
+      # Los rasters, FUERA del directorio de datos y en SOLO LECTURA.
+      # Separados porque son lo pesado y no se respaldan igual: el
+      # directorio de datos son megas y esto son gigas. Y en :ro porque
+      # GeoServer no tiene por que poder escribir sobre la ortofoto
+      # original -los overviews se generan antes, con GDAL-.
+      - ${GS_RASTERS:-/var/www/geodatos}:/datos/rasters:ro
+
+      # Los limites de peticiones concurrentes.
+      - ./control-flow.properties:/opt/geoserver_data/control-flow.properties:ro
+
+    healthcheck:
+      # `web/wicket/...` no vale: responde tambien a medio arrancar. El
+      # WMS GetCapabilities solo contesta cuando el servicio esta de
+      # verdad en pie.
+      test: ["CMD-SHELL",
+             "curl -sf 'http://localhost:8080/geoserver/ows?service=WMS&request=GetCapabilities' >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+    # Un contenedor de Java sin limite puede llevarse la maquina entera.
+    # Esto es el techo duro, por encima del Xmx: la JVM tambien usa
+    # memoria fuera del heap.
+    deploy:
+      resources:
+        limits:
+          memory: ${GS_MEM_LIMIT:-1536m}
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
