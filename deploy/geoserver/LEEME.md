@@ -35,31 +35,87 @@ bucket y olvidarse de GeoServer.
 
 ## 1. La ortofoto, primero
 
-**Este paso importa más que GeoServer.** Un GeoTIFF de vuelo, tal cual
-sale, no tiene resúmenes: para pintar el canal entero alejado hay que
-leer los gigas enteros y reducirlos al vuelo, cada vez y para cada
-persona. Con overviews, esa misma vista se lee de una copia de unos
-megas.
+**Este paso importa más que GeoServer.** Un raster de vuelo sin resúmenes
+obliga a leer los gigas enteros y reducirlos al vuelo cada vez que
+alguien se aleja, para cada persona. Con overviews, esa misma vista se
+lee de una copia de unos megas. No es «va más rápido»: es entre 40
+segundos y 200 ms, y entre un servidor que aguanta tres personas y uno
+que se cae.
 
-No es «va más rápido»: es entre 40 segundos y 200 ms, y entre un servidor
-que aguanta tres personas y uno que se cae.
+### Si el original es un ECW — hay que convertirlo en Windows
+
+Los vuelos de JURP vienen en **ECW**, que es formato propietario de
+Hexagon. El GDAL de Ubuntu no lo lee: el SDK no se puede redistribuir, así
+que ninguna distribución lo compila con ese soporte. Compruébalo antes de
+subir nada:
+
+```bash
+gdalinfo --formats | grep -i ecw     # si no imprime nada, no lo lee
+```
+
+Tu QGIS de Windows **sí** lo lee —las compilaciones para Windows
+incluyen el decodificador gratuito—, así que la conversión se hace ahí,
+en el **OSGeo4W Shell**, y al servidor sube ya el GeoTIFF.
+
+Lo primero, mirar qué hay dentro:
+
+```
+gdalinfo "D:\...\ECW LATERAL 10.ecw"
+```
+
+De ahí salen el CRS (el canal es **EPSG:32717**, UTM 17 Sur), el tamaño en
+píxeles y las bandas. El Lateral 10 son 692.223 × 309.247 px a 3 cm:
+**214 gigapíxeles**, 642 GB sin comprimir, que el ECW deja en 3,7 GB.
+
+Un ratio así solo se consigue cuando casi todo el recuadro está vacío: el
+vuelo es una franja estrecha y el resto es **blanco puro, 255 255 255**.
+Ese blanco hay que recortarlo, o la capa tapará el mapa base alrededor del
+canal y, en un mosaico, la franja del lateral vecino.
+
+**La huella del vuelo** (segundos, sobre una copia reducida 32 veces):
+
+```
+gdal_translate -of GTiff -outsize 21631 9663 -r nearest -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES "D:\...\ECW LATERAL 10.ecw" "D:\l10_small.tif"
+
+gdal_footprint -b 1 -b 2 -b 3 -srcnodata "255 255 255" -max_points unlimited -min_ring_area 500 -simplify 1 -f "ESRI Shapefile" "D:\ortofoto_lateral10.shp" "D:\l10_small.tif"
+```
+
+`-r nearest` a propósito: promediar mezclaría el blanco del fondo con la
+imagen del borde y el fondo dejaría de ser 255 exacto, que es justo lo que
+`gdal_footprint` busca. Y `gdal_footprint` no admite `-srcnodata` junto con
+`-ovr`, por eso el reducido se hace a mano.
+
+El shapefile **se llama igual que el .tif** a propósito: así GeoServer lo
+encuentra solo como sidecar del gránulo.
+
+**La conversión** (una hora y media para el Lateral 10):
+
+```
+gdal_translate -of COG -a_srs EPSG:32717 -co COMPRESS=JPEG -co QUALITY=85 -co BLOCKSIZE=512 -co NUM_THREADS=ALL_CPUS -co BIGTIFF=YES -co OVERVIEW_RESAMPLING=AVERAGE "D:\...\ECW LATERAL 10.ecw" "D:\ortofoto_lateral10.tif"
+```
+
+**No metas el recorte aquí.** La vía obvia —`gdalwarp -cutline -dstalpha`
+a un VRT y de ahí al COG— funciona, pero pasa cada bloque por el motor de
+reproyección, que pide ventanas sueltas al ECW y le impide usar sus
+overviews: medido, 36 horas en vez de hora y media, para una
+transformación que es la identidad. El recorte lo aplica GeoServer al
+servir, con la huella, y queda mejor: es geométrico y no por color, así
+que no abre agujeros en la arena clara ni deja halo en los bordes.
+
+JPEG al 85 % y no DEFLATE porque una ortofoto es una foto: tiene ruido, y
+comprimir sin pérdida no sirve de nada.
+
+### Si el original ya es un GeoTIFF
 
 ```bash
 sudo apt install -y gdal-bin
 sudo mkdir -p /var/www/geodatos && sudo chown "$USER" /var/www/geodatos
-
 cd /var/www/envs/front/repo/deploy/geoserver
-./preparar_ortofoto.sh /ruta/original.tif /var/www/geodatos/ortofoto.tif
+./preparar_ortofoto.sh /ruta/original.tif /var/www/geodatos/ortofotos/ortofoto.tif
 ```
 
-Tarda. Veinte gigas pueden ser una hora: lánzalo dentro de `tmux` o con
-`nohup`, porque si se corta el SSH a mitad queda un archivo incompleto
-que *parece* bueno.
-
-El script convierte a **COG con compresión JPEG**. Un vuelo de 20 GB suele
-quedar en 1,5–2 GB sin diferencia visible en pantalla — una ortofoto es
-una foto, y comprimirla sin pérdida no sirve de nada porque el ruido no
-se comprime.
+Lánzalo dentro de `tmux` o con `nohup`: si se corta el SSH a mitad queda
+un archivo incompleto que *parece* bueno.
 
 ---
 
@@ -120,29 +176,42 @@ panel, por eso también está cerrado.
 
 ## 4. Publicar la capa
 
-Por el túnel, en `http://localhost:8085/geoserver/web/`:
+Sube a `/var/www/geodatos/ortofotos/` el `.tif` y los cuatro archivos del
+shapefile de su huella (`.shp`, `.dbf`, `.shx`, `.prj`), con el mismo
+nombre base. Desde tu PC:
 
-1. **Workspaces** → *Add new* → nombre `jurp`, URI
-   `https://nexhydro.jriegopresurizado.org.pe/jurp`. Marcarlo como *default*.
-2. **Stores** → *Add new store* → **GeoTIFF**
-   - Workspace: `jurp`
-   - Nombre: `ortofoto`
-   - URL: `file:///datos/rasters/ortofoto.tif`
+```
+scp "D:\ortofoto_lateral10.tif" "D:\ortofoto_lateral10.shp" "D:\ortofoto_lateral10.dbf" "D:\ortofoto_lateral10.shx" "D:\ortofoto_lateral10.prj" webadmin@192.81.132.87:/var/www/geodatos/ortofotos/
+```
 
-   Esa ruta es la de **dentro del contenedor**; en el disco está en
-   `/var/www/geodatos/`. El `docker-compose` las conecta.
-3. **Publish** → en la pestaña *Publishing*:
-   - *Declared SRS*: el que diga `gdalinfo` (el canal suele ser
-     `EPSG:32717`, UTM 17 Sur).
-   - *Native SRS* ya debería venir solo.
-4. En la pestaña *Tile Caching*, deja el **GWC** activado: es lo que hace
-   que la segunda persona que mire la misma zona no vuelva a pagar la
-   lectura del raster.
+Y en el servidor:
+
+```bash
+cd /var/www/envs/front/repo/deploy/geoserver
+./publicar_mosaico.sh
+```
+
+Eso crea el espacio de trabajo `jurp`, monta un **ImageMosaic** con todos
+los `.tif` de la carpeta, enciende el recorte por huella y deja publicada
+la capa `jurp:ortofotos`. El script lista antes qué encontró y avisa de
+cualquier `.tif` que no tenga huella al lado.
+
+**Un mosaico y no una capa por lateral**: cada vuelo es un archivo, pero
+para el visor es *la ortofoto*. GeoServer mira qué gránulo cae en la
+ventana pedida y solo abre ese. Añadir el lateral 11 es dejar sus
+archivos en la carpeta y volver a correr el script — no hay nada que
+tocar en la web ni en la app.
 
 Comprobar desde fuera:
 
 ```
 https://nexhydro.jriegopresurizado.org.pe/geoserver/jurp/wms?service=WMS&version=1.3.0&request=GetCapabilities
+```
+
+Si la capa sale vacía o en blanco, el motivo está en el log:
+
+```bash
+docker compose logs --tail=200 geoserver | grep -iE 'mosaic|footprint|error'
 ```
 
 ---
@@ -153,9 +222,9 @@ https://nexhydro.jriegopresurizado.org.pe/geoserver/jurp/wms?service=WMS&version
 
 ```js
 L.tileLayer.wms('/geoserver/jurp/wms', {
-  layers: 'jurp:ortofoto',
-  format: 'image/jpeg',   // jpeg, no png: es una foto y pesa la cuarta parte
-  transparent: false,
+  layers: 'jurp:ortofotos',
+  format: 'image/vnd.jpeg-png',   // ver nota abajo
+  transparent: true,
   maxZoom: 22,
   attribution: 'JURP',
 }).addTo(map);
@@ -164,12 +233,21 @@ L.tileLayer.wms('/geoserver/jurp/wms', {
 Ruta **relativa**: mismo host que el front, así que no hay CORS de por
 medio.
 
+**`transparent: true` y ese formato no son opcionales.** El vuelo es una
+franja dentro de un rectángulo vacío; fuera de la huella no hay imagen.
+Pidiendo `image/jpeg` —que no tiene canal alfa— GeoServer rellena esa
+parte de blanco y vuelve el problema que resolvimos con la huella.
+
+`image/vnd.jpeg-png` es un formato de GeoServer que decide por tesela:
+JPEG donde es toda imagen, PNG donde hay transparencia. Así el interior
+del canal pesa lo que pesaría en JPEG y solo los bordes pagan el PNG.
+
 ### En la app (Flutter, flutter_map)
 
 ```dart
 TileLayer(
   urlTemplate: 'https://nexhydro.jriegopresurizado.org.pe/geoserver/gwc/'
-      'service/tms/1.0.0/jurp:ortofoto@EPSG:900913@jpeg/{z}/{x}/{y}.jpeg',
+      'service/tms/1.0.0/jurp:ortofotos@EPSG:900913@png/{z}/{x}/{y}.png',
   tms: true,
 )
 ```
@@ -177,6 +255,10 @@ TileLayer(
 Por **GWC/TMS** y no por WMS: las teselas van cacheadas y con URL fija, y
 eso en el canal —con la cobertura que hay— es la diferencia entre un mapa
 que carga y uno que no.
+
+En PNG porque la caché guarda un formato fijo y necesita alfa. Hay que
+añadir `image/png` a los formatos cacheados de la capa (*Tile Caching* →
+*Tile Image Formats*), que por defecto trae PNG y JPEG.
 
 ### Desde QGIS (lo del WMS)
 

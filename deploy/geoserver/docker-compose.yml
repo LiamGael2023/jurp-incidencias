@@ -85,12 +85,19 @@ services:
       # unico que hay que respaldar.
       - ./datos:/opt/geoserver_data
 
-      # Los rasters, FUERA del directorio de datos y en SOLO LECTURA.
-      # Separados porque son lo pesado y no se respaldan igual: el
-      # directorio de datos son megas y esto son gigas. Y en :ro porque
-      # GeoServer no tiene por que poder escribir sobre la ortofoto
-      # original -los overviews se generan antes, con GDAL-.
-      - ${GS_RASTERS:-/var/www/geodatos}:/datos/rasters:ro
+      # Los rasters, FUERA del directorio de datos. Separados porque son lo
+      # pesado y no se respaldan igual: el directorio de datos son megas y
+      # esto son gigas.
+      #
+      # EN LECTURA Y ESCRITURA, aunque lo logico seria :ro. Un ImageMosaic
+      # -que es como se publica la ortofoto cuando hay mas de un vuelo-
+      # construye su indice DENTRO de la carpeta de los rasters: escribe
+      # ahi un shapefile con la huella de cada granulo y un .properties con
+      # el esquema. Con :ro el almacen se crea, no da error visible, y la
+      # capa sale vacia; el motivo solo aparece en el log de GeoServer.
+      #
+      # No toca los .tif: solo anade sus propios archivos de indice.
+      - ${GS_RASTERS:-/var/www/geodatos}:/datos/rasters
 
       # Los limites de peticiones concurrentes.
       #
