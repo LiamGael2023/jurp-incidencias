@@ -36,7 +36,9 @@ services:
       # cuando se crea el directorio de datos; despues se cambia desde el
       # panel, no aqui.
       GEOSERVER_ADMIN_USER: "${GEOSERVER_ADMIN_USER:-admin}"
-      GEOSERVER_ADMIN_PASSWORD: "${GEOSERVER_ADMIN_PASSWORD:?pon una clave en .env}"
+      # El :? hace que compose se NIEGUE a arrancar si esta vacia, con ese
+      # mensaje. Es la red que evita un GeoServer con la clave de ejemplo.
+      GEOSERVER_ADMIN_PASSWORD: "${GEOSERVER_ADMIN_PASSWORD:?pon una clave en .env: CLAVE=$(openssl rand -base64 24)}"
 
       # LA MEMORIA, AJUSTADA AL SERVIDOR. GeoServer es Java: si no se le
       # pone techo, la JVM calcula uno por su cuenta a partir del RAM de
