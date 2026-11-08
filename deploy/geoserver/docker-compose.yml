@@ -54,10 +54,23 @@ services:
         -Djava.awt.headless=true
         -DGEOSERVER_CSRF_WHITELIST=${GS_HOST:-localhost}
 
-      # El contexto por el que lo publica nginx. Si cambia la ruta en
-      # nginx, cambia aqui tambien o los enlaces del panel apuntaran a
-      # sitios que no existen.
-      PROXY_BASE_URL: "${GS_PROXY_BASE:-http://localhost/geoserver}"
+      # NO SE FIJA PROXY_BASE_URL, A PROPOSITO.
+      #
+      # Fijarlo al dominio publico parece lo correcto -y para los
+      # servicios lo es- pero GeoServer usa esa base para TODAS sus URL,
+      # incluidas las del panel. Entonces entrar por el tunel SSH deja de
+      # funcionar: te identificas en localhost:8085 y el login te manda a
+      # nexhydro.../geoserver/web/, que es justo donde nginx devuelve 404
+      # porque lo cerramos. El panel queda inalcanzable por los dos lados.
+      #
+      # Sin fijarla, GeoServer compone cada URL a partir de las cabeceras
+      # de la peticion: por nginx sale https://nexhydro.../geoserver y
+      # por el tunel sale http://localhost:8085/geoserver. Cada uno ve lo
+      # suyo, que es lo que hace falta.
+      #
+      # Esto funciona porque el proxy manda Host, X-Forwarded-Proto y
+      # X-Forwarded-Host, y porque el puerto solo escucha en 127.0.0.1:
+      # no hay forma de llegar sin pasar por uno de los dos caminos.
 
       # Las extensiones que si hacen falta para una ortofoto grande.
       # `control-flow` limita cuantas peticiones pesadas atiende a la vez:
