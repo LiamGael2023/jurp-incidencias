@@ -299,6 +299,23 @@ export const ORTOFOTO = {
   capa: 'jurp:ortofotos',
   maxZoom: 22,
   maxNativeZoom: 21,
+
+  // HASTA DÓNDE LLEGA LA IMAGEN. Sin esto, Leaflet pide teselas de TODA la
+  // pantalla, estén o no dentro del vuelo: a zoom regional son sesenta
+  // peticiones de las que cincuenta y ocho caen sobre mar y cerro. GeoServer
+  // las encola —control-flow deja seis por usuario— y las que sí tienen
+  // imagen esperan detrás. El síntoma es una lista de peticiones en
+  // «pending» durante medio minuto y un mapa que nunca pinta.
+  //
+  // Con los límites puestos, Leaflet descarta esas teselas sin pedirlas.
+  //
+  // Salen del propio GeoServer, del latLonBoundingBox de la capa:
+  //   curl -u admin:*** .../rest/workspaces/jurp/coveragestores/ortofotos\
+  //        /coverages/ortofotos.json
+  // Al añadir un lateral nuevo el mosaico crece, así que hay que volver a
+  // leerlo y actualizar estos cuatro números — si no, el lateral nuevo se
+  // publica bien y aun así no se ve.
+  limites: [[-8.4178, -78.9070], [-8.3314, -78.7148]],
 };
 
 /** La ortofoto, encima de la capa base. Devuelve null si está apagada. */
@@ -313,6 +330,11 @@ export function Ortofoto({ activa, opacidad = 1 }) {
       opacity={opacidad}
       maxZoom={ORTOFOTO.maxZoom}
       maxNativeZoom={ORTOFOTO.maxNativeZoom}
+      bounds={ORTOFOTO.limites}
+      // Pedir solo cuando el mapa se queda quieto. Arrastrando, cada paso
+      // lanzaría teselas que se cancelan al siguiente: con una capa cara eso
+      // es llenar la cola de trabajo que ya no le sirve a nadie.
+      updateWhenIdle
       // Por encima de la capa base, que va con el 1 de por defecto, y por
       // debajo de los vectores, que viven en otro panel de Leaflet.
       zIndex={2}
