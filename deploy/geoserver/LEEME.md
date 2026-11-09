@@ -72,18 +72,48 @@ vuelo es una franja estrecha y el resto es **blanco puro, 255 255 255**.
 Ese blanco hay que recortarlo, o la capa tapará el mapa base alrededor del
 canal y, en un mosaico, la franja del lateral vecino.
 
-**La huella del vuelo** (segundos, sobre una copia reducida 32 veces):
+**La huella del vuelo**, en tres pasos de segundos cada uno:
 
 ```
 gdal_translate -of GTiff -outsize 21631 9663 -r nearest -co COMPRESS=DEFLATE -co TILED=YES -co BIGTIFF=YES "D:\...\ECW LATERAL 10.ecw" "D:\l10_small.tif"
 
-gdal_footprint -b 1 -b 2 -b 3 -srcnodata "255 255 255" -max_points unlimited -min_ring_area 500 -simplify 1 -f "ESRI Shapefile" "D:\ortofoto_lateral10.shp" "D:\l10_small.tif"
+gdal_calc -A D:\l10_small.tif --A_band=1 -B D:\l10_small.tif --B_band=2 -C D:\l10_small.tif --C_band=3 --outfile=D:\l10_mask.tif --calc="logical_or(logical_or(A<245,B<245),C<245)" --type=Byte --NoDataValue=0 --co COMPRESS=DEFLATE
+
+gdal_footprint -b 1 -srcnodata 0 -max_points unlimited -min_ring_area 2000 -simplify 5 -f "ESRI Shapefile" "D:\l10_mask.tif" "D:\ortofoto_lateral10.shp"
 ```
 
-`-r nearest` a propósito: promediar mezclaría el blanco del fondo con la
-imagen del borde y el fondo dejaría de ser 255 exacto, que es justo lo que
-`gdal_footprint` busca. Y `gdal_footprint` no admite `-srcnodata` junto con
-`-ovr`, por eso el reducido se hace a mano.
+Tres cosas que costaron una mañana averiguar, por si se repite:
+
+**El umbral de 245, no el blanco exacto.** Lo natural sería buscar
+`255 255 255` directamente sobre el ECW. No sirve: a 173:1 el wavelet
+produce *ringing* alrededor del salto de imagen a fondo, así que hay una
+orla de cien o doscientos metros que es 250-254 y la huella la toma por
+dato. Al publicarla se veía un manchón blanco con los bordes escalonados
+—la forma de los bloques del wavelet— que tapaba el mapa base.
+
+**`-r nearest` en el reducido.** Promediar mezclaría el fondo con la
+imagen del borde y el fondo dejaría de ser plano. Y `gdal_footprint` no
+admite `-srcnodata` junto con `-ovr`, por eso el reducido se hace a mano.
+
+**`-simplify 5` y `-min_ring_area 2000` son un equilibrio medido, no un
+número al azar.** GeoServer rasteriza el polígono ENTERO en cada tesela:
+
+| contorno | `.shp` | tesela de 39 km | tramos estrechos |
+|---|---|---|---|
+| `-simplify 2 -min_ring_area 2000` | 274 KB | no vuelve en 60 s | bien |
+| `-simplify 20 -min_ring_area 20000` | 20 KB | 1,6 s | **se pierden** |
+| `-simplify 5 -min_ring_area 2000` | 130 KB | 0,2 s a zoom 13 | bien |
+
+Simplificar de más borra las fajas angostas: sobre los túneles el vuelo
+es una franja de quince o veinte metros siguiendo el camino de servicio,
+y con tolerancia de 20 m se colapsa y desaparece del mapa aunque la
+imagen esté en el ráster. Se comprueba en un minuto con el script de
+«¿está completo?», al final de este archivo.
+
+El tiempo de la tesela enorme dejó de importar cuando el visor pasó a no
+pedir la capa por debajo del zoom 13 (`ORTOFOTO.minZoom` en
+`src/capasBase.jsx`), pero conviene no volver al contorno de 274 KB: QGIS
+sí puede pedir la vista completa.
 
 El shapefile **se llama igual que el .tif** a propósito: así GeoServer lo
 encuentra solo como sidecar del gránulo.
@@ -281,6 +311,61 @@ https://nexhydro.jriegopresurizado.org.pe/geoserver/jurp/wms
 
 Sin usuario ni clave: los servicios son de solo lectura. Esto es lo que
 puedes pasarle a quien te pida la ortofoto, en vez de mandar el archivo.
+
+---
+
+## ¿Está completo?
+
+Un hueco en la capa puede ser dos cosas muy distintas: que el vuelo no
+cubriera esa zona, o que el recorte por huella se la esté comiendo.
+Mirando el mapa no se distinguen. Esto pregunta al ráster directamente,
+tramo por tramo, usando el trazado del canal que ya está en el repo:
+
+```bash
+cd /var/www/envs/front/repo/src/data
+python3 - <<'PY'
+import json, subprocess
+
+RASTER = '/var/www/geodatos/ortofotos/ortofoto_lateral10.tif'
+fs = json.load(open('Lateral_10.json'))['features']
+
+def centro(f):
+    anillo = f['geometry']['coordinates'][0]
+    return (sum(c[0] for c in anillo) / len(anillo),
+            sum(c[1] for c in anillo) / len(anillo))
+
+def cubierto(lon, lat):
+    r = subprocess.run(['gdallocationinfo', '-wgs84', '-valonly', RASTER,
+                        str(lon), str(lat)], capture_output=True, text=True)
+    v = [x for x in r.stdout.split() if x.isdigit()]
+    if len(v) < 3:
+        return None                      # fuera del rectangulo del vuelo
+    return any(int(x) < 250 for x in v)  # algo que no sea blanco
+
+sin_vuelo, fuera, con = [], [], 0
+for f in fs:
+    lon, lat = centro(f)
+    c = cubierto(lon, lat)
+    if c is None:   fuera.append(f['properties'])
+    elif c:         con += 1
+    else:           sin_vuelo.append(f['properties'])
+
+print('tramos del Lateral 10 :', len(fs))
+print('con imagen            :', con)
+print('dentro, pero en blanco:', len(sin_vuelo))
+print('fuera del vuelo       :', len(fuera))
+for p in sin_vuelo + fuera:
+    print('   %-26s %-16s %s' % (p.get('ESTRUCTURA'), p.get('PROGRESIVA'),
+                                 p.get('NOMBRE')))
+PY
+```
+
+Pregunta al **.tif**, no a la capa publicada: si dice que hay imagen y en
+el mapa no se ve, el culpable es la huella —`-simplify` de más, o
+`footprint_inset` de más— y no hay que volver a convertir nada.
+
+Fue exactamente lo que pasó con los túneles: 106 de 106 tramos tenían
+imagen y el mapa mostraba un hueco de varios kilómetros.
 
 ---
 
