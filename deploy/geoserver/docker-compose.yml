@@ -48,7 +48,19 @@ services:
       # que se cayo la base.
       #
       # Regla: Xmx no mas de la MITAD del RAM libre que reporte `free -h`.
-      JAVA_OPTS: >-
+      # LA VARIABLE ES `EXTRA_JAVA_OPTS`, NO `JAVA_OPTS`.
+      #
+      # La imagen de OSGeo arma JAVA_OPTS por su cuenta y le anade al final
+      # EXTRA_JAVA_OPTS; lo que se ponga en JAVA_OPTS desde fuera lo pisa el
+      # arranque y se pierde entero, sin un aviso. El contenedor queda con el
+      # valor de fabrica -256m/1g- y nadie se entera: arranca bien, responde
+      # bien, y solo se nota cuando le pides algo grande y se queda colgado
+      # con la CPU al 0% y la memoria pegada al techo.
+      #
+      # Se comprueba asi, y tiene que salir UNA sola linea con el Xmx puesto:
+      #   docker inspect geoserver --format '{{json .Config.Env}}' \
+      #     | tr ',' '\n' | grep -i xmx
+      EXTRA_JAVA_OPTS: >-
         -Xms${GS_XMS:-512m}
         -Xmx${GS_XMX:-1g}
         -XX:+UseG1GC
