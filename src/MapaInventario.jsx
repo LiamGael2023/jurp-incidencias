@@ -6,11 +6,11 @@ import './MapaDashboard.css';
 import './MapaGIS.css';
 import RailGIS from './RailGIS';
 import Swal from 'sweetalert2';
-import { TeselasBase, SelectorBase, CAPA_POR_DEFECTO } from './capasBase';
+import { TeselasBase, SelectorBase, CAPA_POR_DEFECTO, Ortofoto } from './capasBase';
 import {
   FaGlobe, FaSyncAlt, FaCamera, FaShareAlt,
   FaPlus, FaMinus, FaRulerCombined, FaDrawPolygon, FaEraser, FaLocationArrow,
-  FaObjectGroup, FaObjectUngroup, FaLayerGroup,
+  FaObjectGroup, FaObjectUngroup, FaLayerGroup, FaImage,
 } from 'react-icons/fa';
 import { MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
 import './MapaHerramientas.css';
@@ -71,6 +71,11 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app,
   const [herramienta, setHerramienta] = useState(null);
   const [destino, setDestino] = useState(null);
 
+  // Apagada al entrar, siempre. Aquí no hay panel de capas donde esconderla,
+  // así que va de botón en las herramientas; el motivo de que no arranque
+  // encendida está en capasBase.jsx.
+  const [ortofoto, setOrtofoto] = useState(false);
+
   const mapRef = useRef(null);
   const contenedorRef = useRef(null);
   const { ocupado: capturando, descargar, compartir } = useCapturaMapa(contenedorRef, { base: base, cambiarBase: setBase });
@@ -105,6 +110,7 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app,
         <MapContainer preferCanvas center={CENTRO} zoom={10} style={{ height: '100%', width: '100%' }}
           ref={mapRef} zoomControl={false}>
           <TeselasBase base={base} opacidad={opacidad} />
+          <Ortofoto activa={ortofoto} />
           <UTMDisplay />
           <MiniMapa base={base} />
           <IrA pos={destino} />
@@ -154,6 +160,11 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app,
         <button className={`gis-tool ${inv.abierto ? 'activo' : ''}`}
           title={inv.abierto ? 'Ocultar el inventario' : 'Mostrar el inventario'}
           onClick={inv.alternar}><FaLayerGroup /></button>
+        <button className={`gis-tool ${ortofoto ? 'activo' : ''}`}
+          title={ortofoto
+            ? 'Ocultar la ortofoto del vuelo'
+            : 'Ortofoto del vuelo (6 cm/píxel) — pesa, con poca señal tarda'}
+          onClick={() => setOrtofoto(v => !v)}><FaImage /></button>
         <div className="gis-tool-sep" />
         <button className="gis-tool" title="Vista general"
           onClick={() => mapRef.current?.flyTo(CENTRO, 10, { duration: 1 })}><FaGlobe /></button>

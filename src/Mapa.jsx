@@ -20,7 +20,7 @@ import Swal from 'sweetalert2';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 // ── Herramientas del visor ───────────────────────────────────────────────────
 import { BarraHerramientas, MiniMapa, HerramientaMedicion, useCapturaMapa } from './MapaHerramientas';
-import { TeselasBase, SelectorBase, capaBase } from './capasBase';
+import { TeselasBase, SelectorBase, capaBase, Ortofoto } from './capasBase';
 import { NIVELES_LLUVIA } from './umbralesLluvia';
 import './MapaHerramientas.css';
 import { useInventario, CapasInventario, PanelInventario, ModalEvaluacion, FichaActivo, FaClipboardCheck } from './InventarioGIS';
@@ -370,7 +370,9 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [cargandoHoras, setCargandoHoras] = useState(false);
   const inputKmzRef = useRef(null);
 
-  const [capas, setCapas] = useState({ Incidentes_Nuevos: true, Incidentes_Atencion: true, Hallazgos: true, Lluvias: true, Davis: true, Canales: true });
+  // Ortofoto apagada a propósito: son gigas de teselas y en el canal la
+  // cobertura no da para encenderla sin querer. Ver capasBase.jsx.
+  const [capas, setCapas] = useState({ Incidentes_Nuevos: true, Incidentes_Atencion: true, Hallazgos: true, Lluvias: true, Davis: true, Canales: true, Ortofoto: false });
   const [capasKMZ, setCapasKMZ] = useState(KMZ_CAPAS_DEFAULT);
   const [incidentesAPI, setIncidentesAPI] = useState([]);
 
@@ -1535,6 +1537,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
             Es el mismo arreglo que ya llevaba la lámina de MapaTematico. */}
         <MapContainer preferCanvas center={centroMapa} zoom={10} style={{ height: '100%', width: '100%' }} ref={mapRef} zoomControl={false}>
           <TeselasBase base={mapaBase} opacidad={opacidadBase} />
+          <Ortofoto activa={capas.Ortofoto} />
           <FlyToComp pos={miUbicacion || flyTarget} />
           <UTMDisplay />
           <MiniMapa base={mapaBase} />
@@ -1916,6 +1919,16 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           <div className="gis-capas-body">
             <div className="gis-capas-grupo">
               <div className="gis-capas-titulo">General</div>
+              {/* La ortofoto va la primera: es lo que cambia el mapa entero,
+                  no un punto más encima. Y con el aviso del peso, que es lo
+                  que decide si conviene encenderla ahora mismo o no. */}
+              <div className="gis-capa">
+                <label title="Vuelo de dron a 6 cm por píxel. Pesa: con poca señal tarda en pintar.">
+                  <input type="checkbox" checked={capas.Ortofoto} onChange={() => toggleCapa('Ortofoto')} />
+                  {' '}Ortofoto del vuelo
+                </label>
+                <span className="gis-capa-badge">6 cm</span>
+              </div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Canales} onChange={() => toggleCapa('Canales')} /> Trazado de canales</label></div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={() => { toggleCapa('Incidentes_Atencion'); toggleCapa('Incidentes_Nuevos'); }} /> Incidentes</label></div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Hallazgos} onChange={() => toggleCapa('Hallazgos')} /> Hallazgos de recorrido</label></div>

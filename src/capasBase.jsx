@@ -48,7 +48,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { useRef, useState, useCallback } from 'react';
-import { TileLayer } from 'react-leaflet';
+import { TileLayer, WMSTileLayer } from 'react-leaflet';
 
 export const CAPAS_BASE = {
   satelite: {
@@ -246,6 +246,69 @@ export function TeselasBase({ base, opacidad }) {
       key={`${c}${conCors ? '+cors' : ''}`}
       {...propsTeselas(c, opacidad)}
       eventHandlers={{ tileerror: alFallar, tileload: alCargar }}
+    />
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  LA ORTOFOTO DEL VUELO (GeoServer)
+//
+//  No es una capa base: va ENCIMA de la que esté puesta. Son los vuelos de
+//  dron de los laterales, a 6 cm por píxel, servidos como un solo WMS desde
+//  el GeoServer del Linode (ver deploy/geoserver/LEEME.md).
+//
+//  ARRANCA APAGADA, siempre. Son gigas de teselas: encenderla sin quererlo
+//  en el teléfono de un recorredor, con la cobertura que hay en el canal, es
+//  gastarle los datos y dejarle el mapa colgado. Se enciende cuando se
+//  necesita y se apaga sola al recargar.
+//
+//  format=image/vnd.jpeg-png y transparent NO SON OPCIONALES. El vuelo es una
+//  franja estrecha dentro de un rectángulo enorme; fuera de ella no hay
+//  imagen, y GeoServer la recorta con la huella de cada vuelo. Pidiendo
+//  image/jpeg —que no tiene canal alfa— ese vacío vuelve como blanco y tapa
+//  el satélite alrededor del canal. El formato vnd.jpeg-png lo decide por
+//  tesela: JPEG donde es toda imagen, PNG donde hay transparencia, así que el
+//  interior pesa como JPEG y solo los bordes pagan el PNG.
+//
+//  La URL es ABSOLUTA aunque el front y GeoServer vivan en el mismo host.
+//  Así la capa también funciona desde Vercel y desde `npm run dev` sin añadir
+//  un proxy en dos sitios. No hace falta CORS: son <img>, y Leaflet no pide
+//  crossOrigin salvo que se le diga. El precio es que, con la ortofoto
+//  encendida, la captura del mapa queda inhabilitada igual que con las capas
+//  de Google —mismo motivo, el lienzo se marca como contaminado—.
+//
+//  maxNativeZoom 21: el ráster está a 6,1 cm/px, que es justo lo que mide un
+//  píxel de zoom 21 a esta latitud. Más allá, Leaflet amplía la última tesela
+//  buena en vez de pedirle a GeoServer que invente detalle que no existe.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SERVIDOR_GEO = (import.meta.env?.VITE_GEOSERVER
+  || 'https://nexhydro.jriegopresurizado.org.pe/geoserver').replace(/\/+$/, '');
+
+export const ORTOFOTO = {
+  etiqueta: 'Ortofoto del vuelo',
+  url: `${SERVIDOR_GEO}/jurp/wms`,
+  capa: 'jurp:ortofotos',
+  maxZoom: 22,
+  maxNativeZoom: 21,
+};
+
+/** La ortofoto, encima de la capa base. Devuelve null si está apagada. */
+export function Ortofoto({ activa, opacidad = 1 }) {
+  if (!activa) return null;
+  return (
+    <WMSTileLayer
+      url={ORTOFOTO.url}
+      layers={ORTOFOTO.capa}
+      format="image/vnd.jpeg-png"
+      transparent
+      opacity={opacidad}
+      maxZoom={ORTOFOTO.maxZoom}
+      maxNativeZoom={ORTOFOTO.maxNativeZoom}
+      // Por encima de la capa base, que va con el 1 de por defecto, y por
+      // debajo de los vectores, que viven en otro panel de Leaflet.
+      zIndex={2}
+      attribution="Ortofoto JURP"
     />
   );
 }
