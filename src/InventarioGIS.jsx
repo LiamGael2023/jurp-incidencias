@@ -568,6 +568,27 @@ export function useInventario() {
 
   const apagarTodas = useCallback(() => setVisibles({}), []);
 
+  // Encender todas. El botón es el mismo que apaga: una vez apagadas, no
+  // había forma de recuperarlas salvo pulsando capa por capa, que son casi
+  // cuarenta.
+  //
+  // `oculta` queda fuera -áreas con licencia no se dibuja a propósito, ver
+  // el catálogo- y cargarCapa no vuelve a bajar lo que ya está en caché, así
+  // que repetirlo no cuesta red.
+  const encenderTodas = useCallback(() => {
+    const codigos = TODAS.filter(c => !c.oculta).map(c => c.codigo);
+    codigos.forEach(c => cargarCapa(c, ambitoDe(c)));
+    setVisibles(Object.fromEntries(codigos.map(c => [c, true])));
+  }, [cargarCapa, ambitoDe]);
+
+  // Para decidir qué ofrece el botón. Se mira si hay CAPAS encendidas, no
+  // cuántos activos hay en pantalla: mientras una capa se descarga el total
+  // es cero y el botón se ofrecería a encender lo que ya está encendido.
+  const algunaVisible = useMemo(
+    () => TODAS.some(c => !c.oculta && visibles[c.codigo]),
+    [visibles]
+  );
+
   const alternar = useCallback(() => {
     setAbierto(a => {
       if (!a && !campania && !iniciando) iniciar();
@@ -792,7 +813,8 @@ export function useInventario() {
     indice, buscar, irA, destacado, limpiarDestacado,
     evaluando, abrirEvaluacion, cerrarEvaluacion, guardarEvaluacion, formularios,
     ficha, abrirFicha, cerrarFicha,
-    alternarCapa, apagarTodas, evaluacionDe, totalVisibles, recargar: iniciar,
+    alternarCapa, apagarTodas, encenderTodas, algunaVisible,
+    evaluacionDe, totalVisibles, recargar: iniciar,
     cluster, alternarCluster,
     sectores, sectoresOcultos, alternarSector, todosLosSectores,
     pasaSector, filtroSector, sectoresEncendidos,
@@ -2350,7 +2372,9 @@ export function PanelInventario({ inv, onVolar }) {
 
         {/* ── capas ── */}
         <div className="gis-capas-acciones" style={{ marginTop: 8 }}>
-          <button onClick={inv.apagarTodas}>Apagar todas</button>
+          <button onClick={inv.algunaVisible ? inv.apagarTodas : inv.encenderTodas}>
+            {inv.algunaVisible ? 'Apagar todas' : 'Encender todas'}
+          </button>
           <span className="inv-visibles">{inv.totalVisibles.toLocaleString('es-PE')} en pantalla</span>
         </div>
 
