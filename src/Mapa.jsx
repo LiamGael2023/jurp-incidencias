@@ -183,6 +183,26 @@ const KMZ_CONFIG = [
   { key:'VIA_RedNacional', label:'Red Nacional', color:'#d63939', data:geoRedNacional, tipo:'line', icon:null },
 ];
 const KMZ_CAPAS_DEFAULT = Object.fromEntries(KMZ_CONFIG.map(c => [c.key, false]));
+
+/* Capas que viven en el inventario y que aquí también hacen falta.
+ *
+ * El dato, el estilo y el dibujo son los del inventario —este visor ya monta
+ * <CapasInventario>—; lo único que se duplica es el interruptor. Si se
+ * añadiera aquí una copia de la capa habría dos verdades del mismo trazado y
+ * el día que cambie una, la otra se queda vieja sin que nadie lo note.
+ *
+ * Los códigos tienen que existir en el catálogo de InventarioGIS.jsx: uno
+ * mal escrito no da error, simplemente no enciende nada. */
+const CAPAS_DEL_INVENTARIO = [
+  { codigo: 'tramos_jurp', label: 'Tramos JURP',
+    nota: 'Los catorce tramos y la empresa que opera cada uno' },
+  { codigo: 'canal_madre_200m', label: 'Canal Madre · 200 m',
+    nota: 'El canal partido por progresiva, con la estructura de cada trozo' },
+  { codigo: 'cuencas_pech', label: 'Cuencas',
+    nota: 'Qué cuenca descarga sobre cada punto del canal' },
+  { codigo: 'cauces_quebradas', label: 'Cauces de quebrada',
+    nota: 'Once mil cauces: tarda en encender' },
+];
 const SEARCH_INDEX = KMZ_CONFIG.flatMap(cfg => (cfg.data?.features || []).filter(f => f.geometry?.type === 'Point' && f.properties?.name).map(f => ({ name: f.properties.name, tipo: cfg.label, tramo: normTramo(f.properties.TRAMO), progresiva: f.properties.PROGRESIVA || '', coords: f.geometry.coordinates, icon: cfg.icon, color: cfg.color })));
 
 // ── Sub-componentes ─────────────────────────────────────────────────────────
@@ -1952,6 +1972,26 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                   <option value={1}>24 horas</option><option value={7}>7 días</option><option value={30}>30 días</option><option value={0}>Todo</option>
                 </select>
               )}
+            </div>
+
+            {/* ── territorio e hidrografía, prestadas del inventario ──
+                No son capas de este visor: viven en el inventario y se
+                dibujan con <CapasInventario>, que ya está montado aquí. Lo
+                que se añade es el interruptor, para no obligar a abrir el
+                panel del inventario cuando lo único que quieres es ver por
+                dónde baja una quebrada sobre un incidente de rebose. */}
+            <div className="gis-capas-grupo">
+              <div className="gis-capas-titulo">Territorio e hidrografía</div>
+              {CAPAS_DEL_INVENTARIO.map(c => (
+                <div className="gis-capa" key={c.codigo}>
+                  <label title={c.nota}>
+                    <input type="checkbox" checked={!!inv.visibles[c.codigo]}
+                      onChange={() => inv.alternarCapa(c.codigo)} />
+                    {' '}{c.label}
+                  </label>
+                  {inv.cargando[c.codigo] && <span className="gis-capa-badge">…</span>}
+                </div>
+              ))}
             </div>
 
             {/* capas guardadas en el servidor */}

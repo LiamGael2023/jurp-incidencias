@@ -92,5 +92,21 @@ const huerfanas = [...new Set(llamadas)].filter(n => !devueltos.has(n));
 t(`el popup no llama a nada que el hook no devuelva (huérfanas: ${huerfanas.join(', ') || 'ninguna'})`,
   huerfanas.length === 0);
 
+// 4. Los códigos que el visor de monitoreo presta del inventario tienen que
+//    existir en el catálogo. Uno mal escrito no da error: la casilla se
+//    marca y no enciende nada, que es el peor fallo posible porque parece
+//    que la capa está vacía.
+{
+  const mapa = leer('src/Mapa.jsx');
+  const bloque = mapa.match(/const CAPAS_DEL_INVENTARIO = \[([\s\S]*?)\n\];/);
+  const prestadas = bloque
+    ? [...bloque[1].matchAll(/codigo:\s*'([^']+)'/g)].map(m => m[1]) : [];
+  const catalogo = new Set([...gis.matchAll(/\{\s*codigo:\s*'([^']+)'/g)].map(m => m[1]));
+  t('Mapa.jsx declara las capas que presta del inventario', prestadas.length > 0);
+  for (const cod of prestadas) {
+    t(`«${cod}» existe en el catálogo del inventario`, catalogo.has(cod));
+  }
+}
+
 console.log(`\n${bien} comprobación(es) en orden${mal ? `, ${mal} MAL` : ''}.`);
 process.exit(mal ? 1 : 0);
