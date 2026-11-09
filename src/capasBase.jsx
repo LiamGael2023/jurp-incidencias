@@ -105,6 +105,28 @@ export const CAPAS_BASE = {
     maxNativeZoom: 20,
     exportable: true,
   },
+
+  // SIN FONDO. No es una capa: es la ausencia de ella.
+  //
+  // Hace falta para mirar lo que va ENCIMA sin nada que compita: comprobar
+  // hasta dónde llega de verdad una ortofoto, ver si el trazado de un canal
+  // cuadra con el inventario, o revisar un KMZ recién cargado. Con el
+  // satélite debajo, un hueco en la capa de arriba no se distingue de un
+  // trozo donde la capa simplemente coincide con la foto.
+  //
+  // `vacia` es lo que mira TeselasBase para no montar nada. El minimapa, en
+  // cambio, sigue con la capa por defecto: es un widget para saber dónde
+  // estás, y en negro no sirve de nada.
+  ninguna: {
+    etiqueta: 'Sin mapa base',
+    grupo: 'Ninguno',
+    url: null,
+    credito: '',
+    maxZoom: 22,
+    maxNativeZoom: 22,
+    exportable: true,   // no hay teselas ajenas que contaminen el lienzo
+    vacia: true,
+  },
 };
 
 export const CAPA_POR_DEFECTO = 'satelite';
@@ -171,7 +193,10 @@ export const alternativaExportable = (k) => {
   const c = claveCapa(k);
   if (puedeExportar(c)) return c;
   const grupo = CAPAS_BASE[c].grupo;
-  const candidatas = Object.keys(CAPAS_BASE).filter(puedeExportar);
+  // Sin la vacía: ofrecer «quítate el mapa de fondo» como arreglo para poder
+  // exportar sería resolver el problema borrando la foto.
+  const candidatas = Object.keys(CAPAS_BASE)
+    .filter((x) => !CAPAS_BASE[x].vacia && puedeExportar(x));
   const igual = candidatas.find((x) => CAPAS_BASE[x].grupo === grupo);
   return igual || candidatas[0] || c;
 };
@@ -184,7 +209,12 @@ export const alternativaExportable = (k) => {
  * queda en blanco. Es justo lo que no se puede hacer con las de Google.
  */
 export const propsTeselas = (k, opacidad, { cors = true } = {}) => {
-  const c = claveCapa(k), cap = CAPAS_BASE[c];
+  // «Sin mapa base» no tiene teselas; quien la pida para un <TileLayer> se
+  // queda con la de por defecto. Montar una capa con url null deja el mapa
+  // lanzando peticiones a «null» hasta que alguien mira la consola.
+  const c0 = claveCapa(k);
+  const c = CAPAS_BASE[c0].vacia ? CAPA_POR_DEFECTO : c0;
+  const cap = CAPAS_BASE[c];
   return {
     url: cap.url,
     attribution: cap.credito,
@@ -221,6 +251,10 @@ export function TeselasBase({ base, opacidad }) {
   const [, repintar] = useState(0);
   const cuenta = useRef({ capa: c, exitos: 0, fallos: 0 });
 
+  // Los hooks van antes: «sin mapa base» no monta nada, pero React exige
+  // que el número de hooks no cambie entre renders.
+  const vacia = !!CAPAS_BASE[c].vacia;
+
   if (cuenta.current.capa !== c) cuenta.current = { capa: c, exitos: 0, fallos: 0 };
 
   const conCors = puedeExportar(c);
@@ -238,6 +272,8 @@ export function TeselasBase({ base, opacidad }) {
   }, []);
 
   const alCargar = useCallback(() => { cuenta.current.exitos += 1; }, []);
+
+  if (vacia) return null;
 
   return (
     <TileLayer
