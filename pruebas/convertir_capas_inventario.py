@@ -106,6 +106,22 @@ def simplificar(pts, tol):
     return [p for p, g in zip(pts, guardar) if g]
 
 
+def simplificar_anillo(pts, tol):
+    """Simplifica un anillo sin dejarlo invalido.
+
+    Douglas-Peucker sobre un anillo cerrado puede reducirlo a dos puntos
+    distintos. Cerrado son tres coordenadas, y PostGIS lo rechaza con
+    «geometry requires more points»: un anillo necesita cuatro, porque la
+    primera y la ultima son la misma. Cuando pasa, se deja el anillo
+    original -son los pocos trozos diminutos, no pesan-.
+    """
+    if tol <= 0 or len(pts) < 5:
+        return pts
+    s = simplificar(pts, tol)
+    cerrado = s if s[0] == s[-1] else s + [s[0]]
+    return pts if len(cerrado) < 4 else s
+
+
 def anillo(pts, dec=6):
     """Un anillo WKT, cerrado. Sin cerrar, PostGIS rechaza el poligono."""
     if pts[0] != pts[-1]:
@@ -119,14 +135,15 @@ def wkt_multipoligono(pm, tol=0.0):
         ext = RE_OUTER.search(poly)
         if not ext:
             continue
-        pts = simplificar(coords(RE_COORD.search(ext.group(0)).group(1)), tol)
-        if len(pts) < 3:
+        crudo = coords(RE_COORD.search(ext.group(0)).group(1))
+        # Cuatro: el cierre cuenta como coordenada y repite la primera.
+        if len(crudo) < 4:
             continue
-        anillos = [anillo(pts)]
+        anillos = [anillo(simplificar_anillo(crudo, tol))]
         for inn in RE_INNER.findall(poly):
-            ptsi = simplificar(coords(RE_COORD.search(inn).group(1)), tol)
-            if len(ptsi) >= 3:
-                anillos.append(anillo(ptsi))
+            crudo_i = coords(RE_COORD.search(inn).group(1))
+            if len(crudo_i) >= 4:
+                anillos.append(anillo(simplificar_anillo(crudo_i, tol)))
         partes.append('(' + ','.join(anillos) + ')')
     return f"MULTIPOLYGON({','.join(partes)})" if partes else None
 
@@ -237,7 +254,7 @@ def canal_madre_200m(f):
         anillos = []
         for i in range(len(partes) - 1):
             trozo = pts[partes[i]:partes[i + 1]]
-            if len(trozo) >= 3:
+            if len(trozo) >= 4:
                 anillos.append('(' + anillo(trozo, dec=2) + ')')
         if not anillos:
             continue
