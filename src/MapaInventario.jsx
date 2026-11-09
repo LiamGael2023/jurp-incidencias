@@ -163,7 +163,7 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app,
         <button className={`gis-tool ${ortofoto ? 'activo' : ''}`}
           title={ortofoto
             ? 'Ocultar la ortofoto del vuelo'
-            : 'Ortofoto del vuelo (6 cm/píxel) — pesa, con poca señal tarda'}
+            : 'Ortofoto del vuelo (6 cm/píxel) — aparece al acercarse sobre el canal'}
           onClick={() => setOrtofoto(v => !v)}><FaImage /></button>
         <div className="gis-tool-sep" />
         <button className="gis-tool" title="Vista general"

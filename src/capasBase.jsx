@@ -316,6 +316,24 @@ export const ORTOFOTO = {
   // leerlo y actualizar estos cuatro números — si no, el lateral nuevo se
   // publica bien y aun así no se ve.
   limites: [[-8.4178, -78.9070], [-8.3314, -78.7148]],
+
+  // NO PEDIRLA POR DEBAJO DE ESTE ZOOM. Dos motivos, y el segundo es el
+  // grave.
+  //
+  // El cosmético: la franja volada mide unos 150 m de ancho. A zoom 9 una
+  // tesela cubre 39 km, así que la ortofoto entera ocuparía menos de un
+  // píxel. No se ve nada y se gasta banda.
+  //
+  // El serio: a esa escala GeoServer tiene que rasterizar la huella ENTERA
+  // —miles de vértices— dentro de una imagen de 256 píxeles. Medido: la
+  // tesela de 1 km vuelve en 0,17 s y la de 39 km no vuelve en 60 s. Y como
+  // el navegador lanza varias a la vez, llenan la cola de control-flow y
+  // tumban también a las buenas. De ahí la lista de peticiones en «pending»
+  // y el mapa que no pintaba nunca.
+  //
+  // Desde 13, una tesela cubre 5 km y la franja ya son ocho píxeles: se ve
+  // dónde está, y al acercarse aparece el detalle.
+  minZoom: 13,
 };
 
 /** La ortofoto, encima de la capa base. Devuelve null si está apagada. */
@@ -330,6 +348,7 @@ export function Ortofoto({ activa, opacidad = 1 }) {
       opacity={opacidad}
       maxZoom={ORTOFOTO.maxZoom}
       maxNativeZoom={ORTOFOTO.maxNativeZoom}
+      minZoom={ORTOFOTO.minZoom}
       bounds={ORTOFOTO.limites}
       // Pedir solo cuando el mapa se queda quieto. Arrastrando, cada paso
       // lanzaría teselas que se cancelan al siguiente: con una capa cara eso

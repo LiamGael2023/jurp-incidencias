@@ -1923,11 +1923,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
                   no un punto más encima. Y con el aviso del peso, que es lo
                   que decide si conviene encenderla ahora mismo o no. */}
               <div className="gis-capa">
-                <label title="Vuelo de dron a 6 cm por píxel. Pesa: con poca señal tarda en pintar.">
+                <label title="Vuelo de dron a 6 cm por píxel, sobre el trazado del canal. Aparece al acercarse: alejado, la franja volada mide menos de un píxel.">
                   <input type="checkbox" checked={capas.Ortofoto} onChange={() => toggleCapa('Ortofoto')} />
                   {' '}Ortofoto del vuelo
                 </label>
-                <span className="gis-capa-badge">6 cm</span>
+                <span className="gis-capa-badge" title="Se dibuja a partir del zoom 13">al acercar</span>
               </div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Canales} onChange={() => toggleCapa('Canales')} /> Trazado de canales</label></div>
               <div className="gis-capa"><label><input type="checkbox" checked={capas.Incidentes_Atencion} onChange={() => { toggleCapa('Incidentes_Atencion'); toggleCapa('Incidentes_Nuevos'); }} /> Incidentes</label></div>
