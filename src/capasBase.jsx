@@ -262,13 +262,21 @@ export function TeselasBase({ base, opacidad }) {
 //  gastarle los datos y dejarle el mapa colgado. Se enciende cuando se
 //  necesita y se apaga sola al recargar.
 //
-//  format=image/vnd.jpeg-png y transparent NO SON OPCIONALES. El vuelo es una
-//  franja estrecha dentro de un rectángulo enorme; fuera de ella no hay
-//  imagen, y GeoServer la recorta con la huella de cada vuelo. Pidiendo
-//  image/jpeg —que no tiene canal alfa— ese vacío vuelve como blanco y tapa
-//  el satélite alrededor del canal. El formato vnd.jpeg-png lo decide por
-//  tesela: JPEG donde es toda imagen, PNG donde hay transparencia, así que el
-//  interior pesa como JPEG y solo los bordes pagan el PNG.
+//  EL FORMATO TIENE QUE TENER CANAL ALFA. El vuelo es una franja estrecha
+//  dentro de un rectángulo enorme; fuera de ella no hay imagen, y GeoServer la
+//  recorta con la huella de cada vuelo. Pidiendo image/jpeg ese vacío vuelve
+//  como blanco y tapa el satélite alrededor del canal.
+//
+//  Lo elegante sería image/vnd.jpeg-png, que decide por tesela —JPEG donde es
+//  toda imagen, PNG donde hay transparencia— y dejaría el interior pesando
+//  como JPEG. En este GeoServer ESE FORMATO SE CUELGA: la petición no vuelve
+//  nunca. Y como Leaflet no avisa de una tesela que no responde, el síntoma
+//  es un mapa que no pinta nada, sin un solo error en la consola. Una hora
+//  buscándolo en la memoria de la JVM y en la huella, que no eran.
+//
+//  Así que PNG, que son unos 120 KB por tesela en vez de 25. Se nota con poca
+//  señal; la solución de fondo es servirlas por GWC cacheadas, no cambiar el
+//  formato.
 //
 //  La URL es ABSOLUTA aunque el front y GeoServer vivan en el mismo host.
 //  Así la capa también funciona desde Vercel y desde `npm run dev` sin añadir
@@ -300,7 +308,7 @@ export function Ortofoto({ activa, opacidad = 1 }) {
     <WMSTileLayer
       url={ORTOFOTO.url}
       layers={ORTOFOTO.capa}
-      format="image/vnd.jpeg-png"
+      format="image/png"
       transparent
       opacity={opacidad}
       maxZoom={ORTOFOTO.maxZoom}
