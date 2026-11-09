@@ -212,7 +212,7 @@ const GRUPOS_CONTEXTO = [
     titulo: 'Chavimochic — hidrografía',
     contexto: true,
     capas: [
-      { codigo: 'cuencas_pech',      label: 'Cuencas',           color: '#38d9a9', tipo: 'poly' },
+      { codigo: 'cuencas_pech',      label: 'Cuencas',           color: '#38d9a9', tipo: 'poly', weight: 2.5 },
       /* Once mil líneas. Van simplificadas a 5 m en la propia base —por
          debajo del grosor con que se dibujan— porque venían trazadas píxel
          a píxel del modelo de elevación. Aun así es la capa más pesada del
@@ -1057,8 +1057,13 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                   // El grosor es la otra mitad de la jerarquía: el troncal
                   // pesa, las ramas adelgazan. Sin esto, cuatro pasos de
                   // azul no se distinguen de un vistazo.
+                  // Un área puede pedir su propio grosor, igual que una
+                  // línea. Hace falta para las cuencas: son del PECH, así
+                  // que van punteadas y a media opacidad, y con el 1,2 de
+                  // por defecto el contorno se perdía sobre el satélite.
                   weight: capa.tipo === 'line'
                     ? (capa.weight || 3) * grueso
+                    : capa.weight ? capa.weight * grueso
                     : (porSector ? (impresion ? 2.6 : 2) : (impresion ? 2.2 : 1.2)),
                   opacity: (esPech && !porSector) ? (impresion ? 0.8 : 0.5) : 0.95,
                   // Un sector con color propio NO va punteado aunque sea del
