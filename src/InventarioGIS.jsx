@@ -159,6 +159,15 @@ const GRUPOS = [
          importaba. */
       { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#c0d259', tipo: 'poly', oculta: true },
       { codigo: 'lotes',             label: 'Lotes',             color: '#d2e070', tipo: 'poly', porLicencia: true },
+      /* El Canal Madre partido por progresiva cada 200 m, con la estructura
+         de cada trozo. Convive con `canal_madre` (el eje en línea) a
+         propósito: el eje sirve para ver por dónde va, y éste para saber en
+         qué estás parado, que es como se recorre y como se reporta al ANA. */
+      { codigo: 'canal_madre_200m',  label: 'Canal Madre · 200 m', color: '#4c6ef5', tipo: 'poly' },
+      /* Los catorce tramos en que se reparte la operación. Es la capa que
+         contesta «¿de quién es este trozo?» — cada uno lo opera una empresa
+         distinta y el popup lleva su nombre y sus conteos de obras. */
+      { codigo: 'tramos_jurp',       label: 'Tramos JURP',       color: '#f59f00', tipo: 'poly' },
     ],
   },
 ];
@@ -193,6 +202,22 @@ const GRUPOS_CONTEXTO = [
       { codigo: 'vias_acceso_kmz',       label: 'Vías de acceso',    color: '#adb5bd', tipo: 'poly' },
       { codigo: 'via_auxiliar_kmz',      label: 'Vía auxiliar',      color: '#9aa3ab', tipo: 'poly' },
       { codigo: 'red_nacional_kmz',      label: 'Red vial nacional', color: '#dee2e6', tipo: 'poly' },
+    ],
+  },
+  {
+    /* Por dónde baja el agua cuando llueve en la sierra. No es adorno: las
+       quebradas son las que colmatan el canal y las que lo revientan, y
+       saber qué cuenca descarga sobre qué progresiva es la mitad de
+       entender un incidente de rebose. */
+    titulo: 'Chavimochic — hidrografía',
+    contexto: true,
+    capas: [
+      { codigo: 'cuencas_pech',      label: 'Cuencas',           color: '#38d9a9', tipo: 'poly' },
+      /* Once mil líneas. Van simplificadas a 5 m en la propia base —por
+         debajo del grosor con que se dibujan— porque venían trazadas píxel
+         a píxel del modelo de elevación. Aun así es la capa más pesada del
+         visor: enciéndela cuando la necesites. */
+      { codigo: 'cauces_quebradas',  label: 'Cauces de quebrada', color: '#4dabf7', tipo: 'line', weight: 1 },
     ],
   },
 ];
