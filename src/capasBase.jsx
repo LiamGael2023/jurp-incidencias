@@ -48,7 +48,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { useRef, useState, useCallback } from 'react';
-import { TileLayer, WMSTileLayer } from 'react-leaflet';
+import { TileLayer, WMSTileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 export const CAPAS_BASE = {
   satelite: {
@@ -369,12 +369,31 @@ export const ORTOFOTO = {
   //
   // Desde 13, una tesela cubre 5 km y la franja ya son ocho píxeles: se ve
   // dónde está, y al acercarse aparece el detalle.
+  //
+  // El corte lo aplica el componente mirando el zoom del mapa, NO la opción
+  // `minZoom` de la capa: esa le impone su mínimo al mapa entero y, sin
+  // capa base debajo, deja el mapa sin poder alejarse. Explicado abajo.
   minZoom: 13,
 };
 
-/** La ortofoto, encima de la capa base. Devuelve null si está apagada. */
+/**
+ * La ortofoto, encima de la capa base. Devuelve null si está apagada o si
+ * el mapa está más lejos de lo que tiene sentido pedirla.
+ *
+ * EL CORTE POR ZOOM SE HACE AQUÍ, NO CON LA OPCIÓN `minZoom` DE LA CAPA.
+ * Leaflet calcula el zoom mínimo del MAPA como el mayor de los mínimos de
+ * sus capas de teselas. Con el satélite debajo —que llega al 0— da igual,
+ * pero quitando el mapa base la ortofoto se queda sola y el mapa entero
+ * deja de poder alejarse del 13: te acercas a mirar un detalle y ya no
+ * puedes volver. Decidiéndolo nosotros, la capa no impone nada.
+ */
 export function Ortofoto({ activa, opacidad = 1 }) {
-  if (!activa) return null;
+  const mapa = useMap();
+  const [zoom, setZoom] = useState(() => mapa.getZoom());
+  useMapEvents({ zoomend: () => setZoom(mapa.getZoom()) });
+
+  if (!activa || zoom < ORTOFOTO.minZoom) return null;
+
   return (
     <WMSTileLayer
       url={ORTOFOTO.url}
@@ -384,7 +403,6 @@ export function Ortofoto({ activa, opacidad = 1 }) {
       opacity={opacidad}
       maxZoom={ORTOFOTO.maxZoom}
       maxNativeZoom={ORTOFOTO.maxNativeZoom}
-      minZoom={ORTOFOTO.minZoom}
       bounds={ORTOFOTO.limites}
       // Pedir solo cuando el mapa se queda quieto. Arrastrando, cada paso
       // lanzaría teselas que se cancelan al siguiente: con una capa cara eso
