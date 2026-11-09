@@ -217,7 +217,7 @@ const GRUPOS_CONTEXTO = [
          debajo del grosor con que se dibujan— porque venían trazadas píxel
          a píxel del modelo de elevación. Aun así es la capa más pesada del
          visor: enciéndela cuando la necesites. */
-      { codigo: 'cauces_quebradas',  label: 'Cauces de quebrada', color: '#4dabf7', tipo: 'line', weight: 1 },
+      { codigo: 'cauces_quebradas',  label: 'Cauces de quebrada', color: '#4dabf7', tipo: 'line', weight: 2 },
     ],
   },
 ];
