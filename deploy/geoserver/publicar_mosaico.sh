@@ -53,6 +53,28 @@ CURL=(curl -sS -u "$USUARIO:$CLAVE")
 
 codigo() { "${CURL[@]}" -o /dev/null -w '%{http_code}' "$@"; }
 
+# Llamada que NO se traga el error.
+#
+# La primera version mandaba la respuesta a /dev/null y el script decia
+# "creado" cuando GeoServer habia contestado 400. Media hora buscando el
+# fallo en el montaje de Docker, que estaba bien. Ahora: si el codigo no
+# empieza por 2, se imprime el cuerpo -que es donde GeoServer explica el
+# motivo en una linea- y se corta.
+pedir() {
+    local que="$1"; shift
+    local salida http cuerpo
+    salida="$("${CURL[@]}" -w $'\n%{http_code}' "$@")" || true
+    http="${salida##*$'\n'}"
+    cuerpo="${salida%$'\n'*}"
+    if [[ "$http" != 2* ]]; then
+        echo ""
+        echo "FALLO: $que  (HTTP $http)"
+        # El cuerpo de error de GeoServer viene en HTML; esto saca la frase.
+        echo "$cuerpo" | sed -e 's/<[^>]*>/ /g' -e 's/  */ /g' | grep -v '^ *$' | head -5
+        exit 1
+    fi
+}
+
 # ── 1. Que haya algo que publicar ────────────────────────────────────
 if [[ ! -d "$DIR_HOST" ]]; then
     echo "No existe $DIR_HOST."
@@ -92,6 +114,24 @@ for f in indexer.properties footprints.properties; do
 done
 echo ""
 
+# ── 2 bis. Rehacer el indice, si se pide ─────────────────────────────
+#
+# Para cuando se anade un lateral. Borra la capa, el almacen y el indice
+# que GeoServer habia dejado en la carpeta, y el resto del script lo
+# vuelve a construir leyendo todos los .tif que haya ahora.
+#
+# No toca ningun .tif ni ninguna huella: solo lo que GeoServer genero.
+if [[ "${1:-}" == "--rehacer" ]]; then
+    echo "── Rehaciendo el indice ──────────────────────────────────────────"
+    "${CURL[@]}" -XDELETE \
+        "$REST/workspaces/$WS/coveragestores/$ALMACEN?recurse=true&purge=none" >/dev/null || true
+    rm -f "$DIR_HOST/$CAPA".{shp,shx,dbf,prj,qix,fix} \
+          "$DIR_HOST/$CAPA.properties" \
+          "$DIR_HOST"/sample_image* 2>/dev/null || true
+    echo "   almacen y indice borrados; se reconstruye abajo."
+    echo ""
+fi
+
 # ── 3. El espacio de trabajo ─────────────────────────────────────────
 if [[ "$(codigo "$REST/workspaces/$WS.json")" == "200" ]]; then
     echo "Espacio de trabajo '$WS': ya existe."
@@ -102,46 +142,63 @@ else
 fi
 
 # ── 4. El almacen ────────────────────────────────────────────────────
-EXISTE="$(codigo "$REST/workspaces/$WS/coveragestores/$ALMACEN.json")"
-
-if [[ "$EXISTE" != "200" ]]; then
-    echo "Almacen '$ALMACEN': creando y publicando la capa (esto tarda,"
-    echo "   GeoServer esta construyendo el indice y leyendo cada .tif)..."
-    # PUT sobre un almacen que no existe = crearlo con toda la carpeta.
-    "${CURL[@]}" -XPUT -H 'Content-type: text/plain' \
-        -d "file://$DIR_CONT" \
-        "$REST/workspaces/$WS/coveragestores/$ALMACEN/external.imagemosaic" >/dev/null
+# NO se usa `external.imagemosaic`, que seria el atajo documentado para
+# publicar una carpeta de un golpe. En 2.26 contesta
+#   400 Failed to locate the input file file:///datos/rasters/ortofotos
+# con la carpeta existiendo y siendo escribible desde dentro del propio
+# contenedor -comprobado con `docker compose exec ... ls`-. Describir el
+# almacen en XML y crear la cobertura aparte funciona a la primera y
+# ademas deja ver en que paso falla.
+if [[ "$(codigo "$REST/workspaces/$WS/coveragestores/$ALMACEN.json")" != "200" ]]; then
+    pedir "crear el almacen" -XPOST -H 'Content-type: text/xml' -d \
+"<coverageStore>
+   <name>$ALMACEN</name>
+   <type>ImageMosaic</type>
+   <enabled>true</enabled>
+   <workspace>$WS</workspace>
+   <url>file://$DIR_CONT</url>
+ </coverageStore>" \
+        "$REST/workspaces/$WS/coveragestores"
     echo "Almacen '$ALMACEN': creado."
 else
-    echo "Almacen '$ALMACEN': ya existe, busco granulos nuevos."
-    # POST = cosechar. GeoServer ignora los que ya estan indexados, asi
-    # que no hace falta saber cuales son nuevos.
-    for t in "${TIFS[@]}"; do
-        "${CURL[@]}" -XPOST -H 'Content-type: text/plain' \
-            -d "file://$DIR_CONT/$(basename "$t")" \
-            "$REST/workspaces/$WS/coveragestores/$ALMACEN/external.imagemosaic" >/dev/null || true
-    done
-    echo "Cosecha terminada."
+    echo "Almacen '$ALMACEN': ya existe."
 fi
 
-# ── 5. El recorte por huella, encendido ──────────────────────────────
+# ── 5. La capa, con el recorte por huella encendido ──────────────────
 #
-# Sin esto el footprints.properties no sirve de nada: la huella se lee,
-# pero no se aplica. Es el paso que la gente olvida y luego no entiende
-# por que sigue viendo el blanco.
+# FootprintBehavior es el paso que se olvida: sin el, el
+# footprints.properties se lee pero no se aplica, y se sigue viendo el
+# rectangulo blanco sin que nada de error.
 #
 #   Transparent  - fuera de la huella, transparente. Lo que queremos.
 #   Cut          - recorta pero rellena de negro.
 #   None         - ignora la huella.
-echo "Aplicando FootprintBehavior=Transparent..."
-"${CURL[@]}" -XPUT -H 'Content-type: text/xml' -d \
-"<coverage>
+XML_CAPA="<coverage>
+   <name>$CAPA</name>
+   <nativeName>$CAPA</nativeName>
    <enabled>true</enabled>
    <parameters>
      <entry><string>FootprintBehavior</string><string>Transparent</string></entry>
    </parameters>
- </coverage>" \
-    "$REST/workspaces/$WS/coveragestores/$ALMACEN/coverages/$CAPA.xml" >/dev/null
+ </coverage>"
+
+if [[ "$(codigo "$REST/workspaces/$WS/coveragestores/$ALMACEN/coverages/$CAPA.json")" != "200" ]]; then
+    echo "Capa '$CAPA': creando. Aqui es donde GeoServer abre cada .tif,"
+    echo "   construye el indice y lee las huellas; tarda."
+    pedir "crear la capa" -XPOST -H 'Content-type: text/xml' -d "$XML_CAPA" \
+        "$REST/workspaces/$WS/coveragestores/$ALMACEN/coverages"
+    echo "Capa '$CAPA': creada."
+else
+    echo "Capa '$CAPA': ya existe, reafirmo el recorte por huella."
+    pedir "actualizar la capa" -XPUT -H 'Content-type: text/xml' -d "$XML_CAPA" \
+        "$REST/workspaces/$WS/coveragestores/$ALMACEN/coverages/$CAPA.xml"
+    echo ""
+    echo "   OJO: esto NO incorpora .tif nuevos. Un ImageMosaic no mira la"
+    echo "   carpeta por su cuenta; se cosecha, y la cosecha va por el mismo"
+    echo "   endpoint external.imagemosaic que aqui contesta 400. Para anadir"
+    echo "   un lateral, rehaz el indice:"
+    echo "        $0 --rehacer"
+fi
 
 # ── 6. Comprobar ─────────────────────────────────────────────────────
 echo ""

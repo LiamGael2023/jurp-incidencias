@@ -198,9 +198,20 @@ cualquier `.tif` que no tenga huella al lado.
 
 **Un mosaico y no una capa por lateral**: cada vuelo es un archivo, pero
 para el visor es *la ortofoto*. GeoServer mira qué gránulo cae en la
-ventana pedida y solo abre ese. Añadir el lateral 11 es dejar sus
-archivos en la carpeta y volver a correr el script — no hay nada que
-tocar en la web ni en la app.
+ventana pedida y solo abre ese. No hay nada que tocar en la web ni en la
+app cuando se añade uno.
+
+Para añadir el lateral 11: deja su `.tif` y su huella en la carpeta y
+corre
+
+```bash
+./publicar_mosaico.sh --rehacer
+```
+
+Hace falta el `--rehacer` porque un ImageMosaic no vigila la carpeta: los
+gránulos nuevos se «cosechan», y la cosecha va por el mismo endpoint
+`external.imagemosaic` que en esta versión contesta 400. Rehacer el
+índice son un par de minutos y no toca ningún `.tif`.
 
 Comprobar desde fuera:
 
