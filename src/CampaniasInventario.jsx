@@ -683,6 +683,7 @@ function CampaniasInventario({ irAActivo }) {
                       <td>{f.fecha}</td>
                       <td>{f.evaluador}</td>
                       <td>
+                        <div className="cmp-acciones">
                         {irAActivo && (
                           <button className="cmp-ir" title="Ver la estructura en el mapa"
                             onClick={() => irAActivo({
@@ -700,6 +701,7 @@ function CampaniasInventario({ irAActivo }) {
                             <FaTrash size={11} />
                           </button>
                         )}
+                        </div>
                       </td>
                     </tr>
                   ))}

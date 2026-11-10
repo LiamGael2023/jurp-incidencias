@@ -345,7 +345,6 @@
   align-items: center;
   justify-content: center;
   width: 27px; height: 27px;
-  margin-left: 5px;
   color: #d63939;
   background: #fff5f5;
   border: 1px solid #ffc9c9;
@@ -354,8 +353,18 @@
 }
 .cmp-borrar:hover { background: #ffe3e3; }
 
-.cmp-ir {
+/* Los dos botones de la fila, uno al lado del otro y pegados a la derecha.
+   `.cmp-ir` era `display: flex`, que es de nivel bloque: ocupaba el ancho de
+   la celda y empujaba la papelera al renglón de abajo. */
+.cmp-acciones {
   display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.cmp-ir {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 27px; height: 27px;
