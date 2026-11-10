@@ -59,6 +59,7 @@ oficial del Lateral 10 y no hay en la base nada que lo contradiga.
 import argparse
 import os
 import sys
+import textwrap
 
 
 # Un activo es «permanente» cuando `tipo` vale 'Pe'; el resto es rustica.
@@ -327,6 +328,24 @@ REFERENCIA = {
     'reservorios': 10, 'reservorios_hm3': 0.214,
 }
 
+# Las diferencias que ya se estudiaron y no son un fallo del lector. Se
+# imprimen debajo de su cifra cuando no coincide, para que nadie tenga que
+# volver a averiguar lo mismo dentro de seis meses.
+NOTAS = {
+    'tomas_lat': 'hay una toma mas que en 2025',
+    'rusticas': 'la base las tiene todas con material C y tipo Pe: de '
+                'concreto, no rusticas. La hoja de 2025 las contaba '
+                'rusticas y el inventario la contradice',
+    'orden': '10.5-CH14 y 10.5-CH20 figuran como 1er orden en la base; la '
+             'hoja de 2025 los listaba en 2do',
+    'km1': 'faltan los 7.33 km del Canal Evacuador, que esta en el CAD '
+           'pero no en redes_presurizado',
+    'partidor': 'hay uno mas que en 2025',
+    'disipador': 'no hay tabla de disipadores en el esquema',
+    'otros': 'aqui solo entra camara_rompepresion; el 8 de la hoja de 2025 '
+             'sale de estructuras que no estan en la base',
+}
+
 
 def comprobar(R, ambito='todos'):
     avisos = []
@@ -334,13 +353,17 @@ def comprobar(R, ambito='todos'):
     mayor = d.get('mayor') or {}
     menor = d.get('menor') or {}
 
-    def linea(etiqueta, valor, esperado, dec=0):
-        """Una cifra junto a la de la hoja, con su marca.
+    def linea(etiqueta, valor, esperado, dec=0, nota=None):
+        """Una cifra junto a la de la hoja, con su marca y su porque.
 
         Tres marcas y no dos: la base lleva año y medio moviendose, asi que
         una diferencia del uno por ciento es el inventario creciendo y una
         del doscientos es un error. Igualarlas en un solo `!!` obliga a
         mirar las treinta lineas cada vez.
+
+        Las diferencias ya estudiadas llevan su nota aqui y no en la cabeza
+        de nadie: la proxima vez que alguien corra esto no tiene que volver
+        a averiguar por que el 1er orden suma siete kilometros menos.
         """
         fmt = f'{{:,.{dec}f}}'
         try:
@@ -355,6 +378,9 @@ def comprobar(R, ambito='todos'):
             marca = '??'
         print(f'{marca} {etiqueta:<34}{fmt.format(valor):>12}'
               f'{fmt.format(esperado):>12}')
+        if nota and marca != '  ':
+            for renglon in textwrap.wrap(nota, 55):
+                print(f'{"":5}{renglon}')
 
     print(f'{"":2} {"":34}{"base":>12}{"hoja 2025":>12}')
     print(f'{"":2} {"(~ = hasta 5% de diferencia)":<34}')
@@ -367,22 +393,23 @@ def comprobar(R, ambito='todos'):
               REFERENCIA['derivacion_km'], 2)
     if menor:
         linea('Tomas laterales', menor['tomas_lat'][0],
-              REFERENCIA['tomas_lat'])
-        linea('  de ellas, rusticas', menor['tomas_lat'][2], 22)
+              REFERENCIA['tomas_lat'], nota=NOTAS['tomas_lat'])
+        linea('  de ellas, rusticas', menor['tomas_lat'][2], 22,
+              nota=NOTAS['rusticas'])
         linea('Canal principal (km)', menor['principal'][1],
               REFERENCIA['principal_km'], 2)
         linea('Laterales de 1er orden', len(menor['orden1']),
-              REFERENCIA['orden1'])
+              REFERENCIA['orden1'], nota=NOTAS['orden'])
         linea('  kilometraje total', sum(l[2] for l in menor['orden1']),
-              31.04, 2)
+              31.04, 2, nota=NOTAS['km1'])
         linea('Laterales de 2do orden', len(menor['orden2']),
-              REFERENCIA['orden2'])
+              REFERENCIA['orden2'], nota=NOTAS['orden'])
         linea('  kilometraje total', sum(l[2] for l in menor['orden2']),
               15.81, 2)
     print('-' * 60)
     for clave, _ in OBRAS:
         linea(clave, d['obras'].get(clave, 0),
-              REFERENCIA['obras'].get(clave, 0))
+              REFERENCIA['obras'].get(clave, 0), nota=NOTAS.get(clave))
     print('-' * 60)
     linea('Reservorios', len(d['reservorios']), REFERENCIA['reservorios'])
     linea('  capacidad total (hm3)',
@@ -392,7 +419,10 @@ def comprobar(R, ambito='todos'):
     if avisos:
         print('\nAvisos:')
         for a in avisos:
-            print(f'  · {a}')
+            renglones = textwrap.wrap(a, 55) or ['']
+            print(f'  · {renglones[0]}')
+            for renglon in renglones[1:]:
+                print(f'    {renglon}')
     return d
 
 
