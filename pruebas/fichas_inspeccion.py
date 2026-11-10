@@ -327,7 +327,7 @@ def hoja1(h, f, anio, esquemas, logos):
 
     h.rotulo_valor(c1, y + 12, 'Año de Construcción :', val(v, 'anio_const'),
                    w_rotulo=94, w_linea=46)
-    tipo = str(val(v, 'tipo')).lower()
+    tipo = val(v, 'tipo')
     h.txt(c1, y + 30, 'Tipo', 6.5, negrita=True)
     for i, (etiqueta, llave) in enumerate((
             ('Permanente', 'perman'), ('Semi - Rustico', 'semi'),
@@ -618,6 +618,30 @@ def _seccion_inspeccion(h, y, v, preguntas, alto=None):
     return y + alto
 
 
+def _normalizar(texto):
+    """Sin tildes, en minúsculas y con los espacios colapsados."""
+    import unicodedata
+    t = unicodedata.normalize('NFD', str(texto or ''))
+    t = ''.join(c for c in t if unicodedata.category(c) != 'Mn')
+    return ' '.join(t.lower().replace('-', ' ').split())
+
+
+def _coincide(etiqueta, valor):
+    """Si esa casilla del formato es la que corresponde al valor guardado.
+
+    Comparar por el principio de la palabra —que es lo que se hacía— marca
+    «Rústico» cuando el valor es «Semi - Rústico», porque «rust» aparece en
+    los dos, y la ficha sale con dos tipos marcados. Aquí tienen que ser el
+    mismo texto o uno empezar por el otro, y así «Semi - Rustico» solo
+    marca su propia casilla. Las tildes se ignoran: la base guarda
+    «Mamposteria» y el formato dice «Mampostería».
+    """
+    e, v = _normalizar(etiqueta), _normalizar(valor)
+    if not e or not v:
+        return False
+    return e == v or v.startswith(e) or e.startswith(v)
+
+
 def _alto_bloque(bloque):
     """Lo que ocupa un bloque de dimensiones, para cuadrar la sección."""
     opciones = bloque.get('opciones')
@@ -640,7 +664,13 @@ def _bloque(h, v, bloque, x, y, ancho):
     rayas y la altura de los renglones dejaban de coincidir entre hojas que
     se archivan juntas.
     """
-    h.txt(x + 6, y + 10, bloque.get('titulo', ''), 6.5, negrita=True)
+    titulo = bloque.get('titulo', '')
+    hueco = ancho - 70 if bloque.get('estado') else ancho - 12
+    # «Estructura de regulación» no entra a 6.5 puntos en una columna de
+    # ciento treinta y seis, y se montaba sobre su propio B/R/M.
+    tam = 6.5 if h.c.stringWidth(titulo, 'Helvetica-Bold', 6.5) <= hueco \
+        else 5.6
+    h.txt(x + 6, y + 10, titulo, tam, negrita=True)
     if bloque.get('estado'):
         h.brm(x + ancho - 58, y + 3, val(v, bloque['estado']))
     yy = y + 20
@@ -648,10 +678,9 @@ def _bloque(h, v, bloque, x, y, ancho):
     opciones = bloque.get('opciones')
     if opciones:
         campo, campo_estado, etiquetas = opciones
-        elegido = str(val(v, campo)).lower()
+        elegido = val(v, campo)
         for etiqueta in etiquetas:
-            clave = etiqueta.split()[0].lower()[:6]
-            marcada = bool(clave) and clave in elegido
+            marcada = _coincide(etiqueta, elegido)
             h.txt(x + 6, yy + 6, etiqueta, 6)
             h.casilla(x + 62, yy, marcada)
             if marcada and campo_estado:
@@ -694,15 +723,23 @@ def hoja1_formato(h, f, anio, esquemas, logos, spec):
 
     # ── 3. características técnicas ──
     y = h.seccion(y, '3. CARACTERISTICAS TECNICAS')
-    bloques = spec.get('bloques') or []
+    # Un formato puede traer sus bloques en una tira o en varias: el
+    # aliviadero reparte sus seis partes en dos, y el desarenador sus siete
+    # en dos tambien, porque en una sola fila las columnas quedarian de
+    # setenta puntos y no entra «Numero de Naves».
+    filas = spec.get('filas') or ([spec['bloques']] if spec.get('bloques')
+                                  else [])
+    bloques = filas[0] if len(filas) == 1 else []
     # Un bloque solo —la entrega, el puente— va DENTRO de la banda, junto al
     # material y antes del esquema, que es como está el papel. Tirado a lo
     # ancho de la hoja como una franja propia se vería una tabla de una sola
     # columna con cuatro centímetros de aire a cada lado.
     en_banda = len(bloques) == 1
+    sin_material = spec.get('sin_material')
     alto_banda = 150 if en_banda else 128
-    alto_bloques = 0 if en_banda else max(_alto_bloque(b) for b in bloques) \
-        if bloques else 30
+    altos_fila = [max(_alto_bloque(b) for b in fila) for fila in filas] \
+        if filas else [30]
+    alto_bloques = 0 if en_banda else sum(altos_fila)
     alto = alto_banda + alto_bloques
     h.caja(MARGEN, y, UTIL, alto)
 
@@ -713,6 +750,10 @@ def hoja1_formato(h, f, anio, esquemas, logos, spec):
         _bloque(h, v, bloques[0], x3, y, 140)
         x_esquema = MARGEN + 420
         h.linea(x_esquema, y, x_esquema, y + alto_banda, 0.5)
+    elif sin_material:
+        # El desarenador no declara material en su hoja: el año y el tipo a
+        # la izquierda y la foto ocupando el resto.
+        x2 = x3 = x_esquema = MARGEN + 180
     else:
         x2, x3 = MARGEN + 160, MARGEN + 330
         x_esquema = x3
@@ -723,52 +764,54 @@ def hoja1_formato(h, f, anio, esquemas, logos, spec):
     h.caja(MARGEN + 8, y + 18, 120, 14, 0.5)
     h.txt(MARGEN + 68, y + 28, val(v, 'anio_const'), 7, negrita=True,
           centro=True)
-    tipo = str(val(v, 'tipo')).lower()
+    tipo = val(v, 'tipo')
     # El rótulo va encima de la lista y no a su izquierda: puesto al lado
     # cae justo sobre la tercera opción, porque las cuatro ocupan los 64
     # puntos centrales de la banda.
     h.txt(MARGEN + 8, y + 48, 'Tipo', 6.5, negrita=True)
     for i, etiqueta in enumerate(('Permanente', 'Semi - Rustico', 'Rustico',
                                   'Otro')):
-        marcada = etiqueta.split()[0].lower()[:4] in tipo
+        marcada = _coincide(etiqueta, tipo)
         h.txt(MARGEN + 18, y + 62 + i * 15, etiqueta, 6.5)
         h.casilla(MARGEN + 110, y + 56 + i * 15, marcada)
-    if 'otro' in tipo or val(v, 'tipo_otro'):
+    if _coincide('Otro', tipo) or val(v, 'tipo_otro'):
         h.linea(MARGEN + 18, y + 122, MARGEN + 150, y + 122, 0.5, GRIS)
         h.txt(MARGEN + 20, y + 120, val(v, 'tipo_otro'), 6.5)
 
-    h.txt(x2 + 30, y + 12, 'Material', 6.5, negrita=True)
-    h.txt(x2 + 110, y + 12, 'Estado', 6.5, negrita=True)
-    material = str(val(v, 'material')).lower()
-    for i, (etiqueta, clave) in enumerate((
-            ('Concreto', 'concreto'), ('Mampostería', 'mampost'),
-            ('Madera', 'madera'), ('No Precisa', 'no precisa'),
-            ('Otros', 'otro'))):
-        yy = y + 26 + i * 16
-        h.txt(x2 + 6, yy + 6, etiqueta, 6.5)
-        h.casilla(x2 + 70, yy, clave in material)
-        if clave in material:
-            h.brm(x2 + 104, yy, val(v, 'mat_estado'))
-    h.linea(x2 + 40, y + 108, x3 - 8, y + 108, 0.5, GRIS)
-    h.txt(x2 + 42, y + 106, val(v, 'mat_otro'), 6.5)
-    h.txt(x2 + 6, y + 122, 'Nota : B (Bueno), R (Regular) , M (Malo)', 5.5,
-          color=GRIS)
+    if not sin_material:
+        h.txt(x2 + 30, y + 12, 'Material', 6.5, negrita=True)
+        h.txt(x2 + 110, y + 12, 'Estado', 6.5, negrita=True)
+        material = val(v, 'material')
+        for i, etiqueta in enumerate(('Concreto', 'Mampostería', 'Madera',
+                                      'No Precisa', 'Otros')):
+            yy = y + 26 + i * 16
+            marcado = _coincide(etiqueta, material)
+            h.txt(x2 + 6, yy + 6, etiqueta, 6.5)
+            h.casilla(x2 + 70, yy, marcado)
+            if marcado:
+                h.brm(x2 + 104, yy, val(v, 'mat_estado'))
+        h.linea(x2 + 40, y + 108, x3 - 8, y + 108, 0.5, GRIS)
+        h.txt(x2 + 42, y + 106, val(v, 'mat_otro'), 6.5)
+        h.txt(x2 + 6, y + 122, 'Nota : B (Bueno), R (Regular) , M (Malo)',
+              5.5, color=GRIS)
 
     lamina = esquemas.get(spec.get('esquema') or '')
     if lamina:
         h.imagen(lamina, x_esquema + 6, y + 6,
                  (MARGEN + UTIL) - x_esquema - 12, alto_banda - 12)
 
-    # bloques de dimensiones, repartidos a lo ancho
+    # bloques de dimensiones, una tira debajo de otra
     if not en_banda:
         yb = y + alto_banda
-        h.linea(MARGEN, yb, MARGEN + UTIL, yb, 0.5)
-        ancho_b = UTIL / float(max(len(bloques), 1))
-        for i, bloque in enumerate(bloques):
-            bx = MARGEN + i * ancho_b
-            if i:
-                h.linea(bx, yb, bx, y + alto, 0.5)
-            _bloque(h, v, bloque, bx, yb, ancho_b)
+        for fila, alto_fila in zip(filas, altos_fila):
+            h.linea(MARGEN, yb, MARGEN + UTIL, yb, 0.5)
+            ancho_b = UTIL / float(max(len(fila), 1))
+            for i, bloque in enumerate(fila):
+                bx = MARGEN + i * ancho_b
+                if i:
+                    h.linea(bx, yb, bx, yb + alto_fila, 0.5)
+                _bloque(h, v, bloque, bx, yb, ancho_b)
+            yb += alto_fila
     y += alto
 
     # ── 4. inspección visual ──
@@ -1183,6 +1226,135 @@ FORMATOS = {
              'insp_descarga', 'insp_descarga_c'),
         ],
     },
+}
+
+FORMATOS['aliviadero'] = {
+    'esquema': 'aliviadero',
+    'filas': [
+        [{'titulo': 'Canal de Ingreso', 'estado': 'apr_estado', 'campos': [
+            ('Caudal Diseño', 'apr_qdis', 'm3/s'),
+            ('Caudal Operación', 'apr_qope', 'm3/s'),
+            ('Base  (b)', 'apr_base', 'm'),
+            ('Altura der. (hd)', 'apr_hd', 'm'),
+            ('Talud der. (zd)', 'apr_zd', ''),
+            ('Altura izq. (hi)', 'apr_hi', 'm'),
+            ('Talud izq. (zi)', 'apr_zi', '')]},
+         {'titulo': 'Aliviadero',
+          'opciones': ('ali_revest', 'ali_estado', REVESTIMIENTOS),
+          'campos': [
+              ('Longitud', 'ali_long', 'm'),
+              ('Base  (b1)', 'ali_base', 'm'),
+              ('Altura  (h1)', 'ali_altura', 'm'),
+              ('Espesor  (e)', 'ali_espes', 'm'),
+              ('Talud  (Z)', 'ali_talud', '')]},
+         {'titulo': 'Partidor', 'estado': 'par_estado', 'campos': [
+             ('Longitud', 'par_long', 'm'),
+             ('Base  (b2)', 'par_base', 'm'),
+             ('Altura  (h2)', 'par_altura', 'm'),
+             ('Espesor  (e)', 'par_espes', 'm'),
+             ('Compuertas metálicas', 'par_compu', ''),
+             ('Barandas de seguridad', 'par_baran', '')]}],
+        [{'titulo': 'Canal hacia el Sifón', 'estado': 'sif_estado',
+          'campos': [
+              ('Longitud', 'sif_long', 'm'),
+              ('Base  (b4)', 'sif_base', 'm'),
+              ('Altura  (h4)', 'sif_altura', 'm'),
+              ('Espesor  (e)', 'sif_espes', 'm'),
+              ('Talud  (Z)', 'sif_talud', '')]},
+         {'titulo': 'Canal de Excedencia', 'estado': 'exc_estado', 'campos': [
+             ('Longitud', 'exc_long', 'm'),
+             ('Base  (b4)', 'exc_base', 'm'),
+             ('Altura  (h4)', 'exc_altura', 'm'),
+             ('Espesor  (e)', 'exc_espes', 'm'),
+             ('Talud  (Z)', 'exc_talud', '')]},
+         {'titulo': 'Disipador', 'estado': 'dis_estado', 'campos': [
+             ('a', 'dis_a', 'm'), ('b', 'dis_b', 'm'), ('c', 'dis_c', 'm'),
+             ('d', 'dis_d', 'm'), ('e', 'dis_e', 'm'), ('f', 'dis_f', 'm')]},
+         {'titulo': 'Disipador (cont.) y conducción', 'campos': [
+             ('g', 'dis_g', 'm'), ('h', 'dis_h', 'm'), ('i', 'dis_i', 'm'),
+             ('j', 'dis_j', 'm'), ('k', 'dis_k', 'm'),
+             ('Tubería  Ø', 'tub_diam', 'mm')]}],
+    ],
+    'inspeccion': [
+        PREGUNTAS_CAUCE[0],
+        ('La estructuras metálicas presentan corrosión ?',
+         'insp_metal_cor', 'insp_metal_cor_c'),
+        ('Se evidencia de sedimentos en la estructura ?',
+         'insp_sedimento', 'insp_sedimento_c'),
+        ('La zona de descarga del aliviadero se encuentra habilitada ?',
+         'insp_descarga', 'insp_descarga_c'),
+    ],
+}
+
+FORMATOS['desarenadores'] = {
+    'esquema': 'desarenador',
+    'sin_material': True,
+    'filas': [
+        [{'titulo': 'Canal de Aproximación',
+          'opciones': ('apr_tipo', 'apr_estado',
+                       ['Canal Abierto', 'Tubería', 'Conducto', 'Otro']),
+          'campos': [
+              ('Longitud', 'apr_long', 'm'),
+              ('Ancho', 'apr_ancho', 'm'),
+              ('Altura', 'apr_altura', 'm'),
+              ('Espesor  (e)', 'apr_espes', 'm')]},
+         {'titulo': 'Estructura de regulación', 'estado': 'reg_estado',
+          'campos': [
+              ('Número de Naves', 'reg_naves', 'und'),
+              ('Base  (b)', 'reg_base', 'm'),
+              ('Base mayor (B)', 'reg_bmayor', 'm'),
+              ('Altura  (h)', 'reg_altura', 'm'),
+              ('Espesor  (e)', 'reg_espes', 'm'),
+              ('Compuertas metálicas', 'reg_compu', ''),
+              ('Barandas de seguridad', 'reg_baran', '')]},
+         {'titulo': 'Transición de entrada', 'campos': [
+             ('Número de Naves', 'ent_naves', 'und'),
+             ('Longitud', 'ent_long', 'm'),
+             ('Base Mayor (B)', 'ent_bmayor', 'm'),
+             ('Base Menor (b)', 'ent_bmenor', 'm'),
+             ('Altura  (h)', 'ent_altura', 'm'),
+             ('Espesor  (e)', 'ent_espes', 'm')]},
+         {'titulo': 'Tanque Sedimentador', 'estado': 'tan_estado', 'campos': [
+             ('Número de Naves', 'tan_naves', 'und'),
+             ('Longitud', 'tan_long', 'm'),
+             ('Ancho  (b)', 'tan_base', 'm'),
+             ('Base  (c)', 'tan_basec', 'm'),
+             ('Altura  (h)', 'tan_altura', 'm'),
+             ('Altura  (h1)', 'tan_h1', 'm'),
+             ('Altura  (h2)', 'tan_h2', 'm'),
+             ('Altura  (h3)', 'tan_h3', 'm'),
+             ('Espesor  (e)', 'tan_espes', 'm')]}],
+        [{'titulo': 'Transición de salida', 'estado': 'sal_estado',
+          'campos': [
+              ('Longitud', 'sal_long', 'm'),
+              ('Ancho  (b)', 'sal_base', 'm'),
+              ('Base  (c)', 'sal_basec', 'm'),
+              ('Altura  (h)', 'sal_altura', 'm'),
+              ('Espesor  (e)', 'sal_espes', 'm')]},
+         {'titulo': 'Equipamiento', 'campos': [
+             ('Puente de Maniobras', 'eq_puente', ''),
+             ('Conductos de purga', 'eq_purga', ''),
+             ('Purga  Ø', 'eq_pdiam', 'mm'),
+             ('Purga  N°', 'eq_pnum', 'und'),
+             ('Compuertas metálicas', 'eq_compu', ''),
+             ('Compuertas  N°', 'eq_cnum', 'und')]},
+         {'titulo': 'Cámara de Carga', 'estado': 'cam_estado', 'campos': [
+             ('Longitud', 'cam_long', 'm'),
+             ('Ancho  (b)', 'cam_base', 'm'),
+             ('Base  (c)', 'cam_basec', 'm'),
+             ('Altura  (h)', 'cam_altura', 'm'),
+             ('Espesor  (e)', 'cam_espes', 'm'),
+             ('Otros', 'cam_otros', '')]}],
+    ],
+    'inspeccion': [
+        PREGUNTAS_CAUCE[0],
+        ('La estructuras metálicas presentan corrosión ?',
+         'insp_metal_cor', 'insp_metal_cor_c'),
+        ('Se evidencia de sedimentos en la estructura ?',
+         'insp_sedimento', 'insp_sedimento_c'),
+        ('La estructura presente alguna avería ?',
+         'insp_averia', 'insp_averia_c'),
+    ],
 }
 
 # El puente peatonal usa el mismo formato que el vehicular: mismos campos
@@ -1673,6 +1845,47 @@ FICHA_PRUEBA_ALCANTARILLA = _prueba_formato(
     }, 'alcantarilla')
 
 
+FICHA_PRUEBA_ALIVIADERO = _prueba_formato(
+    'aliviadero', 'ALIVIADERO', 'ALV-01', {
+        'anio_const': 1995, 'tipo': 'Permanente',
+        'material': 'Concreto', 'mat_estado': 'R',
+        'apr_estado': 'R', 'apr_qdis': 3.00, 'apr_qope': 3.00,
+        'apr_base': 1.20, 'apr_hd': 1.40, 'apr_zd': 1.40,
+        'apr_hi': 1.40, 'apr_zi': 1.50,
+        'ali_revest': 'Concreto', 'ali_estado': 'R', 'ali_long': 18.00,
+        'ali_base': 1.50, 'ali_altura': 1.60, 'ali_espes': 0.075,
+        'ali_talud': 1.5,
+        'par_estado': 'B', 'par_long': 8.70, 'par_base': 3.20,
+        'par_altura': 2.00, 'par_espes': 0.20,
+        'sif_estado': 'R', 'sif_long': 44.80, 'sif_base': 0.90,
+        'sif_altura': 1.20, 'sif_espes': 0.20, 'sif_talud': 1.5,
+        'exc_estado': 'B', 'exc_long': 61.80, 'exc_base': 1.20,
+        'exc_altura': 1.20, 'exc_espes': 0.20, 'exc_talud': 1.5,
+        'dis_estado': 'R', 'dis_a': 3.50, 'dis_b': 2.33, 'dis_c': 1.00,
+        'dis_d': 2.47, 'dis_e': 0.30, 'dis_f': 0.50, 'dis_g': 1.50,
+        'dis_h': 0.30, 'dis_i': 0.30, 'dis_j': 1.50, 'dis_k': 0.90,
+        'tub_diam': 1200,
+        'insp_concreto': 'no', 'insp_metal_cor': 'si',
+        'insp_metal_cor_c': 'Desgaste de ataguias, produce filtraciones',
+        'insp_sedimento': 'no', 'insp_descarga': 'si',
+    }, 'aliviadero')
+
+FICHA_PRUEBA_DESARENADOR = _prueba_formato(
+    'desarenadores', 'DESARENADOR', 'D 10.1 - I', {
+        'anio_const': 1995, 'tipo': 'Semi - Rustico',
+        'obs_ubic': 'Correspondiente a la Toma Lateral 10.1I prog. 1+553.70.',
+        'apr_tipo': 'Canal Abierto', 'apr_estado': 'R', 'apr_long': 6.00,
+        'apr_ancho': 1.50, 'apr_altura': 1.80, 'apr_espes': 0.15,
+        'reg_compu': 'no', 'reg_baran': 'no',
+        'tan_naves': 1, 'tan_long': 23.20, 'tan_base': 5.00,
+        'tan_altura': 1.80, 'tan_espes': 0.15,
+        'eq_puente': 'no', 'eq_purga': 'si', 'eq_pnum': 1, 'eq_cnum': 1,
+        'cam_otros': 'Tuberia de fondo.',
+        'insp_concreto': 'no', 'insp_metal_cor': 'no',
+        'insp_sedimento': 'no', 'insp_averia': 'no',
+    }, 'desarenador')
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--tipo', default='tomas_canal_madre',
@@ -1693,6 +1906,7 @@ def main():
         # porque el riesgo al tocar una es romper la otra sin notarlo.
         dibujar([FICHA_PRUEBA, FICHA_PRUEBA_CANOA,
                  FICHA_PRUEBA_ENTREGA, FICHA_PRUEBA_ALCANTARILLA,
+                 FICHA_PRUEBA_ALIVIADERO, FICHA_PRUEBA_DESARENADOR,
                  FICHA_PRUEBA_GENERICA],
                 args.prueba, anio, esquemas, {})
         print(f'escrito {args.prueba}')
