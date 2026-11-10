@@ -69,6 +69,10 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app,
   const [base, setBase] = useState(CAPA_POR_DEFECTO);
   const [opacidad, setOpacidad] = useState(1);
   const [herramienta, setHerramienta] = useState(null);
+  // La papelera borra lo medido sin apagar la regla: medir varios tramos
+  // seguidos es lo normal, y obligar a volver a encenderla cada vez
+  // convertía «limpiar» en «empezar de cero otra vez».
+  const [limpiezas, setLimpiezas] = useState(0);
   const [destino, setDestino] = useState(null);
 
   // Apagada al entrar, siempre. Aquí no hay panel de capas donde esconderla,
@@ -116,6 +120,7 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app,
           <IrA pos={destino} />
           <HerramientaMedicion
             modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null}
+            limpiar={limpiezas}
             onFinish={() => {}} />
 
           <CapasInventario inv={inv} />
@@ -173,17 +178,17 @@ function MapaInventario({ menu, vistaActual, onNavegar, usuario, onLogout, app,
             p => setDestino([p.coords.latitude, p.coords.longitude]))}><FaLocationArrow /></button>
         <div className="gis-tool-sep" />
         <button className={`gis-tool ${herramienta === 'distancia' ? 'activo' : ''}`}
-          title="Medir distancia"
+          title="Medir distancia — doble clic o Enter cierra el trazo y empieza otro"
           onClick={() => setHerramienta(herramienta === 'distancia' ? null : 'distancia')}>
           <FaRulerCombined />
         </button>
         <button className={`gis-tool ${herramienta === 'area' ? 'activo' : ''}`}
-          title="Medir área"
+          title="Medir área — doble clic o Enter cierra el polígono y empieza otro"
           onClick={() => setHerramienta(herramienta === 'area' ? null : 'area')}>
           <FaDrawPolygon />
         </button>
-        <button className="gis-tool" title="Limpiar medición"
-          onClick={() => setHerramienta(null)}><FaEraser /></button>
+        <button className="gis-tool" title="Borrar todo lo medido (Esc cancela solo el trazo en curso)"
+          onClick={() => setLimpiezas(n => n + 1)}><FaEraser /></button>
         <div className="gis-tool-sep" />
         {/* Va pegado a la cámara porque es ahí donde hace falta: con el racimo
             encendido, la captura sale con burbujas numeradas en vez de los

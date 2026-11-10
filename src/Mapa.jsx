@@ -428,6 +428,10 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
   const [fotosAccion, setFotosAccion] = useState({});         // {accionId: [src, ...]}
   const [accionAbierta, setAccionAbierta] = useState(null);
   const [herramienta, setHerramienta] = useState(null);
+  // La papelera borra lo medido sin apagar la regla: medir varios tramos
+  // seguidos es lo normal, y obligar a volver a encenderla cada vez
+  // convertía «limpiar» en «empezar de cero otra vez».
+  const [limpiezas, setLimpiezas] = useState(0);
   const [costeos, setCosteos] = useState({}); // { incidentId: { personal, maquinaria, insumos, total } }
   const [rawRecursos, setRawRecursos] = useState({ pers: [], mats: [], maqs: [] });
   const [grupoAbierto, setGrupoAbierto] = useState(null); // 'personal' | 'maquinaria' | 'insumos' | null
@@ -1561,7 +1565,7 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           <FlyToComp pos={miUbicacion || flyTarget} />
           <UTMDisplay />
           <MiniMapa base={mapaBase} />
-          <HerramientaMedicion modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null} onFinish={() => {}} />
+          <HerramientaMedicion modo={herramienta === 'distancia' || herramienta === 'area' ? herramienta : null} limpiar={limpiezas} onFinish={() => {}} />
 
           <SelectorOrigen activo={modoOrigen} onElegir={(p) => { setOrigenManual(p); setModoOrigen(false); }} />
 
@@ -1911,11 +1915,11 @@ function MapaChavimochic({ menu, vistaActual, onNavegar, usuario, onLogout, onVe
           </button>
         )}
         <div className="gis-tool-sep" />
-        <button className={`gis-tool ${herramienta === 'distancia' ? 'activo' : ''}`} title="Medir distancia"
+        <button className={`gis-tool ${herramienta === 'distancia' ? 'activo' : ''}`} title="Medir distancia — doble clic o Enter cierra el trazo y empieza otro"
           onClick={() => setHerramienta(herramienta === 'distancia' ? null : 'distancia')}><FaRulerCombined /></button>
-        <button className={`gis-tool ${herramienta === 'area' ? 'activo' : ''}`} title="Medir área"
+        <button className={`gis-tool ${herramienta === 'area' ? 'activo' : ''}`} title="Medir área — doble clic o Enter cierra el polígono y empieza otro"
           onClick={() => setHerramienta(herramienta === 'area' ? null : 'area')}><FaDrawPolygon /></button>
-        <button className="gis-tool" title="Limpiar medición" onClick={() => setHerramienta(null)}><FaEraser /></button>
+        <button className="gis-tool" title="Borrar todo lo medido (Esc cancela solo el trazo en curso)" onClick={() => setLimpiezas(n => n + 1)}><FaEraser /></button>
         <div className="gis-tool-sep" />
         <button className="gis-tool" title="Capturar mapa" onClick={descargar} disabled={capturando}><FaCamera /></button>
         <button className="gis-tool" title="Compartir captura" onClick={compartir} disabled={capturando}><FaShareAlt /></button>

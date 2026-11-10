@@ -138,19 +138,88 @@ export function MiniMapa({ base }) {
 // ═══════════════════════════════════════════════════════════════════════════
 //  MEDICIÓN — distancia (línea) o área (polígono) con clics
 // ═══════════════════════════════════════════════════════════════════════════
-export function HerramientaMedicion({ modo, onFinish }) {
+/**
+ * Medir distancias y áreas, varias veces seguidas.
+ *
+ * VARIOS TRAZOS, NO UNO. Antes todos los clics engordaban la misma línea:
+ * para medir dos tramos había que apagar la herramienta, volver a
+ * encenderla y perder el primero. Medir un canal es casi siempre comparar
+ * —este tramo contra aquél, esta poza contra la de al lado— y eso pide
+ * tenerlos los dos delante.
+ *
+ * Ahora el doble clic cierra el trazo y el siguiente clic empieza otro. Lo
+ * ya cerrado se queda en el mapa con su cifra; la papelera lo borra todo.
+ *
+ * `limpiar` es un contador: cuando cambia, se borra lo medido sin apagar la
+ * herramienta. Así la papelera limpia y se puede seguir midiendo, en vez de
+ * tener que volver a pulsar la regla.
+ */
+export function HerramientaMedicion({ modo, onFinish, limpiar = 0 }) {
   // modo: 'distancia' | 'area' | null
   const map = useMap();
-  const [pts, setPts] = useState([]);
+  const [pts, setPts] = useState([]);        // el trazo en curso
+  const [hechos, setHechos] = useState([]);  // los ya cerrados, con su modo
   const capaRef = useRef(null);
+
+  // Un trazo cuenta si tiene con qué: dos puntos una distancia, tres un
+  // área. Con menos no hay nada que guardar y cerrarlo solo dejaría puntos
+  // sueltos por el mapa.
+  const minimo = modo === 'area' ? 3 : 2;
 
   useMapEvents({
     click(e) {
       if (!modo) return;
       setPts(p => [...p, [e.latlng.lat, e.latlng.lng]]);
     },
-    dblclick() { if (modo) onFinish?.(); },
+    dblclick() {
+      if (!modo) return;
+      /* Leaflet dispara los dos `click` del doble clic ANTES del `dblclick`,
+       * así que el último punto llega repetido. Sin quitarlo, cada trazo
+       * acaba con dos vértices en el mismo sitio: inofensivo en una
+       * distancia, pero en un área mete un lado de longitud cero. */
+      const p = [...pts];
+      if (p.length >= 2) {
+        const [aLat, aLng] = p[p.length - 1];
+        const [bLat, bLng] = p[p.length - 2];
+        if (aLat === bLat && aLng === bLng) p.pop();
+      }
+      if (p.length >= minimo) setHechos(h => [...h, { modo, pts: p }]);
+      setPts([]);
+      onFinish?.();
+    },
   });
+
+  // La papelera: borra lo medido y deja la herramienta puesta.
+  useEffect(() => {
+    if (!limpiar) return;
+    setPts([]);
+    setHechos([]);
+  }, [limpiar]);
+
+  /* ENTER TAMBIÉN CIERRA EL TRAZO, no solo el doble clic.
+   *
+   * El doble clic sigue valiendo, pero no es la única forma de pedir lo
+   * mismo: en una tableta —que es con lo que se mira esto en reunión— dar
+   * dos toques justos sin mover el dedo cuesta, y fallar significa un
+   * vértice de más en mitad del canal. Escape cancela el trazo en curso sin
+   * tocar los ya cerrados, que es lo que uno busca cuando se da cuenta de
+   * que empezó en el sitio equivocado. */
+  useEffect(() => {
+    if (!modo) return undefined;
+    const alPulsar = (e) => {
+      if (e.key === 'Enter') {
+        if (pts.length >= minimo) {
+          setHechos(h => [...h, { modo, pts }]);
+          onFinish?.();
+        }
+        setPts([]);
+      } else if (e.key === 'Escape') {
+        setPts([]);
+      }
+    };
+    window.addEventListener('keydown', alPulsar);
+    return () => window.removeEventListener('keydown', alPulsar);
+  }, [modo, pts, minimo, onFinish]);
 
   /* MIENTRAS SE MIDE, LO DE ENCIMA DEL MAPA NO RECIBE CLICS.
    *
@@ -180,50 +249,76 @@ export function HerramientaMedicion({ modo, onFinish }) {
     };
   }, [modo, map]);
 
-  // Redibuja la capa temporal cada vez que cambian los puntos.
+  // Redibuja cada vez que cambian los puntos: lo cerrado y lo que se está
+  // midiendo ahora.
   useEffect(() => {
     if (capaRef.current) { map.removeLayer(capaRef.current); capaRef.current = null; }
-    if (!modo || pts.length === 0) return;
+    if (!hechos.length && (!modo || pts.length === 0)) return;
 
     const grupo = L.layerGroup();
-    const color = modo === 'area' ? '#6CA43A' : '#E72276';
-
-    if (modo === 'distancia' && pts.length >= 1) {
-      L.polyline(pts, { color, weight: 3, dashArray: '6 4' }).addTo(grupo);
-      let acc = 0;
-      pts.forEach((p, i) => {
-        if (i > 0) acc += distanciaMetros(pts[i - 1], p);
-        L.circleMarker(p, { radius: 4, color, fillColor: '#fff', fillOpacity: 1, weight: 2 }).addTo(grupo);
-        if (i === pts.length - 1 && pts.length > 1) {
-          L.marker(p, { icon: L.divIcon({ className: 'jurp-med-tooltip', html: `<span>${fmtDistancia(acc)}</span>` }) }).addTo(grupo);
-        }
-      });
-    }
-
-    if (modo === 'area') {
-      pts.forEach(p => L.circleMarker(p, { radius: 4, color, fillColor: '#fff', fillOpacity: 1, weight: 2 }).addTo(grupo));
-      if (pts.length >= 3) {
-        const poly = L.polygon(pts, { color, weight: 2, fillColor: color, fillOpacity: 0.25 }).addTo(grupo);
-        const c = poly.getBounds().getCenter();
-        L.marker(c, { icon: L.divIcon({ className: 'jurp-med-tooltip', html: `<span>${fmtArea(areaMetros(pts))}</span>` }) }).addTo(grupo);
-      } else if (pts.length === 2) {
-        L.polyline(pts, { color, weight: 2, dashArray: '6 4' }).addTo(grupo);
-      }
-    }
+    for (const t of hechos) dibujarTrazo(grupo, t.modo, t.pts, true);
+    if (modo && pts.length) dibujarTrazo(grupo, modo, pts, false);
 
     grupo.addTo(map);
     capaRef.current = grupo;
-  }, [pts, modo, map]);
+  }, [pts, hechos, modo, map]);
 
   // Al desactivar el modo, limpia todo.
   useEffect(() => {
     if (!modo) {
       setPts([]);
+      setHechos([]);
       if (capaRef.current) { map.removeLayer(capaRef.current); capaRef.current = null; }
     }
   }, [modo, map]);
 
   return null;
+}
+
+/**
+ * Pinta un trazo en el grupo que se le pase.
+ *
+ * `cerrado` distingue el que se está midiendo del que ya está hecho: el de
+ * en curso va a trazos, para que se vea que admite más puntos, y el cerrado
+ * va continuo. Sin esa diferencia, con tres mediciones en pantalla no hay
+ * forma de saber a cuál se le está añadiendo.
+ */
+function dibujarTrazo(grupo, modo, pts, cerrado) {
+  const color = modo === 'area' ? '#6CA43A' : '#E72276';
+  const guion = cerrado ? null : '6 4';
+  const vertice = (p) => L.circleMarker(p, {
+    radius: 4, color, fillColor: '#fff', fillOpacity: 1, weight: 2,
+  }).addTo(grupo);
+
+  if (modo === 'distancia') {
+    L.polyline(pts, { color, weight: 3, dashArray: guion }).addTo(grupo);
+    let acc = 0;
+    pts.forEach((p, i) => {
+      if (i > 0) acc += distanciaMetros(pts[i - 1], p);
+      vertice(p);
+      if (i === pts.length - 1 && pts.length > 1) {
+        L.marker(p, { icon: L.divIcon({
+          className: 'jurp-med-tooltip',
+          html: `<span>${fmtDistancia(acc)}</span>`,
+        }) }).addTo(grupo);
+      }
+    });
+    return;
+  }
+
+  pts.forEach(vertice);
+  if (pts.length >= 3) {
+    const poly = L.polygon(pts, {
+      color, weight: 2, dashArray: guion, fillColor: color, fillOpacity: 0.25,
+    }).addTo(grupo);
+    const c = poly.getBounds().getCenter();
+    L.marker(c, { icon: L.divIcon({
+      className: 'jurp-med-tooltip',
+      html: `<span>${fmtArea(areaMetros(pts))}</span>`,
+    }) }).addTo(grupo);
+  } else if (pts.length === 2) {
+    L.polyline(pts, { color, weight: 2, dashArray: '6 4' }).addTo(grupo);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -579,7 +674,7 @@ export function useCapturaMapa(contenedorRef, opciones = {}) {
 // ═══════════════════════════════════════════════════════════════════════════
 //  BARRA DE HERRAMIENTAS — botones laterales (vive fuera de <MapContainer>)
 // ═══════════════════════════════════════════════════════════════════════════
-export function BarraHerramientas({ herramienta, setHerramienta, onCaptura, onCompartir, capturando }) {
+export function BarraHerramientas({ herramienta, setHerramienta, onCaptura, onCompartir, capturando, onLimpiar = null }) {
   const btn = (id, icon, title) => (
     <button
       className={`jurp-tool-btn ${herramienta === id ? 'activo' : ''}`}
@@ -591,7 +686,11 @@ export function BarraHerramientas({ herramienta, setHerramienta, onCaptura, onCo
     <div className="jurp-toolbar jurp-no-capture">
       {btn('distancia', <FaRulerCombined />, 'Medir distancia')}
       {btn('area', <FaDrawPolygon />, 'Medir área')}
-      <button className="jurp-tool-btn" title="Limpiar medición" onClick={() => setHerramienta(null)}><FaEraser /></button>
+      {/* `onLimpiar` borra lo medido y deja la regla puesta, que es lo que
+          hacen los dos visores. Sin él se apaga la herramienta, como antes:
+          esta barra no se usa hoy en ningún sitio y no merece romperla. */}
+      <button className="jurp-tool-btn" title="Borrar lo medido"
+        onClick={() => (onLimpiar ? onLimpiar() : setHerramienta(null))}><FaEraser /></button>
       <div className="jurp-tool-sep" />
       <button className="jurp-tool-btn" title="Capturar mapa (PNG)" onClick={onCaptura} disabled={capturando}>
         {capturando ? <FaSpinner className="icon-spin" /> : <FaCamera />}
