@@ -29,8 +29,9 @@ DE DONDE SALE CADA NUMERO
   BOCATOMAS ................ inventario.bocatomas
   TOMAS DIRECTAS CM PECH ... inventario.tomas_otros_sectores
   TOMAS LATERALES .......... inventario.tomas_l10
-  CANAL DE DERIVACION ...... inventario.canal_madre_pech (longitud)
-  CANAL PRINCIPAL .......... inventario.canal_lateral_10_2025 (geometria)
+  CANAL DE DERIVACION ...... inventario.canal_madre_pech (geometria)
+  CANAL PRINCIPAL .......... inventario.canal_lateral_10_2025, capa
+                             «Alineamiento» (geometria)
   LATERAL 1er / 2do ORDEN .. inventario.redes_presurizado (orden, longitud__)
   OBRAS DE ARTE ............ una tabla por tipo, contando por ambito
   RESERVORIOS .............. inventario.reservorios (volumen)
@@ -38,6 +39,21 @@ DE DONDE SALE CADA NUMERO
 `Disipador de Impacto` no tiene tabla en el esquema: sale en cero y se
 avisa. `Otros` suma las camaras rompepresion, que es lo unico que queda
 fuera de las columnas con nombre propio.
+
+POR QUE LOS CANALES SE MIDEN SOBRE EL MAPA
+------------------------------------------
+`canal_madre_pech.longitud` no es lo que su nombre promete: sus 114 tramos
+suman 353.15 km por esa columna y 157.36 km midiendo la geometria, contra
+los 155 de la hoja oficial. Sea lo que sea ese campo —progresiva
+acumulada, longitud de otra cosa— no es el largo del tramo, asi que el
+kilometraje sale de `ST_Length`.
+
+`canal_lateral_10_2025` es un volcado de CAD con cuatro capas. Solo
+«Alineamiento» es el eje del canal, y mide 20.05 km, exactamente lo que
+dice la hoja. Sin filtrar por capa se le suman el camino de servicio y el
+Canal Evacuador y salen 31.75. Esa tabla no trae `material`, asi que el
+kilometraje entero va a la columna «Revestido»: es lo que declara la hoja
+oficial del Lateral 10 y no hay en la base nada que lo contradiga.
 """
 
 import argparse
@@ -75,6 +91,11 @@ NOMBRE_MENOR = 'Sector Hidráulico Menor Riego Presurizado Moche Viru Chao'
 # UTM 17 Sur: las longitudes se miden ahi y no en grados. Transformar una
 # geometria que ya esta en 32717 no cuesta nada, asi que vale para las dos.
 UTM = 32717
+
+# La capa del volcado CAD que es el eje del Lateral 10. Las otras tres son
+# el camino de servicio y el Canal Evacuador.
+CAPA_EJE = 'Alineamiento'
+CAPA_EVACUADOR = 'C-ROAD'
 
 
 def _f(v, por_defecto=0.0):
@@ -119,32 +140,54 @@ def _captacion(R, tabla, ambito=None, avisos=None):
     return (total, perm, rust)
 
 
-def _canal_por_longitud(R, tabla, columna, ambito=None, donde=''):
-    """(revestido, sin revestir, total) en km, a partir de una columna.
+def _canal(R, tabla, ambito=None, donde='', con_material=True):
+    """(revestido, sin revestir, total) en km, medidos sobre la geometria.
 
     El criterio de «revestido» es el mismo que usa el Excel: un tramo con
     material declarado esta revestido; sin material, no. Es lo que hay en la
-    base, no una interpretacion nueva.
+    base, no una interpretacion nueva. `con_material=False` es para las
+    capas que no declaran material: todo el kilometraje va a «revestido»,
+    que es lo que dice la hoja oficial de esos canales.
     """
     cond = [c for c in (_filtro(ambito).replace('WHERE ', ''), donde) if c]
     where = ('WHERE ' + ' AND '.join(cond)) if cond else ''
+    largo = f'ST_Length(ST_Transform(geom, {UTM}))'
+    if not con_material:
+        r = _una(R.consultar(f"""
+            SELECT round(sum({largo})::numeric / 1000, 2)
+            FROM inventario.{tabla} {where};"""))
+        return (_f(r[0]), 0.0, _f(r[0]))
     r = _una(R.consultar(f"""
-        SELECT round((sum({columna}) FILTER (WHERE material IS NOT NULL))
+        SELECT round((sum({largo}) FILTER (WHERE material IS NOT NULL))
                      ::numeric / 1000, 2),
-               round((sum({columna}) FILTER (WHERE material IS NULL))
+               round((sum({largo}) FILTER (WHERE material IS NULL))
                      ::numeric / 1000, 2),
-               round(sum({columna})::numeric / 1000, 2)
+               round(sum({largo})::numeric / 1000, 2)
         FROM inventario.{tabla} {where};"""), 3)
     return (_f(r[0]), _f(r[1]), _f(r[2]))
 
 
-def _canal_por_geometria(R, tabla, ambito=None):
-    """Kilometraje de una capa que no trae longitud, medido sobre el mapa."""
+def _avisar_evacuador(R, menor, avisos):
+    """Avisa si el Canal Evacuador esta dibujado pero no inventariado.
+
+    En la hoja de 2025 el Canal Evacuador figura como un lateral de 1er
+    orden con 7.33 km. En `redes_presurizado` no esta: existe solo como una
+    capa del volcado CAD. No se inventa aqui la fila —seria mezclar dos
+    fuentes y dar por inventariado lo que no lo esta— pero callarlo haria
+    que el formato saliera con 7 km de menos sin que nadie se entere.
+    """
+    if any('evacuador' in (l[3] or '').lower() for l in menor['orden1']):
+        return
     r = _una(R.consultar(f"""
         SELECT round(sum(ST_Length(ST_Transform(geom, {UTM})))::numeric
                      / 1000, 2)
-        FROM inventario.{tabla} {_filtro(ambito)};"""))
-    return _f(r[0])
+        FROM inventario.canal_lateral_10_2025
+        WHERE layer = '{CAPA_EVACUADOR}';"""))
+    km = _f(r[0])
+    if km > 0:
+        avisos.append(
+            f'el Canal Evacuador ({km} km) esta dibujado en el CAD pero no '
+            f'inventariado en redes_presurizado: no sale como lateral')
 
 
 def _laterales(R, orden, ambito=None):
@@ -240,7 +283,7 @@ def leer_datos(R, ambito='todos', campania=None, avisos=None):
     if quiere_mayor:
         boca = _una(R.consultar(
             'SELECT count(*) FROM inventario.bocatomas;'))
-        derivacion = _canal_por_longitud(R, 'canal_madre_pech', 'longitud')
+        derivacion = _canal(R, 'canal_madre_pech')
         datos['mayor'] = {
             'nombre': NOMBRE_MAYOR,
             # La hoja oficial deja Permanente/Rustica de bocatomas en blanco:
@@ -252,14 +295,17 @@ def leer_datos(R, ambito='todos', campania=None, avisos=None):
         }
 
     if quiere_menor:
-        principal = _canal_por_geometria(R, 'canal_lateral_10_2025')
+        principal = _canal(R, 'canal_lateral_10_2025',
+                           donde=f"layer = '{CAPA_EJE}'", con_material=False)
         datos['menor'] = {
             'nombre': NOMBRE_MENOR,
             'tomas_lat': _captacion(R, 'tomas_l10', amb, avisos),
-            'principal': (1, principal, 0.0, principal, 'Lateral 10'),
+            'principal': (1, principal[0], principal[1], principal[2],
+                          'Lateral 10'),
             'orden1': _laterales(R, '1er Orden', amb),
             'orden2': _laterales(R, '2do Orden', amb),
         }
+        _avisar_evacuador(R, datos['menor'], avisos)
 
     datos['obras'] = _obras_de_arte(R, amb or AMBITO_MENOR, avisos)
     datos['reservorios'] = _reservorios(R, amb or AMBITO_MENOR, avisos)
@@ -289,15 +335,29 @@ def comprobar(R, ambito='todos'):
     menor = d.get('menor') or {}
 
     def linea(etiqueta, valor, esperado, dec=0):
+        """Una cifra junto a la de la hoja, con su marca.
+
+        Tres marcas y no dos: la base lleva año y medio moviendose, asi que
+        una diferencia del uno por ciento es el inventario creciendo y una
+        del doscientos es un error. Igualarlas en un solo `!!` obliga a
+        mirar las treinta lineas cada vez.
+        """
         fmt = f'{{:,.{dec}f}}'
         try:
-            marca = '  ' if abs(float(valor) - float(esperado)) < 0.01 else '!!'
+            v, e = float(valor), float(esperado)
+            if abs(v - e) < 0.01:
+                marca = '  '
+            elif e and abs(v - e) / abs(e) <= 0.05:
+                marca = ' ~'
+            else:
+                marca = '!!'
         except (TypeError, ValueError):
             marca = '??'
         print(f'{marca} {etiqueta:<34}{fmt.format(valor):>12}'
               f'{fmt.format(esperado):>12}')
 
     print(f'{"":2} {"":34}{"base":>12}{"hoja 2025":>12}')
+    print(f'{"":2} {"(~ = hasta 5% de diferencia)":<34}')
     print('-' * 60)
     if mayor:
         linea('Tomas directas Canal Madre', mayor['tomas_cm'][0],
