@@ -97,6 +97,22 @@ Son los colores y la agrupación con los que la Junta lee sus propios planos:
 eso es una decisión de cartografía, no un dato. Una capa nueva en el backend
 aparece en `/capas/` con su total, pero no se dibuja hasta que entre ahí.
 
+Son 40, las mismas que el visor web menos la red vial nacional, que no entra
+aquí por lo que dice el comentario de su grupo. Cuando se toque una, hay que
+tocar las dos: para comprobar que no se han separado,
+
+```bash
+python3 herramientas/comparar_capas.py
+```
+
+compara código, etiqueta, color y geometría contra `src/InventarioGIS.jsx` y
+no devuelve 0 si discrepan.
+
+Las marcadas `pesada: true` se listan pero arrancan **apagadas**. Hoy solo
+los cauces de quebrada: once mil líneas que en el escritorio son un
+parpadeo y en un teléfono en Chao son datos del inspector y medio minuto
+mirando un mapa vacío.
+
 **La bandeja de pendientes no miente.** Una ficha sin subir NO está
 guardada, y la app lo dice con todas sus letras —en el aviso al guardar, en
 el contador rojo de la barra y en su propia pantalla—. El peor resultado

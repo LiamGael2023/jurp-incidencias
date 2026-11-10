@@ -36,10 +36,14 @@ class InventarioController extends ChangeNotifier {
   String ambito = 'todo';
 
   /// Qué capas están encendidas. Arranca TODO encendido, como la web:
-  /// llegar a ver el inventario marcando treinta y siete casillas no es
-  /// verlo.
+  /// llegar a ver el inventario marcando cuarenta casillas no es verlo.
+  ///
+  /// Menos las marcadas como pesadas —hoy, los cauces de quebrada: once mil
+  /// líneas—. Esas arrancan apagadas porque en el visor web la espera no se
+  /// nota y en un teléfono con la cobertura de Chao sí, y porque lo que se
+  /// paga ahí son datos del inspector.
   late Map<String, bool> visibles = {
-    for (final c in todasLasCapas) c.codigo: true,
+    for (final c in todasLasCapas) c.codigo: !c.pesada,
   };
 
   /// Los activos ya descargados, por «codigo::ambito».

@@ -22,6 +22,16 @@ class Capa {
   final bool contexto;   // obra del PECH: referencia, no la evalúa la Junta
   final bool oculta;     // se descarga pero no se dibuja ni se lista
 
+  /// Capas que no se encienden solas.
+  ///
+  /// Todo arranca encendido a propósito —ver el inventario no puede costar
+  /// treinta y siete casillas— pero hay capas de miles de geometrías que en
+  /// el escritorio solo cuestan un parpadeo y en campo cuestan datos del
+  /// teléfono y medio minuto de espera antes de ver nada. Esas se listan
+  /// con su casilla en blanco: están ahí para quien las necesite, no se
+  /// descargan hasta que alguien las pida.
+  final bool pesada;
+
   const Capa(
     this.codigo,
     this.label,
@@ -30,6 +40,7 @@ class Capa {
     this.grosor = 3,
     this.contexto = false,
     this.oculta = false,
+    this.pesada = false,
   });
 }
 
@@ -82,6 +93,17 @@ const List<GrupoCapas> gruposCapas = [
     Capa('areas_licencia', 'Áreas con licencia', Color(0xFFC0D259),
         tipo: TipoGeom.poligono, oculta: true),
     Capa('lotes', 'Lotes', Color(0xFFD2E070), tipo: TipoGeom.poligono),
+    // El Canal Madre partido por progresiva cada 200 m, con la estructura
+    // de cada trozo. Convive con `canal_madre` -el eje en línea- a
+    // propósito: el eje sirve para ver por dónde va, y éste para saber en
+    // qué estás parado, que es como se recorre y como se reporta al ANA.
+    Capa('canal_madre_200m', 'Canal Madre · 200 m', Color(0xFF4C6EF5),
+        tipo: TipoGeom.poligono),
+    // Los catorce tramos en que se reparte la operación: la capa que
+    // contesta «¿de quién es este trozo?». Cada uno lo opera una empresa
+    // distinta y la ficha lleva su nombre y sus conteos de obras.
+    Capa('tramos_jurp', 'Tramos JURP', Color(0xFFF59F00),
+        tipo: TipoGeom.poligono),
   ]),
   GrupoCapas('Chavimochic — obras del PECH', [
     Capa('bocatomas', 'Bocatomas', Color(0xFF7A93AB), contexto: true),
@@ -116,6 +138,21 @@ const List<GrupoCapas> gruposCapas = [
     // único que aportaba era tiempo de descarga y trazos grises encima de
     // una carretera que ya se veía. En el visor web sigue estando, que ahí
     // ni la espera ni el dato pesan igual.
+  ], contexto: true),
+  /* Por dónde baja el agua cuando llueve en la sierra. No es adorno: las
+     quebradas son las que colmatan el canal y las que lo revientan, y saber
+     qué cuenca descarga sobre qué progresiva es la mitad de entender un
+     incidente de rebose. */
+  GrupoCapas('Chavimochic — hidrografía', [
+    Capa('cuencas_pech', 'Cuencas', Color(0xFF38D9A9),
+        tipo: TipoGeom.poligono, contexto: true),
+    /* Once mil líneas. Van simplificadas a 5 m en la propia base -por
+       debajo del grosor con que se dibujan- porque venían trazadas píxel a
+       píxel del modelo de elevación. Aun así es la capa más pesada del
+       inventario, así que aquí arranca apagada: en el visor web se enciende
+       sola porque la espera no se nota, y en un teléfono en Chao sí. */
+    Capa('cauces_quebradas', 'Cauces de quebrada', Color(0xFF4DABF7),
+        tipo: TipoGeom.linea, grosor: 2, contexto: true, pesada: true),
   ], contexto: true),
 ];
 
