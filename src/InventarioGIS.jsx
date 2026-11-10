@@ -448,6 +448,29 @@ export function useInventario() {
   // Trae todas las capas de a pocas. De golpe serían treinta y siete
   // peticiones a la vez: el navegador las encola igual y el backend las
   // sufre, así que se piden en tandas y el mapa se va llenando solo.
+  /* Todo el visor identifica un activo por `properties.fid`: así se pintan
+   * los marcadores, así se busca su evaluación y así se guarda. Pero el
+   * GeoJSON estándar lleva el identificador en `feature.id`, fuera de las
+   * propiedades, y no todas las capas lo repiten dentro. Cuando falta, el
+   * fid llega `undefined` hasta el POST y el servidor contesta
+   * «activo_fid: este campo es requerido» —con el formulario entero bien
+   * llenado, que es lo desconcertante del error—.
+   *
+   * Se normaliza al entrar y no en cada lectura: son treinta y siete capas
+   * y una decena de sitios que leen el fid; que una sola de esas lecturas
+   * se olvide del respaldo vuelve a romper el guardado. */
+  const normalizarFid = (geo) => {
+    for (const f of geo?.features || []) {
+      const p = f.properties || (f.properties = {});
+      if (p.fid === undefined || p.fid === null) {
+        const alterno = [f.id, p.id, p.pk, p.objectid, p.objectid_1]
+          .find(v => v !== undefined && v !== null);
+        if (alterno !== undefined) p.fid = alterno;
+      }
+    }
+    return geo;
+  };
+
   const cargarTodas = useCallback(async (amb, codigos) => {
     const ambito_ = amb || 'todo';
     const filtro = ambito_ === 'todo' ? '' : `&ambito=${ambito_}`;
@@ -461,7 +484,7 @@ export function useInventario() {
         const r = await fetch(`${API}/capas/${codigo}/?srid=4326${filtro}`,
                               { headers: cabeceras() });
         if (r.ok) {
-          const geo = await r.json();
+          const geo = normalizarFid(await r.json());
           setDatos(d => ({ ...d, [`${codigo}::${ambito_}`]: geo }));
         }
       } catch (e) { /* esa capa queda vacía; el badge lo refleja */ }
@@ -566,7 +589,7 @@ export function useInventario() {
       if (r.ok) {
         // El JSON se resuelve ANTES de tocar el estado: el actualizador de
         // useState es síncrono y no admite await dentro.
-        const geo = await r.json();
+        const geo = normalizarFid(await r.json());
         setDatos(d => ({ ...d, [k]: geo }));
       }
     } catch (e) { /* la capa queda vacía; el badge lo refleja */ }
@@ -833,6 +856,15 @@ export function useInventario() {
   // Guarda y refresca en memoria, para no volver a pedir toda la campaña.
   const guardarEvaluacion = useCallback(async (tipo, fid, cuerpo) => {
     if (!campania) return { ok: false, error: 'No hay campaña activa' };
+    // Sin fid no hay a qué colgar la evaluación. Decirlo aquí y no dejar que
+    // conteste el servidor: su «activo_fid: este campo es requerido» aparece
+    // bajo un formulario correctamente llenado y no señala a ningún campo
+    // de la pantalla, así que no hay forma de saber qué corregir.
+    if (fid === undefined || fid === null || fid === '') {
+      return { ok: false,
+               error: 'Esta estructura llegó sin identificador: recarga la '
+                      + 'capa y vuelve a abrirla. Si sigue igual, avisa.' };
+    }
     const previa = evaluaciones[`${tipo}:${fid}`];
     const url = previa ? `${API}/evaluaciones/${previa.id}/` : `${API}/evaluaciones/`;
     try {
