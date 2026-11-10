@@ -517,7 +517,7 @@ def hoja1(h, f, anio, esquemas, logos):
 
 # ── la hoja 2 ─────────────────────────────────────────────────────────────
 
-def _general_y_localizacion(h, f, anio, logos):
+def _general_y_localizacion(h, f, anio, logos, doble=False):
     """Las secciones 1 y 2, que son iguales en todas las hojas oficiales.
 
     Se repiten aqui en vez de llamarse a las de `hoja1` porque aquella las
@@ -553,6 +553,32 @@ def _general_y_localizacion(h, f, anio, logos):
     y = h.seccion(y, '2. INFORMACION DE CODIFICACION Y LOCALIZACION')
     alto = 88
     h.caja(MARGEN, y, UTIL, alto)
+
+    # Un canal no está en un punto: está entre dos progresivas, y su hoja
+    # pide las coordenadas de los dos extremos en columnas paralelas. Las
+    # estructuras puntuales llevan la localización de siempre.
+    if doble:
+        h.txt(MARGEN + 6, y + 12, 'Nombre del Canal   :', 7)
+        h.txt(MARGEN + 110, y + 12, f.get('canal') or '', 7)
+        for col, (rotulo, prog, este, norte, elev) in enumerate((
+                ('Progresiva Inicio :', val(v, 'prog_ini') or
+                 progresiva(f.get('progresiva')), f.get('este'),
+                 f.get('norte'), f.get('elevacion')),
+                ('Progresiva Fin :', val(v, 'prog_fin') or
+                 progresiva(f.get('progresiva_fin')), f.get('este_f'),
+                 f.get('norte_f'), ''))):
+            cx = MARGEN + 250 + col * 150
+            h.rotulo_valor(cx, y + 12, rotulo, prog, w_rotulo=78, w_linea=68)
+            for i, (r, valor) in enumerate((('Este', este), ('Norte', norte),
+                                            ('Elevación', elev))):
+                h.rotulo_valor(cx, y + 34 + i * 16, r + ' :', valor,
+                               w_rotulo=48, w_linea=98)
+        h.txt(MARGEN + 6, y + 44, 'Ubicación Geográfica :', 7)
+        h.txt(MARGEN + 110, y + 36, 'UTM  Datum WGS 84', 7)
+        h.rotulo_valor(MARGEN + 110, y + 58, 'Zona :', f.get('zona') or '17S',
+                       w_rotulo=34, w_linea=54)
+        return y + alto
+
     canal = (f.get('canal') or '').lower()
     h.txt(MARGEN + 6, y + 12, 'Nombre del Canal   :', 7)
     h.txt(MARGEN + 96, y + 12, 'Canal Lateral 10', 7)
@@ -646,7 +672,10 @@ def _alto_bloque(bloque):
     """Lo que ocupa un bloque de dimensiones, para cuadrar la sección."""
     opciones = bloque.get('opciones')
     alto_op = (len(opciones[2]) * 13 + 8) if opciones else 0
-    return 20 + alto_op + len(bloque.get('campos') or []) * 12 + 8
+    conteos = bloque.get('conteos') or []
+    alto_co = (len(conteos) * 13 + 4) if conteos else 0
+    return (20 + alto_op + alto_co
+            + len(bloque.get('campos') or []) * 12 + 8)
 
 
 def _bloque(h, v, bloque, x, y, ancho):
@@ -691,6 +720,20 @@ def _bloque(h, v, bloque, x, y, ancho):
         # primera cota sale pegada a «Otro» y parecen el mismo renglon.
         yy += 8
 
+    # Los conteos de la hoja del canal: «Canoas ☒ 1 Und.». No es una cota
+    # ni una opción —es cuántas hay—, y la casilla dice si existe alguna.
+    for etiqueta, campo in (bloque.get('conteos') or []):
+        cuenta = val(v, campo)
+        h.txt(x + 6, yy + 6, etiqueta, 6)
+        h.casilla(x + 72, yy, bool(cuenta) and str(cuenta) not in ('0', '0.0'))
+        h.linea(x + 90, yy + 7.5, x + ancho - 26, yy + 7.5, 0.5, GRIS)
+        h.txt((x + 90 + x + ancho - 26) / 2.0, yy + 6, _entero(cuenta), 6.5,
+              negrita=True, centro=True)
+        h.txt(x + ancho - 22, yy + 6, 'Und.', 5.5, color=GRIS)
+        yy += 13
+    if bloque.get('conteos'):
+        yy += 4
+
     for etiqueta, campo, unidad in (bloque.get('campos') or []):
         h.txt(x + 6, yy, etiqueta, 6)
         x0, x1 = x + 76, x + ancho - 22
@@ -719,7 +762,8 @@ def hoja1_formato(h, f, anio, esquemas, logos, spec):
     preguntas: añadir la décima son veinte líneas.
     """
     v = f.get('valores') or {}
-    y = _general_y_localizacion(h, f, anio, logos)
+    y = _general_y_localizacion(h, f, anio, logos,
+                                spec.get('doble_progresiva'))
 
     # ── 3. características técnicas ──
     y = h.seccion(y, '3. CARACTERISTICAS TECNICAS')
@@ -769,7 +813,8 @@ def hoja1_formato(h, f, anio, esquemas, logos, spec):
     # cae justo sobre la tercera opción, porque las cuatro ocupan los 64
     # puntos centrales de la banda.
     h.txt(MARGEN + 8, y + 48, 'Tipo', 6.5, negrita=True)
-    for i, etiqueta in enumerate(('Permanente', 'Semi - Rustico', 'Rustico',
+    for i, etiqueta in enumerate(spec.get('tipos') or
+                                 ('Permanente', 'Semi - Rustico', 'Rustico',
                                   'Otro')):
         marcada = _coincide(etiqueta, tipo)
         h.txt(MARGEN + 18, y + 62 + i * 15, etiqueta, 6.5)
@@ -778,7 +823,22 @@ def hoja1_formato(h, f, anio, esquemas, logos, spec):
         h.linea(MARGEN + 18, y + 122, MARGEN + 150, y + 122, 0.5, GRIS)
         h.txt(MARGEN + 20, y + 120, val(v, 'tipo_otro'), 6.5)
 
-    if not sin_material:
+    # Donde las estructuras declaran de qué están hechas, el canal declara
+    # cuánto lleva y para qué: su hoja pone ahí los caudales y el tipo de
+    # uso. Es la misma columna, con otro contenido.
+    banda_campos = spec.get('banda_campos')
+    if banda_campos:
+        h.txt(x2 + 6, y + 12, spec.get('banda_titulo', ''), 6.5,
+              negrita=True)
+        for i, (etiqueta, campo, unidad) in enumerate(banda_campos):
+            yy = y + 28 + i * 16
+            h.txt(x2 + 6, yy, etiqueta, 6.5)
+            h.linea(x2 + 90, yy + 1.5, x3 - 24, yy + 1.5, 0.5, GRIS)
+            h.txt((x2 + 90 + x3 - 24) / 2.0, yy, val(v, campo), 6.5,
+                  negrita=True, centro=True)
+            if unidad:
+                h.txt(x3 - 20, yy, unidad, 5.5, color=GRIS)
+    elif not sin_material:
         h.txt(x2 + 30, y + 12, 'Material', 6.5, negrita=True)
         h.txt(x2 + 110, y + 12, 'Estado', 6.5, negrita=True)
         material = val(v, 'material')
@@ -1357,6 +1417,68 @@ FORMATOS['desarenadores'] = {
     ],
 }
 
+FORMATOS['laterales'] = {
+    'esquema': 'canal',
+    'doble_progresiva': True,
+    'tipos': ('Rectangular', 'Trapezoidal', 'Circular', 'Otro'),
+    'banda_titulo': 'Caudales y tipo de uso',
+    'banda_campos': [
+        ('Caudal Diseño', 'q_diseno', 'm3/s'),
+        ('Caudal Operación', 'operación', 'm3/s'),
+        ('Tipo de Uso', 'uso', ''),
+        ('N° Usuarios', 'n__usuario', ''),
+        ('Área Bajo Riego', 'area_riego', 'ha'),
+        ('Volumen otorgado', 'vol_otorg', 'm3'),
+    ],
+    'filas': [
+        [{'titulo': 'Datos',
+          'opciones': ('med_tipo', 'med_estado',
+                       ['Parshall', 'Sin cuello', 'RBC', 'Otros']),
+          'campos': [
+              ('N° Ventanas de Captación', 'cap_vent', 'und'),
+              ('Camino de Servicio', 'cs_hay', ''),
+              ('Margen', 'cs_margen', ''),
+              ('Estado', 'cs_estado', '')]},
+         {'titulo': 'Tipo',
+          'opciones': ('rev_mat', 'rev_estado',
+                       ['Concreto', 'Mampostería', 'Geomembrana', 'PVC',
+                        'Otro']),
+          'campos': [
+              ('Revestimiento', 'rev_tipo', ''),
+              ('Juntas', 'jun_hay', ''),
+              ('Separación', 'jun_separ', 'm'),
+              ('Espesor', 'jun_espes', 'm'),
+              ('Material junta', 'jun_mat', '')]},
+         {'titulo': 'Estructuras Hidráulicas', 'conteos': [
+             ('Canoas', 'eh_canoa'),
+             ('Alcantarillas', 'eh_alcant'),
+             ('Entregas', 'eh_entreg'),
+             ('Tomas', 'número_to'),
+             ('Puente Peatonal', 'eh_ppeat'),
+             ('Puente Vehicular', 'eh_pveh'),
+             ('Retención', 'eh_reten'),
+             ('Pases de tubería', 'eh_pases'),
+             ('Otros', 'eh_otros')]},
+         {'titulo': 'Dimensiones', 'campos': [
+             ('b', 'dim_b', 'm'), ('B', 'dim_bmay', 'm'),
+             ('c', 'dim_c', 'm'), ('e', 'dim_e', 'm'),
+             ('y', 'dim_y', 'm'), ('BI', 'dim_bi', 'm'),
+             ('BD', 'dim_bd', 'm'), ('CS', 'dim_cs', 'm'),
+             ('x', 'dim_x', 'm'), ('z', 'dim_z', 'V:H'),
+             ('Ø', 'dim_diam', 'm'), ('Pendiente', 'dim_pend', '%')]}],
+    ],
+    'inspeccion': [
+        ('Se evidencia problemas en revestimiento : Fisuras, desgaste, etc.',
+         'insp_revest', 'insp_revest_c'),
+        ('Las bermas se encuentran definidas ?',
+         'insp_bermas', 'insp_bermas_c'),
+        ('Se evidencia colmatación de la caja hidráulica ?',
+         'insp_colmatada', 'insp_colmatada_c'),
+        ('Existen zonas de riesgo en el tramo (deslizamiento, '
+         'asentamiento, arenamiento, etc) ?', 'insp_riesgo', 'insp_riesgo_c'),
+    ],
+}
+
 # El puente peatonal usa el mismo formato que el vehicular: mismos campos
 # en campos_evaluables y mismo papel. Lo unico que cambia es el titulo, que
 # sale de TABLAS.
@@ -1512,6 +1634,26 @@ def columnas_de(R, tabla):
         return []
 
 
+def _entero(v):
+    """Una cuenta, sin decimales y sin «None»."""
+    if v in (None, ''):
+        return ''
+    try:
+        return f'{int(float(v)):d}'
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _coord(v):
+    """Una coordenada UTM con separador de miles, o vacio."""
+    if v in (None, ''):
+        return ''
+    try:
+        return f'{float(v):,.2f}'
+    except (TypeError, ValueError):
+        return str(v)
+
+
 def _primera(existentes, *candidatas):
     """La primera columna que exista, o NULL.
 
@@ -1584,7 +1726,10 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
                {plano(_primera(existentes, 'progresiva_kmz'))},
                round(ST_X(ST_Centroid(a.geom))::numeric, 2),
                round(ST_Y(ST_Centroid(a.geom))::numeric, 2),
-               {plano('ev.valores::text')}, {plano('ev.evaluador')}, ev.id
+               {plano('ev.valores::text')}, {plano('ev.evaluador')}, ev.id,
+               {plano(_primera(existentes, 'progresi_1'))},
+               {plano(_primera(existentes, 'este_f'))},
+               {plano(_primera(existentes, 'norte_f'))}
         FROM {tabla} a {join} {where}
         ORDER BY a."{pk}";""")
     if not filas:
@@ -1594,11 +1739,11 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
     for fila in filas:
         # Red de seguridad por si aun asi llega una fila partida: una sola
         # estructura rara no debe dejar sin fichas a las otras veintiuna.
-        if len(fila) != 10:
+        if len(fila) != 13:
             print(f'  fila con {len(fila)} campos, se omite', file=sys.stderr)
             continue
         (clave, nombre, cod, prog, prog_kmz, este, norte,
-         valores, evaluador, eval_id) = fila
+         valores, evaluador, eval_id, prog_fin, este_f, norte_f) = fila
         salida.append({
             'fid': clave,
             'generica': tipo not in CON_FORMATO_PROPIO,
@@ -1609,8 +1754,14 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
             'canal': canal,
             'cod_est': cod,
             'progresiva': prog or prog_kmz,
-            'este': f'{float(este):,.2f}' if este not in (None, '') else '',
-            'norte': f'{float(norte):,.2f}' if norte not in (None, '') else '',
+            'este': _coord(este),
+            'norte': _coord(norte),
+            # El tramo de un canal tiene dos extremos: la hoja del canal
+            # pide los dos juegos de coordenadas, y las de llegada solo
+            # existen en las capas de linea.
+            'progresiva_fin': prog_fin,
+            'este_f': _coord(este_f),
+            'norte_f': _coord(norte_f),
             'zona': '17S',
             'elevacion': '',
             'valores': _json(valores),
@@ -1915,6 +2066,33 @@ FICHA_PRUEBA_DESARENADOR = _prueba_formato(
     }, 'desarenador')
 
 
+FICHA_PRUEBA_CANAL = _prueba_formato(
+    'laterales', 'CANAL', 'Lateral 10', {
+        'anio_const': 1992, 'tipo': 'Rectangular',
+        'prog_ini': '0+000', 'prog_fin': '1+000',
+        'q_diseno': 6, 'operación': 3, 'uso': 'Agrario',
+        'cap_vent': '', 'cs_hay': 'si', 'cs_margen': 'Izquierda',
+        'cs_estado': 'R',
+        'med_tipo': 'Otros', 'med_estado': 'R', 'med_otro': 'SENSOR (FLO-DAR)',
+        'rev_tipo': 'Revestido', 'rev_mat': 'Concreto', 'rev_estado': 'R',
+        'jun_hay': 'si', 'jun_separ': 3.50, 'jun_espes': 0.01,
+        'jun_mat': 'Elastomerico',
+        'eh_canoa': 1, 'eh_entreg': 3, 'eh_ppeat': 1, 'eh_pveh': 1,
+        'dim_b': 1.50, 'dim_bmay': 6.30, 'dim_c': 0.20, 'dim_e': 0.075,
+        'dim_y': 1.32, 'dim_bi': 0.50, 'dim_bd': 1.30, 'dim_cs': 4.00,
+        'dim_x': 3.00, 'dim_z': '1:1.5', 'dim_pend': 0.05,
+        'insp_revest': 'si', 'insp_revest_c': 'Presenta fisuras y desgaste',
+        'insp_bermas': 'no', 'insp_bermas_c': 'Estan arenados',
+        'insp_colmatada': 'no',
+        'insp_riesgo': 'si', 'insp_riesgo_c': 'Riesgo de deslizamientos',
+        'nota_adic': 'Salida del tunel 1+000, con dimensiones (2.00 x 3.10) '
+                     'hasta la transicion (1+015 - 1+022.50).',
+    }, 'canal')
+FICHA_PRUEBA_CANAL['progresiva_fin'] = 1000
+FICHA_PRUEBA_CANAL['este_f'] = '747,420.47'
+FICHA_PRUEBA_CANAL['norte_f'] = '9,072,373.69'
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--tipo', default='tomas_canal_madre',
@@ -1936,7 +2114,7 @@ def main():
         dibujar([FICHA_PRUEBA, FICHA_PRUEBA_CANOA,
                  FICHA_PRUEBA_ENTREGA, FICHA_PRUEBA_ALCANTARILLA,
                  FICHA_PRUEBA_ALIVIADERO, FICHA_PRUEBA_DESARENADOR,
-                 FICHA_PRUEBA_GENERICA],
+                 FICHA_PRUEBA_CANAL, FICHA_PRUEBA_GENERICA],
                 args.prueba, anio, esquemas, {})
         print(f'escrito {args.prueba}')
         return 0
