@@ -136,15 +136,32 @@ def escribir(ruta, texto, simulacro):
         f.write(texto)
 
 
+INICIO = '# ── '
+
+
 def poner_bloque(ruta, marca, bloque, simulacro):
+    """Pega o actualiza un bloque marcado, sin tocar los que vengan detras.
+
+    Un bloque termina donde empieza el siguiente —la siguiente linea que
+    abre con `# ── `— y no al final del archivo. La version anterior
+    reemplazaba hasta el final: con un solo bloque daba igual, pero ya son
+    tres —formatos, fichas y B-9— y volver a pasar este parche borraba los
+    otros dos, dejando la API sin esas rutas sin que nada lo dijera.
+    """
     t = leer(ruta)
     veces = t.count(marca)
     if veces > 1:
         return False, 'la marca sale {0} veces; revisalo a mano'.format(veces)
     if veces == 1:
-        if t[t.index(marca):] == bloque:
+        i = t.index(marca)
+        j = t.find('\n' + INICIO, i + len(marca))
+        if j < 0:
+            nuevo = t[:i] + bloque
+        else:
+            nuevo = t[:i] + bloque.rstrip() + '\n\n\n' + t[j + 1:]
+        if nuevo == t:
             return True, 'ya estaba'
-        escribir(ruta, t[:t.index(marca)] + bloque, simulacro)
+        escribir(ruta, nuevo, simulacro)
         return True, 'bloque actualizado'
     escribir(ruta, t.rstrip() + '\n\n\n' + bloque, simulacro)
     return True, 'bloque anadido'

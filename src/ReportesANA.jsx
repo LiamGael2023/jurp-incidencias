@@ -117,8 +117,7 @@ export default function PanelReportes({ campanias = [], onCerrar }) {
     }
   };
 
-  const anio = campania || 'base';
-  const nombreZip = `Formatos_ANA_${ambito}${campania ? `_${campania}` : ''}.zip`;
+  const nombreZip =`Formatos_ANA_${ambito}${campania ? `_${campania}` : ''}.zip`;
 
   return (
     <div className="rep-panel gis-glass">
@@ -225,20 +224,20 @@ export default function PanelReportes({ campanias = [], onCerrar }) {
                   : <FaFileExcel size={11} />}
               </button>
 
-              {/* El B-9 lo arma otra función, por bloques, y todavía no se
-                  dibuja en PDF: ofrecer el botón para que conteste que no
-                  se puede es peor que no ofrecerlo. */}
-              {f.clave !== 'B-9' && (
-                <button className="rep-pdf"
-                  title={`${f.titulo} en PDF`}
-                  onClick={() => descargar(f.clave,
-                    (f.archivo || f.clave).replace(/\.xlsx$/i, '') + '.pdf', true)}
-                  disabled={bajando !== null}>
-                  {bajando === `${f.clave}:pdf`
-                    ? <FaSyncAlt className="icon-spin" size={11} />
-                    : <FaFilePdf size={12} />}
-                </button>
-              )}
+              {/* El B-9 va por el mismo botón aunque lo dibuje otro
+                  generador: el backend decide. En PDF además salen sus tres
+                  tablas, y el Excel solo arma la primera. */}
+              <button className="rep-pdf"
+                title={f.clave === 'B-9'
+                  ? 'Resumen completo en PDF: las tres tablas del formato'
+                  : `${f.titulo} en PDF`}
+                onClick={() => descargar(f.clave,
+                  (f.archivo || f.clave).replace(/\.xlsx$/i, '') + '.pdf', true)}
+                disabled={bajando !== null}>
+                {bajando === `${f.clave}:pdf`
+                  ? <FaSyncAlt className="icon-spin" size={11} />
+                  : <FaFilePdf size={12} />}
+              </button>
             </div>
           ))}
 
