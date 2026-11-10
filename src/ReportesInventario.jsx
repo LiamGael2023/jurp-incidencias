@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FaSyncAlt, FaFileExcel, FaDownload, FaFileArchive, FaExclamationCircle,
-  FaCheckCircle, FaClipboardCheck, FaChevronDown, FaChevronRight,
+  FaCheckCircle, FaClipboardCheck, FaChevronDown, FaChevronRight, FaFilePdf,
 } from 'react-icons/fa';
 import './Incidentes.css';
 import './EstadisticasGIS.css';
@@ -70,7 +70,7 @@ function ReportesInventario() {
             if (ra.ok) setAvance((await ra.json()).detalle || []);
           }
         }
-      } catch (e) { /* el avance es contexto: su fallo no bloquea la descarga */ }
+      } catch { /* el avance es contexto: su fallo no bloquea la descarga */ }
       finally { setCargandoAvance(false); }
     })();
   }, []);
@@ -102,13 +102,21 @@ function ReportesInventario() {
   // La descarga pasa por fetch y no por un enlace directo para poder mostrar
   // el error cuando el generador falla: un <a> dejaría al usuario con un
   // archivo de error sin explicación.
-  const descargar = async (clave, nombre) => {
-    setBajando(clave);
+  const descargar = async (clave, nombre, pdf = false) => {
+    setBajando(pdf ? `${clave}:pdf` : clave);
     setError(null);
     try {
+      /* El PDF va por una acción aparte, /reportes/<clave>/pdf/, y no por un
+       * ?formato=pdf. Lo dibuja el mismo generador leyendo la misma
+       * configuración de columnas que el Excel, así que los dos dicen lo
+       * mismo; lo que cambia es que el PDF sale apaisado y paginado. El B-9
+       * es la excepción: en PDF trae sus tres tablas y en Excel solo la
+       * primera. */
       const url = clave === 'todos'
         ? `${API}/reportes/todos/?${parametros()}`
-        : `${API}/reportes/${encodeURIComponent(clave)}/?${parametros()}`;
+        : clave === 'fichas'
+          ? `${API}/reportes/fichas/?tipo=tomas_canal_madre&${parametros()}`
+          : `${API}/reportes/${encodeURIComponent(clave)}/${pdf ? 'pdf/' : ''}?${parametros()}`;
 
       const r = await fetch(url);
       if (!r.ok) {
@@ -294,7 +302,25 @@ function ReportesInventario() {
               </div>
             </div>
 
-            <div style={{ marginLeft: 'auto', paddingTop: 22 }}>
+            <div style={{ marginLeft: 'auto', paddingTop: 22, display: 'flex', gap: 10 }}>
+              {/* La ficha de campo no es un formato de la ANA y no se entrega
+                  a la autoridad: se lleva impresa al canal. Va en azul y
+                  aparte, aunque se busque donde se busca lo imprimible. */}
+              <button onClick={() => descargar('fichas',
+                `Fichas_Inspeccion_Tomas_CM_${ambito}${campania ? `_${campania}` : ''}.pdf`)}
+                disabled={bajando !== null}
+                title="Dos páginas por toma: datos, croquis acotados y evidencia fotográfica"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 9, padding: '12px 20px',
+                  background: '#fff', color: '#1971c2', border: '1px solid #a5d8ff',
+                  borderRadius: 9, fontSize: 13.5, fontWeight: 700, fontFamily: 'inherit',
+                  cursor: bajando ? 'not-allowed' : 'pointer', opacity: bajando ? .6 : 1,
+                }}>
+                {bajando === 'fichas'
+                  ? <><FaSyncAlt className="icon-spin" /> Armando las fichas…</>
+                  : <><FaFilePdf /> Fichas de inspección</>}
+              </button>
+
               <button onClick={() => descargar('todos', nombreZip)} disabled={bajando !== null}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 9, padding: '12px 22px',
@@ -347,39 +373,68 @@ function ReportesInventario() {
             {formatos.map(f => {
               const listo = f.generado && f.vigente;
               const enCurso = bajando === f.clave;
+              const enCursoPdf = bajando === `${f.clave}:pdf`;
+              const nombrePdf = (f.archivo || f.clave).replace(/\.xlsx$/i, '') + '.pdf';
+              /* La tarjeta era un <button> con todo dentro; ahora son dos
+                 —Excel y PDF— y un botón no puede anidar otro, así que el
+                 contenedor pasa a ser un <div> y cada mitad su propio botón. */
               return (
-                <button key={f.clave} onClick={() => descargar(f.clave, f.archivo)}
-                  disabled={bajando !== null}
+                <div key={f.clave}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
+                    display: 'flex', alignItems: 'stretch',
                     background: '#fff', border: '1px solid #e2e8f0',
                     borderLeft: `4px solid ${listo ? '#0CA678' : '#cbd5e1'}`,
-                    borderRadius: 10, padding: '13px 15px', cursor: bajando ? 'not-allowed' : 'pointer',
-                    fontFamily: 'inherit', boxShadow: '0 1px 3px rgba(0,0,0,.05)',
-                    opacity: bajando && !enCurso ? .55 : 1,
+                    borderRadius: 10, overflow: 'hidden',
+                    boxShadow: '0 1px 3px rgba(0,0,0,.05)',
+                    opacity: bajando && !enCurso && !enCursoPdf ? .55 : 1,
                   }}>
-                  <span style={{
-                    fontSize: 11, fontWeight: 800, color: '#0CA678', background: '#dcfce7',
-                    border: '1px solid #bbf7d0', borderRadius: 6, padding: '4px 8px',
-                    whiteSpace: 'nowrap', flexShrink: 0,
-                  }}>{f.clave}</span>
+                  <button onClick={() => descargar(f.clave, f.archivo)}
+                    disabled={bajando !== null}
+                    title={`${f.titulo} en Excel`}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
+                      flex: 1, minWidth: 0, background: 'none', border: 'none',
+                      padding: '13px 15px', fontFamily: 'inherit',
+                      cursor: bajando ? 'not-allowed' : 'pointer',
+                    }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 800, color: '#0CA678', background: '#dcfce7',
+                      border: '1px solid #bbf7d0', borderRadius: 6, padding: '4px 8px',
+                      whiteSpace: 'nowrap', flexShrink: 0,
+                    }}>{f.clave}</span>
 
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600,
-                      color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap' }}>{f.titulo}</span>
-                    <span style={{ display: 'block', fontSize: 11, color: '#7b93ad', marginTop: 2 }}>
-                      {listo
-                        ? <><FaCheckCircle size={9} style={{ color: '#2fb344', marginRight: 4 }} />
-                            Generado · {pesoLegible(f.tamano)}</>
-                        : 'Se arma al pedirlo'}
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600,
+                        color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap' }}>{f.titulo}</span>
+                      <span style={{ display: 'block', fontSize: 11, color: '#7b93ad', marginTop: 2 }}>
+                        {listo
+                          ? <><FaCheckCircle size={9} style={{ color: '#2fb344', marginRight: 4 }} />
+                              Generado · {pesoLegible(f.tamano)}</>
+                          : 'Se arma al pedirlo'}
+                      </span>
                     </span>
-                  </span>
 
-                  <span style={{ color: '#0284c7', flexShrink: 0, display: 'flex' }}>
-                    {enCurso ? <FaSyncAlt className="icon-spin" size={14} /> : <FaDownload size={14} />}
-                  </span>
-                </button>
+                    <span style={{ color: '#0284c7', flexShrink: 0, display: 'flex' }}>
+                      {enCurso ? <FaSyncAlt className="icon-spin" size={14} /> : <FaDownload size={14} />}
+                    </span>
+                  </button>
+
+                  <button onClick={() => descargar(f.clave, nombrePdf, true)}
+                    disabled={bajando !== null}
+                    title={f.clave === 'B-9'
+                      ? 'Resumen completo en PDF: las tres tablas del formato'
+                      : `${f.titulo} en PDF`}
+                    style={{
+                      width: 44, flexShrink: 0, display: 'grid', placeItems: 'center',
+                      background: '#fff5f5', border: 'none', borderLeft: '1px solid #e2e8f0',
+                      color: '#e03131', cursor: bajando ? 'not-allowed' : 'pointer',
+                    }}>
+                    {enCursoPdf
+                      ? <FaSyncAlt className="icon-spin" size={14} />
+                      : <FaFilePdf size={15} />}
+                  </button>
+                </div>
               );
             })}
           </div>
