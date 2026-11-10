@@ -176,12 +176,32 @@ if not descuadrados:
     print("    Ninguno. Cabecera y actividades dicen lo mismo en todos.")
     raise SystemExit(0)
 
+# LOS DOS DESCUADRES NO SON EL MISMO PROBLEMA, y contarlos juntos da un
+# titular falso. Si las actividades suman CERO, lo que pasa es que son
+# anteriores a que existiera `horas_efectivas` por linea: la cabecera tiene
+# la cifra buena y no sobra nada. El descuadre de verdad es cuando las
+# actividades SI tienen horas y aun asi no coinciden con la cabecera.
+sin_horas = [x for x in descuadrados if x[6] <= 0.005]
+de_verdad = [x for x in descuadrados if x[6] > 0.005]
+
+print("")
+print("    de esos:")
+print("      actividades sin horas (la cabecera manda) ... %s" % len(sin_horas))
+print("      las dos tienen horas y NO coinciden ......... %s" % len(de_verdad))
+if sin_horas and not de_verdad:
+    print("")
+    print("    Ninguno descuadra de verdad. Los %s son partes cuyas"
+          % len(sin_horas))
+    print("    actividades no llevan horas efectivas; ahi la cabecera es la")
+    print("    unica fuente y nadie cobra de mas por esto.")
+
 print("")
 print("    %-24s %6s %6s %6s %8s  %s"
       % ("PARTE", "CABEC", "EFECT", "DIFER", "ACTIVID", "FECHA"))
 horas_de_mas = 0.0
-for p, campo, cab, n, tramo, muertas, efect in descuadrados[:40]:
-    horas_de_mas += (cab - efect)
+for p, campo, cab, n, tramo, muertas, efect in (de_verdad or descuadrados)[:40]:
+    if efect > 0.005:
+        horas_de_mas += (cab - efect)
     fecha = getattr(p, "part_date", None) or getattr(p, "fecha", "") or ""
     print("    %-24s %6.2f %6.2f %6.2f %8d  %s"
           % (p.part_number, cab, efect, cab - efect, n, fecha))
@@ -190,8 +210,12 @@ if len(descuadrados) > 40:
     print("    ... y %d mas" % (len(descuadrados) - 40))
 
 print("")
-print("    horas cobradas de mas (en los listados de arriba): %.2f h" % horas_de_mas)
-print("")
-print("    Cada una de esas horas se multiplica por el precio de la maquina")
-print("    en la ficha de maquinaria. En el costeo y en el PDF no, porque")
-print("    esos suman las actividades.")
+if horas_de_mas > 0.005:
+    print("    diferencia acumulada en los de arriba: %.2f h" % horas_de_mas)
+    print("")
+    print("    Esos si habria que mirarlos uno a uno: cabecera y actividades")
+    print("    dicen cosas distintas y las dos tienen datos.")
+else:
+    print("    Sin diferencia que valga: en todos los de arriba las")
+    print("    actividades no llevan horas, asi que no hay dos cifras que")
+    print("    comparar. La cabecera es la buena.")
