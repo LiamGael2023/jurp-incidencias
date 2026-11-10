@@ -91,7 +91,9 @@ export default function PanelReportes({ campanias = [], onCerrar }) {
        * mismo; lo que cambia es que el PDF sale apaisado y paginado. */
       const url = clave === 'todos'
         ? `${API}/reportes/todos/?${parametros()}`
-        : `${API}/reportes/${encodeURIComponent(clave)}/${pdf ? 'pdf/' : ''}?${parametros()}`;
+        : clave === 'fichas'
+          ? `${API}/reportes/fichas/?tipo=tomas_canal_madre&${parametros()}`
+          : `${API}/reportes/${encodeURIComponent(clave)}/${pdf ? 'pdf/' : ''}?${parametros()}`;
 
       const r = await fetch(url);
       if (!r.ok) {
@@ -174,6 +176,20 @@ export default function PanelReportes({ campanias = [], onCerrar }) {
           {bajando === 'todos'
             ? <><FaSyncAlt className="icon-spin" /> Generando los 14 formatos…</>
             : <><FaFileArchive /> Descargar todos en un ZIP</>}
+        </button>
+
+        {/* ── la ficha de campo ──
+            No es un formato de la ANA: es el levantamiento, dos páginas por
+            estructura. Va aquí porque es donde se busca lo imprimible, y
+            aparte de los formatos porque no se entrega a la autoridad. */}
+        <button className="rep-btn-ficha"
+          onClick={() => descargar('fichas',
+            `Fichas_Inspeccion_Tomas_CM_${ambito}${campania ? `_${campania}` : ''}.pdf`)}
+          disabled={bajando !== null}
+          title="Dos páginas por toma: datos, croquis acotados y evidencia fotográfica">
+          {bajando === 'fichas'
+            ? <><FaSyncAlt className="icon-spin" /> Armando las fichas…</>
+            : <><FaFilePdf /> Fichas de inspección · Tomas del Canal Madre</>}
         </button>
 
         {error && (
