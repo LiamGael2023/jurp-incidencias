@@ -1536,6 +1536,17 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
             </div>
           )}
 
+          {/* Encender o apagar todo de una vez. Para dejar la lámina con dos
+              capas había que apagar treinta y siete a mano, y para volver al
+              inventario completo, encenderlas otra vez una por una. */}
+          <div className="lam-capas-todas">
+            <span>{capasEncendidas} de {TODAS_LAS_CAPAS.length} encendidas</span>
+            <button type="button"
+              onClick={inv.algunaVisible ? inv.apagarTodas : inv.encenderTodas}>
+              {inv.algunaVisible ? 'Apagar todas' : 'Encender todas'}
+            </button>
+          </div>
+
           <div className="lam-capas">
             {GRUPOS_CAPAS.map(g => (
               <div key={g.titulo} className="lam-capas-grupo">

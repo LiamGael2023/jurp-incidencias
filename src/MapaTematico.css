@@ -170,6 +170,14 @@
 
 .lam-capas-grupo { margin-bottom: 10px; }
 .lam-capas-tit { font-size: 10.5px; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+.lam-capas-todas { display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-bottom: 8px; padding-bottom: 7px; font-size: 10.5px;
+  color: #7ba7c7; border-bottom: 1px solid rgba(255,255,255,.08); }
+.lam-capas-todas button { padding: 4px 10px; font-size: 10.5px; font-weight: 700;
+  font-family: inherit; color: #a8c6da; background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.14); border-radius: 5px; cursor: pointer; }
+.lam-capas-todas button:hover { background: rgba(255,255,255,.13); }
+
 .lam-capa { display: flex !important; align-items: center; gap: 7px; margin-bottom: 3px;
   text-transform: none !important; letter-spacing: 0 !important; font-size: 12px !important;
   color: #cbd5e1 !important; cursor: pointer; }
