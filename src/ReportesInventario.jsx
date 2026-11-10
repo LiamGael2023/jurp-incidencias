@@ -4,6 +4,7 @@ import {
   FaCheckCircle, FaClipboardCheck, FaChevronDown, FaChevronRight, FaFilePdf,
 } from 'react-icons/fa';
 import { tieneFicha } from './tiposConFicha';
+import VisorPDF from './VisorPDF';
 import './Incidentes.css';
 import './EstadisticasGIS.css';
 
@@ -53,6 +54,7 @@ function ReportesInventario() {
   const [cargando, setCargando] = useState(false);
   const [bajando, setBajando] = useState(null);   // clave en curso
   const [error, setError] = useState(null);
+  const [visor, setVisor] = useState(null);   // {clave, pdf, titulo, sub, nombre}
 
   // ── carga inicial: campañas y avance ──────────────────────────────────
   useEffect(() => {
@@ -81,6 +83,23 @@ function ReportesInventario() {
     if (campania) p.set('campania', campania);
     return p.toString();
   }, [ambito, campania]);
+
+  /* La URL de cada descarga, en un solo sitio: la usan el botón que baja el
+   * archivo y el visor que lo enseña, y si cada uno la armara por su cuenta
+   * acabarían pidiendo cosas distintas. */
+  const urlDe = useCallback((clave, pdf = false) => (
+    clave === 'todos'
+      ? `${API}/reportes/todos/?${parametros()}`
+      : clave === 'fichas'
+        ? `${API}/reportes/fichas/?tipo=tomas_canal_madre&${parametros()}`
+        : clave === 'fichas_evaluadas'
+          ? `${API}/reportes/fichas/?tipo=todas&evaluadas=1&${parametros()}`
+          // `fichas:<tipo>` son las fichas evaluadas de una sola capa
+          : clave.startsWith('fichas:')
+            ? `${API}/reportes/fichas/?tipo=${encodeURIComponent(clave.slice(7))}`
+              + `&evaluadas=1&${parametros()}`
+            : `${API}/reportes/${encodeURIComponent(clave)}/${pdf ? 'pdf/' : ''}?${parametros()}`
+  ), [parametros]);
 
   // El catálogo dice qué formatos hay y cuáles ya están generados, para que
   // se sepa cuáles bajan al instante y cuáles hay que armar.
@@ -113,19 +132,7 @@ function ReportesInventario() {
        * mismo; lo que cambia es que el PDF sale apaisado y paginado. El B-9
        * es la excepción: en PDF trae sus tres tablas y en Excel solo la
        * primera. */
-      const url = clave === 'todos'
-        ? `${API}/reportes/todos/?${parametros()}`
-        : clave === 'fichas'
-          ? `${API}/reportes/fichas/?tipo=tomas_canal_madre&${parametros()}`
-          : clave === 'fichas_evaluadas'
-            ? `${API}/reportes/fichas/?tipo=todas&evaluadas=1&${parametros()}`
-            // `fichas:<tipo>` baja las fichas evaluadas de una sola capa
-            : clave.startsWith('fichas:')
-              ? `${API}/reportes/fichas/?tipo=${encodeURIComponent(clave.slice(7))}`
-                + `&evaluadas=1&${parametros()}`
-              : `${API}/reportes/${encodeURIComponent(clave)}/${pdf ? 'pdf/' : ''}?${parametros()}`;
-
-      const r = await fetch(url);
+      const r = await fetch(urlDe(clave, pdf));
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
         throw new Error(d.detail || `El servidor respondió ${r.status}`);
@@ -222,8 +229,12 @@ function ReportesInventario() {
                   por estructura evaluada, de todas las capas. Va aquí y no
                   entre los formatos porque lo que se descarga es el avance
                   que está mirando, no un formato de la ANA. */}
-              <button onClick={() => descargar('fichas_evaluadas',
-                `Fichas_Evaluadas_${ambito}${campania ? `_${campania}` : ''}.pdf`)}
+              <button onClick={() => setVisor({
+                clave: 'fichas_evaluadas',
+                titulo: 'Fichas de inspección evaluadas',
+                sub: `${totales.evaluados} estructuras · ámbito ${ambito}`
+                     + (campania ? ` · campaña ${campania}` : ''),
+                nombre: `Fichas_Evaluadas_${ambito}${campania ? `_${campania}` : ''}.pdf` })}
                 disabled={bajando !== null || totales.evaluados === 0}
                 title={totales.evaluados === 0
                   ? 'Todavía no hay ninguna estructura evaluada en esta campaña'
@@ -286,8 +297,11 @@ function ReportesInventario() {
                           falla al pulsarlo. */}
                       <td className="tbl-text-end">
                         {tieneFicha(a.tipo) && a.evaluados > 0 ? (
-                          <button onClick={() => descargar(`fichas:${a.tipo}`,
-                            `Fichas_${a.tipo}_${ambito}${campania ? `_${campania}` : ''}.pdf`)}
+                          <button onClick={() => setVisor({
+                            clave: `fichas:${a.tipo}`, titulo: `Fichas · ${a.nombre}`,
+                            sub: `${a.evaluados} evaluadas · ámbito ${ambito}`
+                                 + (campania ? ` · campaña ${campania}` : ''),
+                            nombre: `Fichas_${a.tipo}_${ambito}${campania ? `_${campania}` : ''}.pdf` })}
                             disabled={bajando !== null}
                             title={`Las ${a.evaluados} fichas evaluadas de ${a.nombre}, en PDF`}
                             style={{
@@ -365,8 +379,10 @@ function ReportesInventario() {
               {/* La ficha de campo no es un formato de la ANA y no se entrega
                   a la autoridad: se lleva impresa al canal. Va en azul y
                   aparte, aunque se busque donde se busca lo imprimible. */}
-              <button onClick={() => descargar('fichas',
-                `Fichas_Inspeccion_Tomas_CM_${ambito}${campania ? `_${campania}` : ''}.pdf`)}
+              <button onClick={() => setVisor({
+                clave: 'fichas', titulo: 'Fichas de inspección · Tomas del Canal Madre',
+                sub: `Ámbito ${ambito}${campania ? ` · campaña ${campania}` : ''}`,
+                nombre: `Fichas_Inspeccion_Tomas_CM_${ambito}${campania ? `_${campania}` : ''}.pdf` })}
                 disabled={bajando !== null}
                 title="Dos páginas por toma: datos, croquis acotados y evidencia fotográfica"
                 style={{
@@ -479,7 +495,10 @@ function ReportesInventario() {
                     </span>
                   </button>
 
-                  <button onClick={() => descargar(f.clave, nombrePdf, true)}
+                  <button onClick={() => setVisor({
+                    clave: f.clave, pdf: true, titulo: `${f.clave} · ${f.titulo}`,
+                    sub: `Ámbito ${ambito}${campania ? ` · campaña ${campania}` : ''}`,
+                    nombre: nombrePdf })}
                     disabled={bajando !== null}
                     title={f.clave === 'B-9'
                       ? 'Resumen completo en PDF: las tres tablas del formato'
@@ -507,6 +526,12 @@ function ReportesInventario() {
         </div>
 
       </div>
+
+      {visor && (
+        <VisorPDF url={urlDe(visor.clave, visor.pdf)} titulo={visor.titulo}
+          subtitulo={visor.sub} nombre={visor.nombre}
+          onCerrar={() => setVisor(null)} />
+      )}
     </div>
   );
 }
