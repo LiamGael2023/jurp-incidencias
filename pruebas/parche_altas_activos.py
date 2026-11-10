@@ -152,6 +152,14 @@ def _validar_alta(self, request, pk=None):
 
 # El decorador se aplica a mano y la funcion se cuelga de la clase: ver la
 # cabecera del parche para por que no va dentro del cuerpo.
+#
+# EL __name__ HAY QUE CAMBIARLO. Al construir las rutas, DRF recorre la clase
+# y comprueba con un assert que cada accion se llame igual que el atributo
+# donde esta colgada. Con la funcion llamandose _validar_alta y el atributo
+# validar, ese assert salta al importar urls.py y se cae el URLconf ENTERO:
+# la API devuelve 500 en todas sus rutas, no solo en esta, y el error no
+# menciona ni el nombre ni la accion.
+_validar_alta.__name__ = 'validar'
 ActivoNuevoViewSet.validar = action(
     detail=True, methods=['post'], url_path='validar')(_validar_alta)
 '''

@@ -217,6 +217,21 @@ t('pero anota el motivo', a.nota_validacion == 'duplicada')
 print('6. El bloque compila y se cuelga de la clase')
 t('la accion queda en el ViewSet', hasattr(ViewSetFalso, 'validar'))
 
+# Lo que de verdad se nos escapó la primera vez. Al construir las rutas, DRF
+# recorre la clase y comprueba con un assert que cada acción se llame igual
+# que el atributo donde está colgada:
+#
+#     def _check_attr_name(func, name):
+#         assert func.__name__ == name, ...
+#
+# Con la función llamándose _validar_alta y el atributo validar, ese assert
+# salta al importar urls.py y se cae el URLconf ENTERO: toda la API devuelve
+# 500, no solo esta acción, y el error no menciona ni el nombre ni la acción.
+for nombre, metodo in list(vars(ViewSetFalso).items()):
+    if callable(metodo) and getattr(metodo, '_kw', None):
+        t('la accion "{0}" se llama igual que su atributo, o DRF tumba el '
+          'URLconf entero'.format(nombre), metodo.__name__ == nombre)
+
 print('\n{0} comprobacion(es) en orden{1}.'.format(
     bien, ', {0} MAL'.format(mal) if mal else ''))
 sys.exit(1 if mal else 0)
