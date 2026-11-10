@@ -2563,6 +2563,8 @@ function ModalAlta({ inv }) {
   const [fallo, setFallo] = useState(null);
   const [senalar, setSenalar] = useState(false);
   const [cargandoCampos, setCargandoCampos] = useState(false);
+  const [cerradas, setCerradas] = useState({});
+  const [lamina, setLamina] = useState(null);
 
   // Al cambiar de tipo, el formulario es otro: se pide y se vacía lo escrito.
   // Conservarlo mezclaría campos de dos fichas distintas con el mismo nombre.
@@ -2579,23 +2581,37 @@ function ModalAlta({ inv }) {
 
   /* Las mismas secciones que la evaluación: la etiqueta trae el bloque
    * delante, separado por " · ". Sin agrupar, setenta campos seguidos son
-   * una pared. */
+   * una pared.
+   *
+   * `corta` es la etiqueta sin el nombre del bloque, y es lo que se pinta
+   * encima de cada campo. Olvidarla deja el formulario con los recuadros
+   * pero sin un solo rótulo: se ven veinte cajas iguales y un asterisco. */
   const secciones = useMemo(() => {
     if (!campos) return null;
     const grupos = [];
     const porNombre = new Map();
     campos.forEach(c => {
       const corte = (c.etiqueta || '').indexOf(' · ');
-      const titulo = corte > 0 ? c.etiqueta.slice(0, corte) : 'Datos';
+      const titulo = corte > 0 ? c.etiqueta.slice(0, corte) : '';
+      const corta = corte > 0 ? c.etiqueta.slice(corte + 3) : (c.etiqueta || c.campo);
       if (!porNombre.has(titulo)) {
         const g = { titulo, campos: [] };
         porNombre.set(titulo, g);
         grupos.push(g);
       }
-      porNombre.get(titulo).campos.push(c);
+      porNombre.get(titulo).campos.push({ ...c, corta });
     });
     return grupos;
   }, [campos]);
+
+  /* Los croquis acotados de la ficha de papel. Los campos piden «Base (b₁)»
+   * o «Talud (Z)», y esas letras solo significan algo sobre el dibujo. Las
+   * láminas de un componente van dentro de su bloque; las de la estructura
+   * entera, en una tira arriba. */
+  const laminas = useMemo(() => laminasDe(tipo), [tipo]);
+  const sueltas = useMemo(
+    () => laminasSueltas(laminas, (secciones || []).map(g => g.titulo)),
+    [laminas, secciones]);
 
   const cambiar = (clave, v) => setValores(x => ({ ...x, [clave]: v }));
 
@@ -2673,55 +2689,104 @@ function ModalAlta({ inv }) {
             </div>
           </div>
 
-          {cargandoCampos && <div className="inv-modal-sep">Cargando los campos…</div>}
+          {cargandoCampos && (
+            <div className="inv-cargando">
+              <FaSyncAlt className="icon-spin" /> Cargando formulario…
+            </div>
+          )}
 
-          {(secciones || []).map(g => (
-            <React.Fragment key={g.titulo}>
-              <div className="inv-modal-sep">{g.titulo}</div>
-              <div className="inv-campos">
-                {g.campos.map(c => {
-                  const vacio = valores[c.campo] === '' || valores[c.campo] == null;
-                  const senalado = senalar && c.obligatorio && vacio;
-                  const esTexto = c.tipo_dato === 'texto'
-                    && /detalle|observ/i.test(c.corta || '');
-                  return (
-                    <div key={c.campo}
-                      className={`inv-campo${esTexto ? ' ancho' : ''}${senalado ? ' falta' : ''}`}>
-                      <label>
-                        {c.corta}
-                        {c.obligatorio && <b className="inv-req">*</b>}
-                      </label>
-                      {c.tipo_dato === 'opcion' && c.opciones?.length ? (
-                        <select value={valores[c.campo] ?? ''}
-                          onChange={e => cambiar(c.campo, e.target.value)}>
-                          <option value="">— sin dato —</option>
-                          {c.opciones.map(o => (
-                            <option key={o.codigo} value={o.codigo}>{o.etiqueta}</option>
-                          ))}
-                        </select>
-                      ) : c.tipo_dato === 'booleano' ? (
-                        <label className="inv-check">
-                          <input type="checkbox" checked={!!valores[c.campo]}
-                            onChange={e => cambiar(c.campo, e.target.checked)} />
-                          <span>{valores[c.campo] ? 'Sí' : 'No'}</span>
-                        </label>
-                      ) : esTexto ? (
-                        <textarea rows={2} value={valores[c.campo] ?? ''}
-                          onChange={e => cambiar(c.campo, e.target.value)} />
-                      ) : (
-                        <input
-                          type={c.tipo_dato === 'numero' || c.tipo_dato === 'entero'
-                            ? 'number' : 'text'}
-                          step={c.tipo_dato === 'numero' ? '0.01' : '1'}
-                          value={valores[c.campo] ?? ''}
-                          onChange={e => cambiar(c.campo, e.target.value)} />
-                      )}
-                    </div>
-                  );
-                })}
+          {/* Los croquis de la estructura entera, antes de nada: es lo
+              primero que se mira en la ficha de papel. */}
+          {sueltas.length > 0 && (
+            <div className="inv-croquis-tira">
+              {sueltas.map(l => (
+                <Croquis key={l.clave} lamina={l} onAmpliar={setLamina} />
+              ))}
+            </div>
+          )}
+
+          {(secciones || []).map(g => {
+            // El bloque sin título va abierto; los demás cerrados, porque
+            // con diez abiertos de golpe no se ve dónde empieza nada.
+            const abierta = g.titulo === '' || !(cerradas[g.titulo] ?? true);
+            const faltanAqui = g.campos.filter(
+              c => c.obligatorio && (valores[c.campo] === '' || valores[c.campo] == null)
+            ).length;
+            const croquis = laminaDeBloque(laminas, g.titulo);
+
+            return (
+              <div className="inv-bloque" key={g.titulo || '_general'}>
+                {g.titulo !== '' && (
+                  <button type="button"
+                    className={`inv-bloque-tit${abierta ? ' abierta' : ''}`}
+                    onClick={() => setCerradas(s => ({ ...s, [g.titulo]: abierta }))}>
+                    {abierta ? <FaChevronDown size={10} /> : <FaChevronRight size={10} />}
+                    <span>{g.titulo}</span>
+                    <em className="inv-bloque-n">{g.campos.length}</em>
+                    {faltanAqui > 0
+                      ? <b className="inv-bloque-falta">{faltanAqui}</b>
+                      : <FaCheckCircle className="inv-bloque-ok" size={11} />}
+                  </button>
+                )}
+
+                {abierta && croquis && (
+                  <Croquis lamina={croquis} onAmpliar={setLamina} compacto />
+                )}
+
+                {abierta && (
+                  <div className="inv-campos">
+                    {g.campos.map(c => {
+                      const vacio = valores[c.campo] === '' || valores[c.campo] == null;
+                      const senalado = senalar && c.obligatorio && vacio;
+                      const esTexto = c.tipo_dato === 'texto'
+                        && /detalle|observ/i.test(c.corta || '');
+                      return (
+                        <div key={c.campo}
+                          className={`inv-campo${esTexto ? ' ancho' : ''}${senalado ? ' falta' : ''}`}>
+                          <label>
+                            {c.corta}
+                            {c.obligatorio && <b className="inv-req">*</b>}
+                          </label>
+                          {c.tipo_dato === 'opcion' && c.opciones?.length ? (
+                            <select value={valores[c.campo] ?? ''}
+                              onChange={e => cambiar(c.campo, e.target.value)}>
+                              <option value="">— sin dato —</option>
+                              {c.opciones.map(o => (
+                                <option key={o.codigo} value={o.codigo}>{o.etiqueta}</option>
+                              ))}
+                            </select>
+                          ) : c.tipo_dato === 'booleano' ? (
+                            <label className="inv-check">
+                              <input type="checkbox" checked={!!valores[c.campo]}
+                                onChange={e => cambiar(c.campo, e.target.checked)} />
+                              <span>{valores[c.campo] ? 'Sí' : 'No'}</span>
+                            </label>
+                          ) : esTexto ? (
+                            <textarea rows={2} value={valores[c.campo] ?? ''}
+                              onChange={e => cambiar(c.campo, e.target.value)} />
+                          ) : (
+                            <input
+                              type={c.tipo_dato === 'numero' || c.tipo_dato === 'entero'
+                                ? 'number' : 'text'}
+                              step={c.tipo_dato === 'numero' ? '0.01' : '1'}
+                              value={valores[c.campo] ?? ''}
+                              onChange={e => cambiar(c.campo, e.target.value)} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            </React.Fragment>
-          ))}
+            );
+          })}
+
+          {/* El visor va dentro del modal: así el clic que lo cierra no es
+              el fondo del modal y no se lleva por delante el formulario a
+              medio llenar. */}
+          <VisorImagen
+            foto={lamina && { src: lamina.src, titulo: lamina.titulo }}
+            onCerrar={() => setLamina(null)} />
         </div>
 
         <div className="inv-modal-pie">
