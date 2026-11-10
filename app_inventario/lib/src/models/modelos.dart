@@ -298,7 +298,7 @@ class Foto {
 
   /// Lo dice el servidor, no se adivina.
   ///
-  /// La ruta de entrega —fotos/<id>/imagen/— no tiene extensión, así que
+  /// La ruta de entrega —`fotos/<id>/imagen/`— no tiene extensión, así que
   /// mirándola no hay forma de saber si lo que va a llegar es una imagen o
   /// un vídeo. Y hace falta saberlo ANTES de pedirlo, para enseñar un
   /// reproductor en vez de un `Image.network` que fallaría sin explicar

@@ -5,7 +5,6 @@ import '../../controllers/inventario_controller.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/catalogo_capas.dart';
-import '../../utils/sectores.dart';
 import 'simbolo_capa.dart';
 
 /// Qué se ve en el mapa.

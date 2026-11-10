@@ -39,7 +39,7 @@ class VisorFotos extends StatefulWidget {
 class _VisorFotosState extends State<VisorFotos> {
   late final PageController _paginas =
       PageController(initialPage: widget.inicial);
-  late List<Foto> _fotos = [...widget.fotos];
+  late final List<Foto> _fotos = [...widget.fotos];
   late int _actual = widget.inicial;
   bool _borrando = false;
 

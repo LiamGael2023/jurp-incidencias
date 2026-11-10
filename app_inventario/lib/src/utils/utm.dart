@@ -66,7 +66,7 @@ PuntoUTM latLngAUTM(double lat, double lng, [int? zonaForzada]) {
   final c = _ep2 * cosLat * cosLat;
   final x = cosLat * (lngR - lngO);
 
-  final e3 = _e2 * _e2 * _e2;
+  const e3 = _e2 * _e2 * _e2;
   final m = _a *
       ((1 - _e2 / 4 - 3 * _e2 * _e2 / 64 - 5 * e3 / 256) * latR -
           (3 * _e2 / 8 + 3 * _e2 * _e2 / 32 + 45 * e3 / 1024) *
