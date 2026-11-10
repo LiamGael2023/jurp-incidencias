@@ -1091,16 +1091,31 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
     // explican: una leyenda que describe símbolos que no están en el papel
     // manda a quien lee el plano a buscarlos.
     const sinPuntos = escala > ESCALA_SIN_PUNTOS;
+
+    /* Una capa por sectores no se explica con un solo cuadro: en el papel
+     * cada sector sale de su color, y un «Sectores PECH» verde no dice cuál
+     * de las cinco manchas es cuál. Se desglosa en sus sectores encendidos,
+     * que es exactamente lo que está dibujado. */
+    const desglosar = (c) => {
+      if (!c.porSector || !inv.sectores?.length) return [c];
+      return inv.sectores
+        .filter(s => !inv.sectoresOcultos.has(s.nombre))
+        .map(s => ({ ...c, codigo: `${c.codigo}::${s.nombre}`,
+                     label: s.nombre, color: s.color, ico: null }));
+    };
+
     return GRUPOS_CAPAS
       .map(g => ({
         titulo: g.titulo,
-        capas: g.capas.filter(c => inv.visibles[c.codigo]
-          && !c.oculta
-          && !(sinPuntos && c.tipo !== 'line' && c.tipo !== 'poly')
-          && asomaEnLamina(c.codigo)),
+        capas: g.capas
+          .filter(c => inv.visibles[c.codigo]
+            && !c.oculta
+            && !(sinPuntos && c.tipo !== 'line' && c.tipo !== 'poly')
+            && asomaEnLamina(c.codigo))
+          .flatMap(desglosar),
       }))
       .filter(g => g.capas.length);
-  }, [inv.visibles, asomaEnLamina, escala]);
+  }, [inv.visibles, inv.sectores, inv.sectoresOcultos, asomaEnLamina, escala]);
 
   /**
    * Hasta que el inventario termine de bajar no se dibujan los activos.
@@ -1526,11 +1541,44 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
               <div key={g.titulo} className="lam-capas-grupo">
                 <div className="lam-capas-tit">{g.titulo}</div>
                 {g.capas.map(c => (
-                  <label key={c.codigo} className="lam-capa">
-                    <input type="checkbox" checked={!!inv.visibles[c.codigo]}
-                      onChange={() => inv.alternarCapa(c.codigo)} />
-                    <Simbolo capa={c} />{c.label}
-                  </label>
+                  <div key={c.codigo}>
+                    <label className="lam-capa">
+                      <input type="checkbox" checked={!!inv.visibles[c.codigo]}
+                        onChange={() => inv.alternarCapa(c.codigo)} />
+                      <Simbolo capa={c} />{c.label}
+                    </label>
+
+                    {/* «Sectores PECH» es una capa con varios polígonos y
+                        cada uno sale con su color en la lámina. Con una sola
+                        casilla había que apagar la capa entera para dejar un
+                        sector fuera, y la leyenda los resumía en un cuadro
+                        verde que no decía cuál era cuál. */}
+                    {c.porSector && inv.visibles[c.codigo]
+                      && inv.sectores?.length > 0 && (
+                      <div className="lam-subcapas">
+                        <div className="lam-subcapas-cab">
+                          <span>
+                            {inv.sectores.length - inv.sectoresOcultos.size} de {inv.sectores.length}
+                          </span>
+                          <span>
+                            <button type="button" onClick={() => inv.todosLosSectores(true)}
+                              disabled={!inv.sectoresOcultos.size}>Todos</button>
+                            <button type="button" onClick={() => inv.todosLosSectores(false)}
+                              disabled={inv.sectoresOcultos.size === inv.sectores.length}>Ninguno</button>
+                          </span>
+                        </div>
+                        {inv.sectores.map(s => (
+                          <label key={s.nombre} className="lam-subcapa">
+                            <input type="checkbox"
+                              checked={!inv.sectoresOcultos.has(s.nombre)}
+                              onChange={() => inv.alternarSector(s.nombre)} />
+                            <i style={{ background: s.color }} />
+                            <span title={s.nombre}>{s.nombre}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             ))}

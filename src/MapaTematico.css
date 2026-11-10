@@ -182,6 +182,27 @@
 .lam-capa i.linea { height: 0; border-radius: 0; }
 .lam-capa img { width: 13px; height: 13px; flex: 0 0 13px; object-fit: contain; }
 
+/* Los sectores de una capa, colgando de su casilla: sangrados y con una
+   guía a la izquierda para que se lean como parte de ella y no como capas
+   sueltas del catálogo. */
+.lam-subcapas { margin: 2px 0 6px 20px; padding-left: 7px;
+  border-left: 1px solid rgba(255,255,255,.12); }
+.lam-subcapas-cab { display: flex; justify-content: space-between;
+  align-items: center; gap: 6px; font-size: 9.5px; color: #7ba7c7;
+  margin-bottom: 3px; }
+.lam-subcapas-cab button { padding: 1px 6px; font-size: 9px;
+  font-family: inherit; color: #a8c6da; background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12); border-radius: 4px;
+  cursor: pointer; margin-left: 4px; }
+.lam-subcapas-cab button:disabled { opacity: .4; cursor: default; }
+.lam-subcapa { display: flex !important; align-items: center; gap: 6px;
+  margin-bottom: 2px; font-size: 11px; cursor: pointer; }
+.lam-subcapa input { width: auto !important; margin: 0 !important; }
+.lam-subcapa i { width: 10px; height: 10px; border-radius: 3px;
+  flex: 0 0 10px; }
+.lam-subcapa span { overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+
 /* ── Lienzo ─────────────────────────────────────────────────────────────── */
 /* La hoja mide 1682 px y casi ninguna pantalla los tiene: se reduce con zoom,
    que a diferencia de transform:scale sí deja el scroll del tamaño correcto. */
