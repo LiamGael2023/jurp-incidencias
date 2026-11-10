@@ -152,6 +152,34 @@ export function HerramientaMedicion({ modo, onFinish }) {
     dblclick() { if (modo) onFinish?.(); },
   });
 
+  /* MIENTRAS SE MIDE, LO DE ENCIMA DEL MAPA NO RECIBE CLICS.
+   *
+   * Leaflet no propaga al mapa el clic que cae sobre una capa: se lo queda
+   * ella y abre su globo. Con el mapa vacío la regla se portaba bien, pero
+   * sobre el inventario encendido —miles de estructuras y los trazos de los
+   * canales— casi no queda sitio donde pinchar que no sea una capa, así que
+   * medir a lo largo de un canal, que es justo para lo que se usa, no
+   * añadía ni un punto: abría fichas. Desde fuera eso se ve exactamente
+   * igual que una herramienta rota.
+   *
+   * Se apagan los clics de los paneles de marcadores y de vectores mientras
+   * dura la medición, no de la capa del inventario: así vale para cualquier
+   * mapa que use esta herramienta, sin que ninguno tenga que enterarse.
+   *
+   * Y se desactiva el zoom del doble clic, que es cómo se termina de medir:
+   * si no, terminar una medición da un salto de zoom de regalo. */
+  useEffect(() => {
+    const cont = map.getContainer();
+    if (!modo) return undefined;
+    cont.classList.add('jurp-midiendo');
+    const teniaZoom = map.doubleClickZoom.enabled();
+    map.doubleClickZoom.disable();
+    return () => {
+      cont.classList.remove('jurp-midiendo');
+      if (teniaZoom) map.doubleClickZoom.enable();
+    };
+  }, [modo, map]);
+
   // Redibuja la capa temporal cada vez que cambian los puntos.
   useEffect(() => {
     if (capaRef.current) { map.removeLayer(capaRef.current); capaRef.current = null; }

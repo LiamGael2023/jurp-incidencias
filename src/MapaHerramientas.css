@@ -77,6 +77,27 @@
 .jurp-minimapa-toggle:hover { background: #fff; }
 
 /* ── Tooltips de medición ──────────────────────────────────────────────────── */
+/* Mientras se mide, el mapa entero es una superficie donde marcar puntos.
+   Leaflet no propaga al mapa el clic que cae sobre una capa —se lo queda
+   ella y abre su globo—, así que sobre el inventario encendido no quedaba
+   sitio donde pinchar que no fuera una estructura o un canal. Aquí se
+   apagan los clics de marcadores y vectores el tiempo que dura la
+   medición; la propia medición se dibuja en estos mismos paneles, y por eso
+   se le devuelven. */
+.leaflet-container.jurp-midiendo {
+  cursor: crosshair;
+}
+
+.leaflet-container.jurp-midiendo .leaflet-marker-pane,
+.leaflet-container.jurp-midiendo .leaflet-overlay-pane,
+.leaflet-container.jurp-midiendo .leaflet-shadow-pane {
+  pointer-events: none;
+}
+
+.leaflet-container.jurp-midiendo .jurp-med-tooltip {
+  pointer-events: auto;
+}
+
 .jurp-med-tooltip span {
   display: inline-block;
   background: #1d273b;
