@@ -517,6 +517,217 @@ def hoja1(h, f, anio, esquemas, logos):
 
 # ── la hoja 2 ─────────────────────────────────────────────────────────────
 
+def _general_y_localizacion(h, f, anio, logos):
+    """Las secciones 1 y 2, que son iguales en todas las hojas oficiales.
+
+    Se repiten aqui en vez de llamarse a las de `hoja1` porque aquella las
+    tiene embebidas y sacarlas obligaria a tocar la unica hoja que lleva
+    meses funcionando. El dia que haya que cambiar algo de estas dos, se
+    cambia aqui y en hoja1; son veinte lineas y no vale la pena el riesgo.
+
+    Devuelve la `y` donde sigue la seccion 3.
+    """
+    v = f.get('valores') or {}
+    y = cabecera(h, 1, 2, anio, logos)
+
+    # ── 1 ──
+    y = h.seccion(y, '1. INFORMACION GENERAL')
+    alto = 42
+    h.caja(MARGEN, y, UTIL, alto)
+    h.rotulo_valor(MARGEN + 6, y + 15, 'Estructura', f.get('estructura'),
+                   w_rotulo=56, w_linea=140)
+    h.rotulo_valor(MARGEN + 220, y + 15, 'Denominación', f.get('nombre'),
+                   w_rotulo=64, w_linea=140)
+    hoy = f.get('fecha') or ''
+    h.txt(ANCHO - MARGEN - 118, y + 15, 'Fecha :', 7)
+    for i, parte in enumerate((hoy[:2], hoy[3:5], hoy[6:10])):
+        ancho = 24 if i < 2 else 34
+        h.caja(ANCHO - MARGEN - 86 + i * 26, y + 7, ancho, 13, 0.5)
+        h.txt(ANCHO - MARGEN - 86 + i * 26 + ancho / 2.0, y + 16, parte, 7,
+              centro=True)
+    h.rotulo_valor(MARGEN + 6, y + 33, 'Código', f.get('cod_est'),
+                   w_rotulo=56, w_linea=140)
+    y += alto
+
+    # ── 2 ──
+    y = h.seccion(y, '2. INFORMACION DE CODIFICACION Y LOCALIZACION')
+    alto = 88
+    h.caja(MARGEN, y, UTIL, alto)
+    canal = (f.get('canal') or '').lower()
+    h.txt(MARGEN + 6, y + 12, 'Nombre del Canal   :', 7)
+    h.txt(MARGEN + 96, y + 12, 'Canal Lateral 10', 7)
+    h.casilla(MARGEN + 166, y + 6, 'lateral' in canal)
+    h.txt(MARGEN + 212, y + 12, 'Canal Madre PECH', 7)
+    h.casilla(MARGEN + 288, y + 6, 'madre' in canal or 'pech' in canal)
+    h.txt(MARGEN + 330, y + 12, 'Otro', 7)
+    h.linea(MARGEN + 350, y + 13, ANCHO - MARGEN - 46, y + 13, 0.5, GRIS)
+    otro = bool(canal) and 'lateral' not in canal and 'madre' not in canal \
+        and 'pech' not in canal
+    if otro:
+        h.txt(MARGEN + 354, y + 12, f.get('canal'), 7, negrita=True)
+    h.casilla(ANCHO - MARGEN - 40, y + 6, otro)
+
+    # La progresiva se queda en la mitad izquierda y el bloque UTM empieza
+    # en 236: con la raya de la progresiva llegando a 252 se cruzaban, y
+    # «Este» aparecia escrito encima de la progresiva.
+    h.rotulo_valor(MARGEN + 96, y + 30, 'Progresiva :',
+                   progresiva(f.get('progresiva')), w_rotulo=54, w_linea=80)
+    h.txt(MARGEN + 6, y + 60, 'Ubicación Geográfica :', 7)
+    h.txt(MARGEN + 116, y + 52, 'UTM  Datum WGS 84', 7)
+    for i, (rotulo, valor) in enumerate((
+            ('Este', f.get('este')), ('Norte', f.get('norte')),
+            ('Zona', f.get('zona') or '17S'),
+            ('Elevación', f.get('elevacion')))):
+        h.rotulo_valor(MARGEN + 236, y + 30 + i * 14, rotulo + ' :', valor,
+                       w_rotulo=48, w_linea=100)
+    h.txt(MARGEN + 400, y + 30, 'Observaciones :', 7)
+    h.parrafo(MARGEN + 400, y + 44, UTIL - 412, val(v, 'obs_ubic'), 6.5, 9,
+              maximo=4)
+    return y + alto
+
+
+def _seccion_inspeccion(h, y, v, preguntas, alto=None):
+    """La sección 4: cuatro preguntas de SI/NO con su renglón de detalle.
+
+    Las preguntas cambian con la estructura —a una canoa se le pregunta por
+    la colmatación del cauce y a un sifón por la corrosión de la tubería—
+    pero la rejilla es la misma en todas las hojas: dos columnas, dos filas,
+    y debajo la nota adicional.
+    """
+    y = h.seccion(y, '4. INSPECCION VISUAL')
+    alto = alto or 150
+    h.caja(MARGEN, y, UTIL, alto)
+    ancho_col = (UTIL - 24) / 2.0
+    for i, (texto, campo, campo_c) in enumerate(preguntas[:4]):
+        cx = MARGEN + 10 + (i % 2) * (ancho_col + 8)
+        cy = y + 8 + (i // 2) * 52
+        h.parrafo(cx, cy + 6, ancho_col - 50, texto, 6, 7.5, maximo=3)
+        h.si_no(cx + ancho_col - 46, cy, val(v, campo))
+        h.linea(cx, cy + 36, cx + ancho_col - 10, cy + 36, 0.5, GRIS)
+        h.parrafo(cx + 2, cy + 34, ancho_col - 14, val(v, campo_c), 6.5, 8,
+                  maximo=1)
+
+    h.txt(MARGEN + 10, y + 118, 'Nota Adicional :', 6.5)
+    renglon = y + 130
+    while renglon < y + alto - 4:
+        h.linea(MARGEN + 10, renglon, ANCHO - MARGEN - 10, renglon, 0.4,
+                GRIS_SUAVE)
+        renglon += 13
+    h.parrafo(MARGEN + 12, y + 128, UTIL - 26, val(v, 'nota_adic'), 6.5, 13,
+              maximo=3)
+    return y + alto
+
+
+def hoja1_formato(h, f, anio, esquemas, logos, spec):
+    """La hoja 1 de una estructura con formato oficial propio.
+
+    UNA HOJA Y NUEVE DESCRIPCIONES, NO NUEVE HOJAS
+    ----------------------------------------------
+    Los formatos de canoa, sifón, alcantarilla, aliviadero, desarenador,
+    entrega y puente comparten el esqueleto: identificación, localización,
+    una banda con año/tipo/material y el esquema acotado, los bloques de
+    dimensiones de sus partes, cuatro preguntas de inspección y los
+    responsables. Lo que cambia son los bloques y las preguntas.
+
+    Dibujar nueve funciones habría significado copiar ese esqueleto nueve
+    veces y arreglar cada error nueve veces. Aquí el esqueleto se dibuja una
+    vez y cada estructura es una entrada en `FORMATOS` con sus bloques y sus
+    preguntas: añadir la décima son veinte líneas.
+    """
+    v = f.get('valores') or {}
+    y = _general_y_localizacion(h, f, anio, logos)
+
+    # ── 3. características técnicas ──
+    y = h.seccion(y, '3. CARACTERISTICAS TECNICAS')
+    bloques = spec.get('bloques') or []
+    filas_max = max([len(b[2]) for b in bloques] + [1])
+    alto_bloques = 18 + filas_max * 12 + 6
+    alto_banda = 128
+    alto = alto_banda + alto_bloques
+    h.caja(MARGEN, y, UTIL, alto)
+
+    # banda: año y tipo | material y estado | esquema acotado
+    x2, x3 = MARGEN + 160, MARGEN + 330
+    h.linea(x2, y, x2, y + alto_banda, 0.5)
+    h.linea(x3, y, x3, y + alto_banda, 0.5)
+
+    h.txt(MARGEN + 8, y + 14, 'Año de Construcción :', 6.5)
+    h.caja(MARGEN + 8, y + 18, 120, 14, 0.5)
+    h.txt(MARGEN + 68, y + 28, val(v, 'anio_const'), 7, negrita=True,
+          centro=True)
+    tipo = str(val(v, 'tipo')).lower()
+    # El rótulo va encima de la lista y no a su izquierda: puesto al lado
+    # cae justo sobre la tercera opción, porque las cuatro ocupan los 64
+    # puntos centrales de la banda.
+    h.txt(MARGEN + 8, y + 48, 'Tipo', 6.5, negrita=True)
+    for i, etiqueta in enumerate(('Permanente', 'Semi - Rustico', 'Rustico',
+                                  'Otro')):
+        marcada = etiqueta.split()[0].lower()[:4] in tipo
+        h.txt(MARGEN + 18, y + 62 + i * 15, etiqueta, 6.5)
+        h.casilla(MARGEN + 110, y + 56 + i * 15, marcada)
+    if 'otro' in tipo or val(v, 'tipo_otro'):
+        h.linea(MARGEN + 18, y + 122, MARGEN + 150, y + 122, 0.5, GRIS)
+        h.txt(MARGEN + 20, y + 120, val(v, 'tipo_otro'), 6.5)
+
+    h.txt(x2 + 30, y + 12, 'Material', 6.5, negrita=True)
+    h.txt(x2 + 110, y + 12, 'Estado', 6.5, negrita=True)
+    material = str(val(v, 'material')).lower()
+    for i, (etiqueta, clave) in enumerate((
+            ('Concreto', 'concreto'), ('Mampostería', 'mampost'),
+            ('Madera', 'madera'), ('No Precisa', 'no precisa'),
+            ('Otros', 'otro'))):
+        yy = y + 26 + i * 16
+        h.txt(x2 + 6, yy + 6, etiqueta, 6.5)
+        h.casilla(x2 + 70, yy, clave in material)
+        if clave in material:
+            h.brm(x2 + 104, yy, val(v, 'mat_estado'))
+    h.linea(x2 + 40, y + 108, x3 - 8, y + 108, 0.5, GRIS)
+    h.txt(x2 + 42, y + 106, val(v, 'mat_otro'), 6.5)
+    h.txt(x2 + 6, y + 122, 'Nota : B (Bueno), R (Regular) , M (Malo)', 5.5,
+          color=GRIS)
+
+    lamina = esquemas.get(spec.get('esquema') or '')
+    if lamina:
+        h.imagen(lamina, x3 + 6, y + 6, (MARGEN + UTIL) - x3 - 12,
+                 alto_banda - 12)
+
+    # bloques de dimensiones, repartidos a lo ancho
+    yb = y + alto_banda
+    h.linea(MARGEN, yb, MARGEN + UTIL, yb, 0.5)
+    ancho_b = UTIL / float(max(len(bloques), 1))
+    for i, (titulo, campo_estado, campos) in enumerate(bloques):
+        bx = MARGEN + i * ancho_b
+        if i:
+            h.linea(bx, yb, bx, y + alto, 0.5)
+        h.txt(bx + 6, yb + 9, 'Dimensiones   /   Estado', 5.5, color=GRIS)
+        h.brm(bx + ancho_b - 60, yb + 2, val(v, campo_estado))
+        h.txt(bx + 6, yb + 20, titulo, 6.5, negrita=True)
+        for j, (etiqueta, campo, unidad) in enumerate(campos):
+            fy = yb + 32 + j * 12
+            h.txt(bx + 6, fy, etiqueta, 6)
+            h.linea(bx + 74, fy + 1.5, bx + ancho_b - 22, fy + 1.5, 0.5, GRIS)
+            h.txt(bx + (74 + ancho_b - 22) / 2.0, fy, num(v, campo), 6.5,
+                  negrita=True, centro=True)
+            if unidad:
+                h.txt(bx + ancho_b - 18, fy, unidad, 5.5, color=GRIS)
+    y += alto
+
+    # ── 4. inspección visual ──
+    # Lo que quede hasta los responsables, que van pegados al pie.
+    alto_insp = (ALTO - MARGEN - 34) - y - 10
+    y = _seccion_inspeccion(h, y, v, spec.get('inspeccion') or [],
+                            alto=max(120, alto_insp))
+
+    # ── 5. responsables ──
+    y = ALTO - MARGEN - 34
+    y = h.seccion(y, '5. RESPONSABLES DEL REGISTRO')
+    h.caja(MARGEN, y, UTIL, 24)
+    h.rotulo_valor(MARGEN + 10, y + 15, 'Nombre :', f.get('evaluador'),
+                   w_rotulo=44, w_linea=170)
+    h.rotulo_valor(MARGEN + 250, y + 15, 'Cargo :', f.get('cargo'),
+                   w_rotulo=36, w_linea=180)
+
+
 def hoja1_generica(h, f, anio, esquemas, logos):
     """La hoja 1 de cualquier estructura que no sea una toma.
 
@@ -693,9 +904,12 @@ def dibujar(fichas, ruta, anio, esquemas, logos):
     c.setAuthor('JURP')
     h = Hoja(c)
     for f in fichas:
-        # Las tomas llevan su formato propio, calcado del papel de la ANA;
-        # el resto, la hoja que vale para cualquier estructura.
-        if f.get('generica'):
+        # Tres caminos, de más a menos específico: la hoja de las tomas, la
+        # hoja oficial de esa estructura, y la genérica para las que todavía
+        # no tienen formato dibujado.
+        if f.get('formato'):
+            hoja1_formato(h, f, anio, esquemas, logos, f['formato'])
+        elif f.get('generica'):
             hoja1_generica(h, f, anio, esquemas, logos)
         else:
             hoja1(h, f, anio, esquemas, logos)
@@ -707,6 +921,69 @@ def dibujar(fichas, ruta, anio, esquemas, logos):
 
 
 # ── datos ─────────────────────────────────────────────────────────────────
+
+# ── los formatos oficiales, uno por estructura ────────────────────────────
+#
+# Cada entrada describe lo que distingue a esa hoja de las demás: el croquis
+# acotado, los bloques de dimensiones de sus partes y las cuatro preguntas
+# de inspección. El esqueleto —identificación, localización, año, material,
+# responsables, croquis y fotos— lo dibuja `hoja1_formato` para todas.
+#
+# Los nombres de campo son los de `inventario.campos_evaluables`, que es de
+# donde sale el formulario que llena el inspector: así la ficha impresa y la
+# pantalla preguntan exactamente lo mismo. Si aquí se escribe un campo que
+# allí no existe, la cota sale en blanco y no da error, que es lo que debe
+# pasar con un dato que nadie ha levantado.
+
+PREGUNTAS_CAUCE = [
+    ('Se evidencia problemas en el concreto armado : Fisuras, corrosión '
+     'de las armaduras, desgaste, etc.', 'insp_concreto', 'insp_concreto_c'),
+    ('La estructura fue rebasada en época de crecidas (ocurrencia de '
+     'Fenómenos Extraordinarios) ?', 'insp_rebasada', 'insp_rebasada_c'),
+    ('Se evidencia colmatación de los cauces de ingreso y/o salida.',
+     'insp_colmatada', 'insp_colmatada_c'),
+    ('La estructura se encuentra obstruida (Considerar el ingreso y '
+     'salida) ?', 'insp_obstruida', 'insp_obstruida_c'),
+]
+
+FORMATOS = {
+    'canoas': {
+        'esquema': 'canoa',
+        'bloques': [
+            ('Transición de Ingreso', 'ing_estado', [
+                ('Longitud  (Lt1)', 'ing_long', 'm'),
+                ('Base mayor (B1)', 'ing_bmayor', 'm'),
+                ('Base menor (b)', 'ing_bmenor', 'm'),
+                ('Altura Muro (h1)', 'ing_h1', 'm'),
+                ('Espesor Muro (e)', 'ing_espes', 'm'),
+                ('Espesor Losa (e1)', 'ing_esplos', 'm'),
+            ]),
+            ('Cuerpo Canoa', 'cue_estado', [
+                ('Longitud  (L)', 'cue_long', 'm'),
+                ('Base  (b)', 'cue_base', 'm'),
+                ('Altura Muro (h1)', 'cue_altura', 'm'),
+                ('Espesor Muro (e)', 'cue_espes', 'm'),
+                ('Espesor Losa (e1)', 'cue_esplos', 'm'),
+            ]),
+            ('Poza de Disipación', 'poz_estado', [
+                ('Longitud  (L3)', 'poz_long', 'm'),
+                ('Base  (b)', 'poz_base', 'm'),
+                ('Altura Muro (h)', 'poz_altura', 'm'),
+                ('Espesor  (e)', 'poz_espes', 'm'),
+            ]),
+            ('Transición de Salida', 'sal_estado', [
+                ('Longitud  (Lt2)', 'sal_long', 'm'),
+                ('Base mayor (B2)', 'sal_bmayor', 'm'),
+                ('Base menor (b)', 'sal_bmenor', 'm'),
+                ('Altura Muro (h2)', 'sal_h2', 'm'),
+                ('Espesor Muro (e)', 'sal_espes', 'm'),
+                ('Espesor Losa (e1)', 'sal_esplos', 'm'),
+            ]),
+        ],
+        'inspeccion': PREGUNTAS_CAUCE,
+    },
+}
+
 
 # tipo → (tabla, canal, nombre que se imprime como «Estructura»)
 #
@@ -918,6 +1195,7 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
         salida.append({
             'fid': clave,
             'generica': tipo not in CON_FORMATO_PROPIO,
+            'formato': FORMATOS.get(tipo),
             'esquema': ESQUEMA_DE.get(tipo, tipo),
             'nombre': nombre,
             'estructura': estructura,
@@ -1099,6 +1377,50 @@ FICHA_PRUEBA_GENERICA = {
 }
 
 
+# La canoa C-01 del formato que trajo el inspector: sirve para comprobar la
+# hoja oficial sin base de datos, y para ver de un vistazo si una cota se
+# desplazo al tocar el dibujante.
+FICHA_PRUEBA_CANOA = {
+    'fid': 1,
+    'formato': FORMATOS['canoas'],
+    'esquema': 'canoa',
+    'nombre': 'C - 01',
+    'estructura': 'CANOA',
+    'canal': 'Canal Lateral 10',
+    'cod_est': 'C - 01',
+    'progresiva': 729.03,
+    'este': '747,636.59',
+    'norte': '9,072,472.94',
+    'zona': '17S',
+    'elevacion': '146.04',
+    'fecha': '10/06/2025',
+    'evaluador': 'JUAN ALFARO MELENDEZ',
+    'cargo': 'SUPERVISOR PREMAFEN',
+    'valores': {
+        'anio_const': 1993, 'tipo': 'Permanente',
+        'material': 'Concreto', 'mat_estado': 'R',
+        'obs_ubic': 'Prrog. Plano conforme a obra 1 + 748.',
+        'ing_estado': 'R', 'ing_long': 4.50, 'ing_bmayor': 4.50,
+        'ing_bmenor': 1.50, 'ing_h1': 1.00, 'ing_espes': 0.20,
+        'ing_esplos': 0.20,
+        'cue_estado': 'R', 'cue_long': 10.85, 'cue_base': 1.50,
+        'cue_altura': 1.00, 'cue_espes': 0.20, 'cue_esplos': 0.20,
+        'poz_estado': 'R', 'poz_long': 4.60, 'poz_base': 1.50,
+        'poz_altura': 1.00, 'poz_espes': 0.20,
+        'sal_estado': 'R', 'sal_long': 4.40, 'sal_bmayor': 1.50,
+        'sal_h2': 1.00, 'sal_espes': 0.20, 'sal_esplos': 0.20,
+        'insp_concreto': 'no',
+        'insp_rebasada': 'si', 'insp_rebasada_c': 'Fenomeno EL NINO 2017.',
+        'insp_colmatada': 'no', 'insp_colmatada_c': 'Presencia de vegetacion.',
+        'insp_obstruida': 'no',
+        'nota_adic': 'Existencia de diques de rotacion de roca. Diques de '
+                     'encruzamiento de material propio de cauce. Existencia '
+                     'de revestimiento con manposteria al ingreso.',
+    },
+    'fotos': [],
+}
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--tipo', default='tomas_canal_madre',
@@ -1117,8 +1439,8 @@ def main():
     if args.prueba:
         # Las dos hojas: la de las tomas y la generica. Se ven seguidas
         # porque el riesgo al tocar una es romper la otra sin notarlo.
-        dibujar([FICHA_PRUEBA, FICHA_PRUEBA_GENERICA], args.prueba, anio,
-                esquemas, {})
+        dibujar([FICHA_PRUEBA, FICHA_PRUEBA_CANOA, FICHA_PRUEBA_GENERICA],
+                args.prueba, anio, esquemas, {})
         print(f'escrito {args.prueba}')
         return 0
 
