@@ -621,6 +621,14 @@
 .inv-alta-acciones button:last-child:hover { color: #ff8787; border-color: #e03131; }
 .inv-alta-acciones button:disabled { opacity: .4; cursor: wait; }
 
+/* Mientras se ubica un alta, el mapa no escucha a sus capas: el clic tiene
+   que llegar al mapa, no abrir el popup de la cuenca que haya debajo. */
+.leaflet-container.inv-ubicando .leaflet-overlay-pane,
+.leaflet-container.inv-ubicando .leaflet-marker-pane,
+.leaflet-container.inv-ubicando .leaflet-tooltip-pane {
+  pointer-events: none;
+}
+
 /* El punto que se acaba de marcar en el mapa. Pulsa para que se distinga
    de los dos mil seiscientos marcadores que ya hay alrededor. */
 .inv-alta-punto span {

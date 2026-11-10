@@ -1012,9 +1012,17 @@ function PuntoDelAlta({ inv }) {
     const el = mapa.getContainer();
     const ubicando = inv.alta.paso === 'ubicando';
     el.style.cursor = ubicando ? 'crosshair' : '';
+    /* Y las capas, sordas mientras tanto.
+     *
+     * Sin esto el clic aterriza en el primer polígono que haya debajo —una
+     * cuenca, un lote— y lo único que pasa es que se abre su popup: el
+     * punto no se pone y el panel sigue pidiendo que toques el mapa, sin
+     * decir por qué no te hace caso. La clase apaga los eventos de los
+     * paneles de vectores y marcadores, así que el clic llega al mapa. */
+    el.classList.toggle('inv-ubicando', ubicando);
     // Al desmontar hay que soltarlo igual: si el panel se cierra a media
-    // alta, el mapa se quedaría con la cruz para siempre.
-    return () => { el.style.cursor = ''; };
+    // alta, el mapa se quedaría con la cruz y sin poder pinchar nada.
+    return () => { el.style.cursor = ''; el.classList.remove('inv-ubicando'); };
   }, [mapa, inv.alta.paso]);
 
   if (!inv.alta.punto) return null;
