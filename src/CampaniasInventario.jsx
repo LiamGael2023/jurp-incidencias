@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FaSyncAlt, FaFileExcel, FaFilePdf, FaExclamationCircle, FaCheckCircle,
-  FaCalendarPlus, FaLock, FaSearch, FaMapMarkerAlt, FaTimes,
+  FaCalendarPlus, FaLock, FaSearch, FaMapMarkerAlt, FaTimes, FaTrash,
 } from 'react-icons/fa';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -128,6 +128,9 @@ function CampaniasInventario({ irAActivo }) {
    * ano esta sin evaluar cuando en realidad no se pudo preguntar es peor que
    * no enseinar nada: manda a alguien a reevaluar lo que ya estaba hecho. */
   const [falloTabla, setFalloTabla] = useState(null);
+  // Sube cada vez que algo cambia la tabla --borrar una evaluacion--
+  // para que el efecto la vuelva a pedir sin recargar la pagina.
+  const [recarga, setRecarga] = useState(0);
 
   useEffect(() => {
     if (!activa) { setEvaluaciones([]); setAvance([]); setFalloTabla(null); return; }
@@ -162,7 +165,7 @@ function CampaniasInventario({ irAActivo }) {
       }
     })();
     return () => { cancelado = true; };
-  }, [activa]);
+  }, [activa, recarga]);
 
   // ── la tabla ─────────────────────────────────────────────────────────
   const porClave = useMemo(() => {
@@ -324,6 +327,54 @@ function CampaniasInventario({ irAActivo }) {
   };
 
   // ── descargas ────────────────────────────────────────────────────────
+  /* Borrar una evaluación.
+   *
+   * Es la única acción de esta pantalla que destruye algo, así que pregunta
+   * nombrando lo que se va a perder --la estructura, su fecha y su
+   * evaluador-- en vez de un «¿seguro?» genérico: con 413 estructuras y una
+   * tabla filtrable, equivocarse de fila es fácil.
+   *
+   * La estructura vuelve a contar como pendiente en el avance, que es lo que
+   * se quiere cuando se evaluó la que no era.
+   */
+  const borrarEvaluacion = async (f) => {
+    const { isConfirmed } = await Swal.fire({
+      icon: 'warning',
+      title: '¿Borrar esta evaluación?',
+      html: `<b>${f.nombre}</b> · ${f.capa}<br>`
+        + `<small style="color:#64748b">Evaluada el ${f.fecha || '—'}`
+        + `${f.evaluador ? ` por ${f.evaluador}` : ''}.<br>`
+        + 'La estructura vuelve a quedar pendiente. No se puede deshacer.</small>',
+      showCancelButton: true,
+      confirmButtonText: 'Borrar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#d63939',
+      cancelButtonColor: '#5b7590',
+      reverseButtons: true,
+      focusCancel: true,
+    });
+    if (!isConfirmed) return;
+
+    setAvisoAccion(null);
+    try {
+      const r = await fetch(`${API}/evaluaciones/${f.id}/`, {
+        method: 'DELETE', headers: cab(),
+      });
+      if (!r.ok && r.status !== 204) {
+        const d = await r.json().catch(() => ({}));
+        setAvisoAccion({ mal: true, txt: d.detail
+          || (r.status === 405
+            ? 'El servidor no permite borrar evaluaciones por esta ruta.'
+            : explicar(r.status)) });
+        return;
+      }
+      setAvisoAccion({ txt: `Evaluación de ${f.nombre} borrada.` });
+      setRecarga(n => n + 1);
+    } catch {
+      setAvisoAccion({ mal: true, txt: 'No se pudo borrar la evaluación.' });
+    }
+  };
+
   const baseNombre = `evaluaciones_campania_${activa?.anio || ''}`;
 
   const aExcel = async () => {
@@ -637,6 +688,16 @@ function CampaniasInventario({ irAActivo }) {
                             onClick={() => irAActivo({
                               tipo: f.tipo, fid: f.fid, lat: f.lat, lng: f.lng })}>
                             <FaMapMarkerAlt size={11} />
+                          </button>
+                        )}
+                        {/* Solo mientras la campaña siga abierta: una campaña
+                            cerrada es lo que se entregó, y de ahí no se quita
+                            nada desde una tabla. */}
+                        {activa?.estado === 'en_proceso' && (
+                          <button className="cmp-borrar"
+                            title="Borrar esta evaluación"
+                            onClick={() => borrarEvaluacion(f)}>
+                            <FaTrash size={11} />
                           </button>
                         )}
                       </td>

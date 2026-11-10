@@ -337,6 +337,23 @@
   border: 1px solid #fed7aa;
 }
 
+/* La papelera comparte caja con el botón del mapa pero no su color: es la
+   única acción de la tabla que destruye algo y conviene que se vea distinta
+   antes de pulsarla, no después. */
+.cmp-borrar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px; height: 27px;
+  margin-left: 5px;
+  color: #d63939;
+  background: #fff5f5;
+  border: 1px solid #ffc9c9;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.cmp-borrar:hover { background: #ffe3e3; }
+
 .cmp-ir {
   display: flex;
   align-items: center;
