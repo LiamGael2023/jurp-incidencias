@@ -36,7 +36,26 @@ import './CampaniasInventario.css';
  */
 
 const API = '/vigapi/inventario';
-const cab = () => ({ Authorization: `Token ${localStorage.getItem('userToken')}` });
+
+/* NO SE MANDA Authorization, Y ES A PROPÓSITO.
+ *
+ * El backend de vigilancia valida el token de PLUVIRA, pero con él rechaza
+ * cualquier escritura: «Las credenciales de PLUVIRA solo permiten consultar
+ * datos», un 401 que dispara la capa de autenticación ANTES de llegar a la
+ * vista. De ahí que el `AllowAny` del ViewSet no sirviera de nada y que
+ * borrar una evaluación —o crear y cerrar una campaña— contestara 401
+ * mientras los GET de la misma pantalla iban a 200.
+ *
+ * Sin cabecera, la petición llega como anónima y la vista decide. Es lo que
+ * ya hacen `InventarioGIS.jsx` (`cabeceras = () => ({})`, por eso el mapa sí
+ * guarda evaluaciones) y `notificarApp()` en reporteMapa.js. Esta pantalla
+ * era la única que mandaba el token, y la única que no podía escribir.
+ *
+ * Que esto baste para escribir es, en sí, el problema de fondo: hoy
+ * `/vigapi/inventario` acepta escrituras anónimas. El arreglo de verdad está
+ * en el backend —un token que sí autorice escribir en el inventario— y
+ * mientras no exista, mandar el de PLUVIRA solo rompe la pantalla. */
+const cab = () => ({});
 
 const ETIQUETA_CAPA = Object.fromEntries(
   TODAS_LAS_CAPAS.map(c => [c.codigo, c.label || c.codigo]));
