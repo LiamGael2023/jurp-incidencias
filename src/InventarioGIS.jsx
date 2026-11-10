@@ -2791,15 +2791,19 @@ function ModalAlta({ inv }) {
 
         <div className="inv-modal-pie">
           {fallo && <span className="inv-alta-fallo">{fallo}</span>}
-          <button onClick={inv.moverPuntoAlta} disabled={paso === 'guardando'}>
-            Mover el punto
+          {/* Mover el punto lleva icono porque es la única acción del pie
+              que pasa en el mapa, no en el formulario. */}
+          <button className="inv-btn-sec inv-btn-icono" onClick={inv.moverPuntoAlta}
+            disabled={paso === 'guardando'}>
+            <FaCrosshairs /> Mover el punto
           </button>
-          <button onClick={inv.cancelarAlta} disabled={paso === 'guardando'}>
+          <button className="inv-btn-sec" onClick={inv.cancelarAlta}
+            disabled={paso === 'guardando'}>
             Cancelar
           </button>
-          <button className="inv-alta-guardar" onClick={guardar}
+          <button className="inv-btn-pri" onClick={guardar}
             disabled={paso === 'guardando' || !tipo}>
-            {paso === 'guardando' ? 'Guardando…' : 'Registrar'}
+            {paso === 'guardando' ? 'Guardando…' : 'Registrar estructura'}
           </button>
         </div>
       </div>

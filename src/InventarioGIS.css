@@ -560,31 +560,29 @@
   letter-spacing: 0;
   resize: vertical;
 }
-.inv-alta-botones { display: flex; gap: 6px; justify-content: flex-end; }
-.inv-alta-botones button {
-  font: inherit;
-  font-size: 10.5px;
-  padding: 4px 8px;
-  color: #c3d9e8;
-  background: rgba(255, 255, 255, .06);
-  border: 1px solid rgba(255, 255, 255, .15);
-  border-radius: 3px;
-  cursor: pointer;
+/* Los botones del pie son los del módulo —inv-btn-sec e inv-btn-pri—; aquí
+   solo lo que esos no cubren. */
+
+.inv-btn-sec.inv-btn-icono {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
-.inv-alta-botones button:disabled { opacity: .45; cursor: not-allowed; }
-.inv-alta-guardar {
-  color: #d3f9d8 !important;
-  background: rgba(47, 158, 68, .35) !important;
-  border-color: rgba(47, 158, 68, .6) !important;
-  font-weight: 700;
-}
+.inv-btn-sec:disabled { opacity: .5; cursor: not-allowed; }
+
+/* El aviso de lo que falta, en el pie claro del modal y pegado a la
+   izquierda: el hueco entre el mensaje y los botones es lo que hace que se
+   lea antes de volver a pulsar Registrar. */
 .inv-alta-fallo {
-  padding: 4px 6px;
-  font-size: 10px;
-  color: #ffc9c9;
-  background: rgba(224, 49, 49, .18);
-  border: 1px solid rgba(224, 49, 49, .4);
-  border-radius: 3px;
+  margin-right: auto;
+  align-self: center;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c92a2a;
+  background: #fff5f5;
+  border: 1px solid #ffc9c9;
+  border-radius: 8px;
 }
 
 /* La lista de pendientes, con sus dos botones ------------------------- */
