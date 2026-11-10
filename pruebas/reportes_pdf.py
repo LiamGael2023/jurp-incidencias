@@ -33,7 +33,9 @@ al oficial, que es justo lo que se entrega.
 import argparse
 import datetime as dt
 import os
+import shutil
 import sys
+import tempfile
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A3, landscape
@@ -94,6 +96,76 @@ def _texto(valor, tipo, progresiva):
     return str(valor)
 
 
+# ── los logos ─────────────────────────────────────────────────────────────
+# Viven en logos_ana.py como base64 porque el Excel los incrusta desde ahi.
+# El PDF los necesita como archivos: reportlab dibuja rutas, no cadenas.
+
+ALTO_LOGO = 11 * mm
+
+
+def extraer_logos(carpeta_tmp):
+    """Saca los logos de logos_ana.py a archivos, para poder dibujarlos.
+
+    Si el modulo no esta —corriendo fuera del servidor, por ejemplo— se
+    devuelve vacio y la hoja sale sin ellos en vez de no salir.
+    """
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import logos_ana as L
+    except ImportError:
+        return {}
+    import base64
+    salida = {}
+    for nombre, atributo in (('jurp', '_JURP'), ('ana', '_ANA'),
+                             ('minagri', '_MINAGRI')):
+        dato = getattr(L, atributo, None)
+        if not dato:
+            continue
+        try:
+            crudo = base64.b64decode(''.join(dato) if isinstance(dato, tuple)
+                                     else dato)
+            ruta = os.path.join(carpeta_tmp, f'logo_{nombre}.png')
+            with open(ruta, 'wb') as f:
+                f.write(crudo)
+            salida[nombre] = ruta
+        except Exception:
+            continue
+    return salida
+
+
+def dibujar_logos(canvas, pagina, logos, margen):
+    """Los logos en la banda de cabecera: el ministerio a la izquierda, la
+    ANA y la Junta a la derecha, como en el formato impreso.
+
+    Van pintados sobre la hoja y no dentro del relato porque ocupan los
+    extremos de la cabecera, fuera de la columna donde va el titulo. Un
+    logo que no se pueda abrir no tumba el reporte: se omite.
+    """
+    if not logos:
+        return
+    arriba = pagina[1] - margen - ALTO_LOGO
+    if logos.get('minagri'):
+        try:
+            canvas.drawImage(logos['minagri'], margen, arriba,
+                             width=46 * mm, height=ALTO_LOGO,
+                             preserveAspectRatio=True, anchor='sw',
+                             mask='auto')
+        except Exception:
+            pass
+    x = pagina[0] - margen
+    for clave, ancho_mm in (('jurp', 44), ('ana', 38)):
+        if not logos.get(clave):
+            continue
+        try:
+            canvas.drawImage(logos[clave], x - ancho_mm * mm, arriba,
+                             width=ancho_mm * mm, height=ALTO_LOGO,
+                             preserveAspectRatio=True, anchor='se',
+                             mask='auto')
+            x -= (ancho_mm + 3) * mm
+        except Exception:
+            pass
+
+
 # ── la cabecera de tres pisos ─────────────────────────────────────────────
 
 def _cabecera(cols, grupos, subgrupos):
@@ -148,7 +220,7 @@ def _cabecera(cols, grupos, subgrupos):
 # ── dibujo ────────────────────────────────────────────────────────────────
 
 def dibujar(cfg, filas, ruta, ambito, campania=None, cabecera=None,
-            progresiva=None):
+            progresiva=None, logos=None):
     cols = cfg['columnas']
     grupos = cfg.get('grupos') or []
     subgrupos = cfg.get('subgrupos') or []
@@ -171,6 +243,7 @@ def dibujar(cfg, filas, ruta, ambito, campania=None, cabecera=None,
 
     def pie(canvas, documento):
         canvas.saveState()
+        dibujar_logos(canvas, pagina, logos, MARGEN)
         canvas.setFont('Helvetica', 6)
         canvas.setFillColor(colors.HexColor('#666666'))
         sello = dt.datetime.now().strftime('%d/%m/%Y %H:%M')
@@ -326,18 +399,30 @@ def main():
                    help='dibuja una tabla de ejemplo, sin tocar la base')
     args = p.parse_args()
 
+    tmp = tempfile.mkdtemp(prefix='logos_ana_')
+    try:
+        return _generar(args, tmp)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _generar(args, tmp):
+    logos = extraer_logos(tmp)
+
     if args.prueba:
         dibujar(CFG_PRUEBA, FILAS_PRUEBA, args.prueba, 'JURP',
                 cabecera={'ministerio': 'Ministerio de Desarrollo Agrario y Riego',
                           'autoridad': 'Autoridad Nacional del Agua',
                           'aaa': 'Autoridad Administrativa del Agua',
                           'ala': 'Administración Local del Agua'},
-                progresiva=lambda v: f'{int(v) // 1000}+{int(v) % 1000:03d}')
+                progresiva=lambda v: f'{int(v) // 1000}+{int(v) % 1000:03d}',
+                logos=logos)
         print(f'escrito {args.prueba}')
         return 0
 
     if not args.formato:
-        p.error('hace falta --formato o --prueba')
+        print('hace falta --formato o --prueba', file=sys.stderr)
+        return 2
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import reportes_ana as R
@@ -368,7 +453,7 @@ def main():
                         nombre_archivo(cfg, args.ambito, args.campania))
     dibujar(cfg, filas, ruta, args.ambito, args.campania,
             cabecera=getattr(R, 'CABECERA', {}),
-            progresiva=getattr(R, 'progresiva', None))
+            progresiva=getattr(R, 'progresiva', None), logos=logos)
     print(f'escrito {ruta}')
     return 0
 

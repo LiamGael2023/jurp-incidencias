@@ -49,14 +49,28 @@ parezcan un numero.
 import argparse
 import datetime as dt
 import os
+import shutil
 import sys
+import tempfile
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A3, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import (BaseDocTemplate, Frame, Image, PageTemplate,
+from reportlab.platypus import (BaseDocTemplate, Frame, PageTemplate,
                                 Paragraph, Spacer, Table, TableStyle)
+
+# Los logos y su colocacion se comparten con los formatos tabulares: los dos
+# modulos viven en la misma carpeta junto al generador.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from reportes_pdf import dibujar_logos, extraer_logos
+except ImportError:                                  # pragma: sin cobertura
+    def extraer_logos(_):
+        return {}
+
+    def dibujar_logos(*_a, **_k):
+        return None
 
 
 # ── estilo ────────────────────────────────────────────────────────────────
@@ -430,35 +444,11 @@ def dibujar(datos, ruta, ambito='todos', campania=None, cabecera=None,
         title='Formato B-9.- Resumen del Inventario de Infraestructura '
               'Hidráulica', author='JURP')
 
-    logos = logos or {}
-
     def adorno(canvas, documento):
         canvas.saveState()
-        # Los logos van dibujados sobre la hoja y no dentro del relato: en el
-        # formato oficial estan en los extremos de la cabecera, fuera de la
-        # columna del texto.
-        alto = pagina[1]
-        if logos.get('minagri'):
-            try:
-                canvas.drawImage(logos['minagri'], MARGEN, alto - 20 * mm,
-                                 width=46 * mm, height=12 * mm,
-                                 preserveAspectRatio=True, anchor='sw',
-                                 mask='auto')
-            except Exception:
-                pass
-        x = pagina[0] - MARGEN
-        for clave, ancho_mm in (('jurp', 42), ('ana', 38)):
-            if not logos.get(clave):
-                continue
-            try:
-                canvas.drawImage(logos[clave], x - ancho_mm * mm,
-                                 alto - 20 * mm, width=ancho_mm * mm,
-                                 height=12 * mm, preserveAspectRatio=True,
-                                 anchor='se', mask='auto')
-                x -= (ancho_mm + 3) * mm
-            except Exception:
-                pass
-
+        # Los mismos logos y la misma colocacion que los formatos tabulares:
+        # las catorce hojas se archivan juntas y tienen que verse iguales.
+        dibujar_logos(canvas, pagina, logos, MARGEN)
         canvas.setFont('Helvetica', 6)
         canvas.setFillColor(colors.HexColor('#666666'))
         sello = dt.datetime.now().strftime('%d/%m/%Y %H:%M')
@@ -586,13 +576,20 @@ def main():
                    help='dibuja la hoja de referencia, sin tocar la base')
     args = p.parse_args()
 
+    tmp = tempfile.mkdtemp(prefix='logos_ana_')
+    try:
+        return _generar(args, extraer_logos(tmp))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _generar(args, logos):
     if args.prueba:
         dibujar(DATOS_PRUEBA, args.prueba, 'todos',
-                cabecera=CABECERA_PRUEBA)
+                cabecera=CABECERA_PRUEBA, logos=logos)
         print(f'escrito {args.prueba}')
         return 0
 
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import reportes_ana as R                       # noqa: F401
     from reportes_b9_datos import leer_datos       # noqa: F401
 
@@ -605,7 +602,7 @@ def main():
     sufijo = f'_{args.campania}' if args.campania else ''
     ruta = os.path.join(args.salida, f'FB9_Resumen_{args.ambito}{sufijo}.pdf')
     dibujar(datos, ruta, args.ambito, args.campania,
-            cabecera=getattr(R, 'CABECERA', CABECERA_PRUEBA))
+            cabecera=getattr(R, 'CABECERA', CABECERA_PRUEBA), logos=logos)
     print(f'escrito {ruta}')
     return 0
 
