@@ -141,7 +141,14 @@
   border-bottom: 1px solid rgba(255, 255, 255, .06);
 }
 .rep-fila:last-child { border-bottom: none; }
-.rep-fila .rep-formato { border-bottom: none; }
+/* `width: 100%` dentro de un flex no se encoge: el botón de Excel ocupaba
+   la fila entera y empujaba el de PDF fuera del panel, donde no se ve. */
+.rep-fila .rep-formato {
+  border-bottom: none;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
 
 .rep-pdf {
   flex: none;
