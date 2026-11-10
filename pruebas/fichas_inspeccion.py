@@ -8,8 +8,13 @@ La ficha de levantamiento en campo, en PDF.
     python3 fichas_inspeccion.py --prueba ficha.pdf      # sin base de datos
 
 Dos páginas por estructura, como el formato de papel: la primera con los
-datos y los croquis acotados, la segunda con el croquis de detalle y la
-evidencia fotográfica.
+datos y los croquis acotados, la segunda con la evidencia fotográfica.
+
+La hoja 2 llevaba además un «6. CROQUIS DE DETALLES»: una cuadrícula en
+blanco de 300 puntos para dibujar a mano. Se quitó en noviembre de 2026. El
+inventario se levanta con el teléfono y lo que antes se dibujaba a lápiz hoy
+se fotografía, así que esa media página era espacio muerto en pantalla y
+papel desperdiciado al imprimir. Las fotos ocupan ahora la hoja entera.
 
 QUÉ SALE CUANDO NO HAY EVALUACIÓN
 ----------------------------------
@@ -1007,33 +1012,18 @@ def hoja1_generica(h, f, anio, esquemas, logos):
                     0.4, GRIS_SUAVE)
             renglon += 16
 
-    # El croquis del tipo, si lo hay: no todas las estructuras tienen lámina
-    # dibujada, y la hoja 2 ya reserva su recuadro.
-    f['croquis'] = f.get('croquis') or esquemas.get(f.get('esquema') or '')
-
 
 def hoja2(h, f, anio, logos, fotos):
+    """La hoja de evidencia fotográfica.
+
+    Sin el croquis, las fotos pasan de ocupar media hoja a ocuparla entera:
+    cuatro recuadros de 2×2 sobre todo el alto útil. Una grieta o un
+    sedimento se ven bastante mejor a ese tamaño, que es para lo que se
+    toman.
+    """
     y = cabecera(h, 2, 2, anio, logos)
 
-    y = h.seccion(y, '6. CROQUIS DE DETALLES')
-    alto = 300
-    h.caja(MARGEN, y, UTIL, alto)
-    # La cuadrícula es para dibujar a mano cuando la ficha se imprime; con
-    # croquis cargado se tapa sola.
-    paso = 12
-    x = MARGEN + paso
-    while x < ANCHO - MARGEN:
-        h.linea(x, y + 2, x, y + alto - 2, 0.25, GRIS_SUAVE)
-        x += paso
-    yy = y + paso
-    while yy < y + alto - 2:
-        h.linea(MARGEN + 2, yy, ANCHO - MARGEN - 2, yy, 0.25, GRIS_SUAVE)
-        yy += paso
-    if f.get('croquis'):
-        h.imagen(f['croquis'], MARGEN + 8, y + 8, UTIL - 16, alto - 16)
-    y += alto
-
-    y = h.seccion(y, '7. EVIDENCIA FOTOGRAFICA')
+    y = h.seccion(y, '6. EVIDENCIA FOTOGRAFICA')
     alto = ALTO - MARGEN - 34 - y
     h.caja(MARGEN, y, UTIL, alto)
     ancho_f = (UTIL - 30) / 2.0
