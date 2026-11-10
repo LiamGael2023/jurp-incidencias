@@ -618,6 +618,61 @@ def _seccion_inspeccion(h, y, v, preguntas, alto=None):
     return y + alto
 
 
+def _alto_bloque(bloque):
+    """Lo que ocupa un bloque de dimensiones, para cuadrar la sección."""
+    opciones = bloque.get('opciones')
+    alto_op = (len(opciones[2]) * 13 + 8) if opciones else 0
+    return 20 + alto_op + len(bloque.get('campos') or []) * 12 + 8
+
+
+def _bloque(h, v, bloque, x, y, ancho):
+    """Una parte de la estructura: su estado, sus materiales y sus cotas.
+
+    Las tres formas que traen los formatos oficiales caben aquí:
+
+      · solo cotas —el cuerpo de una canoa—;
+      · una matriz de materiales con su B/R/M encima de las cotas, que es
+        como la alcantarilla y el sifón declaran el revestimiento de cada
+        transición;
+      · solo la matriz, sin cotas, como la columna de accesorios del sifón.
+
+    La alternativa era un dibujo por formato, y entonces el ancho de las
+    rayas y la altura de los renglones dejaban de coincidir entre hojas que
+    se archivan juntas.
+    """
+    h.txt(x + 6, y + 10, bloque.get('titulo', ''), 6.5, negrita=True)
+    if bloque.get('estado'):
+        h.brm(x + ancho - 58, y + 3, val(v, bloque['estado']))
+    yy = y + 20
+
+    opciones = bloque.get('opciones')
+    if opciones:
+        campo, campo_estado, etiquetas = opciones
+        elegido = str(val(v, campo)).lower()
+        for etiqueta in etiquetas:
+            clave = etiqueta.split()[0].lower()[:6]
+            marcada = bool(clave) and clave in elegido
+            h.txt(x + 6, yy + 6, etiqueta, 6)
+            h.casilla(x + 62, yy, marcada)
+            if marcada and campo_estado:
+                h.brm(x + 80, yy, val(v, campo_estado))
+            yy += 13
+        # Aire entre la matriz y las cotas: las etiquetas de las opciones se
+        # escriben 6 puntos por debajo de su casilla, asi que sin esto la
+        # primera cota sale pegada a «Otro» y parecen el mismo renglon.
+        yy += 8
+
+    for etiqueta, campo, unidad in (bloque.get('campos') or []):
+        h.txt(x + 6, yy, etiqueta, 6)
+        x0, x1 = x + 76, x + ancho - 22
+        h.linea(x0, yy + 1.5, x1, yy + 1.5, 0.5, GRIS)
+        h.txt((x0 + x1) / 2.0, yy, num(v, campo), 6.5, negrita=True,
+              centro=True)
+        if unidad:
+            h.txt(x + ancho - 18, yy, unidad, 5.5, color=GRIS)
+        yy += 12
+
+
 def hoja1_formato(h, f, anio, esquemas, logos, spec):
     """La hoja 1 de una estructura con formato oficial propio.
 
@@ -640,16 +695,29 @@ def hoja1_formato(h, f, anio, esquemas, logos, spec):
     # ── 3. características técnicas ──
     y = h.seccion(y, '3. CARACTERISTICAS TECNICAS')
     bloques = spec.get('bloques') or []
-    filas_max = max([len(b[2]) for b in bloques] + [1])
-    alto_bloques = 18 + filas_max * 12 + 6
-    alto_banda = 128
+    # Un bloque solo —la entrega, el puente— va DENTRO de la banda, junto al
+    # material y antes del esquema, que es como está el papel. Tirado a lo
+    # ancho de la hoja como una franja propia se vería una tabla de una sola
+    # columna con cuatro centímetros de aire a cada lado.
+    en_banda = len(bloques) == 1
+    alto_banda = 150 if en_banda else 128
+    alto_bloques = 0 if en_banda else max(_alto_bloque(b) for b in bloques) \
+        if bloques else 30
     alto = alto_banda + alto_bloques
     h.caja(MARGEN, y, UTIL, alto)
 
-    # banda: año y tipo | material y estado | esquema acotado
-    x2, x3 = MARGEN + 160, MARGEN + 330
+    # banda: año y tipo | material y estado | [dimensiones] | esquema
+    if en_banda:
+        x2, x3 = MARGEN + 140, MARGEN + 280
+        h.linea(x3, y, x3, y + alto_banda, 0.5)
+        _bloque(h, v, bloques[0], x3, y, 140)
+        x_esquema = MARGEN + 420
+        h.linea(x_esquema, y, x_esquema, y + alto_banda, 0.5)
+    else:
+        x2, x3 = MARGEN + 160, MARGEN + 330
+        x_esquema = x3
+        h.linea(x3, y, x3, y + alto_banda, 0.5)
     h.linea(x2, y, x2, y + alto_banda, 0.5)
-    h.linea(x3, y, x3, y + alto_banda, 0.5)
 
     h.txt(MARGEN + 8, y + 14, 'Año de Construcción :', 6.5)
     h.caja(MARGEN + 8, y + 18, 120, 14, 0.5)
@@ -688,28 +756,19 @@ def hoja1_formato(h, f, anio, esquemas, logos, spec):
 
     lamina = esquemas.get(spec.get('esquema') or '')
     if lamina:
-        h.imagen(lamina, x3 + 6, y + 6, (MARGEN + UTIL) - x3 - 12,
-                 alto_banda - 12)
+        h.imagen(lamina, x_esquema + 6, y + 6,
+                 (MARGEN + UTIL) - x_esquema - 12, alto_banda - 12)
 
     # bloques de dimensiones, repartidos a lo ancho
-    yb = y + alto_banda
-    h.linea(MARGEN, yb, MARGEN + UTIL, yb, 0.5)
-    ancho_b = UTIL / float(max(len(bloques), 1))
-    for i, (titulo, campo_estado, campos) in enumerate(bloques):
-        bx = MARGEN + i * ancho_b
-        if i:
-            h.linea(bx, yb, bx, y + alto, 0.5)
-        h.txt(bx + 6, yb + 9, 'Dimensiones   /   Estado', 5.5, color=GRIS)
-        h.brm(bx + ancho_b - 60, yb + 2, val(v, campo_estado))
-        h.txt(bx + 6, yb + 20, titulo, 6.5, negrita=True)
-        for j, (etiqueta, campo, unidad) in enumerate(campos):
-            fy = yb + 32 + j * 12
-            h.txt(bx + 6, fy, etiqueta, 6)
-            h.linea(bx + 74, fy + 1.5, bx + ancho_b - 22, fy + 1.5, 0.5, GRIS)
-            h.txt(bx + (74 + ancho_b - 22) / 2.0, fy, num(v, campo), 6.5,
-                  negrita=True, centro=True)
-            if unidad:
-                h.txt(bx + ancho_b - 18, fy, unidad, 5.5, color=GRIS)
+    if not en_banda:
+        yb = y + alto_banda
+        h.linea(MARGEN, yb, MARGEN + UTIL, yb, 0.5)
+        ancho_b = UTIL / float(max(len(bloques), 1))
+        for i, bloque in enumerate(bloques):
+            bx = MARGEN + i * ancho_b
+            if i:
+                h.linea(bx, yb, bx, y + alto, 0.5)
+            _bloque(h, v, bloque, bx, yb, ancho_b)
     y += alto
 
     # ── 4. inspección visual ──
@@ -946,43 +1005,190 @@ PREGUNTAS_CAUCE = [
      'salida) ?', 'insp_obstruida', 'insp_obstruida_c'),
 ]
 
+REVESTIMIENTOS = ['Concreto', 'Mampostería', 'Enrocado', 'Otro']
+
 FORMATOS = {
     'canoas': {
         'esquema': 'canoa',
         'bloques': [
-            ('Transición de Ingreso', 'ing_estado', [
-                ('Longitud  (Lt1)', 'ing_long', 'm'),
-                ('Base mayor (B1)', 'ing_bmayor', 'm'),
-                ('Base menor (b)', 'ing_bmenor', 'm'),
-                ('Altura Muro (h1)', 'ing_h1', 'm'),
-                ('Espesor Muro (e)', 'ing_espes', 'm'),
-                ('Espesor Losa (e1)', 'ing_esplos', 'm'),
-            ]),
-            ('Cuerpo Canoa', 'cue_estado', [
+            {'titulo': 'Transición de Ingreso', 'estado': 'ing_estado',
+             'campos': [
+                 ('Longitud  (Lt1)', 'ing_long', 'm'),
+                 ('Base mayor (B1)', 'ing_bmayor', 'm'),
+                 ('Base menor (b)', 'ing_bmenor', 'm'),
+                 ('Altura Muro (h1)', 'ing_h1', 'm'),
+                 ('Espesor Muro (e)', 'ing_espes', 'm'),
+                 ('Espesor Losa (e1)', 'ing_esplos', 'm')]},
+            {'titulo': 'Cuerpo Canoa', 'estado': 'cue_estado', 'campos': [
                 ('Longitud  (L)', 'cue_long', 'm'),
                 ('Base  (b)', 'cue_base', 'm'),
                 ('Altura Muro (h1)', 'cue_altura', 'm'),
                 ('Espesor Muro (e)', 'cue_espes', 'm'),
-                ('Espesor Losa (e1)', 'cue_esplos', 'm'),
-            ]),
-            ('Poza de Disipación', 'poz_estado', [
-                ('Longitud  (L3)', 'poz_long', 'm'),
-                ('Base  (b)', 'poz_base', 'm'),
-                ('Altura Muro (h)', 'poz_altura', 'm'),
-                ('Espesor  (e)', 'poz_espes', 'm'),
-            ]),
-            ('Transición de Salida', 'sal_estado', [
-                ('Longitud  (Lt2)', 'sal_long', 'm'),
-                ('Base mayor (B2)', 'sal_bmayor', 'm'),
-                ('Base menor (b)', 'sal_bmenor', 'm'),
-                ('Altura Muro (h2)', 'sal_h2', 'm'),
-                ('Espesor Muro (e)', 'sal_espes', 'm'),
-                ('Espesor Losa (e1)', 'sal_esplos', 'm'),
-            ]),
+                ('Espesor Losa (e1)', 'cue_esplos', 'm')]},
+            {'titulo': 'Poza de Disipación', 'estado': 'poz_estado',
+             'campos': [
+                 ('Longitud  (L3)', 'poz_long', 'm'),
+                 ('Base  (b)', 'poz_base', 'm'),
+                 ('Altura Muro (h)', 'poz_altura', 'm'),
+                 ('Espesor  (e)', 'poz_espes', 'm')]},
+            {'titulo': 'Transición de Salida', 'estado': 'sal_estado',
+             'campos': [
+                 ('Longitud  (Lt2)', 'sal_long', 'm'),
+                 ('Base mayor (B2)', 'sal_bmayor', 'm'),
+                 ('Base menor (b)', 'sal_bmenor', 'm'),
+                 ('Altura Muro (h2)', 'sal_h2', 'm'),
+                 ('Espesor Muro (e)', 'sal_espes', 'm'),
+                 ('Espesor Losa (e1)', 'sal_esplos', 'm')]},
         ],
         'inspeccion': PREGUNTAS_CAUCE,
     },
+
+    'entregas': {
+        'esquema': 'entrega',
+        'bloques': [
+            {'titulo': 'Dimensiones', 'campos': [
+                ('Longitud  (L1)', 'ent_long1', 'm'),
+                ('Longitud  (L2)', 'ent_long2', 'm'),
+                ('Longitud  (L3)', 'ent_long3', 'm'),
+                ('Ancho  (b)', 'ent_ancho', 'm'),
+                ('Ancho mayor (B)', 'ent_bmayor', 'm'),
+                ('Altura  (h)', 'ent_altura', 'm'),
+                ('Espesor Muro (e)', 'ent_espes', 'm')]},
+        ],
+        'inspeccion': [
+            PREGUNTAS_CAUCE[0], PREGUNTAS_CAUCE[1],
+            ('Se evidencia colmatación de la estructura.',
+             'insp_colmatada', 'insp_colmatada_c'),
+            PREGUNTAS_CAUCE[3],
+        ],
+    },
+
+    # Los dos puentes comparten formato y campos; solo cambia el titulo que
+    # imprime la seccion 1, que sale de TABLAS.
+    'puente_vehicular': {
+        'esquema': 'puente',
+        'bloques': [
+            {'titulo': 'Dimensiones', 'campos': [
+                ('Ancho  (A)', 'pue_ancho', 'm'),
+                ('Murete guarda May. (B)', 'pue_mgmay', 'm'),
+                ('Murete guarda Men. (b)', 'pue_mgmen', 'm'),
+                ('Longitud  (L)', 'pue_long', 'm'),
+                ('Transición losa  (l)', 'pue_translo', 'm'),
+                ('Altura  (h)', 'pue_altura', 'm'),
+                ('Espesor losa  (e)', 'pue_esplos', 'm')]},
+        ],
+        'inspeccion': [
+            PREGUNTAS_CAUCE[0], PREGUNTAS_CAUCE[1],
+            ('Se evidencia colmatación de la estructura.',
+             'insp_colmatada', 'insp_colmatada_c'),
+            PREGUNTAS_CAUCE[3],
+        ],
+    },
+
+    'alcantarilla': {
+        'esquema': 'alcantarilla',
+        'bloques': [
+            {'titulo': 'Transición de Ingreso',
+             'opciones': ('ing_revest', 'ing_estado', REVESTIMIENTOS),
+             'campos': [
+                 ('Longitud  (Lt1)', 'ing_long', 'm'),
+                 ('Base mayor (B1)', 'ing_bmayor', 'm'),
+                 ('Base menor (b)', 'ing_bmenor', 'm'),
+                 ('Altura Muro (h1)', 'ing_h1', 'm'),
+                 ('Altura Muro (h2)', 'ing_h2', 'm'),
+                 ('Espesor  (e)', 'ing_espes', 'm')]},
+            {'titulo': 'Cuerpo Alcantarilla',
+             'opciones': ('cue_tipo', 'cue_estado',
+                          ['Tubería', 'Cajón', 'Otro']),
+             'campos': [
+                 ('Longitud  (L)', 'cue_long', 'm'),
+                 ('Diámetro  (Ø)', 'cue_diam', 'm'),
+                 ('Base  (b)', 'cue_base', 'm'),
+                 ('Altura  (h)', 'cue_altura', 'm'),
+                 ('Espesor  (e)', 'cue_espes', 'm'),
+                 ('Espesor Losa (e1)', 'cue_esplos', 'm')]},
+            {'titulo': 'Transición de Salida',
+             'opciones': ('sal_revest', 'sal_estado', REVESTIMIENTOS),
+             'campos': [
+                 ('Longitud  (Lt2)', 'sal_long', 'm'),
+                 ('Base mayor (B2)', 'sal_bmayor', 'm'),
+                 ('Base menor (b)', 'sal_bmenor', 'm'),
+                 ('Altura Muro (h3)', 'sal_h3', 'm'),
+                 ('Espesor  (e)', 'sal_espes', 'm')]},
+            {'titulo': 'Canales de Ingreso y Salida',
+             'opciones': ('can_ing_mat', 'can_ing_estado',
+                          ['Concreto', 'Mampostería', 'Tierra']),
+             'campos': []},
+        ],
+        'inspeccion': [
+            ('La estructura se encuentra operativa ?',
+             'insp_operativa', 'insp_operativa_c'),
+            PREGUNTAS_CAUCE[1],
+            ('Se evidencia colmatación de los cauces de ingreso y/o salida.',
+             'insp_colmatada', 'insp_colmatada_c'),
+            ('La estructura se encuentra obstruida ?',
+             'insp_obstruida', 'insp_obstruida_c'),
+        ],
+    },
+
+    'sifon': {
+        'esquema': 'sifon',
+        'bloques': [
+            {'titulo': 'Transición de Ingreso',
+             'opciones': ('ing_revest', 'ing_estado', REVESTIMIENTOS),
+             'campos': [
+                 ('Longitud  (Lt1)', 'ing_long', 'm'),
+                 ('Base mayor (B1)', 'ing_bmayor', 'm'),
+                 ('Base menor (b)', 'ing_bmenor', 'm'),
+                 ('Altura Muro (h1)', 'ing_h1', 'm'),
+                 ('Altura Muro (h2)', 'ing_h2', 'm'),
+                 ('Espesor  (e)', 'ing_espes', 'm')]},
+            {'titulo': 'Ducto (Cuerpo Sifón)',
+             'opciones': ('cue_tipo', 'cue_estado',
+                          ['Tubería', 'Cajón', 'Otro']),
+             'campos': [
+                 ('Longitud  (L)', 'cue_long', 'm'),
+                 ('Diámetro  (Ø)', 'cue_diam', 'mm'),
+                 ('Base  (b)', 'cue_base', 'm'),
+                 ('Altura  (h)', 'cue_altura', 'm'),
+                 ('Espesor  (e)', 'cue_espes', 'm'),
+                 ('Espesor Losa (e1)', 'cue_esplos', 'm')]},
+            {'titulo': 'Transición de Salida',
+             'opciones': ('sal_revest', 'sal_estado', REVESTIMIENTOS),
+             'campos': [
+                 ('Longitud  (Lt2)', 'sal_long', 'm'),
+                 ('Base mayor (B2)', 'sal_bmayor', 'm'),
+                 ('Base menor (b)', 'sal_bmenor', 'm'),
+                 ('Altura Muro (h)', 'sal_h', 'm'),
+                 ('Altura Muro (h3)', 'sal_h3', 'm'),
+                 ('Espesor  (e)', 'sal_espes', 'm')]},
+            {'titulo': 'Inspección y Purga',
+             'opciones': ('pur_mat', 'pur_esc_estado',
+                          ['Concreto', 'Acero', 'Otro']),
+             'campos': [
+                 ('Ancho', 'pur_ancho', 'm'),
+                 ('Largo', 'pur_largo', 'm'),
+                 ('Altura', 'pur_altura', 'm'),
+                 ('Espesor', 'pur_espes', 'm'),
+                 ('Válvula compuerta Ø', 'pur_vdiam', 'mm'),
+                 ('Tubería de desfogue Ø', 'pur_ddiam', 'mm')]},
+        ],
+        'inspeccion': [
+            PREGUNTAS_CAUCE[0],
+            ('La tubería cuenta con cobertura y/o protección ?',
+             'insp_cobertura', 'insp_cobertura_c'),
+            ('Se evidencia desgaste por corrosión de la tubería de acero ?',
+             'insp_corr_tub', 'insp_corr_tub_c'),
+            ('La zona de descarga de la purga se encuentra habilitada ?',
+             'insp_descarga', 'insp_descarga_c'),
+        ],
+    },
 }
+
+# El puente peatonal usa el mismo formato que el vehicular: mismos campos
+# en campos_evaluables y mismo papel. Lo unico que cambia es el titulo, que
+# sale de TABLAS.
+FORMATOS['puente_peatonal'] = FORMATOS['puente_vehicular']
 
 
 # tipo → (tabla, canal, nombre que se imprime como «Estructura»)
@@ -1421,6 +1627,52 @@ FICHA_PRUEBA_CANOA = {
 }
 
 
+def _prueba_formato(tipo, estructura, nombre, valores, esquema):
+    """Una ficha de prueba de cualquier formato, con la cabecera comun."""
+    base = dict(FICHA_PRUEBA_CANOA)
+    base.update({
+        'formato': FORMATOS[tipo], 'esquema': esquema, 'nombre': nombre,
+        'estructura': estructura, 'cod_est': nombre, 'valores': valores,
+    })
+    return base
+
+
+FICHA_PRUEBA_ENTREGA = _prueba_formato(
+    'entregas', 'ENTREGAS', 'E - 01', {
+        'anio_const': 1993, 'tipo': 'Permanente',
+        'material': 'Mamposteria', 'mat_estado': 'R',
+        'ent_long1': 2.10, 'ent_long2': 4.00, 'ent_long3': 2.00,
+        'ent_ancho': 2.00, 'ent_bmayor': 8.00, 'ent_altura': 0.70,
+        'ent_espes': 0.30,
+        'insp_concreto': 'si', 'insp_concreto_c': 'Muro izquierdo con ruptura',
+        'insp_rebasada': 'si', 'insp_rebasada_c': 'Fenomeno EL NINO 2017',
+        'insp_colmatada': 'no', 'insp_obstruida': 'no',
+        'nota_adic': 'La estructura aguas arriba cuenta con diques de '
+                     'encauzamiento de material propio (arena) y '
+                     'descolmatacion de la quebrada',
+    }, 'entrega')
+
+FICHA_PRUEBA_ALCANTARILLA = _prueba_formato(
+    'alcantarilla', 'ALCANTARILLA', 'ALC-01', {
+        'anio_const': 1993, 'tipo': 'Permanente',
+        'material': 'Concreto', 'mat_estado': 'B',
+        'ing_revest': 'Mamposteria', 'ing_estado': 'R', 'ing_long': 4.00,
+        'ing_bmayor': 3.00, 'ing_bmenor': 1.00, 'ing_h1': 1.00,
+        'ing_h2': 1.40, 'ing_espes': 0.30,
+        'cue_tipo': 'Tuberia', 'cue_estado': 'B', 'cue_long': 34.60,
+        'cue_diam': 1.00,
+        'sal_revest': 'Mamposteria', 'sal_estado': 'R', 'sal_long': 5.00,
+        'sal_bmayor': 3.00, 'sal_bmenor': 1.00, 'sal_h3': 1.00,
+        'sal_espes': 0.30,
+        'insp_operativa': 'no', 'insp_operativa_c': 'Inoperativa',
+        'insp_rebasada': 'si', 'insp_rebasada_c': 'Fenomeno EL NINO 2017',
+        'insp_colmatada': 'si', 'insp_obstruida': 'si',
+        'nota_adic': 'Los datos corresponden a los planos conforme a obra, '
+                     'debido a que la estructura se encuentra totalmente '
+                     'colmatada.',
+    }, 'alcantarilla')
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--tipo', default='tomas_canal_madre',
@@ -1439,7 +1691,9 @@ def main():
     if args.prueba:
         # Las dos hojas: la de las tomas y la generica. Se ven seguidas
         # porque el riesgo al tocar una es romper la otra sin notarlo.
-        dibujar([FICHA_PRUEBA, FICHA_PRUEBA_CANOA, FICHA_PRUEBA_GENERICA],
+        dibujar([FICHA_PRUEBA, FICHA_PRUEBA_CANOA,
+                 FICHA_PRUEBA_ENTREGA, FICHA_PRUEBA_ALCANTARILLA,
+                 FICHA_PRUEBA_GENERICA],
                 args.prueba, anio, esquemas, {})
         print(f'escrito {args.prueba}')
         return 0
