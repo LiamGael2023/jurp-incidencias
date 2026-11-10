@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import AvisoSesion from './AvisoSesion.jsx'
+import ErrorApp from './ErrorApp.jsx'
 
 /* EL AVISO VA FUERA DE App, no dentro.
  *
@@ -24,7 +25,12 @@ const volverAEntrar = () => {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    {/* El cazador envuelve a App y no al reves: si App revienta, el aviso
+        de sesion sigue en pie y la pantalla cuenta que fallo en vez de
+        quedarse en blanco. */}
+    <ErrorApp>
+      <App />
+    </ErrorApp>
     <AvisoSesion onVolverAEntrar={volverAEntrar} />
   </StrictMode>,
 )
