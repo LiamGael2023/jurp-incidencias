@@ -44,3 +44,14 @@ export const API_OPS = `${BASE}/api/v1/mobile/operations`;
  * propio o una CDN, se cambia esta línea y no veinte llamadas.
  */
 export const MEDIA = BASE;
+
+/**
+ * El inventario, que NO cuelga de BASE.
+ *
+ * Va por `/vigapi/`, una reescritura de nginx hacia el backend de vigilancia
+ * —`/vigapi/(.*)` → `127.0.0.1:8005/api/v1/$1`—, así que es una ruta del
+ * mismo origen que el front y no un host. Estaba escrita a mano en
+ * `InventarioGIS.jsx` y en `CampaniasInventario.jsx`; aquí está una sola vez
+ * porque `fotosActivo.js` también la necesita para resolver las imágenes.
+ */
+export const API_INVENTARIO = '/vigapi/inventario';

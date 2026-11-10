@@ -20,7 +20,7 @@
  * NO SE RECOMPRIME LO QUE YA ES PEQUEÑO. Pasar un JPEG de 200 KB por el lienzo
  * otra vez solo añade artefactos: si ya cabe y ya es pequeño, se sube tal cual.
  */
-import { MEDIA } from './api.js';
+import { MEDIA, API_INVENTARIO } from './api.js';
 
 /** Lado mayor al que se reduce. 1600 cubre pantalla completa en un portátil. */
 export const MAX_LADO = 1600;
@@ -113,19 +113,56 @@ export async function prepararFoto(file, { maxLado = MAX_LADO, calidad = CALIDAD
   }
 }
 
+/* Un host que solo existe dentro del servidor. Django construye las URL
+ * absolutas a partir de la petición que recibe, así que cuando se le pregunta
+ * desde el propio contenedor contesta con su `127.0.0.1:8005`. Desde el
+ * navegador del inspector eso no lleva a ninguna parte. */
+const INTERNA = /^https?:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\])(:\d+)?\//i;
+
 /**
- * Dónde está la foto. El backend puede devolver una URL completa o una ruta
- * relativa de /media/.
+ * Dónde está la foto.
  *
- * Una ruta relativa NO vale tal cual: el inventario se pide a /vigapi/, que es
- * una reescritura del borde de Vercel, así que un '/media/...' suelto lo
- * resolvería el navegador contra el dominio del front y traería un 404. Las
- * fotos cuelgan de la raíz del backend, que es lo que MEDIA apunta.
+ * SE PREFIERE LA RUTA DE LA API (`imagen_api`) A LA DE /media/, y es
+ * deliberado. El backend devuelve tres formas de la misma imagen:
+ *
+ *   imagen        http://127.0.0.1:8005/media/inventario/canoas/3/xxx.jpg
+ *   imagen_media  /media/inventario/canoas/3/xxx.jpg
+ *   imagen_api    fotos/4/imagen/
+ *
+ * La primera es la que se cogía antes y es justo la que no sirve: apunta al
+ * contenedor. Y aunque Django la reescriba al dominio público cuando la
+ * petición entra por nginx, tampoco valdría —la configuración del front no
+ * tiene `location /media/`, así que un `/media/...` se come el index.html y
+ * la imagen sale rota igual—. La tercera sale por `/vigapi/`, que es la
+ * reescritura que ya usa todo el inventario: mismo origen, misma sesión,
+ * nada nuevo que configurar en el servidor.
+ *
+ * Lo demás se conserva por si otro backend devuelve otra cosa: una URL
+ * absoluta de verdad se respeta, y una ruta relativa suelta se resuelve
+ * contra MEDIA como antes.
  */
 export function urlFoto(foto) {
-  const ruta = foto?.imagen_url || foto?.imagen || foto?.url || foto?.archivo || '';
+  if (!foto) return '';
+
+  const porApi = foto.imagen_api || foto.archivo_api || '';
+  if (porApi && !/^(https?:)?\/\//.test(porApi)) {
+    return `${API_INVENTARIO}/${String(porApi).replace(/^\/+/, '')}`;
+  }
+
+  const ruta = foto.imagen_url || foto.imagen || foto.url || foto.archivo || '';
   if (!ruta) return '';
-  if (/^(https?:)?\/\//.test(ruta) || ruta.startsWith('data:')) return ruta;
+  if (ruta.startsWith('data:')) return ruta;
+
+  if (/^(https?:)?\/\//.test(ruta)) {
+    // Absoluta pero interna: se rescata su parte de /media/ y se resuelve
+    // contra MEDIA, que al menos es un host al que el navegador llega.
+    if (INTERNA.test(ruta)) {
+      const m = ruta.match(/\/media\/.*$/);
+      return m ? `${MEDIA}${m[0]}` : '';
+    }
+    return ruta;
+  }
+
   return `${MEDIA}${ruta.startsWith('/') ? '' : '/'}${ruta}`;
 }
 

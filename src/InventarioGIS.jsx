@@ -11,6 +11,7 @@ import {
   FaListUl, FaCamera, FaTrash, FaChevronLeft, FaImages, FaExpand, FaCheckCircle,
   FaFilePdf,
 } from 'react-icons/fa';
+import { API_INVENTARIO } from './api.js';
 import { prepararFoto, motivoRechazo, urlFoto, ordenarFotos, peso } from './fotosActivo';
 import { caracteristicas, cobertura, tituloActivo } from './fichaActivo';
 import { laminasDe, laminaDeBloque, laminasSueltas } from './esquemasFicha';
@@ -69,7 +70,7 @@ import icoGaritaOtros from './assets/simbologia/garita_otros.png';
  *   <PanelInventario inv={inv} onVolar={(b) => mapRef.current?.fitBounds(b)} />
  */
 
-const API = '/vigapi/inventario';
+const API = API_INVENTARIO;
 
 // Agrupación para el panel. El orden es el que ve el usuario.
 /*

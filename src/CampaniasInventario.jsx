@@ -8,6 +8,7 @@ import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
 import Swal from 'sweetalert2';
 import { TODAS_LAS_CAPAS } from './InventarioGIS';
+import { API_INVENTARIO } from './api.js';
 import './Incidentes.css';
 import './EstadisticasGIS.css';
 import './CampaniasInventario.css';
@@ -35,7 +36,7 @@ import './CampaniasInventario.css';
  * cambiando de campaña en el desplegable.
  */
 
-const API = '/vigapi/inventario';
+const API = API_INVENTARIO;
 
 /* NO SE MANDA Authorization, Y ES A PROPÓSITO.
  *
