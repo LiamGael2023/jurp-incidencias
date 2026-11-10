@@ -1764,8 +1764,13 @@ def leer_fichas(R, tipo, ambito, campania, fid=None, evaluadas=False):
             'evaluador': evaluador,
             'cargo': '',
             'fecha': '',
-            'fotos': fotos_de(R, eval_id or None),
+            'eval_id': eval_id or None,
+            'fotos': [],
         })
+
+    # Las fotos, de una sola consulta para todas las fichas. Ver por qué no
+    # va dentro del bucle en `poner_fotos`.
+    poner_fotos(R, tipo, salida)
 
     # Las caracteristicas se piden de una sola vez para todas las fichas:
     # una consulta por estructura serian veintidos viajes a psql, cada uno
@@ -1799,28 +1804,104 @@ def _json(texto):
         return {}
 
 
-def fotos_de(R, eval_id, maximo=4):
-    """Las rutas en disco de las fotos de esa evaluación.
+def _ruta_media(valor):
+    """De lo que guarda la base al archivo en disco.
 
-    `url` guarda la ruta relativa dentro de media; el PDF necesita el
-    archivo, no la URL. Las que no estén en disco se saltan: una foto que
-    falta no debe dejar la ficha sin las otras tres.
+    Las dos tablas guardan la imagen de forma distinta y ninguna guarda una
+    ruta absoluta:
+
+      inventario.fotos.url                  http://host/media/inv/x.jpg
+                                            o /media/inv/x.jpg
+      inventario_foto_activo.imagen         inventario/canoas/3/x.jpg
+
+    Lo común es que todo cuelga de MEDIA_ROOT, así que basta con quitar lo
+    que haya hasta '/media/' —si está— y pegar el resto a la raíz.
     """
-    if not eval_id:
-        return []
-    filas = R.consultar(
-        f'SELECT url FROM inventario.fotos WHERE evaluacion_id = {int(eval_id)} '
-        f'ORDER BY id LIMIT {maximo};') or []
+    if not valor:
+        return None
+    rel = str(valor).split('/media/')[-1].lstrip('/')
+    # Por si alguna fila guarda 'media/...' sin barra delante: pegarlo tal
+    # cual daría /app/media/media/... y el archivo "no existiría".
+    if rel.startswith('media/'):
+        rel = rel[6:]
+    if not rel:
+        return None
     raiz = os.environ.get('MEDIA_ROOT', '/app/media')
-    rutas = []
-    for (url,) in filas:
-        if not url:
-            continue
-        rel = str(url).split('/media/')[-1].lstrip('/')
-        ruta = os.path.join(raiz, rel)
-        if os.path.exists(ruta):
-            rutas.append(ruta)
-    return rutas
+    return os.path.join(raiz, rel)
+
+
+def poner_fotos(R, tipo, fichas, maximo=4):
+    """Rellena `s['fotos']` de cada ficha con las rutas en disco.
+
+    DE DÓNDE SALEN LAS FOTOS: DE DOS SITIOS, Y HAY QUE MIRAR LOS DOS.
+    La app de campo las cuelga de la evaluación (`inventario.fotos`,
+    `evaluacion_id`); la web las cuelga del activo (`inventario_foto_activo`,
+    `tipo_activo` + `activo_fid`), que es la galería de la ficha y existe
+    aunque la estructura no se haya evaluado todavía. Mirando solo la
+    primera, una estructura fotografiada desde el navegador salía con
+    «Sin evidencia fotográfica registrada» teniendo las fotos guardadas.
+
+    Primero las de la evaluación, que son las del día de la inspección, y
+    después las del activo hasta completar cuatro.
+
+    DE UNA CONSULTA, NO DE UNA POR ESTRUCTURA. `R.consultar` levanta un
+    proceso psql en cada llamada: con veintidós estructuras y dos tablas
+    serían cuarenta y cuatro procesos para traer, con suerte, ocho filas.
+
+    Una foto que no esté en disco se salta y se avisa por stderr —acaba en
+    el log del contenedor—: en silencio, una ficha sin fotos y una ficha con
+    las fotos perdidas se ven exactamente igual.
+    """
+    if not fichas:
+        return
+
+    ids = sorted({int(s['eval_id']) for s in fichas if s.get('eval_id')})
+    fids = sorted({int(s['fid']) for s in fichas if s.get('fid') is not None})
+
+    por_eval, por_fid = {}, {}
+
+    if ids:
+        lista = ','.join(str(i) for i in ids)
+        for fila in R.consultar(
+                f'SELECT evaluacion_id, url FROM inventario.fotos '
+                f'WHERE evaluacion_id IN ({lista}) ORDER BY id;') or []:
+            if len(fila) == 2:
+                por_eval.setdefault(str(fila[0]), []).append(fila[1])
+
+    if fids:
+        lista = ','.join(str(i) for i in fids)
+        # `tipo` sale del catálogo TABLAS, no de la petición, así que no hay
+        # nada que escapar aquí.
+        for fila in R.consultar(
+                f"SELECT activo_fid, imagen FROM inventario.inventario_foto_activo "
+                f"WHERE tipo_activo = '{tipo}' AND activo_fid IN ({lista}) "
+                f"ORDER BY id;") or []:
+            if len(fila) == 2:
+                por_fid.setdefault(str(fila[0]), []).append(fila[1])
+
+    if not por_eval and not por_fid:
+        return
+
+    perdidas = 0
+    for s in fichas:
+        candidatas = (por_eval.get(str(s.get('eval_id')), [])
+                      + por_fid.get(str(s.get('fid')), []))
+        rutas = []
+        for valor in candidatas:
+            ruta = _ruta_media(valor)
+            if not ruta or ruta in rutas:
+                continue
+            if os.path.exists(ruta):
+                rutas.append(ruta)
+                if len(rutas) >= maximo:
+                    break
+            else:
+                perdidas += 1
+        s['fotos'] = rutas
+
+    if perdidas:
+        print(f'  {perdidas} foto(s) registradas pero ausentes de '
+              f'{os.environ.get("MEDIA_ROOT", "/app/media")}', file=sys.stderr)
 
 
 def buscar_esquemas(carpeta):
