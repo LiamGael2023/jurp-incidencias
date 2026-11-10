@@ -3,6 +3,7 @@ import {
   FaSyncAlt, FaFileExcel, FaDownload, FaFileArchive, FaExclamationCircle,
   FaCheckCircle, FaClipboardCheck, FaChevronDown, FaChevronRight, FaFilePdf,
 } from 'react-icons/fa';
+import { tieneFicha } from './tiposConFicha';
 import './Incidentes.css';
 import './EstadisticasGIS.css';
 
@@ -118,7 +119,11 @@ function ReportesInventario() {
           ? `${API}/reportes/fichas/?tipo=tomas_canal_madre&${parametros()}`
           : clave === 'fichas_evaluadas'
             ? `${API}/reportes/fichas/?tipo=todas&evaluadas=1&${parametros()}`
-            : `${API}/reportes/${encodeURIComponent(clave)}/${pdf ? 'pdf/' : ''}?${parametros()}`;
+            // `fichas:<tipo>` baja las fichas evaluadas de una sola capa
+            : clave.startsWith('fichas:')
+              ? `${API}/reportes/fichas/?tipo=${encodeURIComponent(clave.slice(7))}`
+                + `&evaluadas=1&${parametros()}`
+              : `${API}/reportes/${encodeURIComponent(clave)}/${pdf ? 'pdf/' : ''}?${parametros()}`;
 
       const r = await fetch(url);
       if (!r.ok) {
@@ -254,6 +259,7 @@ function ReportesInventario() {
                     <th className="tbl-text-end">PENDIENTES</th>
                     <th className="tbl-text-end">% AVANCE</th>
                     <th className="tbl-text-end">CRÍTICOS</th>
+                    <th className="tbl-text-end">FICHAS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -272,6 +278,33 @@ function ReportesInventario() {
                           style={{ color: a.criticos ? '#d63939' : '#94a3b8',
                                    fontWeight: a.criticos ? 700 : 400 }}>
                         {a.criticos || '—'}
+                      </td>
+                      {/* Las fichas evaluadas de esa capa. Sin evaluaciones
+                          no hay nada que bajar, y las capas sin formato
+                          dibujado el servidor las rechaza con un 400: en
+                          los dos casos es mejor un guion que un botón que
+                          falla al pulsarlo. */}
+                      <td className="tbl-text-end">
+                        {tieneFicha(a.tipo) && a.evaluados > 0 ? (
+                          <button onClick={() => descargar(`fichas:${a.tipo}`,
+                            `Fichas_${a.tipo}_${ambito}${campania ? `_${campania}` : ''}.pdf`)}
+                            disabled={bajando !== null}
+                            title={`Las ${a.evaluados} fichas evaluadas de ${a.nombre}, en PDF`}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 5,
+                              padding: '3px 9px', background: '#fff5f5',
+                              border: '1px solid #ffc9c9', borderRadius: 6,
+                              color: '#e03131', fontSize: 11.5, fontWeight: 700,
+                              fontFamily: 'inherit',
+                              cursor: bajando ? 'not-allowed' : 'pointer',
+                              opacity: bajando ? .5 : 1,
+                            }}>
+                            {bajando === `fichas:${a.tipo}`
+                              ? <FaSyncAlt className="icon-spin" size={10} />
+                              : <FaFilePdf size={11} />}
+                            {a.evaluados}
+                          </button>
+                        ) : <span style={{ color: '#cbd5e1' }}>—</span>}
                       </td>
                     </tr>
                   ))}

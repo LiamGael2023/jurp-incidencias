@@ -21,6 +21,7 @@ import { datosDeCapa, filtroDeSectores } from './sectores';
 import { codcatsConLicencia, colorLote, tieneLicencia, textoLicencia,
          CAPA_LICENCIAS, COLOR_CON_LICENCIA, COLOR_SIN_LICENCIA } from './lotes';
 import './InventarioGIS.css';
+import { TIPOS_CON_FICHA } from './tiposConFicha';
 
 // Simbología oficial del inventario. Son los mismos archivos que usa el
 // panel de capas KMZ, así que ambos paneles muestran el mismo símbolo para
@@ -2393,13 +2394,6 @@ export function FichaActivo({ inv }) {
    esté allí, el backend lo rechaza con un 400.
    ══════════════════════════════════════════════════════════ */
 
-const TIPOS_CON_FICHA = [
-  'tomas_canal_madre', 'tomas_l10', 'tomas_otros_sectores',
-  'alcantarilla', 'aliviadero', 'bocatomas', 'cajas_hidraulicas',
-  'camara_rompepresion', 'canoas', 'desarenadores', 'entregas',
-  'estaciones_control', 'laterales', 'partidor', 'pases_de_tuberias',
-  'puente_peatonal', 'puente_vehicular', 'rapidas', 'reservorios', 'sifon',
-];
 
 function VisorFicha({ tipo, fid, nombre, ambito, campania, onCerrar }) {
   const [url, setUrl] = useState(null);
