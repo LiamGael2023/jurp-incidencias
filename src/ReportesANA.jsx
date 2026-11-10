@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  FaFileExcel, FaDownload, FaTimes, FaSyncAlt, FaFileArchive,
+  FaFileExcel, FaFilePdf, FaDownload, FaTimes, FaSyncAlt, FaFileArchive,
   FaExclamationCircle, FaCheckCircle,
 } from 'react-icons/fa';
 import './ReportesANA.css';
@@ -81,13 +81,17 @@ export default function PanelReportes({ campanias = [], onCerrar }) {
   // La descarga pasa por fetch y no por un enlace directo para poder
   // mostrar el error cuando el generador falla: un <a> dejaría al usuario
   // con un archivo de error sin explicación.
-  const descargar = async (clave, nombre) => {
-    setBajando(clave);
+  const descargar = async (clave, nombre, pdf = false) => {
+    setBajando(pdf ? `${clave}:pdf` : clave);
     setError(null);
     try {
+      /* El PDF va por una acción aparte, /reportes/<clave>/pdf/, y no por
+       * un ?formato=pdf. Lo dibuja el mismo generador leyendo la misma
+       * configuración de columnas que el Excel, así que los dos dicen lo
+       * mismo; lo que cambia es que el PDF sale apaisado y paginado. */
       const url = clave === 'todos'
         ? `${API}/reportes/todos/?${parametros()}`
-        : `${API}/reportes/${encodeURIComponent(clave)}/?${parametros()}`;
+        : `${API}/reportes/${encodeURIComponent(clave)}/${pdf ? 'pdf/' : ''}?${parametros()}`;
 
       const r = await fetch(url);
       if (!r.ok) {
@@ -187,22 +191,39 @@ export default function PanelReportes({ campanias = [], onCerrar }) {
           </div>
 
           {formatos.map(f => (
-            <button key={f.clave} className="rep-formato"
-              onClick={() => descargar(f.clave, f.archivo)}
-              disabled={bajando !== null}>
-              <span className="rep-clave">{f.clave}</span>
-              <span className="rep-titulo">
-                {f.titulo}
-                {f.generado && f.vigente && (
-                  <i className="rep-listo" title="Ya generado, descarga inmediata">
-                    <FaCheckCircle size={9} /> {pesoLegible(f.tamano)}
-                  </i>
-                )}
-              </span>
-              {bajando === f.clave
-                ? <FaSyncAlt className="icon-spin" size={12} />
-                : <FaDownload size={11} />}
-            </button>
+            <div key={f.clave} className="rep-fila">
+              <button className="rep-formato"
+                onClick={() => descargar(f.clave, f.archivo)}
+                disabled={bajando !== null}>
+                <span className="rep-clave">{f.clave}</span>
+                <span className="rep-titulo">
+                  {f.titulo}
+                  {f.generado && f.vigente && (
+                    <i className="rep-listo" title="Ya generado, descarga inmediata">
+                      <FaCheckCircle size={9} /> {pesoLegible(f.tamano)}
+                    </i>
+                  )}
+                </span>
+                {bajando === f.clave
+                  ? <FaSyncAlt className="icon-spin" size={12} />
+                  : <FaFileExcel size={11} />}
+              </button>
+
+              {/* El B-9 lo arma otra función, por bloques, y todavía no se
+                  dibuja en PDF: ofrecer el botón para que conteste que no
+                  se puede es peor que no ofrecerlo. */}
+              {f.clave !== 'B-9' && (
+                <button className="rep-pdf"
+                  title={`${f.titulo} en PDF`}
+                  onClick={() => descargar(f.clave,
+                    (f.archivo || f.clave).replace(/\.xlsx$/i, '') + '.pdf', true)}
+                  disabled={bajando !== null}>
+                  {bajando === `${f.clave}:pdf`
+                    ? <FaSyncAlt className="icon-spin" size={11} />
+                    : <FaFilePdf size={12} />}
+                </button>
+              )}
+            </div>
           ))}
 
           {!cargando && formatos.length === 0 && !error && (

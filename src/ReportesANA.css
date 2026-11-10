@@ -108,7 +108,33 @@
 .rep-btn-zip:hover { background: #b2f2bb; }
 .rep-btn-zip:disabled { opacity: .5; cursor: not-allowed; }
 
-/* ── un formato ── */
+/* ── un formato ──
+   La fila lleva el borde inferior, no el botón: ahora son dos —Excel y
+   PDF— y si lo llevara cada uno se vería una raya partida en medio. */
+.rep-fila {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+.rep-fila:last-child { border-bottom: none; }
+.rep-fila .rep-formato { border-bottom: none; }
+
+.rep-pdf {
+  flex: none;
+  width: 30px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, .06);
+  color: #ff9a9a;
+  cursor: pointer;
+  transition: background .12s ease;
+}
+.rep-pdf:hover { background: rgba(224, 49, 49, .14); }
+.rep-pdf:disabled { opacity: .5; cursor: wait; }
+
 .rep-formato {
   display: flex;
   align-items: center;
