@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { GeoJSON, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
+import { GeoJSON, Marker, Popup, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import { createPathComponent } from '@react-leaflet/core';
 import L from 'leaflet';
 import 'leaflet.markercluster';
@@ -15,6 +15,7 @@ import { caracteristicas, cobertura, tituloActivo } from './fichaActivo';
 import { laminasDe, laminaDeBloque, laminasSueltas } from './esquemasFicha';
 import VisorImagen from './VisorImagen';
 import Swal from 'sweetalert2';
+import { latLngToUTM } from './cartografia';
 import { datosDeCapa, filtroDeSectores } from './sectores';
 import { codcatsConLicencia, colorLote, tieneLicencia, textoLicencia,
          CAPA_LICENCIAS, COLOR_CON_LICENCIA, COLOR_SIN_LICENCIA } from './lotes';
@@ -225,6 +226,18 @@ const GRUPOS_CONTEXTO = [
 const TODOS_GRUPOS = [...GRUPOS, ...GRUPOS_CONTEXTO];
 const TODAS = TODOS_GRUPOS.flatMap(g => g.capas);
 
+/* A qué capas se les puede dar de alta una estructura nueva.
+ *
+ * Solo las de la Junta —el contexto es de Chavimochic, no se inventaría
+ * aquí— y solo las de puntos: un alta es alguien parado delante de la obra
+ * con el GPS, y un canal o una cuenca no se digitalizan desde un punto. El
+ * backend se niega igual, pero ofrecerlo en la lista para que luego lo
+ * rechace es hacerle perder el viaje a quien está en campo. */
+const TIPOS_CON_ALTA = TODOS_GRUPOS
+  .filter(g => !g.contexto)
+  .flatMap(g => g.capas)
+  .filter(c => !c.tipo && !c.oculta);
+
 // La leyenda de la lámina temática se arma de aquí, no de una lista paralela:
 // una leyenda que no sale del mismo sitio que el dibujo acaba mintiendo el día
 // que alguien cambia un color o agrega una capa. Van los dos grupos, incluidas
@@ -386,6 +399,14 @@ export function useInventario() {
   const [campanias, setCampanias] = useState([]);
   const [avance, setAvance] = useState([]);
   const [altas, setAltas] = useState([]);
+  /* El alta en curso.
+   *
+   *   paso: null | 'ubicando' | 'llenando' | 'guardando'
+   *
+   * Se guarda aquí y no en el panel porque quien pone el punto es el mapa y
+   * quien enseña el formulario es el panel: son dos componentes que no se
+   * ven entre sí. */
+  const [alta, setAlta] = useState({ paso: null, punto: null });
   const [totales, setTotales] = useState({});
   const [datos, setDatos] = useState({});        // codigo → FeatureCollection
   const [visibles, setVisibles] = useState({});  // codigo → bool
@@ -530,9 +551,13 @@ export function useInventario() {
   const clave = useCallback((codigo, amb) => `${codigo}::${amb || ambitoDe(codigo)}`,
                             [ambitoDe]);
 
-  const cargarCapa = useCallback(async (codigo, amb) => {
+  /* `rehacer` salta la caché. Lo usa la validación de un alta: al aprobarla
+   * el activo ya existe en la capa, y sin volver a pedirla el punto nuevo no
+   * aparece hasta recargar la página — con lo que parece que aprobar no hizo
+   * nada. */
+  const cargarCapa = useCallback(async (codigo, amb, rehacer = false) => {
     const k = `${codigo}::${amb}`;
-    if (datos[k]) return;
+    if (datos[k] && !rehacer) return;
     setCargando(c => ({ ...c, [codigo]: true }));
     try {
       const filtro = amb === 'todo' ? '' : `&ambito=${amb}`;
@@ -590,6 +615,122 @@ export function useInventario() {
     cargarCapa(codigo, nuevo);
     setVisibles(v => (v[codigo] ? v : { ...v, [codigo]: true }));
   }, [filtroCapa, ambito, cargarCapa]);
+
+  /* ── Altas de campo ──────────────────────────────────────────────────
+   *
+   * Registrar una estructura que no está en el inventario. No entra en la
+   * capa: queda pendiente hasta que alguien de oficina la valida. Un punto
+   * GPS mal tomado no debe ensuciar el entregable.
+   */
+
+  const recargarAltas = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/activos-nuevos/?validacion=pendiente`,
+                            { headers: cabeceras() });
+      if (r.ok) { const d = await r.json(); setAltas(d.results || d); }
+    } catch (e) { /* si falla, la lista se queda como estaba */ }
+  }, []);
+
+  const iniciarAlta = useCallback(() => {
+    setAlta({ paso: 'ubicando', punto: null });
+    setAbierto(true);
+  }, []);
+
+  const cancelarAlta = useCallback(() => setAlta({ paso: null, punto: null }), []);
+
+  const ponerPuntoAlta = useCallback((latlng) => {
+    setAlta(a => (a.paso === 'ubicando'
+      ? { paso: 'llenando', punto: { lat: latlng.lat, lng: latlng.lng } }
+      : a));
+  }, []);
+
+  /* Vuelve a 'ubicando' sin perder nada: el punto se toca a ojo y casi
+   * siempre hay que correrlo unos metros al ver el resultado sobre la
+   * ortofoto. */
+  const moverPuntoAlta = useCallback(() => {
+    setAlta(a => ({ paso: 'ubicando', punto: a.punto }));
+  }, []);
+
+  const guardarAlta = useCallback(async (datos) => {
+    if (!alta.punto) return { ok: false, error: 'falta el punto en el mapa' };
+    if (!campania) return { ok: false, error: 'no hay campaña abierta' };
+    setAlta(a => ({ ...a, paso: 'guardando' }));
+
+    /* La capa está en UTM 17S y la API espera la geometría en EWKT, que es
+     * lo que entiende Django al convertirla. Mandar grados aquí la colocaría
+     * a seiscientos kilómetros, en coordenadas que PostGIS aceptaría sin
+     * protestar porque el SRID se lo damos nosotros. */
+    const { este, norte } = latLngToUTM(alta.punto.lat, alta.punto.lng);
+    const cuerpo = {
+      campania: campania.id,
+      tipo_activo: datos.tipo,
+      geom: `SRID=32717;POINT(${este.toFixed(2)} ${norte.toFixed(2)})`,
+      nombre: datos.nombre || null,
+      descripcion: datos.descripcion || null,
+      registrado_por: (() => {
+        try { return localStorage.getItem('userName') || null; } catch { return null; }
+      })(),
+      atributos: datos.atributos || {},
+    };
+    try {
+      const r = await fetch(`${API}/activos-nuevos/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...cabeceras() },
+        body: JSON.stringify(cuerpo),
+      });
+      if (!r.ok) {
+        // El cuerpo del error de DRF dice qué campo falló; sin él solo se
+        // sabe que "no se pudo", que no ayuda a nadie.
+        let detalle = `El servidor respondió ${r.status}`;
+        try {
+          const e = await r.json();
+          const campos = Object.entries(e)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`);
+          if (campos.length) detalle = campos.join(' · ');
+        } catch { /* la respuesta no era JSON */ }
+        setAlta(a => ({ ...a, paso: 'llenando' }));
+        return { ok: false, error: detalle };
+      }
+      setAlta({ paso: null, punto: null });
+      await recargarAltas();
+      return { ok: true };
+    } catch (e) {
+      setAlta(a => ({ ...a, paso: 'llenando' }));
+      return { ok: false, error: 'Sin conexión con el servidor' };
+    }
+  }, [alta.punto, campania, recargarAltas]);
+
+  /** Aprobar, rechazar o marcar duplicada. Aprobar la mete en su capa. */
+  const validarAlta = useCallback(async (id, destino, nota) => {
+    const alta_ = altas.find(a => a.id === id);
+    try {
+      const r = await fetch(`${API}/activos-nuevos/${id}/validar/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...cabeceras() },
+        body: JSON.stringify({
+          validacion: destino,
+          nota: nota || null,
+          validado_por: (() => {
+            try { return localStorage.getItem('userName') || null; } catch { return null; }
+          })(),
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: d.detail || `Error ${r.status}` };
+      await recargarAltas();
+      /* Aprobada, el activo ya existe en su capa. Si esa capa estaba
+       * cargada, se vuelve a pedir; la clave de la caché lleva el ámbito,
+       * por eso se busca por prefijo en vez de por el código a secas. */
+      const cod = alta_ && alta_.tipo_activo;
+      if (destino === 'aprobado' && cod
+          && Object.keys(datos).some(k => k.startsWith(`${cod}::`))) {
+        await cargarCapa(cod, ambitoDe(cod), true);
+      }
+      return { ok: true, fid: d.promovido_fid };
+    } catch (e) {
+      return { ok: false, error: 'Sin conexión con el servidor' };
+    }
+  }, [altas, datos, recargarAltas, cargarCapa, ambitoDe]);
 
   const apagarTodas = useCallback(() => setVisibles({}), []);
 
@@ -834,7 +975,9 @@ export function useInventario() {
     abierto, alternar, cerrar: () => setAbierto(false),
     campania, avance, totales, datos, visibles, cargando, error, iniciando,
     ambito, cambiarAmbito, ambitoDe, alternarAmbitoCapa, datosDe, clave,
-    campanias, cambiarCampania, altas,
+    campanias, cambiarCampania, altas, recargarAltas,
+    alta, iniciarAlta, cancelarAlta, ponerPuntoAlta, moverPuntoAlta,
+    guardarAlta, validarAlta, tiposConAlta: TIPOS_CON_ALTA,
     indice, buscar, irA, destacado, limpiarDestacado,
     evaluando, abrirEvaluacion, cerrarEvaluacion, guardarEvaluacion, formularios,
     ficha, abrirFicha, cerrarFicha,
@@ -849,6 +992,47 @@ export function useInventario() {
 /* ══════════════════════════════════════════════════════════
    Capas sobre el mapa — va DENTRO del <MapContainer>
    ══════════════════════════════════════════════════════════ */
+/**
+ * El punto del alta en curso: recoge el clic y lo enseña.
+ *
+ * Vive dentro del mapa porque el clic es del mapa, pero el formulario está
+ * en el panel lateral, que es otro componente. Lo que los une es el estado
+ * del hook.
+ *
+ * Mientras se ubica, el cursor pasa a cruz: sin eso no hay forma de saber
+ * que el mapa está esperando un clic y no haciendo lo de siempre.
+ */
+function PuntoDelAlta({ inv }) {
+  const mapa = useMap();
+  useMapEvents({
+    click(e) { if (inv.alta.paso === 'ubicando') inv.ponerPuntoAlta(e.latlng); },
+  });
+
+  useEffect(() => {
+    const el = mapa.getContainer();
+    const ubicando = inv.alta.paso === 'ubicando';
+    el.style.cursor = ubicando ? 'crosshair' : '';
+    // Al desmontar hay que soltarlo igual: si el panel se cierra a media
+    // alta, el mapa se quedaría con la cruz para siempre.
+    return () => { el.style.cursor = ''; };
+  }, [mapa, inv.alta.paso]);
+
+  if (!inv.alta.punto) return null;
+  return (
+    <Marker
+      position={[inv.alta.punto.lat, inv.alta.punto.lng]}
+      icon={L.divIcon({
+        className: 'inv-alta-punto',
+        html: '<span></span>',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      })}
+    >
+      <Tooltip permanent direction="top" offset={[0, -12]}>Estructura nueva</Tooltip>
+    </Marker>
+  );
+}
+
 export function CapasInventario({ inv, racimo = null, limites = null, etiquetas = null,
                                   impresion = false, sinPuntos = false }) {
   /**
@@ -995,6 +1179,7 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
 
   return (
     <>
+      <PuntoDelAlta inv={inv} />
       {TODAS.map(capa => {
         // Las capas de solo-datos alimentan a otra y no se dibujan.
         if (capa.oculta) return null;
@@ -2247,6 +2432,154 @@ function BadgeCapa({ info, ambito, onFiltrar }) {
 /* ══════════════════════════════════════════════════════════
    Panel lateral — va FUERA del mapa
    ══════════════════════════════════════════════════════════ */
+/**
+ * Registrar una estructura que falta, y validar las que llegan de campo.
+ *
+ * Las dos cosas van juntas a propósito: quien da de alta desde gabinete es
+ * normalmente quien valida lo que mandó el equipo, y separarlo en dos
+ * sitios obliga a buscar.
+ *
+ * El alta NO entra en la capa: queda pendiente. Es la diferencia entre un
+ * inventario y un cuaderno — cualquiera puede apuntar, pero lo que se
+ * entrega lo firma alguien.
+ */
+function AltaDeCampo({ inv }) {
+  const [tipo, setTipo] = useState(() => (inv.tiposConAlta[0] || {}).codigo || '');
+  const [nombre, setNombre] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [fallo, setFallo] = useState(null);
+  const [trabajando, setTrabajando] = useState(null);
+
+  const limpiar = () => { setNombre(''); setDescripcion(''); setFallo(null); };
+
+  const guardar = async () => {
+    setFallo(null);
+    const r = await inv.guardarAlta({ tipo, nombre, descripcion });
+    if (r.ok) { limpiar(); Swal.fire({ icon: 'success', title: 'Alta registrada',
+      text: 'Queda pendiente de validación.', timer: 2200, showConfirmButton: false }); }
+    else setFallo(r.error);
+  };
+
+  const validar = async (a, destino) => {
+    if (destino !== 'aprobado') {
+      const { value: nota, isConfirmed } = await Swal.fire({
+        title: destino === 'duplicado' ? '¿Marcar como duplicada?' : '¿Rechazar el alta?',
+        input: 'text', inputPlaceholder: 'Motivo (opcional)',
+        showCancelButton: true, confirmButtonText: 'Sí', cancelButtonText: 'No',
+      });
+      if (!isConfirmed) return;
+      setTrabajando(a.id);
+      const r = await inv.validarAlta(a.id, destino, nota);
+      setTrabajando(null);
+      if (!r.ok) Swal.fire({ icon: 'error', title: 'No se pudo', text: r.error });
+      return;
+    }
+    setTrabajando(a.id);
+    const r = await inv.validarAlta(a.id, 'aprobado');
+    setTrabajando(null);
+    if (r.ok) {
+      Swal.fire({ icon: 'success', title: 'Aprobada',
+        text: 'La estructura ya figura en su capa.',
+        timer: 2200, showConfirmButton: false });
+    } else {
+      // El backend se niega, por ejemplo, con una capa de trazados. Decir
+      // por qué evita que alguien lo intente cinco veces.
+      Swal.fire({ icon: 'error', title: 'No se pudo aprobar', text: r.error });
+    }
+  };
+
+  const paso = inv.alta.paso;
+
+  return (
+    <div className="inv-altas">
+      {!paso && (
+        <button className="inv-alta-nueva" onClick={inv.iniciarAlta}
+          disabled={!inv.campania}
+          title={inv.campania
+            ? 'Registrar una estructura que no está en el inventario'
+            : 'Hace falta una campaña abierta'}>
+          <FaPlusCircle /> Registrar estructura nueva
+        </button>
+      )}
+
+      {paso === 'ubicando' && (
+        <div className="inv-alta-ubicando">
+          <b>Toca el mapa</b> donde está la estructura.
+          <button className="inv-alta-cancelar" onClick={inv.cancelarAlta}>Cancelar</button>
+        </div>
+      )}
+
+      {(paso === 'llenando' || paso === 'guardando') && (
+        <div className="inv-alta-form">
+          <label>
+            Tipo
+            <select value={tipo} onChange={e => setTipo(e.target.value)}>
+              {inv.tiposConAlta.map(c => (
+                <option key={c.codigo} value={c.codigo}>{c.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Nombre
+            <input value={nombre} onChange={e => setNombre(e.target.value)}
+              placeholder="Cómo se le conoce" />
+          </label>
+          <label>
+            Descripción
+            <textarea value={descripcion} rows={2}
+              onChange={e => setDescripcion(e.target.value)}
+              placeholder="Qué es y en qué estado está" />
+          </label>
+          {fallo && <div className="inv-alta-fallo">{fallo}</div>}
+          <div className="inv-alta-botones">
+            <button onClick={inv.moverPuntoAlta} disabled={paso === 'guardando'}>
+              Mover el punto
+            </button>
+            <button onClick={inv.cancelarAlta} disabled={paso === 'guardando'}>
+              Cancelar
+            </button>
+            <button className="inv-alta-guardar" onClick={guardar}
+              disabled={paso === 'guardando' || !tipo}>
+              {paso === 'guardando' ? 'Guardando…' : 'Registrar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {inv.altas.length > 0 && (
+        <>
+          <div className="inv-altas-titulo">
+            <FaPlusCircle /> {inv.altas.length} por validar
+          </div>
+          <ul>
+            {inv.altas.map(a => (
+              <li key={a.id}>
+                {/* Sin enlace al mapa todavía: el serializer manda la
+                    geometría como la escribe Django —hex EWKB— y no hay aquí
+                    con qué leerla. Cuando haga falta, lo barato es que la
+                    API devuelva también lat/lon, no parsear hex en el
+                    navegador. */}
+                <span className="inv-alta-datos">
+                  <b>{a.tipo_activo_nombre || a.tipo_activo}</b>{' '}
+                  {a.nombre || a.descripcion || `#${a.id}`}
+                  {a.registrado_por && <span> · {a.registrado_por}</span>}
+                </span>
+                <span className="inv-alta-acciones">
+                  <button title="Aprobar: la mete en su capa"
+                    disabled={trabajando === a.id}
+                    onClick={() => validar(a, 'aprobado')}><FaCheckCircle /></button>
+                  <button title="Rechazar" disabled={trabajando === a.id}
+                    onClick={() => validar(a, 'rechazado')}><FaTimes /></button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function PanelInventario({ inv, onVolar }) {
   const [grupoAbierto, setGrupoAbierto] = useState({ 0: true });
   const [verAvance, setVerAvance] = useState(false);
@@ -2344,20 +2677,7 @@ export function PanelInventario({ inv, onVolar }) {
               </div>
             )}
 
-            {inv.altas.length > 0 && (
-              <div className="inv-altas">
-                <FaPlusCircle /> {inv.altas.length} alta(s) de campo por validar
-                <ul>
-                  {inv.altas.slice(0, 4).map(a => (
-                    <li key={a.id}>
-                      <b>{a.tipo_activo}</b> {a.nombre || a.descripcion || `#${a.id}`}
-                      {a.registrado_por && <span> · {a.registrado_por}</span>}
-                    </li>
-                  ))}
-                  {inv.altas.length > 4 && <li>y {inv.altas.length - 4} más…</li>}
-                </ul>
-              </div>
-            )}
+            <AltaDeCampo inv={inv} />
 
             {verAvance && (
               <table className="inv-avance">

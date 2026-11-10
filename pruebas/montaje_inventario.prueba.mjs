@@ -81,11 +81,17 @@ for (const vista of VISTAS) {
 //    inv.abrirLoQueSea que no existe revienta al pulsar, y en producción eso
 //    es una pantalla que se queda congelada.
 const gis = leer('src/InventarioGIS.jsx');
-const llamadas = [...gis.matchAll(/\binv\.(\w+)\(/g)].map(m => m[1]);
+// Cualquier uso de `inv.loQueSea`, no solo las llamadas con paréntesis: la
+// mitad se pasan como prop —onClick={inv.moverPuntoAlta}— y esas fallan
+// igual de feo, solo que al pulsar en vez de al renderizar.
+const llamadas = [...gis.matchAll(/\binv\.(\w+)/g)].map(m => m[1]);
 const devueltos = (() => {
-  // El return del hook: desde "return {" hasta el "};" de ese bloque.
+  // El return del hook. Se ancla a la indentación de dos espacios, que es
+  // la del cuerpo del hook: buscar el primer "return {" a secas pillaba
+  // cualquier `return { ok: false, ... }` de una función interna y daba por
+  // huérfanas quince cosas que sí se devuelven.
   const i = gis.indexOf('export function useInventario');
-  const r = gis.slice(i).match(/return\s*\{([\s\S]*?)\n\s*\};/);
+  const r = gis.slice(i).match(/\n {2}return \{([\s\S]*?)\n {2}\};/);
   return new Set((r ? r[1] : '').match(/[A-Za-z_]\w*/g) || []);
 })();
 const huerfanas = [...new Set(llamadas)].filter(n => !devueltos.has(n));

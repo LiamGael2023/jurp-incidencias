@@ -496,6 +496,152 @@
 .inv-altas b { color: #a5d8ff; font-weight: 700; }
 .inv-altas span { color: #7ba7c7; }
 
+/* Registrar una estructura nueva ------------------------------------- */
+
+.inv-alta-nueva {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  font-weight: 600;
+  color: #d0ebff;
+  background: rgba(76, 110, 245, .28);
+  border: 1px solid rgba(76, 110, 245, .5);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.inv-alta-nueva:hover:not(:disabled) { background: rgba(76, 110, 245, .45); }
+.inv-alta-nueva:disabled { opacity: .45; cursor: not-allowed; }
+
+/* El aviso de "toca el mapa" parpadea despacio a propósito: el panel está
+   en una esquina y la acción ocurre en el mapa, así que hace falta algo que
+   lleve la vista de vuelta. */
+.inv-alta-ubicando {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  color: #ffe8a3;
+  background: rgba(245, 159, 0, .18);
+  border: 1px solid rgba(245, 159, 0, .45);
+  border-radius: 4px;
+  animation: inv-alta-latido 1.6s ease-in-out infinite;
+}
+@keyframes inv-alta-latido {
+  50% { background: rgba(245, 159, 0, .32); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .inv-alta-ubicando { animation: none; }
+}
+
+.inv-alta-form { display: grid; gap: 6px; }
+.inv-alta-form label {
+  display: grid;
+  gap: 2px;
+  font-size: 10px;
+  color: #7ba7c7;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.inv-alta-form select,
+.inv-alta-form input,
+.inv-alta-form textarea {
+  font: inherit;
+  font-size: 11px;
+  color: #e7f0f7;
+  background: rgba(10, 22, 36, .75);
+  border: 1px solid rgba(76, 110, 245, .35);
+  border-radius: 3px;
+  padding: 4px 6px;
+  text-transform: none;
+  letter-spacing: 0;
+  resize: vertical;
+}
+.inv-alta-botones { display: flex; gap: 6px; justify-content: flex-end; }
+.inv-alta-botones button {
+  font: inherit;
+  font-size: 10.5px;
+  padding: 4px 8px;
+  color: #c3d9e8;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.inv-alta-botones button:disabled { opacity: .45; cursor: not-allowed; }
+.inv-alta-guardar {
+  color: #d3f9d8 !important;
+  background: rgba(47, 158, 68, .35) !important;
+  border-color: rgba(47, 158, 68, .6) !important;
+  font-weight: 700;
+}
+.inv-alta-fallo {
+  padding: 4px 6px;
+  font-size: 10px;
+  color: #ffc9c9;
+  background: rgba(224, 49, 49, .18);
+  border: 1px solid rgba(224, 49, 49, .4);
+  border-radius: 3px;
+}
+
+/* La lista de pendientes, con sus dos botones ------------------------- */
+
+.inv-altas-titulo {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  font-weight: 600;
+}
+.inv-altas li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+.inv-alta-datos { flex: 1; min-width: 0; }
+.inv-alta-acciones { display: flex; gap: 3px; flex: none; }
+.inv-alta-acciones button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 11px;
+  color: #c3d9e8;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.inv-alta-acciones button:first-child:hover { color: #69db7c; border-color: #2f9e44; }
+.inv-alta-acciones button:last-child:hover { color: #ff8787; border-color: #e03131; }
+.inv-alta-acciones button:disabled { opacity: .4; cursor: wait; }
+
+/* El punto que se acaba de marcar en el mapa. Pulsa para que se distinga
+   de los dos mil seiscientos marcadores que ya hay alrededor. */
+.inv-alta-punto span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 2px;
+  border-radius: 50%;
+  background: #f59f00;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 0 rgba(245, 159, 0, .7);
+  animation: inv-alta-pulso 1.6s ease-out infinite;
+}
+@keyframes inv-alta-pulso {
+  70% { box-shadow: 0 0 0 14px rgba(245, 159, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 159, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .inv-alta-punto span { animation: none; }
+}
+
 /* ══════════════════════════════════════════════════════════
    Formulario de evaluación
    ══════════════════════════════════════════════════════════ */
