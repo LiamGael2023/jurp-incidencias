@@ -16,6 +16,33 @@ const E2 = 0.00669437999014;       // excentricidad al cuadrado
 const EP2 = E2 / (1 - E2);
 const K0 = 0.9996;                 // factor de escala en el meridiano central
 
+/**
+ * La primera coordenada que haya dentro de una geometría GeoJSON, en el
+ * orden que quiere Leaflet: [lat, lng].
+ *
+ * Sirve igual para un punto, una línea o un polígono porque baja por los
+ * arrays anidados hasta dar con el primer par de números. Para volar a una
+ * estructura eso basta: no hace falta el centroide, hace falta llegar.
+ *
+ * EL NOMBRE DICE EL ORDEN A PROPÓSITO. GeoJSON guarda [lng, lat] y Leaflet
+ * pide [lat, lng]; el resto de este módulo trabaja en el orden de GeoJSON,
+ * así que esta es la excepción y conviene que se note al leerla.
+ *
+ * → null si la geometría no tiene ninguna coordenada utilizable.
+ */
+export function primerLatLng(coordenadas) {
+  if (!Array.isArray(coordenadas)) return null;
+  const [a, b] = coordenadas;
+  if (typeof a === 'number' && typeof b === 'number') {
+    return Number.isFinite(a) && Number.isFinite(b) ? [b, a] : null;
+  }
+  for (const hijo of coordenadas) {
+    const p = primerLatLng(hijo);
+    if (p) return p;
+  }
+  return null;
+}
+
 /** Zona UTM de una longitud. */
 export const zonaDe = (lng) => Math.floor((lng + 180) / 6) + 1;
 

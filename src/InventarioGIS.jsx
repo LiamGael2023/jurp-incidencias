@@ -17,7 +17,7 @@ import { caracteristicas, cobertura, tituloActivo } from './fichaActivo';
 import { laminasDe, laminaDeBloque, laminasSueltas } from './esquemasFicha';
 import VisorImagen from './VisorImagen';
 import Swal from 'sweetalert2';
-import { latLngToUTM } from './cartografia';
+import { latLngToUTM, primerLatLng } from './cartografia';
 import { datosDeCapa, filtroDeSectores } from './sectores';
 import { codcatsConLicencia, colorLote, tieneLicencia, textoLicencia,
          CAPA_LICENCIAS, COLOR_CON_LICENCIA, COLOR_SIN_LICENCIA } from './lotes';
@@ -1024,6 +1024,24 @@ export function useInventario() {
   };
 }
 
+/**
+ * Dónde está la estructura a la que hay que volar.
+ *
+ * Las que trae quien llama mandan; si no las trae, se buscan en el GeoJSON
+ * de su capa por fid. Devuelve null cuando no hay forma de saberlo todavía
+ * —la capa aún se está descargando—, y eso NO es un fallo: quien llama debe
+ * esperar, no volar a ninguna parte.
+ */
+function posicionDe(destino, datosDe) {
+  if (Number.isFinite(destino?.lat) && Number.isFinite(destino?.lng)) {
+    return [destino.lat, destino.lng];
+  }
+  const fc = datosDe?.(destino?.tipo);
+  const f = fc?.features?.find(
+    x => String(x?.properties?.fid ?? x?.id) === String(destino?.fid));
+  return f ? primerLatLng(f.geometry?.coordinates) : null;
+}
+
 /* ══════════════════════════════════════════════════════════
    Capas sobre el mapa — va DENTRO del <MapContainer>
    ══════════════════════════════════════════════════════════ */
@@ -1139,11 +1157,32 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
     mapa.on('zoomend', alZoom);
     return () => mapa.off('zoomend', alZoom);
   }, [mapa]);
-  const { destacado, limpiarDestacado } = inv;
+  const { destacado, limpiarDestacado, datosDe } = inv;
   const DEPURAR = false;   // ponlo en true para ver el rastro en consola
 
   useEffect(() => {
     if (!destacado) return;
+
+    /* DE DÓNDE SALEN LAS COORDENADAS, Y POR QUÉ NO SE FÍA DE LAS QUE LLEGAN.
+     *
+     * `destacado` las trae cuando quien llama las tiene, pero no siempre las
+     * tiene: la tabla de Campañas las saca del índice de capas, y hay capas
+     * cuyo índice no incluye lat/lng. Antes se pasaban igual y
+     * `mapa.flyTo([undefined, undefined])` reventaba con «Invalid LatLng
+     * object» —un error que no se captura en ningún sitio y que, al ocurrir
+     * dentro del árbol de React, dejaba la aplicación entera en blanco: una
+     * coordenada que falta tumbaba el visor.
+     *
+     * Así que si no vienen, se buscan en el GeoJSON de la capa, que es donde
+     * están de verdad. Puede que la capa aún se esté descargando; entonces
+     * este efecto simplemente no hace nada y se repite cuando llegue, porque
+     * `datosDe` cambia de identidad con cada capa que entra. */
+    const pos = posicionDe(destacado, datosDe);
+    if (!pos) {
+      if (DEPURAR) console.log('[inv] aún sin coordenadas para', destacado);
+      return;
+    }
+
     let cancelado = false;
     let intentos = 0;
     let temporizador = null;
@@ -1156,8 +1195,8 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
     const coincide = (capa) => {
       if (!capa || !capa.getLatLng || !capa.getPopup || !capa.getPopup()) return false;
       const ll = capa.getLatLng();
-      return Math.abs(ll.lat - destacado.lat) < TOL
-          && Math.abs(ll.lng - destacado.lng) < TOL;
+      return Math.abs(ll.lat - pos[0]) < TOL
+          && Math.abs(ll.lng - pos[1]) < TOL;
     };
     const hallar = () => {
       // Dentro del racimo el marcador puede no estar en el mapa todavía:
@@ -1205,7 +1244,7 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
       }
     };
 
-    mapa.flyTo([destacado.lat, destacado.lng], 17, { duration: 1.2 });
+    mapa.flyTo(pos, 17, { duration: 1.2 });
     mapa.once('moveend', abrir);
     // por si el mapa ya estaba en el punto y moveend no llega a dispararse
     temporizador = setTimeout(abrir, 1600);
@@ -1218,7 +1257,7 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
     // conRacimo entra en las dependencias porque el efecto lo lee: si se
     // apaga el racimo mientras hay una búsqueda en vuelo, hay que rehacerla
     // contra el mapa en vez de contra un grupo que ya no está.
-  }, [destacado, mapa, limpiarDestacado, conRacimo]);
+  }, [destacado, mapa, limpiarDestacado, conRacimo, datosDe]);
 
   return (
     <>
