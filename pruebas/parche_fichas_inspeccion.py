@@ -48,13 +48,26 @@ def _fichas_de_campo(self, request):
     hace falta cuando se va a visitar una.
     """
     import subprocess
+    import sys as _sys
     from django.http import FileResponse, JsonResponse
 
-    tipos = ('tomas_canal_madre', 'tomas_l10')
+    # Los tipos admitidos se le preguntan al generador en vez de repetirlos
+    # aqui: anadir una capa a su tabla tiene que bastar, y una lista copiada
+    # en dos sitios envejece mal --rechazaria capas que el generador ya sabe
+    # dibujar, con un 400 que no explica nada--.
+    base = os.path.dirname(self.GENERADOR)
+    try:
+        if base not in _sys.path:
+            _sys.path.insert(0, base)
+        import fichas_inspeccion as _fi
+        tipos = tuple(sorted(_fi.TABLAS))
+    except Exception:
+        tipos = ('tomas_canal_madre', 'tomas_l10')
+
     tipo = request.query_params.get('tipo', 'tomas_canal_madre')
     if tipo not in tipos:
-        return JsonResponse({'detail': f'tipo no admitido; usa {tipos}'},
-                            status=400)
+        return JsonResponse(
+            {'detail': f'No hay ficha para «{tipo}».'}, status=400)
 
     ambito, campania = self._parametros(request)
     fid = request.query_params.get('fid')
@@ -79,7 +92,6 @@ def _fichas_de_campo(self, request):
         if clave_bd:
             entorno['PGPASSWORD'] = clave_bd
 
-        base = os.path.dirname(self.GENERADOR)
         cmd = ['python3', os.path.join(base, 'fichas_inspeccion.py'),
                '--tipo', tipo, '--ambito', ambito,
                '--salida', self.SALIDA,

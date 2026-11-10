@@ -517,6 +517,128 @@ def hoja1(h, f, anio, esquemas, logos):
 
 # ── la hoja 2 ─────────────────────────────────────────────────────────────
 
+def hoja1_generica(h, f, anio, esquemas, logos):
+    """La hoja 1 de cualquier estructura que no sea una toma.
+
+    POR QUE NO SIRVE LA DE LAS TOMAS
+    --------------------------------
+    `hoja1` esta calcada del formato de tomas laterales: pregunta por el
+    numero de compuertas, el tipo de toma y las dimensiones del vano. Usarla
+    para una caja hidraulica o un puente seria entregar al inspector un
+    cuestionario que no es el de lo que tiene delante, y eso es peor que no
+    darle ninguno.
+
+    Esta hoja pregunta lo que vale para todas: que es, donde esta, que
+    dimensiones declara la capa y como se encontro. Las caracteristicas no
+    estan escritas aqui sino que salen de las columnas de la propia tabla,
+    de modo que cada capa muestra las suyas sin que haya que mantener una
+    lista por tipo.
+    """
+    v = f.get('valores') or {}
+    y = cabecera(h, 1, 2, anio, logos)
+
+    # ── 1. información general ──
+    y = h.seccion(y, '1. INFORMACION GENERAL')
+    alto = 34
+    h.caja(MARGEN, y, UTIL, alto)
+    h.rotulo_valor(MARGEN + 6, y + 12, 'Estructura', f.get('estructura'),
+                   w_rotulo=56, w_linea=120)
+    h.rotulo_valor(MARGEN + 200, y + 12, 'Denominación', f.get('nombre'),
+                   w_rotulo=62, w_linea=130)
+    hoy = f.get('fecha') or ''
+    h.txt(ANCHO - MARGEN - 120, y + 12, 'Fecha :', 7)
+    for i, parte in enumerate((hoy[:2], hoy[3:5], hoy[6:10])):
+        ancho = 24 if i < 2 else 34
+        x = ANCHO - MARGEN - 88 + i * 26
+        h.caja(x, y + 4, ancho, 12, 0.5)
+        h.txt(x + ancho / 2.0, y + 13, parte, 7, centro=True)
+    h.rotulo_valor(MARGEN + 6, y + 27, 'Código', f.get('cod_est'),
+                   w_rotulo=56, w_linea=120)
+    y += alto
+
+    # ── 2. localización ──
+    y = h.seccion(y, '2. CODIFICACION Y LOCALIZACION')
+    alto = 42
+    h.caja(MARGEN, y, UTIL, alto)
+    h.rotulo_valor(MARGEN + 6, y + 14, 'Nombre del canal', f.get('canal'),
+                   w_rotulo=86, w_linea=160)
+    h.rotulo_valor(MARGEN + 290, y + 14, 'Progresiva',
+                   progresiva(f.get('progresiva')), w_rotulo=56, w_linea=100)
+    h.rotulo_valor(MARGEN + 6, y + 31, 'Este (m)', f.get('este'),
+                   w_rotulo=56, w_linea=90)
+    h.rotulo_valor(MARGEN + 170, y + 31, 'Norte (m)', f.get('norte'),
+                   w_rotulo=60, w_linea=90)
+    h.rotulo_valor(MARGEN + 340, y + 31, 'Zona', f.get('zona') or '17S',
+                   w_rotulo=32, w_linea=48)
+    # Hasta MARGEN + UTIL y ni un punto más: con w_rotulo + w_linea de más,
+    # la raya se sale del recuadro y cruza el borde de la hoja.
+    h.rotulo_valor(MARGEN + 430, y + 31, 'Elev. (msnm)', f.get('elevacion'),
+                   w_rotulo=60, w_linea=55)
+    y += alto
+
+    # ── 3. características de la capa ──
+    y = h.seccion(y, '3. CARACTERISTICAS DE LA ESTRUCTURA')
+    datos = (f.get('caracteristicas') or [])[:24]
+    # Dos columnas, y una altura minima para que la seccion no se cierre
+    # sobre si misma cuando la capa no declara nada: en una ficha en blanco
+    # ese recuadro es donde se anota a mano.
+    filas_por_columna = max(4, (len(datos) + 1) // 2)
+    alto = 14 * filas_por_columna + 8
+    h.caja(MARGEN, y, UTIL, alto)
+    ancho_col = UTIL / 2.0
+    for i, (etiqueta, valor) in enumerate(datos):
+        col, fila = i // filas_por_columna, i % filas_por_columna
+        h.rotulo_valor(MARGEN + 8 + col * ancho_col, y + 13 + fila * 14,
+                       etiqueta, valor, w_rotulo=ancho_col * 0.46,
+                       w_linea=ancho_col * 0.44, tam=6.5)
+    if not datos:
+        for fila in range(filas_por_columna):
+            for col in range(2):
+                h.rotulo_valor(MARGEN + 8 + col * ancho_col,
+                               y + 13 + fila * 14, '', '',
+                               w_rotulo=ancho_col * 0.46,
+                               w_linea=ancho_col * 0.44, tam=6.5)
+    y += alto
+
+    # ── 4. estado en que se encontró ──
+    y = h.seccion(y, '4. ESTADO Y CONDICION DE OPERACION')
+    alto = 66
+    h.caja(MARGEN, y, UTIL, alto)
+    h.txt(MARGEN + 6, y + 14, 'Estado de conservación :', 7)
+    h.brm(MARGEN + 120, y + 6, val(v, 'estado_cons') or f.get('estado'))
+    h.txt(MARGEN + 182, y + 14, '( B: Bueno   R: Regular   M: Malo )', 6,
+          color=GRIS)
+    h.rotulo_valor(MARGEN + 330, y + 14, 'Condición operativa',
+                   val(v, 'condicion') or val(v, 'operacion'),
+                   w_rotulo=96, w_linea=110)
+    h.txt(MARGEN + 6, y + 32, 'Requiere mantenimiento :', 7)
+    h.si_no(MARGEN + 124, y + 24, f.get('requiere_mant'))
+    h.txt(MARGEN + 6, y + 50, 'Observaciones :', 7)
+    h.linea(MARGEN + 80, y + 51, ANCHO - MARGEN - 8, y + 51, 0.5, GRIS)
+    h.parrafo(MARGEN + 84, y + 49, UTIL - 96, f.get('observaciones'),
+              6.5, 8, maximo=2)
+    y += alto
+
+    # ── 5. lo que quede de hoja, rayado ──
+    # Sin esto la hoja genérica termina a media página y el inspector se
+    # queda sin sitio donde anotar lo que el formulario no previó, que en
+    # campo es la mitad de lo que se apunta.
+    sobra = ALTO - MARGEN - y
+    if sobra > 40:
+        y = h.seccion(y, '5. NOTAS DE CAMPO')
+        alto = ALTO - MARGEN - y
+        h.caja(MARGEN, y, UTIL, alto)
+        renglon = y + 18
+        while renglon < y + alto - 6:
+            h.linea(MARGEN + 10, renglon, ANCHO - MARGEN - 10, renglon,
+                    0.4, GRIS_SUAVE)
+            renglon += 16
+
+    # El croquis del tipo, si lo hay: no todas las estructuras tienen lámina
+    # dibujada, y la hoja 2 ya reserva su recuadro.
+    f['croquis'] = f.get('croquis') or esquemas.get(f.get('esquema') or '')
+
+
 def hoja2(h, f, anio, logos, fotos):
     y = cabecera(h, 2, 2, anio, logos)
 
@@ -571,7 +693,12 @@ def dibujar(fichas, ruta, anio, esquemas, logos):
     c.setAuthor('JURP')
     h = Hoja(c)
     for f in fichas:
-        hoja1(h, f, anio, esquemas, logos)
+        # Las tomas llevan su formato propio, calcado del papel de la ANA;
+        # el resto, la hoja que vale para cualquier estructura.
+        if f.get('generica'):
+            hoja1_generica(h, f, anio, esquemas, logos)
+        else:
+            hoja1(h, f, anio, esquemas, logos)
         c.showPage()
         hoja2(h, f, anio, logos, f.get('fotos') or [])
         c.showPage()
@@ -581,11 +708,145 @@ def dibujar(fichas, ruta, anio, esquemas, logos):
 
 # ── datos ─────────────────────────────────────────────────────────────────
 
+# tipo → (tabla, canal, nombre que se imprime como «Estructura»)
+#
+# Las dos tomas llevan el formato propio de la ANA. Las demas usan la hoja
+# generica: el `canal` sale de la propia fila y por eso va vacio aqui.
 TABLAS = {
     'tomas_canal_madre': ('inventario.tomas_canal_madre', 'Canal Madre PECH',
                           'TOMA LATERAL'),
     'tomas_l10': ('inventario.tomas_l10', 'Canal Lateral 10', 'TOMA LATERAL'),
+
+    'tomas_otros_sectores': ('inventario.tomas_otros_sectores', '', 'TOMA'),
+    'alcantarilla':      ('inventario.alcantarilla', '', 'ALCANTARILLA'),
+    'aliviadero':        ('inventario.aliviadero', '', 'ALIVIADERO'),
+    'bocatomas':         ('inventario.bocatomas', '', 'BOCATOMA'),
+    'cajas_hidraulicas': ('inventario.cajas_hidraulicas', '',
+                          'CAJA HIDRAULICA'),
+    'camara_rompepresion': ('inventario.camara_rompepresion', '',
+                            'CAMARA ROMPEPRESION'),
+    'canoas':            ('inventario.canoas', '', 'CANOA'),
+    'desarenadores':     ('inventario.desarenadores', '', 'DESARENADOR'),
+    'entregas':          ('inventario.entregas', '', 'ENTREGA'),
+    'estaciones_control': ('inventario.estaciones_control', '',
+                           'ESTACION DE CONTROL'),
+    'laterales':         ('inventario.laterales', '', 'LATERAL'),
+    'partidor':          ('inventario.partidor', '', 'PARTIDOR'),
+    'pases_de_tuberias': ('inventario.pases_de_tuberias', '',
+                          'PASE DE TUBERIA'),
+    'puente_peatonal':   ('inventario.puente_peatonal', '', 'PUENTE PEATONAL'),
+    'puente_vehicular':  ('inventario.puente_vehicular', '',
+                          'PUENTE VEHICULAR'),
+    'rapidas':           ('inventario.rapidas', '', 'RAPIDA'),
+    'reservorios':       ('inventario.reservorios', '', 'RESERVORIO'),
+    'sifon':             ('inventario.sifon', '', 'SIFON'),
 }
+
+# Los dos tipos con formato propio. El resto va por la hoja generica.
+CON_FORMATO_PROPIO = ('tomas_canal_madre', 'tomas_l10')
+
+# La lámina acotada de cada tipo. El nombre del tipo suele coincidir con el
+# del archivo —`alcantarilla`, `aliviadero`, `sifon`— y cuando no, va aquí.
+#
+# Los tipos que no aparecen no tienen lámina dibujada todavía: su recuadro
+# sale con la cuadrícula, que es donde el inspector dibuja a mano. Es mejor
+# eso que prestarles el croquis de otra estructura, que acotaría cosas que
+# la que tiene delante no tiene.
+ESQUEMA_DE = {
+    'canoas': 'canoa',
+    'desarenadores': 'desarenador',
+    'entregas': 'entrega',
+    'laterales': 'canal',
+    'puente_peatonal': 'puente',
+    'puente_vehicular': 'puente',
+    'tomas_otros_sectores': 'toma',
+}
+
+# Columnas que no son caracteristicas de la estructura: identificadores,
+# geometria, herencia del CAD y la contabilidad de campanias. Las de la
+# cabecera tambien salen, porque ya se imprimen en las secciones 1 y 2.
+COLUMNAS_OCULTAS = {
+    'fid', 'ogc_fid', 'geom', 'ambito', 'fuente', 'cod_est', 'tramo',
+    'etiqueta', 'campania_alta', 'campania_baja', 'motivo_baja',
+    'progresiva_kmz', 'objectid', 'objectid_1', 'shape_leng', 'shape_le_1',
+    'handle', 'layer', 'entity', 'lyrfrzn', 'lyron', 'color', 'linetype',
+    'linewt', 'refname', 'docupdate', 'docid', 'globalwidt',
+    'nombre', 'nombre_del', 'nombre_de_', 'nombre_canal', 'progresiva',
+    'norte', 'este', 'zona', 'observacio', 'observaciones', 'un', 'unir',
+}
+
+# De donde sacar el nombre del canal, en orden de preferencia.
+COLUMNAS_CANAL = ('nombre_del', 'nombre_de_', 'nombre_canal', 'nombre_d_1')
+
+
+def _etiqueta(columna):
+    """El nombre de columna, legible.
+
+    Los shapefile traen las unidades pegadas al nombre —`ancho__m_`,
+    `altura__m_`— porque DBF corta a diez caracteres y no admite
+    parentesis. Deshacer eso aqui es mas barato que mantener un diccionario
+    de trescientas columnas, y cuando no acierta se lee igual.
+    """
+    t = str(columna)
+    for sufijo, unidad in (('__m_', ' (m)'), ('__mm_', ' (mm)'),
+                           ('__m3_', ' (m3)'), ('__km_', ' (km)'),
+                           ('__s_', ' (s)'), ('__', ' ')):
+        if t.endswith(sufijo):
+            t = t[:-len(sufijo)] + unidad
+            break
+    t = t.rstrip('_').replace('_', ' ').strip()
+    return (t[:1].upper() + t[1:]) if t else ''
+
+
+def caracteristicas_de(R, tabla, pk, fids):
+    """Las columnas propias de la capa, por activo.
+
+    Se leen del catalogo y no de una lista escrita aqui: son veinte capas
+    con columnas distintas, y una lista por capa envejeceria mal. Si la
+    consulta falla, la ficha sale con la seccion en blanco —que es util
+    igual, porque es donde se anota a mano— en vez de no salir.
+    """
+    if not fids:
+        return {}
+    try:
+        esquema, nombre = tabla.split('.', 1)
+        filas = R.consultar(f"""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = '{esquema}' AND table_name = '{nombre}'
+            ORDER BY ordinal_position;""") or []
+        cols = [c[0] for c in filas
+                if c and c[0] and c[0].lower() not in COLUMNAS_OCULTAS]
+        canal_col = next((c for c in COLUMNAS_CANAL
+                          if any(x and x[0] == c for x in filas)), None)
+        if canal_col:
+            cols.append(canal_col)
+        if not cols:
+            return {}
+
+        # Mismo cuidado que en leer_fichas: un salto de linea dentro de un
+        # valor parte la fila en dos y descuadra todo lo que viene detras.
+        sel = ', '.join(
+            f"""translate(coalesce("{c}"::text, ''), E'\n\r', '  ')"""
+            for c in cols)
+        ids = ', '.join(str(int(x)) for x in fids)
+        filas = R.consultar(
+            f'SELECT "{pk}", {sel} FROM {tabla} WHERE "{pk}" IN ({ids});') or []
+    except Exception as e:                       # noqa: BLE001
+        print(f'  caracteristicas de {tabla}: {e}', file=sys.stderr)
+        return {}
+
+    salida = {}
+    for fila in filas:
+        if len(fila) != len(cols) + 1:
+            continue
+        valores = dict(zip(cols, fila[1:]))
+        canal = valores.pop(canal_col, '') if canal_col else ''
+        salida[str(fila[0])] = {
+            'canal': canal,
+            'lista': [(_etiqueta(c), v) for c, v in valores.items()
+                      if v not in (None, '')],
+        }
+    return salida
 
 
 def leer_fichas(R, tipo, ambito, campania, fid=None):
@@ -651,6 +912,8 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
          valores, evaluador, eval_id) = fila
         salida.append({
             'fid': clave,
+            'generica': tipo not in CON_FORMATO_PROPIO,
+            'esquema': ESQUEMA_DE.get(tipo, tipo),
             'nombre': nombre,
             'estructura': estructura,
             'canal': canal,
@@ -666,6 +929,23 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
             'fecha': '',
             'fotos': fotos_de(R, eval_id or None),
         })
+
+    # Las caracteristicas se piden de una sola vez para todas las fichas:
+    # una consulta por estructura serian veintidos viajes a psql, cada uno
+    # levantando su proceso.
+    if tipo not in CON_FORMATO_PROPIO and salida:
+        extra = caracteristicas_de(R, tabla, pk, [s['fid'] for s in salida])
+        for s in salida:
+            dato = extra.get(str(s['fid'])) or {}
+            s['caracteristicas'] = dato.get('lista') or []
+            s['canal'] = s['canal'] or dato.get('canal') or ''
+            v = s.get('valores') or {}
+            # Lo que el inspector anotó manda sobre lo que declara la capa:
+            # la ficha se lee para saber cómo se encontró la estructura.
+            s['estado'] = val(v, 'estado_cons')
+            s['observaciones'] = val(v, 'observaciones')
+            s['requiere_mant'] = val(v, 'requiere_mant')
+
     return salida
 
 
@@ -781,6 +1061,39 @@ FICHA_PRUEBA = {
 }
 
 
+# La misma estructura que vio el inspector en la pantalla de la caja
+# hidraulica: sirve para comprobar la hoja generica sin base de datos.
+FICHA_PRUEBA_GENERICA = {
+    'fid': 170,
+    'generica': True,
+    'esquema': 'canal_rectangular',
+    'nombre': '10.6-C15',
+    'estructura': 'CAJA HIDRAULICA',
+    'canal': 'Sub lateral 10.6',
+    'cod_est': '10.6-C15',
+    'progresiva': 3558.65,
+    'este': '765,120.40',
+    'norte': '9,040,880.15',
+    'zona': '17S',
+    'elevacion': '231.40',
+    'fecha': '09/11/2026',
+    'evaluador': 'cherrera',
+    'cargo': '',
+    'estado': 'B',
+    'observaciones': 'Operativa. Tapa de concreto sin fisuras visibles.',
+    'requiere_mant': 'no',
+    'caracteristicas': [
+        ('Material', 'Concreto'), ('Estado', 'Bueno'),
+        ('Diametro (mm)', '400'), ('Ancho (m)', '3.45'),
+        ('Largo (m)', '3.20'), ('Altura (m)', '2.43'),
+        ('Espesor (m)', '0.20'), ('Numero', '170'),
+        ('Material1', 'Concreto'), ('Estado1', 'B'),
+    ],
+    'valores': {'estado_cons': 'B', 'condicion': 'Operativo'},
+    'fotos': [],
+}
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--tipo', default='tomas_canal_madre',
@@ -797,7 +1110,10 @@ def main():
     esquemas = buscar_esquemas(args.esquemas)
 
     if args.prueba:
-        dibujar([FICHA_PRUEBA], args.prueba, anio, esquemas, {})
+        # Las dos hojas: la de las tomas y la generica. Se ven seguidas
+        # porque el riesgo al tocar una es romper la otra sin notarlo.
+        dibujar([FICHA_PRUEBA, FICHA_PRUEBA_GENERICA], args.prueba, anio,
+                esquemas, {})
         print(f'escrito {args.prueba}')
         return 0
 

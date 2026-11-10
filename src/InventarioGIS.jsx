@@ -2384,14 +2384,22 @@ export function FichaActivo({ inv }) {
    lleva, así que de ese modo contestaría 401 y el visor saldría en blanco
    sin decir por qué.
 
-   El generador solo sabe dibujar las tomas: su hoja 1 pregunta por el canal,
-   las compuertas y el tipo de toma, y para una caja hidráulica o un puente
-   saldría un formulario que no es el suyo. Por eso el botón solo aparece en
-   los tipos que tienen ficha; cuando haya hoja para los demás, se añaden
-   aquí y sale sola.
+   Las dos capas de tomas llevan el formato propio de la ANA, calcado del
+   papel; las demás, una hoja genérica que pregunta lo que vale para todas
+   —qué es, dónde está, qué dimensiones declara la capa, cómo se encontró— y
+   deja el resto de la página rayado para anotar en campo.
+
+   Esta lista tiene que seguir a `TABLAS` en fichas_inspeccion.py: lo que no
+   esté allí, el backend lo rechaza con un 400.
    ══════════════════════════════════════════════════════════ */
 
-const TIPOS_CON_FICHA = ['tomas_canal_madre', 'tomas_l10'];
+const TIPOS_CON_FICHA = [
+  'tomas_canal_madre', 'tomas_l10', 'tomas_otros_sectores',
+  'alcantarilla', 'aliviadero', 'bocatomas', 'cajas_hidraulicas',
+  'camara_rompepresion', 'canoas', 'desarenadores', 'entregas',
+  'estaciones_control', 'laterales', 'partidor', 'pases_de_tuberias',
+  'puente_peatonal', 'puente_vehicular', 'rapidas', 'reservorios', 'sifon',
+];
 
 function VisorFicha({ tipo, fid, nombre, ambito, campania, onCerrar }) {
   const [url, setUrl] = useState(null);
