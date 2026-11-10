@@ -2678,8 +2678,14 @@ function ModalAlta({ inv }) {
             </div>
             <div className="inv-campo">
               <label>Nombre</label>
-              <input value={nombre} onChange={e => setNombre(e.target.value)}
-                placeholder="Cómo se le conoce" />
+              {/* EL type="text" NO SOBRA. Las reglas del formulario apuntan a
+                  input[type="text"], y un <input> sin atributo se comporta
+                  como texto pero no casa ese selector: el campo sale con el
+                  recuadro del navegador al lado de los demás, que sí están
+                  estilados. */}
+              <input type="text" value={nombre}
+                onChange={e => setNombre(e.target.value)}
+                placeholder="Cómo se le conoce en campo" />
             </div>
             <div className="inv-campo ancho">
               <label>Descripción</label>
