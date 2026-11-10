@@ -83,9 +83,12 @@ def _fichas_de_campo(self, request):
     sufijo = f'_{campania}' if campania else ''
     if fid:
         sufijo += f'_{fid}'
-    base = ('Fichas_Evaluadas' if evaluadas and tipo == 'todas'
-            else f'Fichas_Inspeccion_{tipo}')
-    ruta = os.path.join(self.SALIDA, f'{base}_{ambito}{sufijo}.pdf')
+    # OJO con el nombre: `base` de mas arriba es la CARPETA del generador.
+    # Reutilizarlo aqui para el nombre del archivo hacia que la llamada
+    # buscara el generador en /app/Fichas_Evaluadas/fichas_inspeccion.py.
+    nombre_pdf = ('Fichas_Evaluadas' if evaluadas and tipo == 'todas'
+                  else f'Fichas_Inspeccion_{tipo}')
+    ruta = os.path.join(self.SALIDA, f'{nombre_pdf}_{ambito}{sufijo}.pdf')
 
     # Una ficha suelta se rehace siempre: se pide justo despues de corregir
     # el dato, y servir la de hace un rato seria peor que tardar un segundo.
