@@ -888,7 +888,12 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
     # buena: «not enough values to unpack». Se limpia en la consulta, que es
     # donde todavia se sabe que es un solo campo.
     def plano(col):
-        return f"translate({col}, E'\n\r', '  ')"
+        # El ::text no es adorno: `progresiva` es texto en las tomas pero
+        # double precision en las canoas y en media docena de capas mas, y
+        # translate() solo acepta texto. Sin el cast, el generador muere con
+        # «function translate(double precision, unknown, unknown) does not
+        # exist» y la ficha no sale para ninguna de esas capas.
+        return f"translate(coalesce({col}::text, ''), E'\n\r', '  ')"
 
     filas = R.consultar(f"""
         SELECT a.{pk}, {plano('a.nombre')}, {plano('a.cod_est')},
