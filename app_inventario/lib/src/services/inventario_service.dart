@@ -438,19 +438,18 @@ class InventarioService {
     ];
   }
 
-  /// Baja un formato y devuelve el archivo ya escrito en el teléfono.
+  /// Baja lo que haya en esa URL y lo deja escrito en el teléfono.
   ///
-  /// Pasa por una petición y no por abrir el enlace en el navegador para
+  /// PASA POR UNA PETICIÓN Y NO POR ABRIR EL ENLACE EN EL NAVEGADOR para
   /// poder enseñar el error cuando el generador falla: un enlace dejaría al
   /// usuario con un archivo de error sin explicación, y el archivo de error
   /// se llama igual que el bueno.
-  Future<File> descargarFormato(
-      String clave, String nombreArchivo, String ambito, int? anio) async {
-    final c = anio == null ? '' : '&campania=$anio';
-    final ruta = clave == 'todos'
-        ? '$base/reportes/todos/?ambito=$ambito$c'
-        : '$base/reportes/${Uri.encodeComponent(clave)}/?ambito=$ambito$c';
-
+  ///
+  /// El plazo es largo a propósito. Armar las fichas de una capa entera son
+  /// decenas de páginas con sus croquis y sus fotos, y el servidor las
+  /// dibuja al vuelo: cortar a los treinta segundos sería cortar justo lo
+  /// que más se tarda en pedir.
+  Future<File> _bajar(String ruta, String nombreArchivo) async {
     final r =
         await http.get(Uri.parse(ruta)).timeout(const Duration(minutes: 5));
     if (r.statusCode != 200) {
@@ -461,12 +460,71 @@ class InventarioService {
       } catch (_) {}
       throw Exception(detalle);
     }
-
     final dir = await getApplicationDocumentsDirectory();
-    final f = File(p.join(dir.path,
-        nombreArchivo.isEmpty ? '$clave.xlsx' : nombreArchivo));
+    final f = File(p.join(dir.path, nombreArchivo));
     await f.writeAsBytes(r.bodyBytes);
     return f;
+  }
+
+  /// Baja un formato y devuelve el archivo ya escrito en el teléfono.
+  ///
+  /// `pdf` pide la versión impresa del mismo formato. El Excel sirve para
+  /// seguir trabajando el dato y el PDF para entregarlo: en campo, lo que
+  /// se enseña y se firma es el PDF.
+  Future<File> descargarFormato(
+      String clave, String nombreArchivo, String ambito, int? anio,
+      {bool pdf = false}) async {
+    final c = anio == null ? '' : '&campania=$anio';
+    final ruta = clave == 'todos'
+        ? '$base/reportes/todos/?ambito=$ambito$c'
+        : '$base/reportes/${Uri.encodeComponent(clave)}/'
+            '${pdf ? 'pdf/' : ''}?ambito=$ambito$c';
+    final nombre = nombreArchivo.isEmpty
+        ? '$clave.${pdf ? 'pdf' : 'xlsx'}'
+        : (pdf ? '${p.withoutExtension(nombreArchivo)}.pdf' : nombreArchivo);
+    return _bajar(ruta, nombre);
+  }
+
+  /// Las fichas de inspección del ANA, en PDF.
+  ///
+  /// La misma ruta sirve tres cosas distintas según lo que se le pida, y
+  /// son las tres que se usan:
+  ///
+  ///   fid != null      la ficha de ESA estructura, con lo evaluado dentro.
+  ///                    Es la que se mira en campo, delante de la obra.
+  ///   evaluadas        solo las que ya tienen evaluación en la campaña.
+  ///                    `tipo` puede ser 'todas' para la campaña entera.
+  ///   ninguna de las   el talonario en blanco de esa capa, para imprimir
+  ///   dos              y salir con él.
+  ///
+  /// El PDF lo arma el servidor con el mismo generador que el visor web, y
+  /// es a propósito: la ficha que firma la Junta no puede depender de si se
+  /// imprimió desde un teléfono o desde un escritorio.
+  Future<File> descargarFichas({
+    required String tipo,
+    int? fid,
+    bool evaluadas = false,
+    String ambito = 'todo',
+    int? anio,
+  }) async {
+    final q = <String, String>{'tipo': tipo};
+    if (fid != null) q['fid'] = '$fid';
+    if (evaluadas) q['evaluadas'] = '1';
+    if (ambito.isNotEmpty) q['ambito'] = ambito;
+    if (anio != null) q['campania'] = '$anio';
+
+    final nombre = fid != null
+        ? 'ficha_${tipo}_$fid.pdf'
+        : evaluadas
+            ? 'fichas_evaluadas_$tipo.pdf'
+            : 'fichas_$tipo.pdf';
+
+    return _bajar(
+      Uri.parse('$base/reportes/fichas/')
+          .replace(queryParameters: q)
+          .toString(),
+      nombre,
+    );
   }
 
   void cerrar() => _cliente.close();

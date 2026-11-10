@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
@@ -62,24 +64,26 @@ class _ReportesPageState extends State<ReportesPage> {
     }
   }
 
-  Future<void> _descargar(Formato f) async {
+  /// Baja algo y lo abre. `tarea` es lo que se marca como «bajando»: hace
+  /// falta para que el Excel y el PDF del mismo formato no se enciendan a
+  /// la vez, y para que las fichas tengan su propio indicador.
+  Future<void> _bajarYAbrir(
+      String tarea, String titulo, Future<File> Function() traer) async {
     setState(() {
-      _bajando = f.clave;
+      _bajando = tarea;
       _error = null;
     });
-    final inv = context.read<InventarioController>();
     try {
-      final archivo = await inv.api
-          .descargarFormato(f.clave, f.archivo, _ambito, _anio);
+      final archivo = await traer();
       if (!mounted) return;
       setState(() => _bajando = null);
 
-      // Se abre con la app que el teléfono tenga para hojas de cálculo; si
-      // no hay ninguna, se ofrece compartirlo —que es lo que acaba pasando
-      // en campo: va por WhatsApp a la oficina—.
+      // Se abre con la app que el teléfono tenga para hojas de cálculo o
+      // PDF; si no hay ninguna, se ofrece compartirlo —que es lo que acaba
+      // pasando en campo: va por WhatsApp a la oficina—.
       final r = await OpenFilex.open(archivo.path);
       if (r.type != ResultType.done && mounted) {
-        await Share.shareXFiles([XFile(archivo.path)], text: f.titulo);
+        await Share.shareXFiles([XFile(archivo.path)], text: titulo);
       }
     } catch (e) {
       if (!mounted) return;
@@ -88,6 +92,31 @@ class _ReportesPageState extends State<ReportesPage> {
         _error = e.toString().replaceFirst('Exception: ', '');
       });
     }
+  }
+
+  Future<void> _descargar(Formato f, {bool pdf = false}) {
+    final inv = context.read<InventarioController>();
+    return _bajarYAbrir(
+      pdf ? '${f.clave}:pdf' : f.clave,
+      f.titulo,
+      () => inv.api
+          .descargarFormato(f.clave, f.archivo, _ambito, _anio, pdf: pdf),
+    );
+  }
+
+  /// Todas las fichas ya evaluadas de la campaña, en un solo PDF.
+  ///
+  /// Es lo que se entrega: el talonario relleno. Sin campaña elegida no
+  /// tiene sentido —el inventario base no tiene nada evaluado— y por eso el
+  /// botón solo aparece con un año seleccionado.
+  Future<void> _fichasEvaluadas() {
+    final inv = context.read<InventarioController>();
+    return _bajarYAbrir('fichas_evaluadas', 'Fichas evaluadas',
+        () => inv.api.descargarFichas(
+            tipo: 'todas',
+            evaluadas: true,
+            ambito: _ambito,
+            anio: _anio));
   }
 
   @override
@@ -199,8 +228,47 @@ class _ReportesPageState extends State<ReportesPage> {
               _FilaFormato(
                 f: f,
                 bajando: _bajando == f.clave,
+                bajandoPdf: _bajando == '${f.clave}:pdf',
                 onTap: () => _descargar(f),
+                onPdf: () => _descargar(f, pdf: true),
               ),
+
+          // Las fichas de inspección rellenas. Solo con campaña elegida: el
+          // inventario base no tiene ninguna evaluada y el PDF saldría
+          // vacío, que parece un fallo del generador y no lo es.
+          if (_anio != null) ...[
+            const SizedBox(height: 14),
+            const Text('Fichas de inspección',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+            const SizedBox(height: 8),
+            Container(
+              decoration: AppTheme.tarjeta,
+              child: ListTile(
+                onTap: _bajando == 'fichas_evaluadas' ? null : _fichasEvaluadas,
+                leading: _bajando == 'fichas_evaluadas'
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2.2))
+                    : const Icon(Icons.picture_as_pdf_outlined,
+                        color: AppColors.verde),
+                title: const Text('Fichas evaluadas de la campaña',
+                    style: TextStyle(fontSize: 14.5)),
+                // El contador solo vale si el año elegido es el que la app
+                // tiene cargado: `inv.evaluaciones` son las de la campaña
+                // activa, no las del año del desplegable. Enseñarlo para
+                // otro año sería dar un número de otra campaña.
+                subtitle: Text(
+                  _anio == inv.campania?.anio
+                      ? '${inv.evaluaciones.length} evaluadas en $_anio · '
+                          'se arma al pedirlo'
+                      : 'Las evaluadas en $_anio · se arma al pedirlo',
+                  style: const TextStyle(fontSize: 12.5),
+                ),
+                trailing: const Icon(Icons.download_outlined),
+              ),
+            ),
+          ],
 
           const SizedBox(height: 14),
           const Text(
@@ -324,10 +392,17 @@ class _FilaAvance extends StatelessWidget {
 class _FilaFormato extends StatelessWidget {
   final Formato f;
   final bool bajando;
+  final bool bajandoPdf;
   final VoidCallback onTap;
+  final VoidCallback onPdf;
 
-  const _FilaFormato(
-      {required this.f, required this.bajando, required this.onTap});
+  const _FilaFormato({
+    required this.f,
+    required this.bajando,
+    required this.bajandoPdf,
+    required this.onTap,
+    required this.onPdf,
+  });
 
   String get _peso {
     if (f.tamano <= 0) return '';
@@ -357,7 +432,28 @@ class _FilaFormato extends StatelessWidget {
           f.listo ? 'Generado · $_peso' : 'Se arma al pedirlo',
           style: const TextStyle(fontSize: 12.5),
         ),
-        trailing: const Icon(Icons.download_outlined),
+        // Dos salidas del mismo formato: la fila entera baja el Excel, que
+        // es para seguir trabajando el dato, y el botón del PDF la versión
+        // que se entrega y se firma. En campo casi siempre se quiere la
+        // segunda, pero quien reporta a la oficina quiere la primera.
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.download_outlined),
+            const SizedBox(width: 2),
+            bajandoPdf
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.2))
+                : IconButton(
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    tooltip: 'En PDF',
+                    color: AppColors.gris,
+                    onPressed: bajando ? null : onPdf,
+                  ),
+          ],
+        ),
       ),
     );
   }

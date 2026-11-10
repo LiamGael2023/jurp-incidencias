@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -47,10 +49,52 @@ class _FichaPageState extends State<FichaPage> {
   /// subir tardan, y sin rótulo parece que la app se colgó.
   String? _tarea;
 
+  /// La ficha del ANA se está armando en el servidor.
+  bool _bajandoFicha = false;
+
   @override
   void initState() {
     super.initState();
     _cargarFotos();
+  }
+
+  /// La ficha de inspección de ESTA estructura, en PDF.
+  ///
+  /// POR QUÉ SE PIDE AL SERVIDOR Y NO SE DIBUJA AQUÍ. Es el formato oficial
+  /// del ANA, con sus croquis acotados y sus casillas, y lo que la Junta
+  /// firma no puede depender de si se imprimió desde un teléfono o desde un
+  /// escritorio. El mismo generador sirve a los dos, así que una corrección
+  /// en el formato llega a la app sin publicar una versión en la tienda.
+  ///
+  /// Se abre con el visor de PDF del teléfono, y si no hay ninguno se
+  /// ofrece compartirla: en campo eso acaba siendo un WhatsApp a la
+  /// oficina, que es exactamente para lo que se pide.
+  Future<void> _verFicha() async {
+    setState(() => _bajandoFicha = true);
+    final inv = context.read<InventarioController>();
+    final mensajero = ScaffoldMessenger.of(context);
+    try {
+      final archivo = await inv.api.descargarFichas(
+        tipo: widget.activo.tipo,
+        fid: widget.activo.fid,
+        ambito: inv.ambito,
+        anio: inv.campania?.anio,
+      );
+      if (!mounted) return;
+      setState(() => _bajandoFicha = false);
+      final r = await OpenFilex.open(archivo.path);
+      if (r.type != ResultType.done && mounted) {
+        await Share.shareXFiles([XFile(archivo.path)],
+            text: 'Ficha de ${widget.activo.nombre}');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _bajandoFicha = false);
+      mensajero.showSnackBar(SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: const Color(0xFFD9480F),
+      ));
+    }
   }
 
   Future<void> _cargarFotos() async {
@@ -303,6 +347,27 @@ class _FichaPageState extends State<FichaPage> {
                 style: const TextStyle(fontSize: 12, color: Colors.white70)),
           ],
         ),
+        actions: [
+          // La ficha del ANA de esta estructura. Va en la barra y no abajo
+          // porque abajo manda EVALUAR, que es lo que se viene a hacer.
+          _bajandoFicha
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 18),
+                  child: Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.2, color: Colors.white),
+                    ),
+                  ),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  tooltip: 'Ficha de inspección en PDF',
+                  onPressed: _verFicha,
+                ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 100),
