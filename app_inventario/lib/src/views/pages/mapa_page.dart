@@ -14,6 +14,7 @@ import '../../utils/app_colors.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/catalogo_capas.dart';
 import '../widgets/panel_capas.dart';
+import 'alta_page.dart';
 import 'buscar_page.dart';
 import 'ficha_page.dart';
 import 'login_page.dart';
@@ -91,6 +92,25 @@ class _MapaPageState extends State<MapaPage> {
   }
 
   // ── posición ──────────────────────────────────────────────────────────
+
+  /// Abre el alta de una estructura nueva.
+  ///
+  /// Sin campaña abierta no se puede: el alta cuelga de una, y el servidor
+  /// la rechazaría después de que el inspector haya tomado el punto y
+  /// escrito la descripción, que es el peor momento para enterarse.
+  Future<void> _darDeAlta() async {
+    final inv = context.read<InventarioController>();
+    if (inv.campania == null) {
+      _aviso('No hay campaña abierta: el alta tiene que colgar de una.');
+      return;
+    }
+    final hecha = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const AltaPage()),
+    );
+    // Un alta no aparece en el mapa —queda pendiente de validación— pero sí
+    // cambia el contador de la bandeja si se quedó sin subir.
+    if (hecha == true && mounted) await inv.contarPendientes();
+  }
 
   /// Lleva el mapa a donde está el inspector.
   ///
@@ -722,6 +742,20 @@ class _MapaPageState extends State<MapaPage> {
                   )
                 : const Icon(Icons.my_location),
             ),
+          ),
+          const SizedBox(height: 10),
+
+          // Dar de alta una estructura que la capa no tenía. Va aquí, en el
+          // mapa, porque es donde uno se da cuenta: se llega a la obra, se
+          // busca en el mapa y no está.
+          FloatingActionButton.small(
+            heroTag: 'alta',
+            backgroundColor: Colors.white,
+            foregroundColor: AppColors.verde,
+            elevation: 3,
+            tooltip: 'Registrar una estructura nueva',
+            onPressed: _darDeAlta,
+            child: const Icon(Icons.add_location_alt_outlined),
           ),
           const SizedBox(height: 10),
           FloatingActionButton.extended(

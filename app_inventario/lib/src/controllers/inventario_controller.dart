@@ -347,6 +347,72 @@ class InventarioController extends ChangeNotifier {
     }
   }
 
+  // ── altas ─────────────────────────────────────────────────────────────
+
+  /// A qué capas se les puede dar de alta una estructura nueva.
+  ///
+  /// Solo las de la Junta —el contexto es de Chavimochic, no se inventaría
+  /// aquí— y solo las de puntos: un alta es alguien parado delante de la
+  /// obra con el GPS, y un canal o una cuenca no se digitalizan desde un
+  /// punto. El backend se niega igual, pero ofrecer en la lista algo que
+  /// luego rechaza es hacerle perder el viaje a quien está en campo.
+  static List<Capa> get tiposConAlta => [
+        for (final g in gruposCapas)
+          if (!g.contexto)
+            for (final c in g.capas)
+              if (!c.oculta && !c.contexto && c.tipo == TipoGeom.punto) c
+      ];
+
+  /// Da de alta una estructura encontrada en campo.
+  ///
+  /// Igual que `guardar`: devuelve `false` cuando se quedó en la bandeja
+  /// por falta de señal, para que la pantalla no diga «guardado». Un alta
+  /// que el inspector cree subida y no está es una estructura que nadie
+  /// vuelve a visitar.
+  Future<bool> guardarAlta({
+    required String tipoActivo,
+    required double lat,
+    required double lng,
+    String? nombre,
+    String? descripcion,
+    String? registradoPor,
+  }) async {
+    if (campania == null) throw Exception('No hay campaña activa');
+
+    // El cuerpo se arma ANTES de intentar nada, para que lo que se mande
+    // ahora y lo que se guarde en la bandeja sean lo mismo: las
+    // coordenadas son las de aquí, no las de donde vuelva la cobertura.
+    final cuerpo = InventarioService.cuerpoActivoNuevo(
+      campaniaId: campania!.id,
+      tipoActivo: tipoActivo,
+      lat: lat,
+      lng: lng,
+      nombre: nombre,
+      descripcion: descripcion,
+      registradoPor: registradoPor,
+    );
+
+    try {
+      await api.enviarActivoNuevo(cuerpo);
+      notifyListeners();
+      return true;
+    } on SinConexion {
+      await bandeja.agregar(
+        clase: ClasePendiente.alta,
+        tipo: tipoActivo,
+        fid: 0,
+        nombre: (nombre ?? '').trim().isEmpty
+            ? (capaPorCodigo(tipoActivo)?.label ?? tipoActivo)
+            : nombre!.trim(),
+        evaluacionId: null,
+        cuerpo: cuerpo,
+        fotos: const [],
+      );
+      await contarPendientes();
+      return false;
+    }
+  }
+
   Future<void> contarPendientes() async {
     pendientes = await bandeja.cuantos();
     notifyListeners();

@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/modelos.dart';
+import '../utils/utm.dart';
 import 'auth_service.dart';
 
 /// Todo lo que la app le pide al inventario.
@@ -437,6 +438,117 @@ class InventarioService {
         Formato.desdeJson(Map<String, dynamic>.from(x as Map))
     ];
   }
+
+  // ── altas: estructuras que la capa no tenía ───────────────────────────
+
+  /// Da de alta una estructura encontrada en campo.
+  ///
+  /// NO ENTRA EN LA CAPA: queda pendiente de que alguien la apruebe desde
+  /// el visor web. Un apunte de campo no puede convertirse en dato oficial
+  /// sin que nadie lo mire, y el inventario es lo que la Junta reporta al
+  /// ANA.
+  ///
+  /// La geometría va en EWKT —`SRID=32717;POINT(este norte)`— porque es lo
+  /// que entiende Django al convertirla, y en UTM porque es como está la
+  /// capa. En grados el punto acabaría a seiscientos kilómetros, y PostGIS
+  /// lo aceptaría sin protestar: el SRID se lo damos nosotros.
+  Future<ActivoNuevo> crearActivoNuevo({
+    required int campaniaId,
+    required String tipoActivo,
+    required double lat,
+    required double lng,
+    String? nombre,
+    String? descripcion,
+    String? registradoPor,
+    Map<String, dynamic> atributos = const {},
+  }) async {
+    final cuerpo = cuerpoActivoNuevo(
+      campaniaId: campaniaId,
+      tipoActivo: tipoActivo,
+      lat: lat,
+      lng: lng,
+      nombre: nombre,
+      descripcion: descripcion,
+      registradoPor: registradoPor,
+      atributos: atributos,
+    );
+    return enviarActivoNuevo(cuerpo);
+  }
+
+  /// El cuerpo de la petición, aparte de mandarlo.
+  ///
+  /// Se separa para que la bandeja de pendientes pueda guardarlo tal cual
+  /// cuando no hay señal y reenviarlo luego sin volver a calcular nada. Si
+  /// lo recalculara al reintentar, un alta tomada en el cerro acabaría con
+  /// las coordenadas de donde el teléfono recuperó la cobertura.
+  static Map<String, dynamic> cuerpoActivoNuevo({
+    required int campaniaId,
+    required String tipoActivo,
+    required double lat,
+    required double lng,
+    String? nombre,
+    String? descripcion,
+    String? registradoPor,
+    Map<String, dynamic> atributos = const {},
+  }) {
+    final u = latLngAUTM(lat, lng);
+    return {
+      'campania': campaniaId,
+      'tipo_activo': tipoActivo,
+      'geom': u.ewkt,
+      'nombre': (nombre ?? '').trim().isEmpty ? null : nombre!.trim(),
+      'descripcion':
+          (descripcion ?? '').trim().isEmpty ? null : descripcion!.trim(),
+      'registrado_por':
+          (registradoPor ?? '').trim().isEmpty ? null : registradoPor!.trim(),
+      'atributos': atributos,
+    };
+  }
+
+  /// Manda un cuerpo ya armado. Lo usan el alta directa y la bandeja.
+  Future<ActivoNuevo> enviarActivoNuevo(Map<String, dynamic> cuerpo) async {
+    http.Response r;
+    try {
+      r = await http
+          .post(Uri.parse('$base/activos-nuevos/'),
+              headers: const {'Content-Type': 'application/json'},
+              body: jsonEncode(cuerpo))
+          .timeout(const Duration(seconds: 40));
+    } on SocketException {
+      throw const SinConexion();
+    } on HttpException {
+      throw const SinConexion();
+    } catch (e) {
+      // Un plazo agotado es lo mismo que no haber llegado: merece esperar a
+      // que vuelva la cobertura, no rebotar al inspector.
+      if (e.toString().contains('TimeoutException')) throw const SinConexion();
+      rethrow;
+    }
+
+    if (r.statusCode == 404) throw const SinEndpoint();
+    if (r.statusCode != 200 && r.statusCode != 201) {
+      // El cuerpo del error de DRF dice QUÉ campo falló; sin él solo se
+      // sabe que «no se pudo», que no le sirve a nadie en campo.
+      String detalle = 'El servidor respondió ${r.statusCode}';
+      try {
+        final d = jsonDecode(utf8.decode(r.bodyBytes)) as Map;
+        final campos = <String>[
+          for (final e in d.entries)
+            '${e.key}: ${e.value is List ? (e.value as List).join(' ') : e.value}'
+        ];
+        if (campos.isNotEmpty) detalle = campos.join(' · ');
+      } catch (_) {}
+      throw Exception(detalle);
+    }
+    return ActivoNuevo.desdeJson(
+        Map<String, dynamic>.from(jsonDecode(utf8.decode(r.bodyBytes)) as Map));
+  }
+
+  /// Las altas que todavía nadie ha validado.
+  Future<List<ActivoNuevo>> activosNuevosPendientes() async => [
+        for (final j in _lista(await _json('/activos-nuevos/?validacion=pendiente')))
+          ActivoNuevo.desdeJson(j)
+      ];
 
   /// Baja lo que haya en esa URL y lo deja escrito en el teléfono.
   ///

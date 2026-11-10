@@ -406,6 +406,53 @@ class Formato {
   bool get listo => generado && vigente;
 }
 
+/// Una estructura que alguien encontró en campo y la capa no tenía.
+///
+/// NO ENTRA EN LA CAPA AL GUARDARLA, y es lo que se quiere. Un alta es lo
+/// que vio una persona parada delante de la obra; meterla directamente en
+/// el inventario convertiría un apunte de campo en un dato oficial sin que
+/// nadie lo mirara, y el inventario es lo que la Junta reporta al ANA.
+/// Queda «pendiente» hasta que alguien la aprueba, la rechaza o la marca
+/// duplicada desde el visor web.
+class ActivoNuevo {
+  final int? id;
+  final String tipoActivo;
+  final String nombre;
+  final String descripcion;
+  final String registradoPor;
+  final double? lat;
+  final double? lng;
+  final String validacion;   // pendiente | aprobado | rechazado | duplicado
+  final DateTime? creado;
+
+  const ActivoNuevo({
+    this.id,
+    required this.tipoActivo,
+    this.nombre = '',
+    this.descripcion = '',
+    this.registradoPor = '',
+    this.lat,
+    this.lng,
+    this.validacion = 'pendiente',
+    this.creado,
+  });
+
+  factory ActivoNuevo.desdeJson(Map<String, dynamic> j) => ActivoNuevo(
+        id: j['id'] == null ? null : _entero(j['id']),
+        tipoActivo: _texto(j['tipo_activo']),
+        nombre: _texto(j['nombre']),
+        descripcion: _texto(j['descripcion']),
+        registradoPor: _texto(j['registrado_por']),
+        lat: _decimal(j['lat']),
+        lng: _decimal(j['lng']),
+        validacion:
+            j['validacion'] == null ? 'pendiente' : _texto(j['validacion']),
+        creado: DateTime.tryParse(_texto(j['creado'])),
+      );
+
+  bool get pendiente => validacion == 'pendiente';
+}
+
 /// Expuestos para quien necesite las mismas conversiones tolerantes.
 int enteroDe(dynamic v, [int pd = 0]) => _entero(v, pd);
 double? decimalDe(dynamic v) => _decimal(v);

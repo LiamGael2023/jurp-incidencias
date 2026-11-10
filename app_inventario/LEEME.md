@@ -113,6 +113,27 @@ los cauces de quebrada: once mil líneas que en el escritorio son un
 parpadeo y en un teléfono en Chao son datos del inspector y medio minuto
 mirando un mapa vacío.
 
+**Un alta no entra en el inventario.** Lo que se registra en campo queda
+«pendiente» hasta que alguien lo aprueba desde el visor web. Un apunte de
+campo no puede volverse dato oficial sin que nadie lo mire, porque el
+inventario es lo que la Junta reporta al ANA.
+
+El punto sale del GPS y no de tocar el mapa, al revés que en la web: allí
+se marca sobre la ortofoto porque se está mirando dónde debería ir; aquí el
+inspector está delante de la obra, y el sitio lo sabe mejor el teléfono que
+su dedo sobre una pantalla a pleno sol. La coordenada viaja en UTM
+(`SRID=32717;POINT(…)`), que es como está la capa; la conversión está en
+`utils/utm.dart` y se comprueba contra PROJ —la biblioteca de PostGIS— con
+
+```bash
+python3 herramientas/comparar_utm.py
+```
+
+Todavía **sin foto**: el almacén cuelga de una estructura que ya existe
+(`tipo_activo` + `fid`) y un alta aún no tiene fid. Antes que inventar una
+ruta que el servidor no tiene, el alta se guarda sin foto y las fotos se
+añaden cuando se apruebe.
+
 **La bandeja de pendientes no miente.** Una ficha sin subir NO está
 guardada, y la app lo dice con todas sus letras —en el aviso al guardar, en
 el contador rojo de la barra y en su propia pantalla—. El peor resultado

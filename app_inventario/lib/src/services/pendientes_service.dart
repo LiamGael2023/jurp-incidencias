@@ -24,10 +24,22 @@ import 'inventario_service.dart';
 /// que el usuario vacíe la galería antes de subir; por eso, al reintentar,
 /// una foto que ya no está no tumba la evaluación: se sube lo que haya y se
 /// avisa de la que faltó.
+/// Qué clase de cosa espera en la bandeja.
+///
+/// Las dos esperan por lo mismo —no había señal— pero no se suben igual ni
+/// se pueden tratar igual: una evaluación va contra una estructura que ya
+/// existe y se puede reemplazar si se rehace; un alta crea algo nuevo cada
+/// vez que se manda, así que dos altas iguales son dos estructuras.
+class ClasePendiente {
+  static const evaluacion = 'evaluacion';
+  static const alta = 'alta';
+}
+
 class Pendiente {
   final String id;             // local, para poder borrar uno concreto
+  final String clase;          // evaluacion | alta
   final String tipo;
-  final int fid;
+  final int fid;               // 0 en un alta: todavía no hay estructura
   final String nombre;         // para enseñarlo en la bandeja
   final int? evaluacionId;     // si era una corrección de una ya existente
   final Map<String, dynamic> cuerpo;
@@ -43,10 +55,14 @@ class Pendiente {
     required this.cuerpo,
     required this.fotos,
     required this.cuando,
+    this.clase = ClasePendiente.evaluacion,
   });
+
+  bool get esAlta => clase == ClasePendiente.alta;
 
   Map<String, dynamic> aJson() => {
         'id': id,
+        'clase': clase,
         'tipo': tipo,
         'fid': fid,
         'nombre': nombre,
@@ -58,6 +74,10 @@ class Pendiente {
 
   factory Pendiente.desdeJson(Map<String, dynamic> j) => Pendiente(
         id: '${j['id']}',
+        // Sin 'clase' es una bandeja escrita por una versión anterior, y
+        // entonces todo lo que hay dentro son evaluaciones. Leerlo como
+        // alta mandaría la ficha a crear estructuras.
+        clase: j['clase'] == null ? ClasePendiente.evaluacion : '${j['clase']}',
         tipo: '${j['tipo']}',
         fid: enteroDe(j['fid']),
         nombre: '${j['nombre'] ?? ''}',
@@ -123,10 +143,12 @@ class PendientesService {
     required int? evaluacionId,
     required Map<String, dynamic> cuerpo,
     required List<String> fotos,
+    String clase = ClasePendiente.evaluacion,
   }) async {
     final lista = await todos();
     final nuevo = Pendiente(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
+      clase: clase,
       tipo: tipo,
       fid: fid,
       nombre: nombre,
@@ -138,7 +160,15 @@ class PendientesService {
     // Si ya había una ficha pendiente de ESTA misma estructura, la nueva la
     // reemplaza. Subir las dos crearía dos evaluaciones de lo mismo y la
     // segunda rebotaría contra la restricción del servidor.
-    lista.removeWhere((x) => x.tipo == tipo && x.fid == fid);
+    //
+    // CON LAS ALTAS NO, Y ES IMPORTANTE: un alta todavía no tiene fid, así
+    // que todas las de un mismo tipo valen 0. Aplicarles esta regla haría
+    // que la segunda canoa encontrada en la mañana borrara la primera, sin
+    // avisar y sin forma de recuperarla.
+    if (clase != ClasePendiente.alta) {
+      lista.removeWhere(
+          (x) => !x.esAlta && x.tipo == tipo && x.fid == fid);
+    }
     lista.add(nuevo);
     await _escribir(lista);
     return nuevo;
@@ -161,6 +191,19 @@ class PendientesService {
     final fallos = <String>[];
 
     for (final x in lista) {
+      if (x.esAlta) {
+        try {
+          // El cuerpo se manda TAL CUAL se guardó, con sus coordenadas del
+          // momento. Recalcularlo aquí pondría el alta donde el teléfono
+          // recuperó la cobertura, que puede ser el pueblo de al lado.
+          await api.enviarActivoNuevo(x.cuerpo);
+          await quitar(x.id);
+          subidas++;
+        } catch (e) {
+          fallos.add('${x.nombre}: ${_motivo(e)}');
+        }
+        continue;
+      }
       try {
         final guardada = await api.guardarEvaluacion(
             campaniaId: campaniaId, ev: x.evaluacion);

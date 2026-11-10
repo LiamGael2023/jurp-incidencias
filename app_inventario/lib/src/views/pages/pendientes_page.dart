@@ -88,12 +88,13 @@ class _PendientesPageState extends State<PendientesPage> {
                                         fontWeight: FontWeight.w800,
                                         color: AppColors.tinta)),
                                 Text(
+                                  '${x.esAlta ? 'Estructura nueva · ' : ''}'
                                   '${capa?.label ?? x.tipo}'
                                   '${x.fotos.isEmpty ? '' : ' · ${x.fotos.length} foto(s)'}',
                                   style: const TextStyle(
                                       fontSize: 12.5, color: AppColors.gris),
                                 ),
-                                Text(_cuando(x.cuando),
+                                Text(_cuando(x.cuando, x.esAlta),
                                     style: const TextStyle(
                                         fontSize: 12, color: AppColors.gris)),
                               ],
@@ -118,18 +119,23 @@ class _PendientesPageState extends State<PendientesPage> {
                           child: CircularProgressIndicator(
                               strokeWidth: 2.2, color: Colors.white))
                       : const Icon(Icons.cloud_upload_outlined),
+                  // «Ficha(s)» mentía en cuanto hay un alta en la bandeja:
+                  // un alta no es una ficha, y quien lee el botón tiene que
+                  // reconocer lo que va a subir.
                   label: Text(_enviando
                       ? 'Subiendo…'
-                      : 'SUBIR ${lista.length} FICHA(S)'),
+                      : 'SUBIR ${lista.length} '
+                          '${lista.every((x) => x.esAlta) ? 'ALTA(S)' : (lista.any((x) => x.esAlta) ? 'REGISTRO(S)' : 'FICHA(S)')}'),
                 ),
               ),
             ),
     );
   }
 
-  String _cuando(DateTime d) {
-    final dos = (int n) => n.toString().padLeft(2, '0');
-    return 'Evaluada el ${dos(d.day)}/${dos(d.month)}/${d.year} '
+  String _cuando(DateTime d, [bool esAlta = false]) {
+    String dos(int n) => n.toString().padLeft(2, '0');
+    return '${esAlta ? 'Registrada' : 'Evaluada'} el '
+        '${dos(d.day)}/${dos(d.month)}/${d.year} '
         'a las ${dos(d.hour)}:${dos(d.minute)}';
   }
 }
