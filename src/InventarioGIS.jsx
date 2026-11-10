@@ -975,7 +975,7 @@ export function useInventario() {
     abierto, alternar, cerrar: () => setAbierto(false),
     campania, avance, totales, datos, visibles, cargando, error, iniciando,
     ambito, cambiarAmbito, ambitoDe, alternarAmbitoCapa, datosDe, clave,
-    campanias, cambiarCampania, altas, recargarAltas,
+    campanias, cambiarCampania, altas, recargarAltas, cargarFormulario,
     alta, iniciarAlta, cancelarAlta, ponerPuntoAlta, moverPuntoAlta,
     guardarAlta, validarAlta, tiposConAlta: TIPOS_CON_ALTA,
     indice, buscar, irA, destacado, limpiarDestacado,
@@ -2452,21 +2452,7 @@ function BadgeCapa({ info, ambito, onFiltrar }) {
  * entrega lo firma alguien.
  */
 function AltaDeCampo({ inv }) {
-  const [tipo, setTipo] = useState(() => (inv.tiposConAlta[0] || {}).codigo || '');
-  const [nombre, setNombre] = useState('');
-  const [descripcion, setDescripcion] = useState('');
-  const [fallo, setFallo] = useState(null);
   const [trabajando, setTrabajando] = useState(null);
-
-  const limpiar = () => { setNombre(''); setDescripcion(''); setFallo(null); };
-
-  const guardar = async () => {
-    setFallo(null);
-    const r = await inv.guardarAlta({ tipo, nombre, descripcion });
-    if (r.ok) { limpiar(); Swal.fire({ icon: 'success', title: 'Alta registrada',
-      text: 'Queda pendiente de validación.', timer: 2200, showConfirmButton: false }); }
-    else setFallo(r.error);
-  };
 
   const validar = async (a, destino) => {
     if (destino !== 'aprobado') {
@@ -2517,43 +2503,6 @@ function AltaDeCampo({ inv }) {
         </div>
       )}
 
-      {(paso === 'llenando' || paso === 'guardando') && (
-        <div className="inv-alta-form">
-          <label>
-            Tipo
-            <select value={tipo} onChange={e => setTipo(e.target.value)}>
-              {inv.tiposConAlta.map(c => (
-                <option key={c.codigo} value={c.codigo}>{c.label}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Nombre
-            <input value={nombre} onChange={e => setNombre(e.target.value)}
-              placeholder="Cómo se le conoce" />
-          </label>
-          <label>
-            Descripción
-            <textarea value={descripcion} rows={2}
-              onChange={e => setDescripcion(e.target.value)}
-              placeholder="Qué es y en qué estado está" />
-          </label>
-          {fallo && <div className="inv-alta-fallo">{fallo}</div>}
-          <div className="inv-alta-botones">
-            <button onClick={inv.moverPuntoAlta} disabled={paso === 'guardando'}>
-              Mover el punto
-            </button>
-            <button onClick={inv.cancelarAlta} disabled={paso === 'guardando'}>
-              Cancelar
-            </button>
-            <button className="inv-alta-guardar" onClick={guardar}
-              disabled={paso === 'guardando' || !tipo}>
-              {paso === 'guardando' ? 'Guardando…' : 'Registrar'}
-            </button>
-          </div>
-        </div>
-      )}
-
       {inv.altas.length > 0 && (
         <>
           <div className="inv-altas-titulo">
@@ -2584,6 +2533,211 @@ function AltaDeCampo({ inv }) {
           </ul>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * El formulario del alta, con los campos del tipo elegido.
+ *
+ * Los campos salen de `campos-evaluables`, la misma tabla que arma el
+ * formulario de evaluación y el de la app de campo. Así una estructura dada
+ * de alta trae desde el principio lo mismo que una que ya estaba, y añadir
+ * un campo nuevo no obliga a tocar esta pantalla.
+ *
+ * Van en un modal y no en el panel lateral por una razón práctica: una ficha
+ * del ANA son decenas de campos y el panel mide trescientos píxeles.
+ *
+ * Lo que se escriba viaja en `atributos`. Al aprobar el alta, el backend
+ * copia a la capa los que esa tabla tenga como columna y descarta el resto
+ * sin protestar: los formularios cambian más a menudo que las tablas.
+ */
+function ModalAlta({ inv }) {
+  const paso = inv.alta.paso;
+  const abierto = paso === 'llenando' || paso === 'guardando';
+
+  const [tipo, setTipo] = useState(() => (inv.tiposConAlta[0] || {}).codigo || '');
+  const [nombre, setNombre] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [valores, setValores] = useState({});
+  const [fallo, setFallo] = useState(null);
+  const [senalar, setSenalar] = useState(false);
+  const [cargandoCampos, setCargandoCampos] = useState(false);
+
+  // Al cambiar de tipo, el formulario es otro: se pide y se vacía lo escrito.
+  // Conservarlo mezclaría campos de dos fichas distintas con el mismo nombre.
+  useEffect(() => {
+    if (!abierto || !tipo) return;
+    setValores({});
+    setSenalar(false);
+    if (inv.formularios[tipo]) return;
+    setCargandoCampos(true);
+    inv.cargarFormulario(tipo).finally(() => setCargandoCampos(false));
+  }, [abierto, tipo]);           // eslint-disable-line react-hooks/exhaustive-deps
+
+  const campos = inv.formularios[tipo] || null;
+
+  /* Las mismas secciones que la evaluación: la etiqueta trae el bloque
+   * delante, separado por " · ". Sin agrupar, setenta campos seguidos son
+   * una pared. */
+  const secciones = useMemo(() => {
+    if (!campos) return null;
+    const grupos = [];
+    const porNombre = new Map();
+    campos.forEach(c => {
+      const corte = (c.etiqueta || '').indexOf(' · ');
+      const titulo = corte > 0 ? c.etiqueta.slice(0, corte) : 'Datos';
+      if (!porNombre.has(titulo)) {
+        const g = { titulo, campos: [] };
+        porNombre.set(titulo, g);
+        grupos.push(g);
+      }
+      porNombre.get(titulo).campos.push(c);
+    });
+    return grupos;
+  }, [campos]);
+
+  const cambiar = (clave, v) => setValores(x => ({ ...x, [clave]: v }));
+
+  const faltan = (campos || []).filter(
+    c => c.obligatorio && (valores[c.campo] === '' || valores[c.campo] == null));
+
+  const guardar = async () => {
+    setFallo(null);
+    if (faltan.length) {
+      setSenalar(true);
+      setFallo(faltan.length === 1
+        ? 'Falta un campo obligatorio, marcado en rojo.'
+        : `Faltan ${faltan.length} campos obligatorios, marcados en rojo.`);
+      return;
+    }
+    // Los numéricos viajan como número: en el JSON de atributos un "12"
+    // entrecomillado se copia tal cual a una columna numérica y revienta
+    // al aprobar, no al guardar.
+    const limpios = {};
+    (campos || []).forEach(c => {
+      const v = valores[c.campo];
+      if (v === '' || v == null) return;
+      limpios[c.campo] = (c.tipo_dato === 'numero' || c.tipo_dato === 'entero')
+        ? Number(v) : v;
+    });
+
+    const r = await inv.guardarAlta({ tipo, nombre, descripcion, atributos: limpios });
+    if (r.ok) {
+      setNombre(''); setDescripcion(''); setValores({}); setSenalar(false);
+      Swal.fire({ icon: 'success', title: 'Alta registrada',
+        text: 'Queda pendiente de validación.',
+        timer: 2200, showConfirmButton: false });
+    } else {
+      setFallo(r.error);
+    }
+  };
+
+  if (!abierto) return null;
+
+  return (
+    <div className="inv-modal-fondo" onClick={inv.cancelarAlta}>
+      <div className="inv-modal inv-eval gis-glass" onClick={e => e.stopPropagation()}>
+
+        <div className="inv-modal-head">
+          <div>
+            <div className="inv-modal-tit">Estructura nueva</div>
+            <div className="inv-modal-sub">
+              campaña {inv.campania?.anio} · queda pendiente de validación
+            </div>
+          </div>
+          <button className="gis-tool" style={{ width: 26, height: 26 }}
+            onClick={inv.cancelarAlta}><FaTimes /></button>
+        </div>
+
+        <div className="inv-modal-body">
+          <div className="inv-campos">
+            <div className="inv-campo">
+              <label>Tipo de estructura<b className="inv-req">*</b></label>
+              <select value={tipo} onChange={e => setTipo(e.target.value)}>
+                {inv.tiposConAlta.map(c => (
+                  <option key={c.codigo} value={c.codigo}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="inv-campo">
+              <label>Nombre</label>
+              <input value={nombre} onChange={e => setNombre(e.target.value)}
+                placeholder="Cómo se le conoce" />
+            </div>
+            <div className="inv-campo ancho">
+              <label>Descripción</label>
+              <textarea rows={2} value={descripcion}
+                onChange={e => setDescripcion(e.target.value)}
+                placeholder="Qué es y en qué estado está" />
+            </div>
+          </div>
+
+          {cargandoCampos && <div className="inv-modal-sep">Cargando los campos…</div>}
+
+          {(secciones || []).map(g => (
+            <React.Fragment key={g.titulo}>
+              <div className="inv-modal-sep">{g.titulo}</div>
+              <div className="inv-campos">
+                {g.campos.map(c => {
+                  const vacio = valores[c.campo] === '' || valores[c.campo] == null;
+                  const senalado = senalar && c.obligatorio && vacio;
+                  const esTexto = c.tipo_dato === 'texto'
+                    && /detalle|observ/i.test(c.corta || '');
+                  return (
+                    <div key={c.campo}
+                      className={`inv-campo${esTexto ? ' ancho' : ''}${senalado ? ' falta' : ''}`}>
+                      <label>
+                        {c.corta}
+                        {c.obligatorio && <b className="inv-req">*</b>}
+                      </label>
+                      {c.tipo_dato === 'opcion' && c.opciones?.length ? (
+                        <select value={valores[c.campo] ?? ''}
+                          onChange={e => cambiar(c.campo, e.target.value)}>
+                          <option value="">— sin dato —</option>
+                          {c.opciones.map(o => (
+                            <option key={o.codigo} value={o.codigo}>{o.etiqueta}</option>
+                          ))}
+                        </select>
+                      ) : c.tipo_dato === 'booleano' ? (
+                        <label className="inv-check">
+                          <input type="checkbox" checked={!!valores[c.campo]}
+                            onChange={e => cambiar(c.campo, e.target.checked)} />
+                          <span>{valores[c.campo] ? 'Sí' : 'No'}</span>
+                        </label>
+                      ) : esTexto ? (
+                        <textarea rows={2} value={valores[c.campo] ?? ''}
+                          onChange={e => cambiar(c.campo, e.target.value)} />
+                      ) : (
+                        <input
+                          type={c.tipo_dato === 'numero' || c.tipo_dato === 'entero'
+                            ? 'number' : 'text'}
+                          step={c.tipo_dato === 'numero' ? '0.01' : '1'}
+                          value={valores[c.campo] ?? ''}
+                          onChange={e => cambiar(c.campo, e.target.value)} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
+
+        <div className="inv-modal-pie">
+          {fallo && <span className="inv-alta-fallo">{fallo}</span>}
+          <button onClick={inv.moverPuntoAlta} disabled={paso === 'guardando'}>
+            Mover el punto
+          </button>
+          <button onClick={inv.cancelarAlta} disabled={paso === 'guardando'}>
+            Cancelar
+          </button>
+          <button className="inv-alta-guardar" onClick={guardar}
+            disabled={paso === 'guardando' || !tipo}>
+            {paso === 'guardando' ? 'Guardando…' : 'Registrar'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2686,6 +2840,9 @@ export function PanelInventario({ inv, onVolar }) {
             )}
 
             <AltaDeCampo inv={inv} />
+            {/* El modal cuelga del panel, no de la vista: así las dos
+                pantallas que montan el panel lo tienen sin tocar nada. */}
+            <ModalAlta inv={inv} />
 
             {verAvance && (
               <table className="inv-avance">
