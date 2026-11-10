@@ -619,19 +619,36 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
         cond.append(f'a.{pk} = {int(fid)}')
     where = ('WHERE ' + ' AND '.join(cond)) if cond else ''
 
+    # SIN SALTOS DE LINEA EN EL TEXTO.
+    #
+    # `consultar` lanza psql con -A -F \x1f y luego parte la salida POR
+    # LINEAS. Un nombre o una observacion con un salto dentro rompe su fila
+    # en dos trozos, y lo que llega aqui son dos filas cortas en vez de una
+    # buena: «not enough values to unpack». Se limpia en la consulta, que es
+    # donde todavia se sabe que es un solo campo.
+    def plano(col):
+        return f"translate({col}, E'\n\r', '  ')"
+
     filas = R.consultar(f"""
-        SELECT a.{pk}, a.nombre, a.cod_est, a.progresiva, a.progresiva_kmz,
+        SELECT a.{pk}, {plano('a.nombre')}, {plano('a.cod_est')},
+               {plano('a.progresiva')}, {plano('a.progresiva_kmz')},
                round(ST_X(ST_Centroid(a.geom))::numeric, 2),
                round(ST_Y(ST_Centroid(a.geom))::numeric, 2),
-               ev.valores, ev.evaluador, ev.id
+               {plano('ev.valores::text')}, {plano('ev.evaluador')}, ev.id
         FROM {tabla} a {join} {where}
         ORDER BY a.{pk};""")
     if not filas:
         return []
 
     salida = []
-    for (clave, nombre, cod, prog, prog_kmz, este, norte,
-         valores, evaluador, eval_id) in filas:
+    for fila in filas:
+        # Red de seguridad por si aun asi llega una fila partida: una sola
+        # estructura rara no debe dejar sin fichas a las otras veintiuna.
+        if len(fila) != 10:
+            print(f'  fila con {len(fila)} campos, se omite', file=sys.stderr)
+            continue
+        (clave, nombre, cod, prog, prog_kmz, este, norte,
+         valores, evaluador, eval_id) = fila
         salida.append({
             'fid': clave,
             'nombre': nombre,
@@ -639,17 +656,30 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
             'canal': canal,
             'cod_est': cod,
             'progresiva': prog or prog_kmz,
-            'este': f'{float(este):,.2f}' if este is not None else '',
-            'norte': f'{float(norte):,.2f}' if norte is not None else '',
+            'este': f'{float(este):,.2f}' if este not in (None, '') else '',
+            'norte': f'{float(norte):,.2f}' if norte not in (None, '') else '',
             'zona': '17S',
             'elevacion': '',
-            'valores': valores or {},
+            'valores': _json(valores),
             'evaluador': evaluador,
             'cargo': '',
             'fecha': '',
-            'fotos': fotos_de(R, eval_id),
+            'fotos': fotos_de(R, eval_id or None),
         })
     return salida
+
+
+def _json(texto):
+    """El JSONB llega como texto: psql no lo convierte a dict."""
+    if not texto:
+        return {}
+    if isinstance(texto, dict):
+        return texto
+    try:
+        import json
+        return json.loads(texto)
+    except (ValueError, TypeError):
+        return {}
 
 
 def fotos_de(R, eval_id, maximo=4):
