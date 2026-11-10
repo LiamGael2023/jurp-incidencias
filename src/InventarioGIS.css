@@ -2010,3 +2010,41 @@
   font-size: 11px;
   color: #6b8299;
 }
+
+/* ══════════════════════════════════════════════════════════
+   El visor de la ficha de inspección
+
+   La hoja es A4 vertical y lo que importa es leerla, así que el modal se
+   estira todo lo que permite la ventana en vez de quedarse en el ancho de
+   los demás: una ficha a 420 px no se lee, se adivina.
+   ══════════════════════════════════════════════════════════ */
+
+.inv-visor-ficha {
+  width: min(900px, 94vw);
+  max-width: 94vw;
+  display: flex;
+  flex-direction: column;
+}
+
+.inv-visor-cuerpo {
+  background: #fff;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 74vh;
+  display: flex;
+}
+
+.inv-visor-cuerpo iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: #525659;      /* el gris del visor de PDF, para que no parpadee en blanco */
+}
+
+/* El enlace de descarga comparte el botón primario del pie, pero un <a> no
+   hereda ni la caja ni el centrado de un <button>. */
+.inv-modal-pie a.inv-btn-pri {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}

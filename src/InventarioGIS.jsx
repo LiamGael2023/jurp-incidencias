@@ -9,6 +9,7 @@ import {
   FaClipboardCheck, FaTimes, FaSyncAlt, FaCrosshairs,
   FaChevronDown, FaChevronRight, FaExclamationCircle, FaPlusCircle, FaSearch,
   FaListUl, FaCamera, FaTrash, FaChevronLeft, FaImages, FaExpand, FaCheckCircle,
+  FaFilePdf,
 } from 'react-icons/fa';
 import { prepararFoto, motivoRechazo, urlFoto, ordenarFotos, peso } from './fotosActivo';
 import { caracteristicas, cobertura, tituloActivo } from './fichaActivo';
@@ -2243,6 +2244,12 @@ function GaleriaFotos({ tipo, fid, nombre }) {
 export function FichaActivo({ inv }) {
   const f = inv.ficha;
   const tipo = f?.tipo;
+  /* El visor guarda PARA QUÉ activo se abrió, no un simple sí/no: así, al
+   * saltar a otra estructura, deja de coincidir y se cierra solo. Con un
+   * booleano habría que apagarlo desde un efecto, y un setState dentro de un
+   * efecto encadena un render de más cada vez que se abre una ficha. */
+  const [fichaDe, setFichaDe] = useState(null);
+  const verFicha = fichaDe !== null && String(fichaDe) === String(f?.fid);
 
   // Las etiquetas bonitas de cada campo salen del formulario de evaluación,
   // que ya se pide al abrir la ficha. Si no ha llegado, se usan los nombres
@@ -2341,11 +2348,119 @@ export function FichaActivo({ inv }) {
             de evaluación y así hereda el tema claro ya definido. */}
         <div className="inv-modal-pie">
           <button className="inv-btn-sec" onClick={inv.cerrarFicha}>Cerrar</button>
+          {TIPOS_CON_FICHA.includes(f.tipo) && (
+            <button className="inv-btn-sec" onClick={() => setFichaDe(f.fid)}>
+              <FaFilePdf style={{ marginRight: 6 }} /> Ver ficha
+            </button>
+          )}
           {evaluable && (
             <button className="inv-btn-pri"
               onClick={() => { inv.cerrarFicha(); inv.abrirEvaluacion(f.tipo, f.fid, f.props); }}>
               {ev ? 'Editar evaluación' : 'Evaluar'}
             </button>
+          )}
+        </div>
+      </div>
+
+      {verFicha && (
+        <VisorFicha tipo={f.tipo} fid={f.fid} nombre={nombre}
+          ambito={f.props?.ambito} campania={inv.campania?.anio}
+          onCerrar={() => setFichaDe(null)} />
+      )}
+    </div>
+  );
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   La ficha de inspección, dentro del visor
+
+   Dos páginas por estructura —datos, croquis acotado y evidencia— que hasta
+   ahora solo se podían ver bajando el PDF de todas desde el panel de
+   reportes. Aquí sale la de una sola, con lo que tenga evaluado.
+
+   El PDF se pide con fetch y se muestra desde un blob, no apuntando el
+   iframe a la URL: la ruta va con cabecera de sesión y un iframe no la
+   lleva, así que de ese modo contestaría 401 y el visor saldría en blanco
+   sin decir por qué.
+
+   El generador solo sabe dibujar las tomas: su hoja 1 pregunta por el canal,
+   las compuertas y el tipo de toma, y para una caja hidráulica o un puente
+   saldría un formulario que no es el suyo. Por eso el botón solo aparece en
+   los tipos que tienen ficha; cuando haya hoja para los demás, se añaden
+   aquí y sale sola.
+   ══════════════════════════════════════════════════════════ */
+
+const TIPOS_CON_FICHA = ['tomas_canal_madre', 'tomas_l10'];
+
+function VisorFicha({ tipo, fid, nombre, ambito, campania, onCerrar }) {
+  const [url, setUrl] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    let creada = null;
+    (async () => {
+      try {
+        const p = new URLSearchParams({ tipo, fid: String(fid) });
+        if (ambito) p.set('ambito', ambito);
+        if (campania) p.set('campania', String(campania));
+        const r = await fetch(`${API}/reportes/fichas/?${p}`,
+                              { headers: cabeceras() });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          throw new Error(d.detail || `El servidor respondió ${r.status}`);
+        }
+        creada = URL.createObjectURL(await r.blob());
+        if (vivo) setUrl(creada); else URL.revokeObjectURL(creada);
+      } catch (e) {
+        if (vivo) setError(e.message || 'No se pudo armar la ficha');
+      }
+    })();
+    // El blob se suelta al cerrar: cada apertura crea uno y el navegador los
+    // retiene mientras exista la pestaña.
+    return () => { vivo = false; if (creada) URL.revokeObjectURL(creada); };
+  }, [tipo, fid, ambito, campania]);
+
+  useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape') onCerrar(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onCerrar]);
+
+  return (
+    <div className="inv-modal-fondo" onClick={onCerrar} style={{ zIndex: 1200 }}>
+      <div className="inv-modal inv-visor-ficha gis-glass"
+        onClick={e => e.stopPropagation()}>
+
+        <div className="inv-modal-head">
+          <div>
+            <div className="inv-modal-tit">Ficha de inspección</div>
+            <div className="inv-modal-sub">{nombre}</div>
+          </div>
+          <button className="gis-tool" style={{ width: 26, height: 26 }}
+            onClick={onCerrar}><FaTimes /></button>
+        </div>
+
+        <div className="inv-visor-cuerpo">
+          {error
+            ? <div className="inv-error" style={{ margin: 16 }}>
+                <FaExclamationCircle /> {error}
+              </div>
+            : url
+              ? <iframe src={url} title="Ficha de inspección" />
+              : <div className="inv-nota" style={{ margin: 16 }}>
+                  <FaSyncAlt className="icon-spin" /> Armando la ficha…
+                </div>}
+        </div>
+
+        <div className="inv-modal-pie">
+          <button className="inv-btn-sec" onClick={onCerrar}>Cerrar</button>
+          {url && (
+            <a className="inv-btn-pri" href={url}
+              download={`Ficha_${(nombre || fid).toString().replace(/[^\w.-]+/g, '_')}.pdf`}>
+              Descargar
+            </a>
           )}
         </div>
       </div>
