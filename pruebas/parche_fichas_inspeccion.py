@@ -65,7 +65,10 @@ def _fichas_de_campo(self, request):
         tipos = ('tomas_canal_madre', 'tomas_l10')
 
     tipo = request.query_params.get('tipo', 'tomas_canal_madre')
-    if tipo not in tipos:
+    # `todas` recorre el inventario entero: es el PDF que se entrega a la
+    # Junta con el levantamiento de la campana.
+    evaluadas = request.query_params.get('evaluadas') in ('1', 'true', 'si')
+    if tipo != 'todas' and tipo not in tipos:
         return JsonResponse(
             {'detail': f'No hay ficha para «{tipo}».'}, status=400)
 
@@ -80,12 +83,13 @@ def _fichas_de_campo(self, request):
     sufijo = f'_{campania}' if campania else ''
     if fid:
         sufijo += f'_{fid}'
-    ruta = os.path.join(self.SALIDA,
-                        f'Fichas_Inspeccion_{tipo}_{ambito}{sufijo}.pdf')
+    base = ('Fichas_Evaluadas' if evaluadas and tipo == 'todas'
+            else f'Fichas_Inspeccion_{tipo}')
+    ruta = os.path.join(self.SALIDA, f'{base}_{ambito}{sufijo}.pdf')
 
     # Una ficha suelta se rehace siempre: se pide justo despues de corregir
     # el dato, y servir la de hace un rato seria peor que tardar un segundo.
-    if fid or not self._vigente(ruta, campania):
+    if fid or evaluadas or not self._vigente(ruta, campania):
         entorno = os.environ.copy()
         clave_bd = (os.environ.get('GIS_ADMIN_PASSWORD')
                     or os.environ.get('PGPASSWORD'))
@@ -100,12 +104,14 @@ def _fichas_de_campo(self, request):
             cmd += ['--campania', str(campania)]
         if fid:
             cmd += ['--fid', str(fid)]
+        if evaluadas:
+            cmd += ['--evaluadas']
 
         try:
             r = subprocess.run(cmd, capture_output=True, text=True,
-                               timeout=300, env=entorno)
+                               timeout=900, env=entorno)
         except subprocess.TimeoutExpired:
-            return JsonResponse({'detail': 'Las fichas tardaron demasiado.'},
+            return JsonResponse({'detail': 'Las fichas tardaron demasiado. Prueba por tipo.'},
                                 status=504)
         except FileNotFoundError:
             return JsonResponse(

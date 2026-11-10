@@ -116,7 +116,9 @@ function ReportesInventario() {
         ? `${API}/reportes/todos/?${parametros()}`
         : clave === 'fichas'
           ? `${API}/reportes/fichas/?tipo=tomas_canal_madre&${parametros()}`
-          : `${API}/reportes/${encodeURIComponent(clave)}/${pdf ? 'pdf/' : ''}?${parametros()}`;
+          : clave === 'fichas_evaluadas'
+            ? `${API}/reportes/fichas/?tipo=todas&evaluadas=1&${parametros()}`
+            : `${API}/reportes/${encodeURIComponent(clave)}/${pdf ? 'pdf/' : ''}?${parametros()}`;
 
       const r = await fetch(url);
       if (!r.ok) {
@@ -210,7 +212,31 @@ function ReportesInventario() {
               {verAvance ? <FaChevronDown size={10} /> : <FaChevronRight size={10} />}
               Avance de la campaña por tipo de activo
             </button>
-            <span style={{ color: '#0CA678', fontWeight: 800 }}>{pct.toFixed(1)}%</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              {/* El levantamiento de la campaña, en un solo PDF: dos páginas
+                  por estructura evaluada, de todas las capas. Va aquí y no
+                  entre los formatos porque lo que se descarga es el avance
+                  que está mirando, no un formato de la ANA. */}
+              <button onClick={() => descargar('fichas_evaluadas',
+                `Fichas_Evaluadas_${ambito}${campania ? `_${campania}` : ''}.pdf`)}
+                disabled={bajando !== null || totales.evaluados === 0}
+                title={totales.evaluados === 0
+                  ? 'Todavía no hay ninguna estructura evaluada en esta campaña'
+                  : `Las ${totales.evaluados} fichas evaluadas, en un PDF`}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '7px 13px', background: '#fff', color: '#1971c2',
+                  border: '1px solid #a5d8ff', borderRadius: 7,
+                  fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+                  cursor: bajando || !totales.evaluados ? 'not-allowed' : 'pointer',
+                  opacity: bajando || !totales.evaluados ? .5 : 1,
+                }}>
+                {bajando === 'fichas_evaluadas'
+                  ? <><FaSyncAlt className="icon-spin" size={11} /> Armando…</>
+                  : <><FaFilePdf size={12} /> Fichas evaluadas ({totales.evaluados})</>}
+              </button>
+              <span style={{ color: '#0CA678', fontWeight: 800 }}>{pct.toFixed(1)}%</span>
+            </div>
           </div>
           <div style={{ height: 9, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden' }}>
             <div style={{ width: `${pct}%`, height: '100%',

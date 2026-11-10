@@ -1670,7 +1670,7 @@ def _primera(existentes, *candidatas):
     return 'NULL'
 
 
-def leer_fichas(R, tipo, ambito, campania, fid=None):
+def leer_fichas(R, tipo, ambito, campania, fid=None, evaluadas=False):
     tabla, canal, estructura = TABLAS[tipo]
     existentes = columnas_de(R, tabla)
     pk = 'fid' if 'fid' in existentes else 'ogc_fid'
@@ -1700,6 +1700,12 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
         cond.append(f"a.ambito = '{ambito}'")
     if fid:
         cond.append(f'a."{pk}" = {int(fid)}')
+    if evaluadas:
+        # El LEFT JOIN deja en NULL lo que nadie ha evaluado; pedir que `ev`
+        # exista convierte la consulta en «solo lo levantado», que es lo que
+        # se entrega a la Junta. Va en el WHERE y no en el JOIN: en el JOIN
+        # seguiria trayendo la fila con la evaluacion vacia.
+        cond.append('ev.id IS NOT NULL')
     where = ('WHERE ' + ' AND '.join(cond)) if cond else ''
 
     # SIN SALTOS DE LINEA EN EL TEXTO.
@@ -2096,7 +2102,9 @@ FICHA_PRUEBA_CANAL['norte_f'] = '9,072,373.69'
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--tipo', default='tomas_canal_madre',
-                   choices=sorted(TABLAS))
+                   choices=sorted(TABLAS) + ['todas'])
+    p.add_argument('--evaluadas', action='store_true',
+                   help='solo las estructuras que ya tienen evaluacion')
     p.add_argument('--ambito', default='PECH')
     p.add_argument('--campania', type=int)
     p.add_argument('--fid', type=int, help='una sola estructura')
@@ -2122,10 +2130,28 @@ def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import reportes_ana as R
 
-    fichas = leer_fichas(R, args.tipo, args.ambito, args.campania, args.fid)
+    # `--tipo todas` recorre el inventario entero. Cada capa se pide por
+    # separado porque cada una tiene su tabla y sus columnas, y una que
+    # falle --una capa vacia, un esquema raro-- no debe dejar sin fichas a
+    # las diecinueve restantes: se avisa y se sigue.
+    if args.tipo == 'todas':
+        fichas = []
+        for tipo in sorted(TABLAS):
+            try:
+                parte = leer_fichas(R, tipo, args.ambito, args.campania,
+                                    None, args.evaluadas) or []
+            except Exception as e:                   # noqa: BLE001
+                print(f'  {tipo}: {e}', file=sys.stderr)
+                continue
+            if parte:
+                print(f'  {tipo:<22}{len(parte)} fichas', file=sys.stderr)
+            fichas.extend(parte)
+    else:
+        fichas = leer_fichas(R, args.tipo, args.ambito, args.campania,
+                             args.fid, args.evaluadas)
     if not fichas:
-        print(f'sin estructuras para {args.tipo} / {args.ambito}',
-              file=sys.stderr)
+        que = 'evaluadas' if args.evaluadas else 'estructuras'
+        print(f'sin {que} para {args.tipo} / {args.ambito}', file=sys.stderr)
         return 1
 
     os.makedirs(args.salida, exist_ok=True)
@@ -2136,8 +2162,9 @@ def main():
     sufijo = f'_{args.campania}' if args.campania else ''
     if args.fid:
         sufijo += f'_{args.fid}'
-    ruta = os.path.join(args.salida,
-                        f'Fichas_Inspeccion_{args.tipo}_{args.ambito}{sufijo}.pdf')
+    base = ('Fichas_Evaluadas' if args.evaluadas and args.tipo == 'todas'
+            else f'Fichas_Inspeccion_{args.tipo}')
+    ruta = os.path.join(args.salida, f'{base}_{args.ambito}{sufijo}.pdf')
     dibujar(fichas, ruta, anio, esquemas, logos)
     print(f'escrito {ruta} ({len(fichas)} fichas)')
     return 0
