@@ -1464,15 +1464,9 @@ def caracteristicas_de(R, tabla, pk, fids):
     if not fids:
         return {}
     try:
-        esquema, nombre = tabla.split('.', 1)
-        filas = R.consultar(f"""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_schema = '{esquema}' AND table_name = '{nombre}'
-            ORDER BY ordinal_position;""") or []
-        cols = [c[0] for c in filas
-                if c and c[0] and c[0].lower() not in COLUMNAS_OCULTAS]
-        canal_col = next((c for c in COLUMNAS_CANAL
-                          if any(x and x[0] == c for x in filas)), None)
+        todas = columnas_de(R, tabla)
+        cols = [c for c in todas if c.lower() not in COLUMNAS_OCULTAS]
+        canal_col = next((c for c in COLUMNAS_CANAL if c in todas), None)
         if canal_col:
             cols.append(canal_col)
         if not cols:
@@ -1504,9 +1498,40 @@ def caracteristicas_de(R, tabla, pk, fids):
     return salida
 
 
+def columnas_de(R, tabla):
+    """Los nombres de columna de una tabla, tal como están en el catálogo."""
+    try:
+        esquema, nombre = tabla.split('.', 1)
+        filas = R.consultar(f"""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = '{esquema}' AND table_name = '{nombre}'
+            ORDER BY ordinal_position;""") or []
+        return [c[0] for c in filas if c and c[0]]
+    except Exception as e:                       # noqa: BLE001
+        print(f'  columnas de {tabla}: {e}', file=sys.stderr)
+        return []
+
+
+def _primera(existentes, *candidatas):
+    """La primera columna que exista, o NULL.
+
+    Las veinte capas vienen de shapefiles distintos y no comparten nombres:
+    el aliviadero llama `codigo` a lo que las demas llaman `nombre`, y el
+    desarenador no tiene `progresiva` siquiera. Una consulta con la lista de
+    columnas escrita a mano falla con «column a.nombre does not exist» y la
+    ficha devuelve 500 para esa capa y solo para esa, que es lo peor de
+    diagnosticar.
+    """
+    for c in candidatas:
+        if c in existentes:
+            return f'a."{c}"'
+    return 'NULL'
+
+
 def leer_fichas(R, tipo, ambito, campania, fid=None):
     tabla, canal, estructura = TABLAS[tipo]
-    pk = 'ogc_fid' if 'canal_madre' in tabla or 'otros' in tabla else 'fid'
+    existentes = columnas_de(R, tabla)
+    pk = 'fid' if 'fid' in existentes else 'ogc_fid'
 
     join = ''
     if campania:
@@ -1515,7 +1540,7 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
             SELECT e.valores, e.evaluador, e.id
             FROM inventario.evaluaciones e
             JOIN inventario.campanias c ON c.id = e.campania_id
-            WHERE e.tipo_activo = '{tipo}' AND e.activo_fid = a.{pk}
+            WHERE e.tipo_activo = '{tipo}' AND e.activo_fid = a."{pk}"
               AND c.anio <= {campania}
             ORDER BY c.anio DESC LIMIT 1
         ) ev ON true"""
@@ -1524,7 +1549,7 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
         LEFT JOIN LATERAL (
             SELECT e.valores, e.evaluador, e.id
             FROM inventario.evaluaciones e
-            WHERE e.tipo_activo = '{tipo}' AND e.activo_fid = a.{pk}
+            WHERE e.tipo_activo = '{tipo}' AND e.activo_fid = a."{pk}"
             ORDER BY e.id DESC LIMIT 1
         ) ev ON true"""
 
@@ -1532,7 +1557,7 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
     if ambito and ambito != 'todos':
         cond.append(f"a.ambito = '{ambito}'")
     if fid:
-        cond.append(f'a.{pk} = {int(fid)}')
+        cond.append(f'a."{pk}" = {int(fid)}')
     where = ('WHERE ' + ' AND '.join(cond)) if cond else ''
 
     # SIN SALTOS DE LINEA EN EL TEXTO.
@@ -1551,13 +1576,17 @@ def leer_fichas(R, tipo, ambito, campania, fid=None):
         return f"translate(coalesce({col}::text, ''), E'\n\r', '  ')"
 
     filas = R.consultar(f"""
-        SELECT a.{pk}, {plano('a.nombre')}, {plano('a.cod_est')},
-               {plano('a.progresiva')}, {plano('a.progresiva_kmz')},
+        SELECT a."{pk}",
+               {plano(_primera(existentes, 'nombre', 'código', 'codigo',
+                               'etiqueta'))},
+               {plano(_primera(existentes, 'cod_est', 'código', 'codigo'))},
+               {plano(_primera(existentes, 'progresiva'))},
+               {plano(_primera(existentes, 'progresiva_kmz'))},
                round(ST_X(ST_Centroid(a.geom))::numeric, 2),
                round(ST_Y(ST_Centroid(a.geom))::numeric, 2),
                {plano('ev.valores::text')}, {plano('ev.evaluador')}, ev.id
         FROM {tabla} a {join} {where}
-        ORDER BY a.{pk};""")
+        ORDER BY a."{pk}";""")
     if not filas:
         return []
 
