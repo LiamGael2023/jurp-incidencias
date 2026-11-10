@@ -336,12 +336,33 @@ def comprobar(R, ambito='todos'):
     return d
 
 
+def _asegurar_clave():
+    """Deja PGPASSWORD puesta, como hace la vista antes de lanzar esto.
+
+    `consultar()` llama a psql, que pide la clave por env. Cuando el
+    generador corre desde Django la vista se la inyecta; cuando uno entra a
+    mano con `docker exec` no hay nadie que lo haga y psql pregunta por
+    teclado, no encuentra a nadie y falla *cada* consulta. El sintoma es un
+    --comprobar con todo en cero, que parece una base vacia y no lo es.
+    """
+    if os.environ.get('PGPASSWORD'):
+        return True
+    clave = os.environ.get('GIS_ADMIN_PASSWORD')
+    if clave:
+        os.environ['PGPASSWORD'] = clave
+        return True
+    print('aviso: no hay PGPASSWORD ni GIS_ADMIN_PASSWORD en el entorno; '
+          'las consultas van a fallar', file=sys.stderr)
+    return False
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--ambito', default='todos')
     p.add_argument('--comprobar', action='store_true')
     args = p.parse_args()
 
+    _asegurar_clave()
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import reportes_ana as R
 
