@@ -117,6 +117,31 @@ const ESCALAS_LAMINA = GRUPOS_ESCALA.flatMap(g => g.escalas);
  * segundos. */
 const ESCALA_SIN_PUNTOS = 40000;
 
+
+/**
+ * El símbolo de una capa: el mismo en el panel y en la leyenda.
+ *
+ * El panel pintaba un cuadrito de color para todo, incluidas las capas que
+ * en el mapa salen con su pictograma —una toma, una canoa, un puente— y las
+ * de línea, que no son un cuadro sino un trazo. Quien encendía «Redes
+ * presurizado» veía un cuadro azul en el panel y una línea punteada azul en
+ * el papel, y tenía que mirar la leyenda para atar las dos cosas.
+ *
+ * Dibujarlo en un sitio y usarlo en los dos evita, además, que vuelvan a
+ * separarse: el símbolo de la lámina y el del panel son el mismo elemento.
+ */
+function Simbolo({ capa }) {
+  if (capa.ico) return <img src={capa.ico} alt="" />;
+  if (capa.tipo === 'line') {
+    return <i className="linea" style={{
+      background: 'none',
+      borderTop: `3px ${capa.dash ? 'dotted' : 'solid'} ${capa.color}`,
+    }} />;
+  }
+  return <i className={capa.tipo === 'poly' ? 'area' : ''}
+    style={{ background: capa.color }} />;
+}
+
 /* Y A PARTIR DE AQUI SE DIBUJAN, PERO SIN NOMBRE.
  *
  * Son dos preguntas distintas y antes las respondia una sola. El simbolo de
@@ -1504,7 +1529,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
                   <label key={c.codigo} className="lam-capa">
                     <input type="checkbox" checked={!!inv.visibles[c.codigo]}
                       onChange={() => inv.alternarCapa(c.codigo)} />
-                    <i style={{ background: c.color }} />{c.label}
+                    <Simbolo capa={c} />{c.label}
                   </label>
                 ))}
               </div>
@@ -1666,12 +1691,7 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
                       <div className="lam-leyenda-sub">{g.titulo}</div>
                       {g.capas.map(c => (
                         <div key={c.codigo} className="lam-leyenda-it">
-                          {c.ico
-                            ? <img src={c.ico} alt="" />
-                            : <i className={c.tipo === 'line' ? 'linea' : c.tipo === 'poly' ? 'area' : ''}
-                                style={c.tipo === 'line'
-                                  ? { background: 'none', borderTop: `3px ${c.dash ? 'dotted' : 'solid'} ${c.color}` }
-                                  : { background: c.color }} />}
+                          <Simbolo capa={c} />
                           <span>{c.label}</span>
                         </div>
                       ))}

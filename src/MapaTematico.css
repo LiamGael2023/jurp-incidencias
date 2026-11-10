@@ -174,7 +174,13 @@
   text-transform: none !important; letter-spacing: 0 !important; font-size: 12px !important;
   color: #cbd5e1 !important; cursor: pointer; }
 .lam-capa input { width: auto !important; margin: 0 !important; }
-.lam-capa i { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 11px; }
+/* El símbolo del panel es el mismo elemento que el de la leyenda, así que
+   tiene que admitir sus tres formas: pictograma, trazo y área. Un punto va
+   redondo y un área cuadrada, igual que en el papel. */
+.lam-capa i { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 11px; }
+.lam-capa i.area { border-radius: 3px; }
+.lam-capa i.linea { height: 0; border-radius: 0; }
+.lam-capa img { width: 13px; height: 13px; flex: 0 0 13px; object-fit: contain; }
 
 /* ── Lienzo ─────────────────────────────────────────────────────────────── */
 /* La hoja mide 1682 px y casi ninguna pantalla los tiene: se reduce con zoom,
