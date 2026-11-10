@@ -146,20 +146,39 @@ def main():
                    help='metros de diferencia admitidos (por defecto 0.01)')
     args = p.parse_args()
 
+    # Las dos comparaciones son independientes y cada una vale por sí sola:
+    # PROJ dice si la fórmula es correcta, y el visor web si la app y la
+    # oficina colocan el punto en el mismo sitio. Exigir las dos convertía
+    # la herramienta en inservible allí donde no hay pyproj —el servidor,
+    # por ejemplo— cuando todavía podía contestar media pregunta.
     try:
         from pyproj import Transformer
     except ImportError:
-        print('falta pyproj: pip install pyproj', file=sys.stderr)
-        return 2
+        Transformer = None
 
     if not os.path.exists(DART):
         print(f'no encuentro {DART}', file=sys.stderr)
         return 2
 
     web = por_el_visor_web(PUNTOS)
+
+    if Transformer is None and web is None:
+        print('no hay con qué comparar: falta pyproj (pip install pyproj) '
+              'y tampoco hay node para ejecutar el visor web', file=sys.stderr)
+        return 2
+
+    contra = []
+    if Transformer is not None:
+        contra.append('PROJ')
+    else:
+        print('sin pyproj: no se compara con PROJ (pip install pyproj)')
+    if web is not None:
+        contra.append('el visor web')
+    else:
+        print('sin node: no se compara con el visor web')
+
     print(f'{len(PUNTOS)} puntos · tolerancia {args.tolerancia} m')
-    print('contra PROJ' + (' y contra el visor web' if web else
-                           ' (sin node: no se compara con el visor web)'))
+    print('contra ' + ' y contra '.join(contra))
 
     peor_proj = 0.0
     peor_web = 0.0
@@ -168,12 +187,15 @@ def main():
     for i, (lat, lng) in enumerate(PUNTOS):
         este, norte, zona, hemi = dart_latlng_a_utm(lat, lng)
         srid = (32700 if hemi == 'S' else 32600) + zona
-        t = Transformer.from_crs('EPSG:4326', f'EPSG:{srid}', always_xy=True)
-        ex, nx = t.transform(lng, lat)
-        d = math.hypot(este - ex, norte - nx)
-        peor_proj = max(peor_proj, d)
-        if d > args.tolerancia:
-            malos.append(f'{lat},{lng}: {d:.3f} m contra PROJ (EPSG:{srid})')
+
+        if Transformer is not None:
+            t = Transformer.from_crs('EPSG:4326', f'EPSG:{srid}',
+                                     always_xy=True)
+            ex, nx = t.transform(lng, lat)
+            d = math.hypot(este - ex, norte - nx)
+            peor_proj = max(peor_proj, d)
+            if d > args.tolerancia:
+                malos.append(f'{lat},{lng}: {d:.3f} m contra PROJ (EPSG:{srid})')
 
         if web:
             ew, nw, zw, hw = web[i]
@@ -182,7 +204,8 @@ def main():
             if dw > args.tolerancia or zw != zona or hw != hemi:
                 malos.append(f'{lat},{lng}: {dw:.3f} m contra el visor web')
 
-    print(f'peor diferencia contra PROJ: {peor_proj*100:.3f} cm')
+    if Transformer is not None:
+        print(f'peor diferencia contra PROJ: {peor_proj*100:.3f} cm')
     if web:
         print(f'peor diferencia contra el visor web: {peor_web*100:.3f} cm')
 
