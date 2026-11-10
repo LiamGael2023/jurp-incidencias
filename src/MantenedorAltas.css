@@ -1,0 +1,127 @@
+/* Mantenedor de estructuras nuevas.
+   La carcasa —cabecera, filtros, tabla, avisos— se reaprovecha de
+   CampaniasInventario.css: son la misma clase de pantalla y tenerlas
+   distintas solo conseguiría que se parecieran cada vez menos. Aquí va lo
+   que es propio de ésta. */
+
+/* Las pestañas son el filtro y el contador a la vez. */
+.alt-pestanas {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+}
+
+.alt-pestana {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 1px solid #d3dfeb;
+  background: #fff;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #51688a;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+
+.alt-pestana:hover { background: #f1f6fc; }
+
+.alt-pestana b {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #51688a;
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.alt-pestana.activa {
+  background: #1268C3;
+  border-color: #1268C3;
+  color: #fff;
+}
+
+.alt-pestana.activa b { background: rgba(255, 255, 255, .22); color: #fff; }
+
+/* La descripción es lo que el inspector escribió en vez de la foto que
+   todavía no se puede subir, así que se enseña entera y no recortada: es
+   la única pista de qué vio. */
+.alt-desc {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #51688a;
+  line-height: 1.35;
+  max-width: 320px;
+}
+
+/* Una coordenada partida en dos renglones deja de leerse como una
+   coordenada: «-8.41310,» arriba y «-78.75500» abajo se parece a dos
+   números sueltos. Y es justo la columna que hay que leer de un vistazo
+   para decidir si el alta cae donde dice. */
+.alt-sitio {
+  display: inline-flex;
+  flex-direction: column;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.alt-sitio small { color: #8295ad; font-size: 11px; }
+
+.alt-sin-sitio { color: #c08b00; font-size: 11.5px; font-style: italic; }
+
+.alt-quien { margin-top: 3px; font-size: 11px; color: #8295ad; }
+
+.alt-nota {
+  max-width: 260px;
+  font-size: 11.5px;
+  color: #51688a;
+  line-height: 1.35;
+}
+
+/* Aprobar es verde y mete la estructura en la capa; duplicar es gris
+   porque no decide nada, solo aparta; rechazar hereda el rojo de
+   `.cmp-borrar`. Los tres tienen el mismo tamaño a propósito: ninguno debe
+   ser más fácil de pulsar sin querer que los otros. */
+.alt-ok,
+.alt-dup {
+  width: 26px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+
+.alt-ok {
+  border: 1px solid #a7e8cd;
+  background: #e3faf0;
+  color: #0b7a56;
+}
+
+.alt-ok:hover:not(:disabled) { background: #0CA678; border-color: #0CA678; color: #fff; }
+
+.alt-dup {
+  border: 1px solid #d3dfeb;
+  background: #fff;
+  color: #8295ad;
+}
+
+.alt-dup:hover:not(:disabled) { background: #eef2f7; color: #51688a; }
+
+.alt-ok:disabled,
+.alt-dup:disabled { opacity: .45; cursor: not-allowed; }
+
+.cmp-estado.est-pendiente { color: #8a5b00; background: #fff6e0; border: 1px solid #f3d99b; }
+.cmp-estado.est-aprobado  { color: #0b7a56; background: #e3faf0; border: 1px solid #a7e8cd; }
+.cmp-estado.est-rechazado { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; }
+.cmp-estado.est-duplicado { color: #51688a; background: #eef2f7; border: 1px solid #d3dfeb; }
+
+@media (max-width: 760px) {
+  .alt-desc, .alt-nota { max-width: none; }
+}

@@ -24,8 +24,9 @@ import Partes from './Partes';
 import MapaInventario from './MapaInventario';
 import ReportesInventario from './ReportesInventario';
 import CampaniasInventario from './CampaniasInventario';
+import MantenedorAltas from './MantenedorAltas';
 import MapaTematico from './MapaTematico';
-import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt, FaMobileAlt, FaUserTag, FaWater, FaFlask, FaFileContract, FaGasPump, FaRoute } from 'react-icons/fa';
+import { FaUserCircle, FaSignOutAlt, FaBars, FaMapMarkedAlt, FaListUl, FaChartPie, FaShieldAlt, FaFilePdf, FaTruck, FaClipboardList, FaClipboardCheck, FaDraftingCompass, FaChartLine, FaHardHat, FaFolderOpen, FaCalendarAlt, FaMobileAlt, FaUserTag, FaWater, FaFlask, FaFileContract, FaGasPump, FaRoute, FaPlusCircle } from 'react-icons/fa';
 import logo from './assets/logo1.png';
 import EquiposEnlazados from './EquiposEnlazados';
 import Monitoreos from './Monitoreos';
@@ -99,6 +100,10 @@ const MENU = [
   // Campañas va pegada al mapa porque es su contracara: el mapa enseña dónde
   // está cada estructura, ésta enseña qué se evaluó y cuánto falta del año.
   { clave: 'inv-campanias', titulo: 'Campañas',     icono: <FaCalendarAlt />,    apps: ['pluvira'] },
+  // Lo que llega de campo y todavía no es inventario. Va junto a Campañas
+  // porque es la otra mitad del trabajo del año: una enseña lo evaluado, la
+  // otra lo encontrado que aún nadie ha firmado.
+  { clave: 'inv-altas',    titulo: 'Estructuras nuevas', icono: <FaPlusCircle />, apps: ['pluvira'] },
   { clave: 'inv-laminas',  titulo: 'Mapas temáticos', icono: <FaDraftingCompass />, apps: ['pluvira'] },
   { clave: 'inv-reportes', titulo: 'Reportes',      icono: <FaClipboardCheck />, apps: ['pluvira'] },
 ];
@@ -355,6 +360,15 @@ function App() {
       <div className="maq">
         <RailGIS {...propsRail} />
         <div className="maq-main"><CampaniasInventario irAActivo={irAActivo} /></div>
+      </div>
+    );
+  }
+
+  if (vistaActual === 'inv-altas') {
+    return (
+      <div className="maq">
+        <RailGIS {...propsRail} />
+        <div className="maq-main"><MantenedorAltas irAActivo={irAActivo} /></div>
       </div>
     );
   }

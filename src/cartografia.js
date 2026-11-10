@@ -141,6 +141,68 @@ export function utmALatLng(este, norte, zona, sur = true) {
   return { lat, lng };
 }
 
+/**
+ * La geometría tal como la devuelve Django → {lat, lng}.
+ *
+ * POR QUÉ HAY QUE LEER ESTO A MANO. El serializer manda el punto en EWKB
+ * hexadecimal —`0101000020...`, que es lo que PostGIS guarda— y no en
+ * grados. Hasta ahora eso dejaba las altas de campo sin sitio: la lista de
+ * pendientes enseñaba el nombre y quién la registró, pero no dónde estaba,
+ * que es justamente lo que hay que mirar antes de aprobar una.
+ *
+ * El formato, para quien venga detrás:
+ *
+ *   byte 0        01 = little endian, 00 = big endian
+ *   bytes 1-4     tipo; el bit 0x20000000 indica que lleva SRID
+ *   bytes 5-8     el SRID, solo si ese bit está puesto
+ *   luego         X e Y, dos float64
+ *
+ * Solo entiende POINT, que es lo único que puede tener un alta: una
+ * estructura la marca una persona parada delante de ella.
+ *
+ * → null ante cualquier cosa que no sepa leer. Un alta sin coordenada
+ * legible se sigue pudiendo validar; lo que no se puede es inventarle un
+ * sitio.
+ */
+export function puntoDeEWKB(hex) {
+  if (typeof hex !== 'string') return null;
+  const h = hex.trim();
+  if (!/^[0-9a-fA-F]+$/.test(h) || h.length < 42) return null;
+
+  const b = new Uint8Array(h.length / 2);
+  for (let i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16);
+  const v = new DataView(b.buffer);
+
+  const pequeno = b[0] === 1;          // little endian
+  const tipo = v.getUint32(1, pequeno);
+  const conSrid = (tipo & 0x20000000) !== 0;
+  if ((tipo & 0xff) !== 1) return null;  // 1 = POINT
+
+  let p = 5;
+  let srid = null;
+  if (conSrid) { srid = v.getUint32(p, pequeno); p += 4; }
+  if (b.length < p + 16) return null;
+
+  const x = v.getFloat64(p, pequeno);
+  const y = v.getFloat64(p + 8, pequeno);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+
+  // 4326 ya viene en grados; 326xx/327xx son UTM y hay que volverlos.
+  if (srid === 4326 || srid === null) {
+    return Math.abs(x) <= 180 && Math.abs(y) <= 90
+      ? { lat: y, lng: x, srid: srid || 4326 }
+      : null;
+  }
+  const sur = srid >= 32700 && srid <= 32760;
+  const norte = srid >= 32600 && srid <= 32660;
+  if (!sur && !norte) return null;
+
+  const { lat, lng } = utmALatLng(x, y, srid % 100, sur);
+  return Number.isFinite(lat) && Number.isFinite(lng)
+    ? { lat, lng, srid }
+    : null;
+}
+
 /** Distancia en metros entre dos [lat,lng] (haversine). */
 /**
  * ¿Cae este punto dentro del polígono?
