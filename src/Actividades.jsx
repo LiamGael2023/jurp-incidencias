@@ -314,27 +314,45 @@ export default function Actividades() {
        * para dejarlo «limpio» tiraría también el nombre, las fechas y el
        * responsable que acaban de escribirse. Se avisa y se sigue; las
        * partidas se pueden programar luego desde Proyectos. */
+      let avisoPartidas = '';
       if (nueva && editando._titulo) {
         const ids = partidasDe(editando._titulo);
-        if (ids.length) {
-          const creada = await r.json().catch(() => ({}));
-          if (creada && creada.id) {
-            const rp = await fetch(`${API}/actividades-obra/${creada.id}/`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ partidas: ids }),
-            });
-            if (!rp.ok) {
-              setError(`La actividad se creó, pero no se le pudieron asignar `
-                + `sus ${ids.length} partidas (el servidor respondió `
-                + `${rp.status}). Asígnalas desde Proyectos.`);
-            }
+        const creada = await r.json().catch(() => ({}));
+        /* El id puede venir suelto o envuelto, según el serializer. Se
+         * buscan las dos formas antes de rendirse: fallar aquí por no mirar
+         * en `data` deja la actividad sin partidas y sin explicación. */
+        const idNuevo = creada?.id ?? creada?.data?.id ?? null;
+
+        if (!ids.length) {
+          avisoPartidas = `El título ${editando._titulo} no tiene partidas `
+            + 'en el presupuesto, así que la actividad se creó sin ninguna.';
+        } else if (!idNuevo) {
+          avisoPartidas = 'La actividad se creó, pero el servidor no devolvió '
+            + `su id, así que no se le pudieron asignar las ${ids.length} `
+            + 'partidas. Asígnalas desde Proyectos.';
+        } else {
+          const rp = await fetch(`${API}/actividades-obra/${idNuevo}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ partidas: ids }),
+          });
+          if (!rp.ok) {
+            const cuerpo = await rp.text().catch(() => '');
+            avisoPartidas = `La actividad se creó, pero no se le pudieron `
+              + `asignar sus ${ids.length} partidas: el servidor respondió `
+              + `${rp.status}. ${cuerpo.slice(0, 200)}`;
           }
         }
       }
 
       setEditando(null);
       await cargar();
+      /* DESPUES de cargar, no antes. `cargar()` empieza con setError(''):
+       * puesto arriba, este aviso se borraba solo y la actividad aparecía
+       * sin partidas sin que nada dijera por qué. Es el mismo fallo que el
+       * del presupuesto hace un rato —avisar y que el aviso no llegue es
+       * peor que no avisar, porque uno cree que fue bien—. */
+      if (avisoPartidas) setError(avisoPartidas);
     } catch (e) {
       setError(e.message || String(e));
     } finally { setGuardando(false); }
