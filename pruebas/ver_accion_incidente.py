@@ -131,12 +131,16 @@ print("=" * 72)
 print("4. QUE SE HA GUARDADO HOY")
 print("=" * 72)
 print("    (si hoy no entro ninguna, lleva roto todo el dia)")
+# OJO: Django viejo. `timezone.localtime()` sin argumento solo existe
+# desde 1.11, y este proyecto corre sobre Python 3.5. Pasarle el valor
+# funciona en las dos.
 from django.utils import timezone
-hoy = timezone.localtime().date()
+ahora = timezone.localtime(timezone.now())
+hoy = ahora.date()
 print("    acciones de incidente en total ..... %s" % M.objects.count())
 print("    creadas hoy ........................ %s"
-      % M.objects.filter(created_at__date=hoy).count())
+      % M.objects.filter(created_at__gte=hoy).count())
 ultima = M.objects.order_by("-id").first()
-if ultima:
+if ultima and ultima.created_at:
     print("    la ultima .......................... #%s  %s"
           % (ultima.id, timezone.localtime(ultima.created_at)))
