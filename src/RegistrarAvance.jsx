@@ -36,6 +36,12 @@ const ESTADOS = [
   ['ate', 'Atendido'],
 ];
 
+/* El tope que el servidor acepta en la descripción. Se amplió a texto sin
+ * límite, pero se mantiene un aviso a partir de esta cifra: un avance más
+ * largo que esto deja de leerse y conviene partirlo en dos. */
+const TOPE_AVISO = 500;
+const AVISA_DESDE = Math.round(TOPE_AVISO * 0.7);
+
 const LADO_MAX = 1280;
 const CALIDAD = 0.7;
 const MAX_FOTOS = 6;
@@ -136,6 +142,13 @@ export default function RegistrarAvance({ incidenteId, onGuardado }) {
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState('');
   const [fecha, setFecha] = useState(hoyLocal);
+
+  /* Lo que de verdad se manda, prefijo incluido. Ver el comentario del
+   * contador, más abajo. */
+  const prefijo = `DÍA ${fecha ? enPalabras(fecha) : '00/00/0000'} — `;
+  const largo = prefijo.length + texto.trim().length;
+  const pasado = largo > TOPE_AVISO;
+
   const [estado, setEstado] = useState('eat');
   const [fotos, setFotos] = useState([]);
   const [conUbicacion, setConUbicacion] = useState(false);
@@ -274,9 +287,34 @@ export default function RegistrarAvance({ incidenteId, onGuardado }) {
         placeholder="Qué se hizo, dónde y con qué. Esto queda en la bitácora del incidente."
         style={{
           width: '100%', padding: 10, borderRadius: 8, fontSize: 13.5,
-          border: '1px solid #cbd5e1', resize: 'vertical', fontFamily: 'inherit',
+          border: `1px solid ${pasado ? '#dc2626' : '#cbd5e1'}`,
+          resize: 'vertical', fontFamily: 'inherit',
         }}
       />
+
+      {/* EL CONTADOR SOLO APARECE CUANDO IMPORTA.
+        *
+        * El 13/11/2026 los inspectores no podían subir avances: el servidor
+        * rechazaba la descripción por pasar de 500 caracteres y la app solo
+        * enseñaba «Error en el servidor: 400». Un avance de bitácora lista la
+        * partida ejecutada, la maquinaria operativa y las observaciones, y eso
+        * pasa de 500 sin esfuerzo.
+        *
+        * El tope del servidor se amplió, pero el contador se queda: escribir
+        * tres párrafos y perderlos al guardar es el peor momento posible para
+        * enterarse de un límite. Aparece al 70% del tope y no antes, para no
+        * meter ruido en el 95% de los avances, que son cortos.
+        *
+        * Cuenta el texto COMPLETO, incluido el «DÍA dd/mm/aaaa — » que se
+        * antepone al guardar: si contara solo lo tecleado, diría 498 cuando al
+        * servidor le llegan 516. */}
+      {largo > AVISA_DESDE && (
+        <div style={{ marginTop: 5, fontSize: 11.5, textAlign: 'right',
+          color: pasado ? '#dc2626' : '#b45309', fontWeight: pasado ? 700 : 500 }}>
+          {largo} / {TOPE_AVISO} caracteres
+          {pasado && ' — es muy largo; resúmelo o divídelo en dos avances.'}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap',
         alignItems: 'center' }}>
