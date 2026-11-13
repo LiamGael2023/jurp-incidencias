@@ -271,6 +271,25 @@ export default function Actividades() {
       const aMandar = Object.fromEntries(
         Object.entries(editando).filter(([k]) => !k.startsWith('_')));
 
+      /* LAS FECHAS VACIAS NO SE MANDAN COMO CADENA VACIA.
+       *
+       * Un <input type="date"> sin rellenar vale `''`, y DRF contesta
+       * «Fecha con formato erróneo. Use uno de los siguientes formatos en
+       * su lugar: YYYY-MM-DD» — que es un mensaje desconcertante cuando lo
+       * que pasa es que no hay fecha ninguna. Y las dos son opcionales: una
+       * actividad se crea antes de empezarla, así que no tener fecha de
+       * inicio es lo normal el primer día.
+       *
+       * AL CREAR SE OMITEN; AL EDITAR SE MANDAN NULAS. No es lo mismo: en
+       * un POST omitir significa «no la tengo», y en un PATCH significa «no
+       * la toques». Si al editar se omitiera, borrar una fecha mal puesta
+       * sería imposible: se guardaría y seguiría ahí. */
+      for (const k of ['fecha_inicio', 'fecha_fin']) {
+        if (aMandar[k] === '' || aMandar[k] === undefined) {
+          if (nueva) delete aMandar[k]; else aMandar[k] = null;
+        }
+      }
+
       const r = await fetch(
         nueva ? `${API}/actividades-obra/` : `${API}/actividades-obra/${editando.id}/`,
         { method: nueva ? 'POST' : 'PATCH',
