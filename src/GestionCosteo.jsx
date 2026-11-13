@@ -938,18 +938,32 @@ export default function GestionCosteo({
      * La red de seguridad que motivaba la excepción sigue estando, tres
      * líneas más abajo: si ninguna coincide, se devuelve el presupuesto
      * entero antes que un selector vacío. */
-    /* PRIMERO LO PROGRAMADO DE VERDAD: el M2M `partidas`. Ver el comentario
-     * de `progIds` arriba para por qué no vale `partidas_detalle`. */
-    if (progIds.length) {
-      const prog = new Set(progIds.map(String));
-      const sub = partidas.filter(p => prog.has(String(p.id)));
+    /* LA UNIÓN DE LAS DOS, no una u otra.
+     *
+     * Lo programado (`partidas`) y lo ya imputado (`partidas_detalle`) son
+     * relaciones distintas y ninguna de las dos es completa por sí sola:
+     *
+     *   - Una actividad recién creada tiene M2M y no tiene detalle.
+     *   - Las antiguas tienen detalle y el M2M vacío, porque se cargaron
+     *     antes de que existiera.
+     *   - Y ACT-0001 tiene UNA sola en el M2M y DOS en el detalle. Si se
+     *     tomara solo el M2M, la 01.02 —que esa actividad sí usa—
+     *     desaparecería del selector.
+     *
+     * Quedarse con cualquiera de las dos esconde trabajo real. La unión
+     * no: ofrece lo que hay que hacer más lo que ya se hizo, que es
+     * exactamente lo que alguien puede necesitar imputar. */
+    const permitidas = new Set([
+      ...progIds.map(String),
+      ...progDetalle.filter(p => !p.es_titulo).map(p => String(p.id)),
+    ]);
+    if (permitidas.size) {
+      const sub = partidas.filter(p => permitidas.has(String(p.id)));
+      // Si por lo que sea ninguna coincide, el presupuesto entero antes que
+      // un selector vacío: lo primero es molesto, lo segundo bloquea.
       if (sub.length) return sub;
     }
 
-    /* Y si el M2M está vacío, lo de antes. No se quita porque una
-     * incidencia escribe sus partidas por otro camino —`/incidentes/{id}/
-     * partidas/`— y puede tener detalle sin tener M2M: cambiarle el criterio
-     * a la incidencia para arreglar la actividad rompería la que funciona. */
     if (!progDetalle.length) return partidas;
     /* LOS TITULOS NO ENTRAN. Un título es una fila que agrupa: no tiene
      * unidad ni precio, y su total es la suma de lo que cuelga. Imputarle
