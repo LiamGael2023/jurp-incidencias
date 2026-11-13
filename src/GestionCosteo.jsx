@@ -898,18 +898,26 @@ export default function GestionCosteo({
    * porque la escalera necesita la partida completa —rutaDe y cuelgaDe leen
    * el código para saber de qué cuelga— y progDetalle es un resumen. */
   const partidasDelParte = useMemo(() => {
-    /* EN UNA ACTIVIDAD DE OBRA, el presupuesto entero. En una incidencia,
-     * solo lo programado.
+    /* SOLO LO PROGRAMADO, sea incidencia o actividad.
      *
-     * La diferencia no es un capricho: en una incidencia se programa de
-     * antemano qué partidas va a tocar ese evento, y acotar a eso evita
-     * imputar a una partida que no tiene nada que ver. En una actividad ya
-     * no se programa nada —el bloque de añadir partidas se quitó de aquí
-     * porque las partidas se registran en Proyectos—, así que acotar a «lo
-     * programado» dejaba el desplegable con lo poco que se hubiera
-     * programado antes de quitarlo. Con la partida ya obligatoria, eso es
-     * un formulario que no se puede completar. */
-    if (!esIncidencia) return partidas;
+     * AQUI PONIA «en una actividad de obra, el presupuesto entero», y el
+     * motivo era este: «en una actividad ya no se programa nada —el bloque
+     * de añadir partidas se quitó de aquí porque las partidas se registran
+     * en Proyectos—, así que acotar a lo programado dejaba el desplegable
+     * con lo poco que se hubiera programado antes de quitarlo».
+     *
+     * Esa premisa dejó de ser cierta. Las partidas SI se programan por
+     * actividad —se registran en Proyectos, no aquí, pero llegan en
+     * `progDetalle` y son las que pinta el bloque «PROGRAMADO · PARTIDAS
+     * DEL PRESUPUESTO»—. Con la excepción puesta, una actividad del dren
+     * DV 3.1 ofrecía las 38 partidas del proyecto entero, incluidas las de
+     * Compositan y Huancaquito: imputar a la partida de otro dren es un
+     * clic de distancia, y el error no se ve hasta que alguien cuadra el
+     * valorizado.
+     *
+     * La red de seguridad que motivaba la excepción sigue estando, tres
+     * líneas más abajo: si ninguna coincide, se devuelve el presupuesto
+     * entero antes que un selector vacío. */
     if (!progDetalle.length) return partidas;
     /* LOS TITULOS NO ENTRAN. Un título es una fila que agrupa: no tiene
      * unidad ni precio, y su total es la suma de lo que cuelga. Imputarle
@@ -921,15 +929,20 @@ export default function GestionCosteo({
     // Si por lo que sea ninguna coincide, mejor el presupuesto entero que un
     // selector vacío: lo primero es molesto, lo segundo bloquea el parte.
     return sub.length ? sub : partidas;
-  }, [partidas, progDetalle, esIncidencia]);
+  }, [partidas, progDetalle]);
 
   /* ¿La lista de partidas está ACOTADA a lo programado, o es el presupuesto
    * entero? Lo usan los dos formularios que ofrecen partida -el parte de
    * maquinaria y los de mano de obra e insumo- para decir de dónde salen las
    * opciones. Vive aquí y no dentro de uno de ellos porque, estando dentro,
    * el otro reventaba con un ReferenceError al abrirse. */
-  const acotado = esIncidencia && progDetalle.length > 0
+  const acotado = progDetalle.length > 0
     && partidasDelParte.length < partidas.length;
+
+  /* Cómo llamar a esto en los avisos. Una incidencia y una actividad de obra
+   * se gestionan en la misma pantalla, y decirle «esta incidencia» a quien
+   * está dentro del dren DV 3.1 le hace dudar de si está donde cree. */
+  const estaCosa = esIncidencia ? 'esta incidencia' : 'esta actividad';
 
   const partidaDeLaLinea = partidas.find(
     x => String(x.id) === String(actForm.partidaId));
@@ -2837,12 +2850,12 @@ export default function GestionCosteo({
                       <small style={{ color:'#94a3b8', fontWeight:400 }}> · opcional</small>
                       {acotado ? (
                         <div style={{ fontSize:'11.5px', fontWeight:600, color:'#0b7a56', marginTop:'3px' }}>
-                          Solo las {partidasDelParte.length} programadas para esta incidencia
+                          Solo las {partidasDelParte.length} programadas para {estaCosa}
                         </div>
                       ) : partidas.length > 0 && (
                         <div style={{ fontSize:'11.5px', fontWeight:400, color:'#b45309', marginTop:'3px' }}>
                           Las {partidas.length} del presupuesto — prográmalas arriba
-                          y aquí saldrán solo las de esta incidencia
+                          y aquí saldrán solo las de {estaCosa}
                         </div>
                       )}
                     </div>
@@ -3390,7 +3403,7 @@ export default function GestionCosteo({
                             sitios distintos. */}
                         {acotado ? (
                           <div style={{ fontSize:'11.5px', fontWeight:600, color:'#0b7a56', marginTop:'3px' }}>
-                            Solo las {partidasDelParte.length} programadas para esta incidencia
+                            Solo las {partidasDelParte.length} programadas para {estaCosa}
                           </div>
                         ) : partidas.length > 0 && (
                           /* En una actividad no hay nada que programar —ese
@@ -3399,7 +3412,7 @@ export default function GestionCosteo({
                           esIncidencia ? (
                             <div style={{ fontSize:'11.5px', fontWeight:400, color:'#b45309', marginTop:'3px' }}>
                               Las {partidas.length} del presupuesto entero — prográmalas
-                              arriba y aquí saldrán solo las de esta incidencia
+                              arriba y aquí saldrán solo las de {estaCosa}
                             </div>
                           ) : (
                             <div style={{ fontSize:'11.5px', fontWeight:400, color:'#64748b', marginTop:'3px' }}>
