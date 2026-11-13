@@ -7,11 +7,16 @@
 
 POR QUÉ ESTO Y NO OTRA VALIDACIÓN MÁS
 -------------------------------------
-Ya sabemos que el cuerpo de la app PASA el serializer: probado campo por
-campo. Y aun así nginx registra `400 92`. Eso deja una sola posibilidad:
-algo lo rechaza ANTES de llegar a la vista —el tamaño máximo de petición
-de Django, un middleware, la autenticación— y eso no se ve validando en
-memoria. Hay que hacer la petición de verdad.
+El cuerpo de la app PASA el serializer: probado campo por campo. Y aun
+así nginx registra `400 92`. Así que algo lo rechaza por el camino, y eso
+no se ve validando en memoria: hay que hacer la petición de verdad.
+
+EL HOST IMPORTA, y de aquí salió una pista falsa. El cliente de pruebas
+de Django manda `testserver` como cabecera Host; si no está en
+ALLOWED_HOSTS, Django contesta 400 con su página genérica ANTES de mirar
+nada más. Da el mismo 400 con 49 KB que con 3 MB, lo que hace creer en un
+tope de tamaño que no existe. Por eso aquí se manda el dominio real,
+sacado de la propia configuración.
 
 LA HACE DESDE DENTRO DEL CONTENEDOR, contra 127.0.0.1:8000, saltándose
 nginx. Si aquí sale 201 y desde el teléfono sale 400, el que rechaza es
@@ -41,6 +46,11 @@ Token = django_apps.get_model("authtoken", "Token")
 
 RUTA = "/api/v1/mobile/hi-incident-actions/"
 
+# El dominio real, sacado de la propia configuracion. Ver nota de arriba.
+from django.conf import settings as _s
+_permitidos = [h for h in getattr(_s, "ALLOWED_HOSTS", []) if h not in ("*",)]
+HOST_PRUEBA = _permitidos[0] if _permitidos else "sistema.jriegopresurizado.org.pe"
+
 print("")
 print("=" * 72)
 print("PETICION REAL, LA MISMA QUE MANDA LA APP")
@@ -59,6 +69,7 @@ inc = M._meta.get_field("incident").related_model
 ultimo = inc.objects.order_by("-id").first()
 IID = ultimo.id
 print("    incidente: #%s" % IID)
+print("    host: %s" % HOST_PRUEBA)
 
 # Tres fotos del tamaño real: 800x800 a calidad 70 ronda los 100-150 KB,
 # y en base64 crece un tercio. El tamaño es justo lo que no se puede
@@ -81,7 +92,8 @@ antes = set(M.objects.values_list("id", flat=True))
 
 c = Client()
 r = c.post(RUTA, data=cuerpo, content_type="application/json",
-           HTTP_AUTHORIZATION="Token %s" % tok.key)
+           HTTP_AUTHORIZATION="Token %s" % tok.key,
+               HTTP_HOST=HOST_PRUEBA)
 
 print("")
 print("    -> HTTP %s" % r.status_code)

@@ -22,6 +22,12 @@ validación, y por eso despista tanto.
 
 Esto imprime el tope configurado y prueba tamaños crecientes hasta dar
 con el corte real.
+
+EL HOST IMPORTA. El cliente de pruebas de Django manda `testserver` como
+cabecera Host; si no está en ALLOWED_HOSTS, Django contesta 400 con su
+página genérica ANTES de mirar el tamaño. Eso da el mismo 400 con 49 KB
+que con 3 MB y hace creer en un tope que no existe: exactamente la pista
+falsa que costó una vuelta de más. Por eso se manda el dominio real.
 """
 from __future__ import print_function
 
@@ -35,6 +41,11 @@ from django.test import Client
 
 Token = django_apps.get_model("authtoken", "Token")
 RUTA = "/api/v1/mobile/hi-incident-actions/"
+
+# El dominio real, sacado de la propia configuracion. Ver nota de arriba.
+from django.conf import settings as _s
+_permitidos = [h for h in getattr(_s, "ALLOWED_HOSTS", []) if h not in ("*",)]
+HOST_PRUEBA = _permitidos[0] if _permitidos else "sistema.jriegopresurizado.org.pe"
 
 print("")
 print("=" * 72)
@@ -80,13 +91,16 @@ def probar(kb):
         "images": [{"content": relleno}],
     })
     r = c.post(RUTA, data=cuerpo, content_type="application/json",
-               HTTP_AUTHORIZATION="Token %s" % tok.key)
+               HTTP_AUTHORIZATION="Token %s" % tok.key,
+               HTTP_HOST=HOST_PRUEBA)
     texto = r.content.decode("utf-8", "replace")
     # La pagina generica de Django no es JSON; la del serializer si.
     llego = texto.lstrip().startswith("{")
     return len(cuerpo), r.status_code, llego, texto[:90]
 
 
+print("    host de la prueba: %s" % HOST_PRUEBA)
+print("")
 print("    %10s %7s %-8s %s" % ("CUERPO", "HTTP", "LLEGO?", "RESPUESTA"))
 corte_ok = None
 corte_mal = None
