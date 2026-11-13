@@ -116,6 +116,85 @@ export default function Actividades() {
     () => proyectos.find(p => String(p.id) === String(proId)) || null,
     [proyectos, proId]);
 
+  /* ─────────────────────────────────────────────────────────────────────
+   * LOS TITULOS DEL PRESUPUESTO SON LAS ACTIVIDADES
+   * ─────────────────────────────────────────────────────────────────────
+   *
+   * En este proyecto, «01 DV Compositan I», «02 DV Compositan II», «03 DV
+   * 3.1»… no son categorías contables: son los frentes de trabajo. Cada uno
+   * tiene su limpieza y su petróleo colgando, y la obra se ejecuta tramo a
+   * tramo.
+   *
+   * Hasta ahora «Nueva actividad» abría un cuadro en blanco y había que
+   * teclear el nombre. Eso tiene dos costes: uno escribe «Dren DV 3.1»
+   * donde el presupuesto dice «DV 3.1» —y ya no cuadran solos—, y nada
+   * impide crear una actividad que no corresponde a ningún título, que
+   * luego no tiene contra qué valorizarse.
+   *
+   * Así que se ofrecen los títulos que todavía no tienen actividad. Se leen
+   * del presupuesto del proyecto, que es la única fuente.
+   */
+  const [titulos, setTitulos] = useState([]);
+  const [partidasPro, setPartidasPro] = useState([]);
+  const [sinPresupuesto, setSinPresupuesto] = useState(false);
+
+  useEffect(() => {
+    if (!pro) { setTitulos([]); setPartidasPro([]); return; }
+    let vivo = true;
+    (async () => {
+      try {
+        const r = await fetch(`${API}/proyectos/${pro.id}/presupuesto/`);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        const filas = Array.isArray(j) ? j : (j.partidas || j.results || []);
+        if (!vivo) return;
+        setPartidasPro(filas);
+        /* SOLO LOS DE PRIMER NIVEL. Un título de segundo nivel —03.02 que
+         * agrupara a 03.02.01 y 03.02.02— sería una subdivisión dentro de
+         * un frente, no un frente. Aquí los frentes son los de arriba. */
+        setTitulos(filas.filter(f => f.es_titulo
+          && String(f.codigo || '').split('.').length === 1));
+        setSinPresupuesto(filas.length === 0);
+      } catch {
+        if (vivo) { setTitulos([]); setPartidasPro([]); setSinPresupuesto(false); }
+      }
+    })();
+    return () => { vivo = false; };
+  }, [pro]);
+
+  /* De qué título cuelga una actividad, deducido de sus partidas.
+   *
+   * NO HAY CAMPO QUE LO DIGA, y no hace falta inventarlo: la actividad ya
+   * trae `partidas_detalle`, y el código de una partida lleva dentro el de
+   * su título —03.01 cuelga del 03—. Añadir una columna nueva a la base
+   * para guardar algo que ya se puede saber crea la posibilidad de que las
+   * dos fuentes discrepen, y entonces hay que decidir cuál miente. */
+  const tituloDe = (act) => {
+    for (const p of (act.partidas_detalle || [])) {
+      const raiz = String(p.codigo || '').split('.')[0];
+      if (raiz) return raiz;
+    }
+    return null;
+  };
+
+  const titulosUsados = useMemo(() => {
+    const s = new Set();
+    lista.forEach(a => { const t = tituloDe(a); if (t) s.add(t); });
+    return s;
+  }, [lista]);
+
+  const titulosLibres = useMemo(
+    () => titulos.filter(t => !titulosUsados.has(String(t.codigo))),
+    [titulos, titulosUsados]);
+
+  /* Las partidas que cuelgan de un título, para programárselas a la
+   * actividad nada más crearla. Es lo que hace que entrar en la actividad
+   * recién creada ya enseñe sus dos partidas en vez de un bloque vacío. */
+  const partidasDe = (codTitulo) => partidasPro
+    .filter(p => !p.es_titulo
+      && String(p.codigo || '').split('.')[0] === String(codTitulo))
+    .map(p => p.id);
+
   const cargar = useCallback(async () => {
     setCargando(true); setError('');
     try {
@@ -169,11 +248,20 @@ export default function Actividades() {
     setGuardando(true); setError('');
     try {
       const nueva = !editando.id;
+
+      /* Los campos que empiezan por `_` son de esta pantalla, no de la
+       * actividad: `_titulo` y `_aMano` solo sirven para decidir qué pasa al
+       * guardar. DRF los ignoraría, pero mandar basura a un endpoint es
+       * apostar a que el día que alguien añada validación estricta nadie se
+       * acuerde de esto. */
+      const aMandar = Object.fromEntries(
+        Object.entries(editando).filter(([k]) => !k.startsWith('_')));
+
       const r = await fetch(
         nueva ? `${API}/actividades-obra/` : `${API}/actividades-obra/${editando.id}/`,
         { method: nueva ? 'POST' : 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...editando,
+          body: JSON.stringify({ ...aMandar,
             // La clave y el texto, por lo mismo que en las consultas.
             proyecto_id: editando.proyecto_id || (pro && pro.id),
             obra: editando.obra || (pro && pro.codigo) }) });
@@ -181,6 +269,37 @@ export default function Actividades() {
         let d = {}; try { d = await r.json(); } catch { d = {}; }
         throw new Error(d.detail || JSON.stringify(d).slice(0, 160));
       }
+
+      /* RECIEN CREADA DESDE UN TITULO: se le programan sus partidas.
+       *
+       * Sin esto, entrar en la actividad enseñaría el bloque «PROGRAMADO ·
+       * PARTIDAS DEL PRESUPUESTO» vacío y el selector de partida volvería a
+       * ofrecer el presupuesto entero —que es justo lo que se acaba de
+       * arreglar—. Son las dos mitades de lo mismo.
+       *
+       * SI ESTE PASO FALLA, LA ACTIVIDAD YA EXISTE. No se deshace: borrarla
+       * para dejarlo «limpio» tiraría también el nombre, las fechas y el
+       * responsable que acaban de escribirse. Se avisa y se sigue; las
+       * partidas se pueden programar luego desde Proyectos. */
+      if (nueva && editando._titulo) {
+        const ids = partidasDe(editando._titulo);
+        if (ids.length) {
+          const creada = await r.json().catch(() => ({}));
+          if (creada && creada.id) {
+            const rp = await fetch(`${API}/actividades-obra/${creada.id}/`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ partidas: ids }),
+            });
+            if (!rp.ok) {
+              setError(`La actividad se creó, pero no se le pudieron asignar `
+                + `sus ${ids.length} partidas (el servidor respondió `
+                + `${rp.status}). Asígnalas desde Proyectos.`);
+            }
+          }
+        }
+      }
+
       setEditando(null);
       await cargar();
     } catch (e) {
@@ -545,12 +664,86 @@ export default function Actividades() {
               </div>
 
               <div style={{ padding:'16px 20px', overflowY:'auto', background:'#f8fafc' }}>
-                <Campo etiqueta="ACTIVIDAD" obligatorio>
-                  <input value={editando.nombre} autoFocus
-                    onChange={e => setEditando({ ...editando, nombre: e.target.value })}
-                    placeholder="Excavación de caja de derivación"
-                    style={ctrl({ width:'100%' })} />
-                </Campo>
+                {/* AL CREAR SE ELIGE DEL PRESUPUESTO; al editar se escribe.
+                    Una actividad ya creada puede haber cambiado de nombre
+                    por mil razones y no toca reabrir esa decisión cada vez
+                    que alguien corrige una fecha. */}
+                {!editando.id && titulos.length > 0 ? (
+                  <Campo etiqueta="ACTIVIDAD" obligatorio>
+                    <select
+                      value={editando._titulo || (editando._aMano ? '__mano' : '')}
+                      autoFocus
+                      onChange={e => {
+                        const v = e.target.value;
+                        if (v === '__mano') {
+                          setEditando({ ...editando, _titulo: '', _aMano: true,
+                            nombre: '' });
+                          return;
+                        }
+                        const t = titulos.find(x => String(x.codigo) === v);
+                        setEditando({ ...editando, _titulo: v, _aMano: false,
+                          nombre: t ? t.descripcion : '' });
+                      }}
+                      style={ctrl({ width:'100%' })}>
+                      <option value="">— Elegir del presupuesto —</option>
+                      {titulosLibres.map(t => (
+                        <option key={t.codigo} value={t.codigo}>
+                          {t.codigo} · {t.descripcion}
+                          {` (${partidasDe(t.codigo).length} partidas)`}
+                        </option>
+                      ))}
+                      {/* Los que ya tienen actividad se enseñan deshabilitados
+                          en vez de desaparecer: si alguien busca «DV 3.1» y no
+                          lo encuentra, lo natural es crearlo otra vez a mano. */}
+                      {titulos.filter(t => titulosUsados.has(String(t.codigo)))
+                        .map(t => (
+                        <option key={`ya-${t.codigo}`} value="" disabled>
+                          {t.codigo} · {t.descripcion} — ya tiene actividad
+                        </option>
+                      ))}
+                      <option value="__mano">— Otra, escribirla a mano —</option>
+                    </select>
+
+                    {editando._aMano && (
+                      <input value={editando.nombre} style={ctrl({ width:'100%',
+                        marginTop:'7px' })}
+                        onChange={e => setEditando({ ...editando,
+                          nombre: e.target.value })}
+                        placeholder="Excavación de caja de derivación" />
+                    )}
+
+                    {editando._titulo && (
+                      <div style={{ fontSize:'11.5px', color:'#0b7a56',
+                        marginTop:'5px', fontWeight:600 }}>
+                        Se le asignarán las {partidasDe(editando._titulo).length} partidas
+                        del título {editando._titulo}.
+                      </div>
+                    )}
+                    {editando._aMano && (
+                      <div style={{ fontSize:'11.5px', color:'#b45309',
+                        marginTop:'5px' }}>
+                        Sin título del presupuesto detrás, esta actividad no
+                        tendrá partidas contra las que valorizar hasta que se
+                        las asignes en Proyectos.
+                      </div>
+                    )}
+                  </Campo>
+                ) : (
+                  <Campo etiqueta="ACTIVIDAD" obligatorio>
+                    <input value={editando.nombre} autoFocus
+                      onChange={e => setEditando({ ...editando, nombre: e.target.value })}
+                      placeholder="Excavación de caja de derivación"
+                      style={ctrl({ width:'100%' })} />
+                    {!editando.id && sinPresupuesto && (
+                      <div style={{ fontSize:'11.5px', color:'#b45309',
+                        marginTop:'5px' }}>
+                        Este proyecto no tiene presupuesto cargado, así que no
+                        hay títulos que ofrecer. Cárgalo en Proyectos y las
+                        actividades saldrán solas.
+                      </div>
+                    )}
+                  </Campo>
+                )}
 
                 <Campo etiqueta="DESCRIPCIÓN">
                   <textarea value={editando.descripcion || ''} rows={2}
