@@ -138,6 +138,26 @@ export default function GestionCosteo({
    * Se eligen UNA vez aquí arriba y a partir de ahí el parte elige solo entre
    * ellas. */
   const [progDetalle, setProgDetalle] = useState([]);   // del servidor
+
+  /* ─────────────────────────────────────────────────────────────────────
+   * DOS RELACIONES, Y SIGNIFICAN COSAS DISTINTAS
+   * ─────────────────────────────────────────────────────────────────────
+   *
+   * `partidas`          el M2M: lo que esta actividad TIENE QUE hacer.
+   * `partidas_detalle`  lo que YA ha imputado en sus partes diarios.
+   *
+   * No es una suposición: el backend lo cambió a propósito y lo dejó
+   * escrito en `parche_partidas_de_los_partes.py` —«partidas_detalle sale
+   * de los partes de la actividad, no del M2M»—.
+   *
+   * Y es la diferencia que importa para acotar el selector. Acotando por
+   * `partidas_detalle` el razonamiento es circular: para que una partida
+   * salga ahí hay que haberle imputado antes, y para imputarle hay que
+   * poder elegirla. Una actividad recién creada no acotaría nunca, que es
+   * exactamente lo que pasaba con ACT-0005.
+   *
+   * Lo programado es `partidas`. Eso es lo que se ofrece. */
+  const [progIds, setProgIds] = useState([]);
   // Solo lo usa el flujo viejo (incidencias): avisa de que se soltó la
   // partida porque la actividad elegida mide en otra unidad.
   const [avisoPartida, setAvisoPartida] = useState('');
@@ -223,7 +243,7 @@ export default function GestionCosteo({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!abierto || !sujeto || !sujeto.id) return;
-    setProgDetalle([]); setProgAbierto(false);
+    setProgDetalle([]); setProgIds([]); setProgAbierto(false);
     setProgAviso(null); setProgSoporte('cargando');
     cargarProgramado();
   }, [abierto, sujeto && sujeto.id]);
@@ -401,7 +421,7 @@ export default function GestionCosteo({
         setProgSoporte('no-soportado');
         return;
       }
-      setProgDetalle(d.partidas_detalle || []);
+      setProgDetalle(d.partidas_detalle || []); setProgIds(d.partidas || []);
       setProgSoporte('ok');
     } catch (e) {
       setProgSoporte('error');
@@ -429,7 +449,7 @@ export default function GestionCosteo({
         return false;
       }
       const d = await r.json().catch(() => ({}));
-      setProgDetalle(d.partidas_detalle || []);
+      setProgDetalle(d.partidas_detalle || []); setProgIds(d.partidas || []);
       setProgSoporte('ok');
       return true;
     } catch (e) {
@@ -447,7 +467,7 @@ export default function GestionCosteo({
    * presupuestado— y pedirlo aparte dejaría medio segundo los números
    * viejos en pantalla. */
   const aplicarRespuesta = (d) => {
-    setProgDetalle(d.partidas_detalle || []);
+    setProgDetalle(d.partidas_detalle || []); setProgIds(d.partidas || []);
     setProgSoporte('ok');
   };
 
@@ -918,6 +938,18 @@ export default function GestionCosteo({
      * La red de seguridad que motivaba la excepción sigue estando, tres
      * líneas más abajo: si ninguna coincide, se devuelve el presupuesto
      * entero antes que un selector vacío. */
+    /* PRIMERO LO PROGRAMADO DE VERDAD: el M2M `partidas`. Ver el comentario
+     * de `progIds` arriba para por qué no vale `partidas_detalle`. */
+    if (progIds.length) {
+      const prog = new Set(progIds.map(String));
+      const sub = partidas.filter(p => prog.has(String(p.id)));
+      if (sub.length) return sub;
+    }
+
+    /* Y si el M2M está vacío, lo de antes. No se quita porque una
+     * incidencia escribe sus partidas por otro camino —`/incidentes/{id}/
+     * partidas/`— y puede tener detalle sin tener M2M: cambiarle el criterio
+     * a la incidencia para arreglar la actividad rompería la que funciona. */
     if (!progDetalle.length) return partidas;
     /* LOS TITULOS NO ENTRAN. Un título es una fila que agrupa: no tiene
      * unidad ni precio, y su total es la suma de lo que cuelga. Imputarle
@@ -929,14 +961,14 @@ export default function GestionCosteo({
     // Si por lo que sea ninguna coincide, mejor el presupuesto entero que un
     // selector vacío: lo primero es molesto, lo segundo bloquea el parte.
     return sub.length ? sub : partidas;
-  }, [partidas, progDetalle]);
+  }, [partidas, progDetalle, progIds]);
 
   /* ¿La lista de partidas está ACOTADA a lo programado, o es el presupuesto
    * entero? Lo usan los dos formularios que ofrecen partida -el parte de
    * maquinaria y los de mano de obra e insumo- para decir de dónde salen las
    * opciones. Vive aquí y no dentro de uno de ellos porque, estando dentro,
    * el otro reventaba con un ReferenceError al abrirse. */
-  const acotado = progDetalle.length > 0
+  const acotado = (progIds.length > 0 || progDetalle.length > 0)
     && partidasDelParte.length < partidas.length;
 
   /* Cómo llamar a esto en los avisos. Una incidencia y una actividad de obra
