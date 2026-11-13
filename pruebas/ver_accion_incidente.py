@@ -61,6 +61,14 @@ for nombre, campo in s.get_fields().items():
     print("    %-14s required=%s" % (nombre, campo.required))
 
 print("")
+print("    Valores que admite 'status':")
+try:
+    for valor, etiqueta in M._meta.get_field("status").choices:
+        print("        %-12r %s" % (valor, etiqueta))
+except Exception as e:
+    print("        no he podido leerlos: %s" % e)
+
+print("")
 print("=" * 72)
 print("2. QUE INCIDENTE SE ESTA USANDO")
 print("=" * 72)
@@ -80,36 +88,42 @@ print("")
 TEXTO = ("DIA 11/11/26 Se concluyo con el Tramo N02 con la Conformacion "
          "de dique con material de prestamo en una longitud de")
 
+# EL CUERPO LITERAL DE LA APP, copiado de incident_detail_page.dart:
+#
+#     {"incident": <int>, "description": "...", "status": "eat"}
+#     + latitude/longitude como CADENA, con seis decimales
+#     + images: [{"content": "<base64 sin prefijo>"}]
+#
+# Una foto comprimida a 800x800 con calidad 70 ronda los 60-120 KB, asi
+# que su base64 pasa de 100.000 caracteres. Eso importa: si `content`
+# tuviera un limite de longitud, mi prueba con una cadena de 31
+# caracteres no lo habria encontrado nunca.
+FOTO = "/9j/4AAQSkZJRgABAQAAAQABAAD" * 4000   # ~108 KB de base64
+CORTA = "/9j/4AAQSkZJRgABAQAAAQABAAD"
+
 CASOS = [
-    ("solo descripcion y fotos (lo que se ve en la pantalla)",
+    ("EL DE LA APP, tal cual (3 fotos grandes)",
+     {"incident": IID, "description": TEXTO, "status": "eat",
+      "latitude": "-8.413000", "longitude": "-78.755000",
+      "images": [{"content": FOTO}, {"content": FOTO}, {"content": FOTO}]}),
+    ("el de la app, sin coordenadas (GPS no disponible)",
+     {"incident": IID, "description": TEXTO, "status": "eat",
+      "images": [{"content": FOTO}]}),
+    ("el de la app, con fotos pequenas",
+     {"incident": IID, "description": TEXTO, "status": "eat",
+      "latitude": "-8.413000", "longitude": "-78.755000",
+      "images": [{"content": CORTA}]}),
+    ("solo cambiando status 'eat' por el primero valido",
      {"incident": IID, "description": TEXTO,
-      "images": [{"content": "data:image/jpeg;base64,/9j/4AAQ"}]}),
-    ("sin 'name'",
-     {"incident": IID, "description": TEXTO, "status": "pending",
-      "images": [{"content": "data:image/jpeg;base64,/9j/4AAQ"}]}),
-    ("sin coordenadas",
-     {"incident": IID, "name": "Avance", "description": TEXTO,
-      "status": "pending",
-      "images": [{"content": "data:image/jpeg;base64,/9j/4AAQ"}]}),
-    ("sin 'status'",
-     {"incident": IID, "name": "Avance", "description": TEXTO,
-      "latitude": -8.41, "longitude": -78.75,
-      "images": [{"content": "data:image/jpeg;base64,/9j/4AAQ"}]}),
-    ("con la lista de imagenes vacia",
-     {"incident": IID, "name": "Avance", "description": TEXTO,
-      "latitude": -8.41, "longitude": -78.75, "status": "pending",
-      "images": []}),
-    ("imagenes como lista de cadenas, no de objetos",
-     {"incident": IID, "name": "Avance", "description": TEXTO,
-      "latitude": -8.41, "longitude": -78.75, "status": "pending",
-      "images": ["data:image/jpeg;base64,/9j/4AAQ"]}),
-    ("sin la clave 'images'",
-     {"incident": IID, "name": "Avance", "description": TEXTO,
-      "latitude": -8.41, "longitude": -78.75, "status": "pending"}),
-    ("todo puesto",
-     {"incident": IID, "name": "Avance", "description": TEXTO,
-      "latitude": -8.41, "longitude": -78.75, "status": "pending",
-      "images": [{"content": "data:image/jpeg;base64,/9j/4AAQ"}]}),
+      "latitude": "-8.413000", "longitude": "-78.755000",
+      "images": [{"content": CORTA}]}),
+    ("sin fotos (por si el fallo esta en las imagenes)",
+     {"incident": IID, "description": TEXTO, "status": "eat",
+      "latitude": "-8.413000", "longitude": "-78.755000"}),
+    ("coordenadas como numero en vez de cadena",
+     {"incident": IID, "description": TEXTO, "status": "eat",
+      "latitude": -8.413, "longitude": -78.755,
+      "images": [{"content": CORTA}]}),
 ]
 
 for titulo, datos in CASOS:
