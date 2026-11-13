@@ -32,6 +32,7 @@ import GestionCosteo from './GestionCosteo';
 import VisorImagen from './VisorImagen';
 import { API_OPS } from './api';
 import { pedir } from './sesion';
+import RegistrarAvance from './RegistrarAvance';
 // ── Imágenes de referencia metrado por actividad ─────────────────────────────
 
 // Los modales se cuelgan del <body>, no del árbol de la página.
@@ -1384,6 +1385,15 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto, fuente = 'incidentes' 
 
             {/* Línea de tiempo */}
             <div style={{ overflowY:'auto', padding:'18px 22px', background:'#f8fafc' }}>
+              {/* Escribir en la bitácora desde aquí. Antes solo se podía
+                  desde la app de campo, lo que dejaba a la oficina sin
+                  forma de anotar una coordinación o una corrección -y, el
+                  día que la app falla, el seguimiento congelado-. */}
+              <div style={{ marginBottom:'16px' }}>
+                <RegistrarAvance
+                  incidenteId={modalBitacora.id}
+                  onGuardado={() => verBitacora(modalBitacora)} />
+              </div>
               {cargandoBitacora ? (
                 <div style={{ textAlign:'center', padding:'40px', color:'#64748b', fontSize:'13px' }}>
                   <FaSyncAlt className="icon-spin" style={{ marginRight:'8px' }} /> Cargando bitácora…
@@ -1453,7 +1463,7 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto, fuente = 'incidentes' 
             {/* Pie */}
             <div style={{ padding:'12px 22px', borderTop:'1px solid #e2e8f0', background:'#f8fafc', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <span style={{ fontSize:'12px', color:'#64748b' }}>
-                {cargandoBitacora ? '' : `${bitacora.length} atención(es) registrada(s) desde la app`}
+                {cargandoBitacora ? '' : `${bitacora.length} atención(es) registrada(s)`}
               </span>
               <button onClick={() => setModalBitacora(null)} className="tbl-btn tbl-btn-link">Cerrar</button>
             </div>
