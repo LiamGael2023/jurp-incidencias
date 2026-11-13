@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import {
   FaCamera, FaTimes, FaSpinner, FaCheckCircle, FaExclamationCircle,
-  FaMapMarkerAlt, FaPlus,
+  FaMapMarkerAlt, FaPlus, FaCalendarAlt,
 } from 'react-icons/fa';
 
 /**
@@ -39,6 +39,37 @@ const ESTADOS = [
 const LADO_MAX = 1280;
 const CALIDAD = 0.7;
 const MAX_FOTOS = 6;
+
+/**
+ * LA FECHA DEL TRABAJO NO ES LA FECHA DEL REGISTRO.
+ *
+ * El servidor sella cada avance con el momento en que entra (`created_at`,
+ * automático) y no admite otra cosa: el serializer de
+ * `hi-incident-actions/` solo acepta incident, description, status,
+ * latitude, longitude e images. Así que una anotación del lunes escrita el
+ * miércoles quedaría fechada el miércoles.
+ *
+ * Eso importa aquí más que en la app, porque la oficina registra en
+ * diferido por definición: lo que informó una empresa, lo que se coordinó
+ * por teléfono, lo que el inspector no pudo subir porque le falló el móvil.
+ *
+ * Mientras el servidor no guarde una fecha propia, la del trabajo va
+ * delante del texto —«DÍA 11/11/2026 — …»—, que es exactamente como ya la
+ * escriben los inspectores a mano en la bitácora. Se lee igual y no
+ * inventa un campo que el backend no tiene.
+ */
+function hoyLocal() {
+  const d = new Date();
+  // `toISOString()` pasa a UTC, y en Perú (UTC-5) eso adelanta un día
+  // cada tarde a partir de las 19:00. Se compone a mano.
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function enPalabras(iso) {
+  const [a, m, d] = iso.split('-');
+  return `${d}/${m}/${a}`;
+}
 
 /**
  * Los errores del servidor, en una línea legible.
@@ -104,6 +135,7 @@ function encoger(archivo) {
 export default function RegistrarAvance({ incidenteId, onGuardado }) {
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState('');
+  const [fecha, setFecha] = useState(hoyLocal);
   const [estado, setEstado] = useState('eat');
   const [fotos, setFotos] = useState([]);
   const [conUbicacion, setConUbicacion] = useState(false);
@@ -151,16 +183,20 @@ export default function RegistrarAvance({ incidenteId, onGuardado }) {
   const limpiar = () => {
     setTexto(''); setFotos([]); setPunto(null);
     setConUbicacion(false); setError(null); setEstado('eat');
+    setFecha(hoyLocal());
   };
 
   const guardar = async () => {
     if (!texto.trim()) { setError('Escribe qué se hizo.'); return; }
+    if (!fecha) { setError('Indica de qué día es el trabajo.'); return; }
     setGuardando(true);
     setError(null);
     try {
       const cuerpo = {
         incident: Number(incidenteId),
-        description: texto.trim(),
+        // La fecha del trabajo delante, porque el servidor solo sabe
+        // cuándo se registró. Ver el comentario de `hoyLocal`.
+        description: `DÍA ${enPalabras(fecha)} — ${texto.trim()}`,
         status: estado,
       };
       if (conUbicacion && punto) {
@@ -244,6 +280,16 @@ export default function RegistrarAvance({ incidenteId, onGuardado }) {
 
       <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap',
         alignItems: 'center' }}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+          fontSize: 12.5, color: '#475569' }}>
+          <FaCalendarAlt size={12} />
+          <input type="date" value={fecha} max={hoyLocal()}
+            onChange={(e) => { setFecha(e.target.value); if (error) setError(null); }}
+            style={{ padding: '6px 8px', borderRadius: 7, fontSize: 13,
+              border: `1px solid ${fecha && fecha !== hoyLocal() ? '#f0a848' : '#cbd5e1'}`,
+              fontFamily: 'inherit', color: '#1e293b' }} />
+        </label>
+
         <select value={estado} onChange={(e) => setEstado(e.target.value)}
           style={{ padding: '7px 10px', borderRadius: 7, fontSize: 13,
             border: '1px solid #cbd5e1' }}>
@@ -271,6 +317,16 @@ export default function RegistrarAvance({ incidenteId, onGuardado }) {
             : 'Añadir ubicación'}
         </button>
       </div>
+
+      {fecha && fecha !== hoyLocal() && (
+        <div style={{ marginTop: 10, fontSize: 12, color: '#8a5a12',
+          background: '#fff8ec', border: '1px solid #f3dcb4',
+          borderRadius: 7, padding: '7px 10px', lineHeight: 1.45 }}>
+          Se anotará como trabajo del <b>{enPalabras(fecha)}</b>. En la
+          bitácora aparecerá con la hora de hoy, que es cuando se registra;
+          la fecha del trabajo va al principio del texto.
+        </div>
+      )}
 
       {fotos.length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
