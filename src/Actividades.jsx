@@ -136,15 +136,22 @@ export default function Actividades() {
    */
   const [titulos, setTitulos] = useState([]);
   const [partidasPro, setPartidasPro] = useState([]);
-  const [sinPresupuesto, setSinPresupuesto] = useState(false);
+  const [falloPpto, setFalloPpto] = useState('');
 
   useEffect(() => {
-    if (!pro) { setTitulos([]); setPartidasPro([]); return; }
+    if (!pro) { setTitulos([]); setPartidasPro([]); setFalloPpto(''); return; }
     let vivo = true;
     (async () => {
+      setFalloPpto('');
       try {
-        const r = await fetch(`${API}/proyectos/${pro.id}/presupuesto/`);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
+        /* La misma ruta que usa PresupuestoProyecto. La primera versión de
+         * esto pedía `/proyectos/{id}/presupuesto/`, que no existe: el 404
+         * caía al `catch`, la lista quedaba vacía y el alta volvía al campo
+         * de texto SIN DECIR NADA. Desde fuera eso es idéntico a «no has
+         * desplegado todavía», que es justo lo que pareció. */
+        const r = await fetch(
+          `${API}/partidas/?obra=${encodeURIComponent(pro.codigo || '')}`);
+        if (!r.ok) throw new Error(`el servidor respondió ${r.status}`);
         const j = await r.json();
         const filas = Array.isArray(j) ? j : (j.partidas || j.results || []);
         if (!vivo) return;
@@ -154,9 +161,16 @@ export default function Actividades() {
          * un frente, no un frente. Aquí los frentes son los de arriba. */
         setTitulos(filas.filter(f => f.es_titulo
           && String(f.codigo || '').split('.').length === 1));
-        setSinPresupuesto(filas.length === 0);
-      } catch {
-        if (vivo) { setTitulos([]); setPartidasPro([]); setSinPresupuesto(false); }
+      } catch (e) {
+        if (!vivo) return;
+        setTitulos([]); setPartidasPro([]);
+        /* SE DICE. Un fallo al leer el presupuesto no puede verse igual que
+         * un proyecto sin presupuesto: lo segundo invita a escribir la
+         * actividad a mano, y hacerlo encima de un título que sí existe
+         * deja dos actividades para el mismo frente. */
+        setFalloPpto(`No se pudo leer el presupuesto (${e.message}). `
+          + 'Se puede crear la actividad a mano, pero no se le asignarán '
+          + 'partidas.');
       }
     })();
     return () => { vivo = false; };
@@ -734,12 +748,13 @@ export default function Actividades() {
                       onChange={e => setEditando({ ...editando, nombre: e.target.value })}
                       placeholder="Excavación de caja de derivación"
                       style={ctrl({ width:'100%' })} />
-                    {!editando.id && sinPresupuesto && (
-                      <div style={{ fontSize:'11.5px', color:'#b45309',
-                        marginTop:'5px' }}>
-                        Este proyecto no tiene presupuesto cargado, así que no
-                        hay títulos que ofrecer. Cárgalo en Proyectos y las
-                        actividades saldrán solas.
+                    {!editando.id && (
+                      <div style={{ fontSize:'11.5px', marginTop:'5px',
+                        color: falloPpto ? '#b91c1c' : '#b45309' }}>
+                        {falloPpto || 'Este proyecto no tiene presupuesto '
+                          + 'cargado, así que no hay títulos que ofrecer. '
+                          + 'Cárgalo en Proyectos y las actividades saldrán '
+                          + 'solas.'}
                       </div>
                     )}
                   </Campo>
