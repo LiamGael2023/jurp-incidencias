@@ -1093,7 +1093,31 @@ export default function GestionCosteo({
      * fórmula mientras no se toquen sus casillas. */
     const esVieja = esIncidencia || a.modoMetrado !== MODO_GRILLA;
 
-    if (esVieja && !(g.val > 0)) {
+    /* LA INCIDENCIA SE SALE AQUI, ANTES DE MIRAR LA GRILLA.
+     *
+     * Antes la condicion era `esVieja && !(g.val > 0)`, y para una
+     * incidencia eso no se cumplia NUNCA: `metradoGrilla` arranca en 1 y
+     * multiplica `cantidad`, `coeficiente` y `nEstruc`, que nacen valiendo
+     * 1 cada uno. Las casillas vacias se saltan, no ponen el producto a
+     * cero. Asi que g.val valia 1 aunque no se hubiera medido nada, la
+     * linea caia en la rama de la grilla y esta le pisaba el metrado con
+     * `metradoValor`.
+     *
+     * Lo que se veia: un inspector escribia 0.07 Km en «Metrado (ingreso
+     * manual)» y se guardaba 1.0000 Km -1 x 1 x 1-, catorce veces lo
+     * presupuestado. Sin aviso, porque para el formulario no hubo error:
+     * simplemente leyo el numero por otro sitio (16/11/2026).
+     *
+     * El comentario de arriba ya decia lo correcto -«en una incidencia
+     * SIEMPRE el flujo viejo»-; lo que no lo hacia era el codigo.
+     *
+     * Se limpia ademas `modoMetrado`, porque hay lineas ya guardadas con
+     * «grilla» pegado de esta misma falla: sin borrarlo, al reabrirlas
+     * `calcMetradoDe` volveria a leer `metradoValor` y el arreglo no
+     * serviria de nada. */
+    if (esIncidencia) a = { ...a, modoMetrado: '', metradoValor: '' };
+
+    if (esIncidencia || (esVieja && !(g.val > 0))) {
       /* Parte antiguo que se abre para corregir las horas o la zona, sin
        * tocar las medidas. Se deja exactamente como estaba: su metrado, su
        * nombre y su fórmula. Recalcularlo con la grilla vacía lo pondría a
