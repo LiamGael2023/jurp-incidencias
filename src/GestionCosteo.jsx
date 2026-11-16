@@ -3384,6 +3384,33 @@ export default function GestionCosteo({
                   const mv = calcMetradoDe(actForm);
                   const uAct = esIncidencia ? norm(mv.unit || actForm.unidadMetrado) : '';
                   const choca = sel && uAct && norm(sel.unidad) !== uAct;
+
+                  /* SOLO UNA FORMULA PUEDE VETAR UNA PARTIDA.
+                   *
+                   * Antes se vetaba comparando contra `unidadMetrado`, que
+                   * vale «m3» de fabrica porque asi nace el formulario. O sea
+                   * que se filtraba por un valor que nadie habia escogido: en
+                   * una estructura cuyas partidas van en Glb, Mes y Km salian
+                   * las tres deshabilitadas con «no se puede» y el inspector
+                   * se quedaba sin ninguna que elegir (16/11/2026).
+                   *
+                   * Y era al reves de como esta pensado: `ponerPartida`, aqui
+                   * debajo, COPIA la unidad de la partida al formulario
+                   * -«la unidad la manda la PARTIDA, que es a quien se le
+                   * imputa»-. Esa funcion existe justo para el caso que el
+                   * veto impedia que ocurriera nunca.
+                   *
+                   * Cuando el metrado SI sale de una formula la cosa cambia:
+                   * el numero es un volumen de trapecio, m³ de verdad, y
+                   * cargarlo a una partida en Km no es una etiqueta mal
+                   * puesta sino una cuenta que no significa nada. Ahi el veto
+                   * se queda.
+                   *
+                   * Para todo lo demas basta el aviso rojo de mas abajo, que
+                   * ya dice lo unico que al inspector le importa: que ese
+                   * metrado no sumara al avance. */
+                  const uImpuesta = esIncidencia && actForm.calcularMetrado
+                    ? norm(mv.unit) : '';
                   // De lo programado arriba, o del presupuesto entero si no
                   // hay nada programado.
                   const candidatas = partidasDelParte.filter(p => cuelgaDe(p, casRuta));
@@ -3502,28 +3529,26 @@ export default function GestionCosteo({
                           <label className="tbl-form-label">
                             {peldanos.length + 1} · Partida
                             {!esIncidencia && <span style={{color:'red'}}> *</span>}
-                            {esIncidencia && uAct && (
+                            {uImpuesta && (
                               <small style={{ color:'#94a3b8', fontWeight:400 }}>
-                                {' '}· solo las que miden en {mv.unit || actForm.unidadMetrado}
+                                {' '}· la fórmula da {mv.unit}, solo las que midan así
                               </small>
                             )}
                           </label>
-                          {/* EN UNA INCIDENCIA la unidad la fija la actividad
-                              elegida, así que las partidas que miden en otra
-                              cosa salen deshabilitadas: imputarles metrado no
-                              sumaría al avance.
-                              EN UNA ACTIVIDAD no hay actividad que la fije —la
-                              unidad la pone la propia partida—, así que
-                              cualquiera vale. */}
+                          {/* Se puede elegir cualquier partida: al elegirla,
+                              su unidad pasa a ser la de la línea. La única
+                              excepción es el metrado por fórmula, donde la
+                              unidad sale de la geometría y no se puede
+                              cambiar. */}
                           <select className="tbl-form-select" value={actForm.partidaId}
                             onChange={e => ponerPartida(e.target.value)}>
                             <option value="">— Elegir —</option>
                             {hojas.map(p => {
-                              const vale = !esIncidencia || !uAct || norm(p.unidad) === uAct;
+                              const vale = !uImpuesta || norm(p.unidad) === uImpuesta;
                               return (
                                 <option key={p.id} value={p.id} disabled={!vale}>
                                   {p.codigo} · {p.descripcion} ({p.unidad})
-                                  {vale ? '' : ` — en ${p.unidad}, no se puede`}
+                                  {vale ? '' : ` — en ${p.unidad}, la fórmula da ${mv.unit}`}
                                 </option>
                               );
                             })}
@@ -3552,10 +3577,15 @@ export default function GestionCosteo({
                             : 'Elige la partida: de ella salen el nombre de esta línea y la unidad con la que se mide.'}
                         </div>
                       )}
-                      {/* Solo puede pasar en una incidencia, y aun ahí casi
-                          nunca: las que no cuadran salen deshabilitadas. Se
-                          queda por si una partida quedó apuntada antes de esa
-                          regla, o si se cambia la actividad tras elegirla. */}
+                      {/* ESTE AVISO ES AHORA LA DEFENSA, no un resto.
+                          Desde el 16/11/2026 las partidas ya no salen
+                          deshabilitadas por su unidad —eso dejaba al
+                          inspector sin ninguna que elegir—, así que el choque
+                          de unidades se avisa aquí en vez de impedirse.
+                          Al elegir una partida su unidad pasa a la línea, de
+                          modo que esto salta solo cuando el metrado viene de
+                          una fórmula que da otra cosa, o cuando se cambia la
+                          actividad después de haber elegido partida. */}
                       {esIncidencia && choca && (
                         <div style={{ marginTop:'8px', fontSize:'11.5px', color:'#b91c1c', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'6px', padding:'7px 9px' }}>
                           Esta línea mide en <b>{mv.unit || actForm.unidadMetrado}</b> y la partida
