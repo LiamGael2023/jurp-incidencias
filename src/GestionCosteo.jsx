@@ -2025,9 +2025,48 @@ export default function GestionCosteo({
           } catch (e) { console.error('No se pudo actualizar disponibilidad de la máquina', e); }
         }
       }
-      Swal.fire({ icon: 'success', title: 'Éxito', text: 'Se guardó correctamente', confirmButtonColor: '#206bc4' });
+      /* GUARDAR YA NO CIERRA LA PANTALLA.
+       *
+       * Antes, al terminar de guardar se llamaba a `cerrarPantalla()` y el
+       * modal desaparecía. Quien estaba cargando el costeo de una incidencia
+       * —mano de obra, materiales, varios partes de maquinaria— tenía que
+       * volver a abrirlo y a bajar hasta donde estaba por cada tanda que
+       * guardaba. El 18/11/2026 lo pidieron explícitamente: que se quede
+       * abierto para seguir editando.
+       *
+       * Cerrar era además la única forma de que lo de fuera se enterara, así
+       * que al quitarlo hay que refrescar a mano las tres cosas que el cierre
+       * refrescaba de rebote:
+       *
+       *   onCambio()              la lista de incidencias de detrás
+       *   cargarCosteosGuardados  lo ya guardado de ESTE sujeto, para que lo
+       *                           recién enviado baje a su sección en vez de
+       *                           quedarse arriba como pendiente
+       *   cargarPartidas()        el presupuesto, porque un parte de
+       *                           maquinaria mueve el metrado ejecutado de su
+       *                           partida y si no se recarga la tabla sigue
+       *                           enseñando el avance anterior
+       *
+       * Ese último es el que más se nota: sin él, guardas un metrado y el
+       * presupuesto de arriba te sigue diciendo el de antes. Parece que no se
+       * guardó.
+       *
+       * El aviso pasa a ser un toast en la esquina en vez de un cuadro con
+       * botón: si la idea es seguir trabajando, no tiene sentido obligar a
+       * descartar un diálogo después de cada guardado. */
+      Swal.fire({
+        icon: 'success',
+        title: 'Se guardó correctamente',
+        toast: true,
+        position: 'top-end',
+        timer: 2500,
+        timerProgressBar: true,
+        showConfirmButton: false,
+      });
       setRecursos([]);
-      cerrarPantalla();
+      if (onCambio) onCambio();
+      if (sujeto) await cargarCosteosGuardados(sujeto.id);
+      await cargarPartidas();
     } catch (error) {
       console.error(error);
       Swal.fire({ icon: 'error', title: 'Error al guardar', text: error.message || 'Hubo un error al guardar en la base de datos.' });
