@@ -33,8 +33,35 @@ const BASE = (import.meta.env?.VITE_API_BASE || 'https://api.192.81.132.87.nip.i
 /** El host, a secas. Para las imágenes y los PDF, que cuelgan de la raíz. */
 export const API_BASE = BASE;
 
-/** Lo que usa casi todo: incidencias, partes, maquinaria, proyectos. */
-export const API_OPS = `${BASE}/api/v1/mobile/operations`;
+/**
+ * Lo que usa casi todo: incidencias, partes, maquinaria, proyectos.
+ *
+ * VA POR RUTA RELATIVA, NO POR HOST. Hasta el 24/11/2026 esto era
+ * `${BASE}/api/v1/mobile/operations`, o sea que el navegador de cada usuario
+ * tenía que resolver y alcanzar `api.192.81.132.87.nip.io` por su cuenta.
+ * Unos podían y otros no: `nip.io` es un DNS comodín que bastantes redes
+ * corporativas y operadores bloquean, y cuando el nombre no resuelve la
+ * petición no llega ni a salir. El navegador no da código de estado, solo
+ * «Failed to fetch», que es lo que veían en Proyectos y en Actividades.
+ *
+ * Ahora sale del MISMO ORIGEN que el front, y el salto al backend lo da el
+ * servidor. Los dos despliegues ya tenían la reescritura puesta:
+ *
+ *   nginx (Linode)   /vigapi/(.*)  →  127.0.0.1:8005/api/v1/$1
+ *   vercel.json      /vigapi/(.*)  →  https://api.192.81.132.87.nip.io/api/v1/$1
+ *
+ * En Vercel se sigue pasando por `nip.io`, pero desde el borde de Vercel, no
+ * desde el navegador del usuario: da igual lo que bloquee su red.
+ *
+ * Con esto desaparecen de golpe tres puntos de fallo que no controlábamos
+ * —que el DNS del usuario resuelva `nip.io`, que su firewall lo deje pasar y
+ * que el certificado de ese nombre siga válido— y además el CORS, porque ya
+ * no hay dos orígenes.
+ *
+ * Comprobado antes de cambiarlo: las dos rutas devuelven byte a byte lo
+ * mismo (`/proyectos/`, 863 bytes, HTTP 200 por ambas).
+ */
+export const API_OPS = '/vigapi/mobile/operations';
 
 /**
  * De dónde salen las fotos y los archivos subidos.

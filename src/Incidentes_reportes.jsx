@@ -10,7 +10,7 @@ import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { API_OPS, API_BASE } from './api';
+import { API_OPS } from './api';
 
 
 // Los modales se cuelgan del <body>, no del árbol de la página.
@@ -176,12 +176,11 @@ function Incidentes() {
   const galeriaSiguiente = () => setGaleriaIndex(i => Math.min(galeriaMedia.length - 1, i + 1));
 
   const cargarCosteosGuardados = async (incidenteId) => {
-    const BASE_URL = API_BASE;
     try {
       const [resPers, resMat, resMaq] = await Promise.all([
-        fetch(`${BASE_URL}/api/v1/mobile/operations/incident-personnels/`),
-        fetch(`${BASE_URL}/api/v1/mobile/operations/incident-materials/`),
-        fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`)
+        fetch(`${API_OPS}/incident-personnels/`),
+        fetch(`${API_OPS}/incident-materials/`),
+        fetch(`${API_OPS}/daily-part-heavy-equipments/`)
       ]);
       const [dataPers, dataMat, dataMaq] = await Promise.all([resPers.json(), resMat.json(), resMaq.json()]);
       const listPers = Array.isArray(dataPers) ? dataPers : (dataPers.results || []);
@@ -412,7 +411,6 @@ function Incidentes() {
     const recursosNuevos = recursos.filter(r => !r.guardadoEnDB);
     if (recursosNuevos.length === 0) return Swal.fire({ icon: 'info', title: 'Todo al día', text: 'No hay recursos nuevos.' });
     setGuardando(true);
-    const BASE_URL = API_BASE;
     const token = localStorage.getItem('userToken'); 
     try {
       for (const r of recursosNuevos) {
@@ -420,17 +418,17 @@ function Incidentes() {
         let formData = new FormData();
         formData.append('incident_report', incidenteActivo.id);
         if (r.tipo === 'Personal') {
-          endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-personnels/`;
+          endpoint = `${API_OPS}/incident-personnels/`;
           formData.append('description', r.descripcionResumen || r.descripcion); 
           formData.append('quantity_hours', r.cantidad);
           formData.append('unit_price', r.precioUnitario);
         } else if (r.tipo === 'Insumo') {
-          endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-materials/`;
+          endpoint = `${API_OPS}/incident-materials/`;
           formData.append('description', r.descripcion);
           formData.append('quantity', r.cantidad);
           formData.append('unit_price', r.precioUnitario);
         } else if (r.tipo === 'Maquinaria') {
-          endpoint = `${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`;
+          endpoint = `${API_OPS}/daily-part-heavy-equipments/`;
           formData.append('part_number', r.numeroParte); formData.append('date', r.fechaParte);
           formData.append('shift', r.turno); formData.append('work_zone_text', r.zonaTrabajo);
           formData.append('provider', r.proveedor); formData.append('operator', r.operador);

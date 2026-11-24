@@ -35,7 +35,7 @@ import refAltura from './assets/ref_altura.png';
 import refAncho from './assets/ref_ancho.png';
 import MantenedorEquipos from './MantenedorEquipos';
 import VisorImagen from './VisorImagen';
-import { API_OPS, API_BASE } from './api';
+import { API_OPS } from './api';
 import { rutaDe, cuelgaDe, bajarSolo } from './arbolPartidas';
 import EscaleraPartida from './SelectorPartida';
 import FormaPartida from './FormaPartida';
@@ -710,12 +710,11 @@ export default function GestionCosteo({
    * unidades sin mandar nada al servidor. Se quitó. El catálogo se mantiene
    * en Proyectos → Unidades, y desde allí sí se guarda. */
   const cargarCosteosGuardados = async (incidenteId) => {
-    const BASE_URL = API_BASE;
     try {
       const [resPers, resMat, resMaq] = await Promise.all([
-        fetch(`${BASE_URL}/api/v1/mobile/operations/incident-personnels/`),
-        fetch(`${BASE_URL}/api/v1/mobile/operations/incident-materials/`),
-        fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`)
+        fetch(`${API_OPS}/incident-personnels/`),
+        fetch(`${API_OPS}/incident-materials/`),
+        fetch(`${API_OPS}/daily-part-heavy-equipments/`)
       ]);
       const [dataPers, dataMat, dataMaq] = await Promise.all([resPers.json(), resMat.json(), resMaq.json()]);
       const listPers = Array.isArray(dataPers) ? dataPers : (dataPers.results || []);
@@ -833,10 +832,9 @@ export default function GestionCosteo({
       confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar',
     });
     if (!conf.isConfirmed) return;
-    const BASE_URL = API_BASE;
     try {
       const resultados = await Promise.all(registros.map(reg =>
-        fetch(`${BASE_URL}/api/v1/mobile/operations/${reg.endpoint}/${reg.dbId}/`, { method: 'DELETE' })
+        fetch(`${API_OPS}/${reg.endpoint}/${reg.dbId}/`, { method: 'DELETE' })
       ));
       const okAll = resultados.every(r => r.ok || r.status === 204);
       if (okAll) {
@@ -863,9 +861,8 @@ export default function GestionCosteo({
       confirmButtonText: 'Sí, finalizar', cancelButtonText: 'Cancelar',
     });
     if (!conf.isConfirmed) return;
-    const BASE_URL = API_BASE;
     try {
-      const r = await fetch(`${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/${fila.dbId}/cerrar/`, { method: 'POST' });
+      const r = await fetch(`${API_OPS}/daily-part-heavy-equipments/${fila.dbId}/cerrar/`, { method: 'POST' });
       if (r.ok) {
         if (sujeto) cargarCosteosGuardados(sujeto.id);
         setNuevoRecurso(prev => {
@@ -1929,7 +1926,6 @@ export default function GestionCosteo({
     const recursosNuevos = recursos.filter(r => !r.guardadoEnDB && !r.esBorrador);
     if (recursosNuevos.length === 0) return Swal.fire({ icon: 'info', title: 'Todo al día', text: 'No hay recursos nuevos por guardar.' });
     setGuardando(true);
-    const BASE_URL = API_BASE;
     const token = localStorage.getItem('userToken'); 
     try {
       for (const r of recursosNuevos) {
@@ -1938,7 +1934,7 @@ export default function GestionCosteo({
         // El unico sitio donde se escribe de que cuelga la linea.
         formData.append(campoVinculo, sujeto.id);
         if (r.tipo === 'Personal') {
-          endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-personnels/`;
+          endpoint = `${API_OPS}/incident-personnels/`;
           if (r.fechaRecurso) formData.append('date', r.fechaRecurso);
           formData.append('description', r.descripcionResumen || r.descripcion); 
           formData.append('quantity_hours', r.cantidad);
@@ -1952,7 +1948,7 @@ export default function GestionCosteo({
           // ForeignKey en vez de dejarlo en NULL.
           if (r.partidaId) formData.append('partida', r.partidaId);
         } else if (r.tipo === 'Insumo') {
-          endpoint = `${BASE_URL}/api/v1/mobile/operations/incident-materials/`;
+          endpoint = `${API_OPS}/incident-materials/`;
           if (r.fechaRecurso) formData.append('date', r.fechaRecurso);
           formData.append('description', r.descripcion);
           formData.append('quantity', r.cantidad);
@@ -1960,7 +1956,7 @@ export default function GestionCosteo({
           formData.append('unit', r.unidad || 'und');
           if (r.partidaId) formData.append('partida', r.partidaId);
         } else if (r.tipo === 'Maquinaria') {
-          endpoint = `${BASE_URL}/api/v1/mobile/operations/daily-part-heavy-equipments/`;
+          endpoint = `${API_OPS}/daily-part-heavy-equipments/`;
           formData.append('part_number', r.numeroParte); formData.append('date', /^\d{4}-\d{2}-\d{2}$/.test(r.fechaParte) ? r.fechaParte : getFechaHoy());
           formData.append('shift', r.turno); formData.append('work_zone_text', r.zonaTrabajo);
           formData.append('provider', r.proveedor); formData.append('operator', r.operador);
@@ -2017,7 +2013,7 @@ export default function GestionCosteo({
         }
         if (r.tipo === 'Maquinaria' && r.modeloId) {
           try {
-            await fetch(`${BASE_URL}/api/v1/mobile/operations/modelos/${r.modeloId}/`, {
+            await fetch(`${API_OPS}/modelos/${r.modeloId}/`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ estado: 1 }),
