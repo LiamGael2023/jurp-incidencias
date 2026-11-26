@@ -220,12 +220,24 @@ const GRUPOS_CONTEXTO = [
     titulo: 'Chavimochic — hidrografía',
     contexto: true,
     capas: [
-      { codigo: 'cuencas_pech',      label: 'Cuencas',           color: '#38d9a9', tipo: 'poly', weight: 2.5 },
+      /* SOLO CONTORNO, BLANCO Y FINO.
+       *
+       * Una cuenca ocupa media pantalla, así que cualquier relleno suyo
+       * tiñe todo lo que hay debajo —que es justo el terreno que se está
+       * mirando—. En blanco y a 0,7 px hace lo único que tiene que hacer:
+       * decir dónde acaba una y empieza la otra, sin competir con nada.
+       *
+       * `continua` hace falta porque la capa es del PECH y el estilo de
+       * contexto la pondría a rayas: una línea de 0,7 px discontinua no se
+       * lee como un límite, se lee como suciedad. */
+      { codigo: 'cuencas_pech',      label: 'Cuencas',           color: '#ffffff', tipo: 'poly', weight: 0.7,
+        sinRelleno: true, continua: true, opacidad: 0.85, rotulo: ['nombre', 'cuenca', 'nom_cuenca', 'nombcuenca'] },
       /* Once mil líneas. Van simplificadas a 5 m en la propia base —por
          debajo del grosor con que se dibujan— porque venían trazadas píxel
          a píxel del modelo de elevación. Aun así es la capa más pesada del
          visor: enciéndela cuando la necesites. */
-      { codigo: 'cauces_quebradas',  label: 'Cauces de quebrada', color: '#4dabf7', tipo: 'line', weight: 2 },
+      { codigo: 'cauces_quebradas',  label: 'Cauces de quebrada', color: '#4dabf7', tipo: 'line', weight: 0.8,
+        continua: true, opacidad: 0.55 },
     ],
   },
 ];
@@ -1361,11 +1373,19 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                     ? (capa.weight || 3) * grueso
                     : capa.weight ? capa.weight * grueso
                     : (porSector ? (impresion ? 2.6 : 2) : (impresion ? 2.2 : 1.2)),
-                  opacity: (esPech && !porSector) ? (impresion ? 0.8 : 0.5) : 0.95,
+                  /* `opacidad` manda sobre el valor de contexto: una capa
+                   * puede querer verse tenue sin heredar el resto del
+                   * tratamiento de «esto es del PECH». */
+                  opacity: capa.opacidad != null ? capa.opacidad
+                    : (esPech && !porSector) ? (impresion ? 0.8 : 0.5) : 0.95,
                   // Un sector con color propio NO va punteado aunque sea del
                   // PECH: el guion lo decia "esto es contexto", y aqui el
                   // sector es justo lo que se quiere leer.
-                  dashArray: (esPech && !porSector) ? '6 4' : (capa.dash || null),
+                  // `continua` gana al rayado de contexto: hay capas del
+                  // PECH que son un límite o un cauce y tienen que leerse
+                  // como una línea, no como un apunte.
+                  dashArray: capa.continua ? null
+                    : (esPech && !porSector) ? '6 4' : (capa.dash || null),
                   fillColor: tono,
                   // Las áreas van casi sin relleno: son el suelo sobre el que
                   // se leen los canales, no la información principal. Con
@@ -1387,7 +1407,7 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                    * El verde y el naranja de la licencia siguen
                    * distinguiéndose: a 0.12 el tono se reconoce, y el borde
                    * -que no se toca- lo remata. */
-                  fillOpacity: capa.tipo !== 'poly' ? 0
+                  fillOpacity: (capa.tipo !== 'poly' || capa.sinRelleno) ? 0
                     : licencias ? (impresion ? 0.12 : 0.09)
                     : porSector ? (impresion ? 0.26 : 0.20)
                     : (impresion ? (esPech ? 0.10 : 0.16) : (esPech ? 0.04 : 0.08)),
@@ -1407,11 +1427,23 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                     + '</span>'
                   : '';
                 /* El nombre del rótulo sale del reparto por sector o, si la
-                 * capa declara `rotulo`, del campo que diga. Un lote sin
-                 * nombre se queda sin etiqueta en vez de pintar «null». */
+                 * capa declara `rotulo`, del campo que diga.
+                 *
+                 * `rotulo` admite una LISTA porque cada capa viene de un
+                 * shapefile distinto y nadie se puso de acuerdo en cómo
+                 * llamar a la columna del nombre: en una es `nombre`, en
+                 * otra `cuenca`, en otra `nom_cuenca`. Se prueba por orden
+                 * y gana el primero que traiga algo. Así la capa no deja de
+                 * rotularse el día que cambie el origen del dato.
+                 *
+                 * Sin nombre no hay etiqueta, en vez de pintar «null». */
+                const campos = capa.rotulo
+                  ? (Array.isArray(capa.rotulo) ? capa.rotulo : [capa.rotulo])
+                  : [];
                 const nombre = porSector
                   ? porSector.nombre(f)
-                  : (capa.rotulo ? (p[capa.rotulo] || null) : null);
+                  : (campos.map(k => p[k]).find(v => v != null && v !== '')
+                     || null);
                 // La licencia, con todas las letras: el color la cuenta de un
                 // vistazo, pero quien abre el globo quiere leerla.
                 const lic = licencias
