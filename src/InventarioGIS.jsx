@@ -1373,8 +1373,23 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                   // Con color propio el relleno sube un poco: es lo que
                   // separa un sector del de al lado. Sigue siendo tenue, que
                   // debajo hay imagen satelital que no se debe tapar.
+                  /* LOS LOTES, CASI TRANSPARENTES; LOS SECTORES, NO.
+                   *
+                   * Los dos se colorean por un criterio —licencia uno,
+                   * reparto el otro— y por eso compartían relleno. Pero
+                   * hacen cosas distintas: un sector es una mancha que se
+                   * lee de lejos y su color ES la información; un lote se
+                   * lee por su contorno y su nombre, y son doscientos
+                   * pegados unos a otros. Con el relleno de sector, esos
+                   * doscientos suman una capa continua que tapa la imagen
+                   * satelital justo donde hace falta verla.
+                   *
+                   * El verde y el naranja de la licencia siguen
+                   * distinguiéndose: a 0.12 el tono se reconoce, y el borde
+                   * -que no se toca- lo remata. */
                   fillOpacity: capa.tipo !== 'poly' ? 0
-                    : (porSector || licencias) ? (impresion ? 0.26 : 0.20)
+                    : licencias ? (impresion ? 0.12 : 0.09)
+                    : porSector ? (impresion ? 0.26 : 0.20)
                     : (impresion ? (esPech ? 0.10 : 0.16) : (esPech ? 0.04 : 0.08)),
                 };
               }}
