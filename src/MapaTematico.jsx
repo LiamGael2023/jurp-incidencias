@@ -10,6 +10,8 @@ import {
 import { TeselasBase, SelectorBase, capaBase, puedeExportar, alternativaExportable,
          CAPA_POR_DEFECTO } from './capasBase';
 import { useInventario, CapasInventario, GRUPOS_CAPAS, TODAS_LAS_CAPAS } from './InventarioGIS';
+import AjusteCapa from './AjusteCapa';
+import { useAjustesCapas, hayAjustes, restablecerTodo } from './estiloCapas';
 import {
   latLngToUTM, utmTexto, zonaDe, cuadriculaUTM, barraEscala, numeroLamina,
   zoomParaEscala, escalaDeZoom, terrenoDeLamina, cabeEnLamina, distanciaMetros,
@@ -749,6 +751,12 @@ function BuscadorLamina({ inv, onCentrar }) {
 
 function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, RailGIS }) {
   const inv = useInventario();
+
+  /* Para que la lista se entere de los ajustes: la rueda dentada se marca
+   * cuando la capa tiene algo tocado, y «Restablecer todo» aparece y
+   * desaparece. Sin esto los cambios se verían en el mapa pero no en el
+   * panel que los hizo. */
+  useAjustesCapas();
 
   // Google, la misma que PLUVIRA. Ver más arriba por qué no se abre con una
   // capa exportable, que es lo que haría falta para el PDF.
@@ -1547,17 +1555,35 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
             </button>
           </div>
 
+          {/* Solo aparece cuando hay algo que deshacer. Un botón de
+              «restablecer» permanente invita a pulsarlo por curiosidad, y
+              aquí eso significa perder los ajustes de toda la sesión. */}
+          {hayAjustes() && (
+            <div className="lam-capas-todas lam-capas-reset">
+              <span>Hay estilos ajustados por ti</span>
+              <button type="button" onClick={restablecerTodo}>
+                Restablecer todo
+              </button>
+            </div>
+          )}
+
           <div className="lam-capas">
             {GRUPOS_CAPAS.map(g => (
               <div key={g.titulo} className="lam-capas-grupo">
                 <div className="lam-capas-tit">{g.titulo}</div>
                 {g.capas.map(c => (
                   <div key={c.codigo}>
-                    <label className="lam-capa">
-                      <input type="checkbox" checked={!!inv.visibles[c.codigo]}
-                        onChange={() => inv.alternarCapa(c.codigo)} />
-                      <Simbolo capa={c} />{c.label}
-                    </label>
+                    <div className="lam-capa-fila">
+                      <label className="lam-capa">
+                        <input type="checkbox" checked={!!inv.visibles[c.codigo]}
+                          onChange={() => inv.alternarCapa(c.codigo)} />
+                        <Simbolo capa={c} />{c.label}
+                      </label>
+                      {/* Los ajustes solo de lo que se está viendo: con 41
+                          capas, una rueda dentada por fila en todas es ruido
+                          sobre cuarenta filas que nadie va a tocar. */}
+                      {inv.visibles[c.codigo] && <AjusteCapa capa={c} />}
+                    </div>
 
                     {/* «Sectores PECH» es una capa con varios polígonos y
                         cada uno sale con su color en la lámina. Con una sola

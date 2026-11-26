@@ -178,6 +178,73 @@
   border: 1px solid rgba(255,255,255,.14); border-radius: 5px; cursor: pointer; }
 .lam-capas-todas button:hover { background: rgba(255,255,255,.13); }
 
+/* Aviso de que hay estilos tocados a mano. En ámbar y no en el azul del
+   resto: no es un control más, es un estado del que conviene acordarse
+   antes de exportar una lámina que no se parece a la de los demás. */
+.lam-capas-reset { color: #e8b339; border-bottom-color: rgba(232,179,57,.25); }
+.lam-capas-reset button { color: #e8b339; border-color: rgba(232,179,57,.35); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   AJUSTES DE UNA CAPA
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* La fila completa: la casilla a la izquierda y la rueda a la derecha.
+   La rueda solo aparece en las capas encendidas, así que el hueco de la
+   derecha queda vacío en la mayoría de filas y no hay que reservarlo. */
+.lam-capa-fila { display: flex; align-items: center; gap: 6px; }
+.lam-capa-fila > .lam-capa { flex: 1; min-width: 0; }
+
+.aj-raiz { position: relative; display: inline-flex; flex: 0 0 auto; }
+.aj-boton { display: grid; place-items: center; width: 20px; height: 20px;
+  padding: 0; font-size: 10px; color: #6b8ca5; background: none;
+  border: 1px solid transparent; border-radius: 4px; cursor: pointer; }
+.aj-boton:hover { color: #cbd5e1; background: rgba(255,255,255,.08); }
+/* Ámbar cuando esta capa tiene algo tuyo: se ve de un vistazo cuáles has
+   tocado sin abrir una por una. */
+.aj-boton-on { color: #e8b339; border-color: rgba(232,179,57,.35); }
+
+/* El panel se ancla a la derecha de la rueda y se sale del carril, que es
+   estrecho. z-index alto porque el carril tiene el suyo propio. */
+.aj-panel { position: absolute; top: 22px; right: 0; z-index: 1200;
+  width: 232px; padding: 10px; background: #15212e;
+  border: 1px solid rgba(255,255,255,.14); border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0,0,0,.5); cursor: default; }
+.aj-cab { display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-bottom: 8px; padding-bottom: 7px; font-size: 11.5px;
+  color: #e2e8f0; border-bottom: 1px solid rgba(255,255,255,.1); }
+.aj-cerrar { padding: 0; font-size: 11px; color: #6b8ca5; background: none;
+  border: 0; cursor: pointer; }
+.aj-cerrar:hover { color: #cbd5e1; }
+
+.aj-fila { display: grid; grid-template-columns: 54px 1fr 20px;
+  align-items: center; gap: 6px; margin-bottom: 6px; }
+.aj-eti { font-size: 10.5px; color: #7ba7c7; }
+.aj-ctl { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.aj-ctl input[type="range"] { flex: 1; min-width: 0; accent-color: #4dabf7; }
+.aj-ctl input[type="color"] { width: 30px; height: 20px; padding: 0;
+  background: none; border: 1px solid rgba(255,255,255,.2);
+  border-radius: 4px; cursor: pointer; }
+.aj-ctl em { flex: 0 0 34px; font-style: normal; font-size: 10px;
+  color: #a8c6da; text-align: right; font-variant-numeric: tabular-nums; }
+/* El nombre del campo se enciende cuando lo has tocado: así se distingue
+   «lo puse yo así» de «es lo que trae». */
+.aj-tocado .aj-eti { color: #e8b339; }
+
+.aj-soltar { display: grid; place-items: center; width: 20px; height: 20px;
+  padding: 0; font-size: 9px; color: #6b8ca5; background: none; border: 0;
+  border-radius: 4px; cursor: pointer; }
+.aj-soltar:hover:not(:disabled) { color: #e8b339; background: rgba(255,255,255,.08); }
+.aj-soltar:disabled { opacity: .18; cursor: default; }
+
+.aj-pie { margin-top: 9px; padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,.1); }
+.aj-pie button { width: 100%; padding: 5px; font-size: 10.5px; font-weight: 700;
+  font-family: inherit; color: #a8c6da; background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.14); border-radius: 5px; cursor: pointer; }
+.aj-pie button:hover:not(:disabled) { background: rgba(255,255,255,.13); }
+.aj-pie button:disabled { opacity: .35; cursor: default; }
+.aj-nota { margin-top: 7px; font-size: 9.5px; color: #5c7891; text-align: center; }
+
 .lam-capa { display: flex !important; align-items: center; gap: 7px; margin-bottom: 3px;
   text-transform: none !important; letter-spacing: 0 !important; font-size: 12px !important;
   color: #cbd5e1 !important; cursor: pointer; }

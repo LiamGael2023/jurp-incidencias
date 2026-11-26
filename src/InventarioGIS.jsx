@@ -19,6 +19,7 @@ import VisorImagen from './VisorImagen';
 import Swal from 'sweetalert2';
 import { latLngToUTM, primerLatLng } from './cartografia';
 import { datosDeCapa, filtroDeSectores } from './sectores';
+import { conAjustes, rotuloAjustado, useAjustesCapas } from './estiloCapas';
 import { codcatsConLicencia, colorLote, tieneLicencia, textoLicencia,
          CAPA_LICENCIAS, COLOR_CON_LICENCIA, COLOR_SIN_LICENCIA } from './lotes';
 import './InventarioGIS.css';
@@ -1171,6 +1172,29 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
    * pantalla. Lo gobierna la propia capa, no un efecto de React: el primer
    * intento recorria el mapa desde un useEffect y salia siempre a cero,
    * porque ese efecto corre antes de que las capas lleguen a anadirse. */
+  /* LAS CAPAS VECTORIALES QUE HAY AHORA MISMO EN EL MAPA.
+   *
+   * Se guardan para repintarlas cuando el usuario ajusta un estilo, sin
+   * reconstruirlas: ver el `ref` de cada <GeoJSON> más abajo. */
+  const vivas = useRef(new Map());
+  const verAjustes = useAjustesCapas();
+
+  useEffect(() => {
+    /* `setStyle` acepta la misma función que usa el componente, así que
+     * aquí no se recalcula nada: se vuelve a pasar por las geometrías ya
+     * construidas aplicando lo que el usuario acabe de tocar.
+     *
+     * El rótulo no entra aquí. Encenderlo o apagarlo sí obliga a rehacer
+     * la capa —el tooltip se ata en `onEachFeature`, que no vuelve a
+     * correr—, pero es algo que se hace una vez y no arrastrando un
+     * deslizador, así que el parón de rehacerla no molesta. */
+    for (const { capa, estilo } of vivas.current.values()) {
+      if (capa?.setStyle) {
+        try { capa.setStyle(estilo); } catch { /* capa a medio montar */ }
+      }
+    }
+  }, [verAjustes]);
+
   const ajustarRotulo = useCallback((layer) => {
     const tt = layer.getTooltip?.();
     const b = layer.getBounds?.();
@@ -1331,88 +1355,123 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
           if (!fcPintar.features.length) return null;
           // Verde o naranja según tenga licencia de agua.
           const licencias = capa.porLicencia ? conLicencia : null;
+          /* EL ESTILO, COMO FUNCION CON NOMBRE.
+           *
+           * Lo necesitan dos sitios: el componente al montar, y
+           * `setStyle` cuando el usuario mueve un deslizador del panel
+           * de ajustes. Si se dejara en linea habria que duplicarlo, y
+           * dos copias de setenta lineas de estilo es garantizar que un
+           * dia dejan de parecerse.
+           */
+          const estiloBase = (f) => {
+            const tono = (porSector && porSector.color(f))
+              || (licencias && colorLote(f, licencias, capa.color))
+              || capa.color;
+            // Las obras del PECH van más tenues: son contexto.
+            const esPech = (f?.properties?.ambito) === 'PECH';
+            /*
+             * El papel no perdona lo que la pantalla sí.
+             *
+             * En un monitor, un polígono con 4 % de relleno y un borde de
+             * 1.2 px se ve: la pantalla ilumina y el ojo lo encuentra. Al
+             * imprimirlo a A1 sobre imagen satelital, ese mismo polígono
+             * desaparece —y con él el límite del sector, que es media
+             * razón de ser de la lámina—. Lo mismo con las líneas de
+             * contexto, que al 50 % y punteadas se confunden con un camino
+             * de la foto.
+             *
+             * Así que para imprimir se sube el trazo y se le da borde
+             * franco a las áreas, sin llegar a tapar la imagen: el relleno
+             * sigue siendo tenue, lo que manda es el contorno.
+             */
+            const grueso = impresion ? 1.6 : 1;
+            return {
+              color: tono,
+              // El grosor es la otra mitad de la jerarquía: el troncal
+              // pesa, las ramas adelgazan. Sin esto, cuatro pasos de
+              // azul no se distinguen de un vistazo.
+              // Un área puede pedir su propio grosor, igual que una
+              // línea. Hace falta para las cuencas: son del PECH, así
+              // que van punteadas y a media opacidad, y con el 1,2 de
+              // por defecto el contorno se perdía sobre el satélite.
+              weight: capa.tipo === 'line'
+                ? (capa.weight || 3) * grueso
+                : capa.weight ? capa.weight * grueso
+                : (porSector ? (impresion ? 2.6 : 2) : (impresion ? 2.2 : 1.2)),
+              /* `opacidad` manda sobre el valor de contexto: una capa
+               * puede querer verse tenue sin heredar el resto del
+               * tratamiento de «esto es del PECH». */
+              opacity: capa.opacidad != null ? capa.opacidad
+                : (esPech && !porSector) ? (impresion ? 0.8 : 0.5) : 0.95,
+              // Un sector con color propio NO va punteado aunque sea del
+              // PECH: el guion lo decia "esto es contexto", y aqui el
+              // sector es justo lo que se quiere leer.
+              // `continua` gana al rayado de contexto: hay capas del
+              // PECH que son un límite o un cauce y tienen que leerse
+              // como una línea, no como un apunte.
+              dashArray: capa.continua ? null
+                : (esPech && !porSector) ? '6 4' : (capa.dash || null),
+              fillColor: tono,
+              // Las áreas van casi sin relleno: son el suelo sobre el que
+              // se leen los canales, no la información principal. Con
+              // relleno fuerte tapaban la imagen satelital entera.
+              // Con color propio el relleno sube un poco: es lo que
+              // separa un sector del de al lado. Sigue siendo tenue, que
+              // debajo hay imagen satelital que no se debe tapar.
+              /* LOS LOTES, CASI TRANSPARENTES; LOS SECTORES, NO.
+               *
+               * Los dos se colorean por un criterio —licencia uno,
+               * reparto el otro— y por eso compartían relleno. Pero
+               * hacen cosas distintas: un sector es una mancha que se
+               * lee de lejos y su color ES la información; un lote se
+               * lee por su contorno y su nombre, y son doscientos
+               * pegados unos a otros. Con el relleno de sector, esos
+               * doscientos suman una capa continua que tapa la imagen
+               * satelital justo donde hace falta verla.
+               *
+               * El verde y el naranja de la licencia siguen
+               * distinguiéndose: a 0.12 el tono se reconoce, y el borde
+               * -que no se toca- lo remata. */
+              fillOpacity: (capa.tipo !== 'poly' || capa.sinRelleno) ? 0
+                : licencias ? (impresion ? 0.12 : 0.09)
+                : porSector ? (impresion ? 0.26 : 0.20)
+                : (impresion ? (esPech ? 0.10 : 0.16) : (esPech ? 0.04 : 0.08)),
+            };
+          };
+          // Lo que el usuario haya ajustado va ENCIMA de lo calculado,
+          // campo a campo. Ver estiloCapas.js.
+          const estilo = (f) => conAjustes(capa.codigo, estiloBase(f));
+
           return (
             <GeoJSON
+              /* SE GUARDA LA CAPA VIVA PARA PODER REPINTARLA.
+               *
+               * Sin esto, cambiar un color obligaria a rehacer el
+               * <GeoJSON>, y rehacerlo significa volver a parsear el
+               * GeoJSON entero. `cuencas_pech` son cuatro megas: cada
+               * movimiento del deslizador congelaria la pestaña medio
+               * segundo. Con la capa a mano basta un `setStyle`, que
+               * recorre las geometrias ya construidas. */
+              ref={(l) => {
+                if (l) vivas.current.set(capa.codigo, { capa: l, estilo });
+                else vivas.current.delete(capa.codigo);
+              }}
               // El rótulo se ata al crear la capa, y onEachFeature no se
               // vuelve a ejecutar: la clave lleva el estado para que Leaflet
               // la rehaga al cruzar el zoom.
-              key={`inv-${capa.codigo}-${fcPintar.features.length}`}
+              /* La clave lleva el estado del RÓTULO, no el del estilo.
+               *
+               * Cambiar la clave rehace la capa, y rehacerla cuesta
+               * reparsear el GeoJSON. El color y el grosor no pasan por
+               * aquí: se aplican con `setStyle` sobre la capa viva.
+               *
+               * El rótulo sí, porque se ata en `onEachFeature` y eso no
+               * vuelve a ejecutarse. Es un interruptor que se toca una vez,
+               * no un deslizador, así que el parón es asumible. */
+              key={`inv-${capa.codigo}-${fcPintar.features.length}`
+                + `-${rotuloAjustado(capa.codigo) ?? 'def'}`}
               data={fcPintar}
-              style={(f) => {
-                const tono = (porSector && porSector.color(f))
-                  || (licencias && colorLote(f, licencias, capa.color))
-                  || capa.color;
-                // Las obras del PECH van más tenues: son contexto.
-                const esPech = (f?.properties?.ambito) === 'PECH';
-                /*
-                 * El papel no perdona lo que la pantalla sí.
-                 *
-                 * En un monitor, un polígono con 4 % de relleno y un borde de
-                 * 1.2 px se ve: la pantalla ilumina y el ojo lo encuentra. Al
-                 * imprimirlo a A1 sobre imagen satelital, ese mismo polígono
-                 * desaparece —y con él el límite del sector, que es media
-                 * razón de ser de la lámina—. Lo mismo con las líneas de
-                 * contexto, que al 50 % y punteadas se confunden con un camino
-                 * de la foto.
-                 *
-                 * Así que para imprimir se sube el trazo y se le da borde
-                 * franco a las áreas, sin llegar a tapar la imagen: el relleno
-                 * sigue siendo tenue, lo que manda es el contorno.
-                 */
-                const grueso = impresion ? 1.6 : 1;
-                return {
-                  color: tono,
-                  // El grosor es la otra mitad de la jerarquía: el troncal
-                  // pesa, las ramas adelgazan. Sin esto, cuatro pasos de
-                  // azul no se distinguen de un vistazo.
-                  // Un área puede pedir su propio grosor, igual que una
-                  // línea. Hace falta para las cuencas: son del PECH, así
-                  // que van punteadas y a media opacidad, y con el 1,2 de
-                  // por defecto el contorno se perdía sobre el satélite.
-                  weight: capa.tipo === 'line'
-                    ? (capa.weight || 3) * grueso
-                    : capa.weight ? capa.weight * grueso
-                    : (porSector ? (impresion ? 2.6 : 2) : (impresion ? 2.2 : 1.2)),
-                  /* `opacidad` manda sobre el valor de contexto: una capa
-                   * puede querer verse tenue sin heredar el resto del
-                   * tratamiento de «esto es del PECH». */
-                  opacity: capa.opacidad != null ? capa.opacidad
-                    : (esPech && !porSector) ? (impresion ? 0.8 : 0.5) : 0.95,
-                  // Un sector con color propio NO va punteado aunque sea del
-                  // PECH: el guion lo decia "esto es contexto", y aqui el
-                  // sector es justo lo que se quiere leer.
-                  // `continua` gana al rayado de contexto: hay capas del
-                  // PECH que son un límite o un cauce y tienen que leerse
-                  // como una línea, no como un apunte.
-                  dashArray: capa.continua ? null
-                    : (esPech && !porSector) ? '6 4' : (capa.dash || null),
-                  fillColor: tono,
-                  // Las áreas van casi sin relleno: son el suelo sobre el que
-                  // se leen los canales, no la información principal. Con
-                  // relleno fuerte tapaban la imagen satelital entera.
-                  // Con color propio el relleno sube un poco: es lo que
-                  // separa un sector del de al lado. Sigue siendo tenue, que
-                  // debajo hay imagen satelital que no se debe tapar.
-                  /* LOS LOTES, CASI TRANSPARENTES; LOS SECTORES, NO.
-                   *
-                   * Los dos se colorean por un criterio —licencia uno,
-                   * reparto el otro— y por eso compartían relleno. Pero
-                   * hacen cosas distintas: un sector es una mancha que se
-                   * lee de lejos y su color ES la información; un lote se
-                   * lee por su contorno y su nombre, y son doscientos
-                   * pegados unos a otros. Con el relleno de sector, esos
-                   * doscientos suman una capa continua que tapa la imagen
-                   * satelital justo donde hace falta verla.
-                   *
-                   * El verde y el naranja de la licencia siguen
-                   * distinguiéndose: a 0.12 el tono se reconoce, y el borde
-                   * -que no se toca- lo remata. */
-                  fillOpacity: (capa.tipo !== 'poly' || capa.sinRelleno) ? 0
-                    : licencias ? (impresion ? 0.12 : 0.09)
-                    : porSector ? (impresion ? 0.26 : 0.20)
-                    : (impresion ? (esPech ? 0.10 : 0.16) : (esPech ? 0.04 : 0.08)),
-                };
-              }}
+              style={estilo}
               onEachFeature={(f, layer) => {
                 const p = f.properties || {};
                 const filas = Object.entries(p)
@@ -1437,8 +1496,14 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                  * rotularse el día que cambie el origen del dato.
                  *
                  * Sin nombre no hay etiqueta, en vez de pintar «null». */
-                const campos = capa.rotulo
-                  ? (Array.isArray(capa.rotulo) ? capa.rotulo : [capa.rotulo])
+                /* El usuario manda sobre si la capa se rotula o no. Si no
+                 * ha dicho nada —`undefined`— vale lo del código. */
+                const quiereRotulo = rotuloAjustado(capa.codigo);
+                const pedido = quiereRotulo === undefined ? capa.rotulo
+                  : quiereRotulo ? (capa.rotulo || 'nombre')
+                  : null;
+                const campos = pedido
+                  ? (Array.isArray(pedido) ? pedido : [pedido])
                   : [];
                 const nombre = porSector
                   ? porSector.nombre(f)
