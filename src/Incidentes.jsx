@@ -32,6 +32,7 @@ import GestionCosteo from './GestionCosteo';
 import VisorImagen from './VisorImagen';
 import { API_OPS } from './api';
 import { pedir } from './sesion';
+import { loQuePuedo } from './permisos';
 import RegistrarAvance from './RegistrarAvance';
 // ── Imágenes de referencia metrado por actividad ─────────────────────────────
 
@@ -78,6 +79,11 @@ const Portal = ({ children }) => createPortal(children, document.body);
  */
 function Incidentes({ incidenteAbrir, onIncidenteAbierto, fuente = 'incidentes' }) {
   const esHallazgos = fuente === 'hallazgos';
+
+  /* LA MISMA PANTALLA SIRVE A DOS ENTRADAS DEL MENU, y cada una tiene sus
+   * permisos: 'lista' para Incidentes y 'hallazgos' para los recorridos.
+   * Quien puede borrar en una no tiene por qué poder en la otra. */
+  const permiso = loQuePuedo(esHallazgos ? 'hallazgos' : 'lista');
   const [incidentes, setIncidentes] = useState([]);
   /* id de incidente → de dónde salió. Lo manda monitoreo/hallazgos/, que no
    * repite el incidente -ese ya lo sirve hi-incidents/- sino el contexto que
@@ -499,6 +505,76 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto, fuente = 'incidentes' 
         aviso ? 'warning' : 'success');
 
       await cargarHallazgos();
+      await obtenerIncidentes();
+    } catch (e) {
+      Swal.fire('No se pudo borrar', String(e), 'error');
+    }
+  };
+
+  /* Borrar un incidente de la lista.
+   *
+   * ──────────────────────────────────────────────────────────────────
+   * NO BORRA LA FILA: LA MARCA
+   * ──────────────────────────────────────────────────────────────────
+   *
+   * El modelo del servidor ya traía `is_deleted` y TODAS sus consultas
+   * filtran por él —el propio 404 dice «no encontrado o eliminado»—,
+   * pero no existía forma de activarlo desde fuera. Esto es ese
+   * interruptor que faltaba, no un borrado nuevo.
+   *
+   * Y la diferencia importa, porque un incidente no está solo. Sus
+   * costeos y sus partes diarios viven en OTRA base de datos, la de
+   * operations, y le apuntan por id. Borrar la fila de verdad los
+   * dejaría señalando al vacío: no fallaría nada en ese momento, y el
+   * día que alguien sacara un reporte le saldrían importes sin dueño.
+   * Marcándolo, la fila sigue donde estaba y las referencias siguen
+   * resolviendo.
+   *
+   * Para quien mira la pantalla el efecto es el que pidió: desaparece.
+   * La diferencia es que esto se deshace y lo otro no.
+   */
+  const borrarIncidente = async (inc) => {
+    const r = await Swal.fire({
+      icon: 'warning',
+      title: '¿Borrar este incidente?',
+      html: `<b>${inc.codigoIncidente || 'Incidente'}</b>`
+        + `<div style="margin:6px 0 14px;color:#5b6b7f">${inc.tipo || ''}`
+        + `${inc.lugar ? ` · ${inc.lugar}` : ''}</div>`
+        + 'Dejará de aparecer en la lista y en los reportes.<br><br>'
+        + 'Sus <b>costeos y partes diarios se conservan</b>, así que no se'
+        + ' pierde nada de lo valorizado. Un administrador de base de datos'
+        + ' puede recuperarlo si hiciera falta.',
+      showCancelButton: true,
+      focusCancel: true,
+      confirmButtonText: 'Borrar incidente',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#d63939',
+    });
+    if (!r.isConfirmed) return;
+
+    try {
+      const token = localStorage.getItem('userToken');
+      const res = await fetch(`/api/v1/mobile/hi-incidents/${inc.id}/`,
+        { method: 'DELETE', headers: { Authorization: `Token ${token}` } });
+
+      if (!res.ok) {
+        let porQue = null;
+        try { porQue = await res.clone().json(); } catch { /* no es JSON */ }
+        Swal.fire('No se pudo borrar',
+          (porQue && (porQue.detail || porQue.error))
+            || (res.status === 405 || res.status === 404
+              ? 'Este servidor todavía no permite borrar incidentes. Falta '
+                + 'aplicar el parche en el backend.'
+              : res.status === 403
+                ? 'Tu usuario no tiene permiso para borrar incidentes.'
+                : `El servidor respondió ${res.status}.`),
+          'error');
+        return;
+      }
+
+      await Swal.fire('Incidente borrado',
+        'Ya no aparece en la lista. Sus costeos y partes se conservan.',
+        'success');
       await obtenerIncidentes();
     } catch (e) {
       Swal.fire('No se pudo borrar', String(e), 'error');
@@ -1315,10 +1391,20 @@ function Incidentes({ incidenteAbrir, onIncidenteAbierto, fuente = 'incidentes' 
                   {/* EN GRIS Y EL ULTIMO. Lo que se hace casi siempre con un
                       hallazgo es atenderlo, no borrarlo; el rojo aparece en
                       el aviso, que es donde se decide. */}
-                  {esHallazgos && inc.hallazgo && (
+                  {esHallazgos && inc.hallazgo && permiso.borrar && (
                     <div className="tbl-card-btn-bottom inc-borrar"
                       onClick={() => borrarHallazgo(inc)}>
                       <FaTrashAlt /> Borrar hallazgo
+                    </div>
+                  )}
+                  {/* Y en la lista de incidentes, lo mismo para quien pueda.
+                      Solo aquí: en la pantalla de hallazgos el botón de
+                      arriba ya ofrece borrar el incidente entero, y dos
+                      botones rojos que hacen casi lo mismo se pulsan mal. */}
+                  {!esHallazgos && permiso.borrar && (
+                    <div className="tbl-card-btn-bottom inc-borrar"
+                      onClick={() => borrarIncidente(inc)}>
+                      <FaTrashAlt /> Borrar incidente
                     </div>
                   )}
                 </div>
