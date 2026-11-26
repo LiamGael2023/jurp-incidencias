@@ -1871,6 +1871,29 @@
 }
 .leaflet-tooltip.inv-eti-sector::before { display: none; }   /* sin flecha */
 
+/* EL NOMBRE DE UN ÁREA PEQUEÑA —un lote, una parcela—.
+ *
+ * Mismo tratamiento que el del sector, pero un punto más pequeño y sin
+ * versalitas: el nombre de un sector es un titular y hay cinco; el de un
+ * lote es un dato y hay doscientos. En mayúsculas y a 12 px, doscientos
+ * nombres tapan el mapa que están describiendo.
+ *
+ * La sombra negra a tres capas se mantiene: es lo único que hace legible
+ * un texto blanco sobre imagen satelital, donde debajo puede haber arena
+ * clara o cultivo oscuro en el mismo rótulo. */
+.leaflet-tooltip.inv-eti-area {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  font: 700 11px/1.15 system-ui, sans-serif;
+  color: #fff;
+  text-shadow: 0 1px 3px #000, 0 0 7px #000, 0 0 2px #000;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.leaflet-tooltip.inv-eti-area::before { display: none; }     /* sin flecha */
+
 /* Las dos muestras de una capa que se pinta por licencia. Una sola pastilla
    mentiría sobre lo que se va a ver en el mapa. */
 .inv-capa-par { display: inline-flex; gap: 2px; flex-shrink: 0; }

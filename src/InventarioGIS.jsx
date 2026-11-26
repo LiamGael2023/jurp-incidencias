@@ -162,7 +162,11 @@ const GRUPOS = [
          pintar 205 polígonos dos veces para esconder el único dato que
          importaba. */
       { codigo: 'areas_licencia',    label: 'Áreas con licencia', color: '#c0d259', tipo: 'poly', oculta: true },
-      { codigo: 'lotes',             label: 'Lotes',             color: '#d2e070', tipo: 'poly', porLicencia: true },
+      /* `rotulo` pone el nombre del polígono encima, como en los sectores.
+       * Hasta ahora el rótulo de áreas estaba atado a `porSector`, que es
+       * otra cosa —reparte colores—, así que un lote no podía llevar
+       * nombre sin heredar también el coloreado por sector. */
+      { codigo: 'lotes',             label: 'Lotes',             color: '#d2e070', tipo: 'poly', porLicencia: true, rotulo: 'nombre' },
       /* El Canal Madre partido por progresiva cada 200 m, con la estructura
          de cada trozo. Convive con `canal_madre` (el eje en línea) a
          propósito: el eje sirve para ver por dónde va, y éste para saber en
@@ -266,6 +270,19 @@ const ZOOM_ETIQUETAS = 16;
  * poligono tiene sitio para el, se quite o se ponga zoom, y da igual si
  * manana la capa trae cinco o cincuenta. */
 const MIN_PX_SECTOR = 70;
+
+/* CUÁNDO CABE EL NOMBRE DE UN ÁREA PEQUEÑA.
+ *
+ * El umbral de los sectores mide el LADO MENOR, y para un lote eso no
+ * sirve: son tiras largas y estrechas, y una parcela de 300 px de largo
+ * por 40 de alto tiene sitio de sobra para su nombre y aun así suspendería
+ * la prueba del lado menor.
+ *
+ * El rótulo es texto horizontal, así que lo que necesita es ANCHO. El alto
+ * solo tiene que dar para no desbordar la tira por arriba y por abajo.
+ */
+const MIN_PX_ANCHO_AREA = 60;
+const MIN_PX_ALTO_AREA = 14;
 
 // El coloreado por vecindad y el rotulo de los sectores viven en su propio
 // modulo: son funciones puras y asi se comprueban sin montar el mapa.
@@ -1148,8 +1165,20 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
     if (!tt || !b || !mapa) return;
     const a = mapa.latLngToContainerPoint(b.getNorthWest());
     const c = mapa.latLngToContainerPoint(b.getSouthEast());
-    const lado = Math.min(Math.abs(c.x - a.x), Math.abs(c.y - a.y));
-    tt.setOpacity(etiquetas || lado >= MIN_PX_SECTOR ? 1 : 0);
+    const ancho = Math.abs(c.x - a.x);
+    const alto = Math.abs(c.y - a.y);
+    /* EN LA LÁMINA LOS SECTORES SE ROTULAN SIEMPRE, LOS LOTES NO.
+     *
+     * Son cinco sectores y doscientos lotes. Forzar el rótulo de los
+     * sectores garantiza que la lámina salga con sus nombres aunque el
+     * polígono quede justo; hacer lo mismo con los lotes llenaría el papel
+     * de texto encabalgado, que es peor que no poner nada. Los lotes se
+     * rotulan cuando hay sitio, igual en pantalla que en papel. */
+    const forzar = etiquetas && !layer._soloSiCabe;
+    const cabe = layer._soloSiCabe
+      ? (ancho >= MIN_PX_ANCHO_AREA && alto >= MIN_PX_ALTO_AREA)
+      : Math.min(ancho, alto) >= MIN_PX_SECTOR;
+    tt.setOpacity(forzar || cabe ? 1 : 0);
   }, [mapa, etiquetas]);
 
   useEffect(() => {
@@ -1362,7 +1391,12 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                     + `${amb === 'JURP' ? 'JURP' : amb === 'PECH' ? 'Chavimochic' : 'sin ámbito'}`
                     + '</span>'
                   : '';
-                const nombre = porSector ? porSector.nombre(f) : null;
+                /* El nombre del rótulo sale del reparto por sector o, si la
+                 * capa declara `rotulo`, del campo que diga. Un lote sin
+                 * nombre se queda sin etiqueta en vez de pintar «null». */
+                const nombre = porSector
+                  ? porSector.nombre(f)
+                  : (capa.rotulo ? (p[capa.rotulo] || null) : null);
                 // La licencia, con todas las letras: el color la cuenta de un
                 // vistazo, pero quien abre el globo quiere leerla.
                 const lic = licencias
@@ -1379,9 +1413,13 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
                 // decide si se ve es el efecto de arriba, segun el sitio que
                 // tenga el poligono en pantalla.
                 if (nombre) {
+                  // Lo lee `ajustarRotulo`: un lote solo se rotula si cabe,
+                  // también en la lámina. Un sector se rotula siempre.
+                  layer._soloSiCabe = !porSector;
                   layer.bindTooltip(nombre, {
                     permanent: true, direction: 'center',
-                    className: 'inv-eti-sector', opacity: 1,
+                    className: porSector ? 'inv-eti-sector' : 'inv-eti-area',
+                    opacity: 1,
                   });
                   // Cada sector se vigila a si mismo: al entrar al mapa y en
                   // cada cambio de zoom. Asi no depende de cuando React
