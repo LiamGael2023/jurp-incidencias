@@ -283,6 +283,14 @@
  *
  * `cursor: pointer` es lo único que delata que se puede pulsar; el
  * `title` lo dice con palabras para quien no lo intuya. */
+/* La fila de un sector: casilla y nombre a la izquierda, ajustes a la
+   derecha. Igual que las filas de capa, para que se lea como lo mismo. */
+.lam-subcapa-fila { display: flex; align-items: center; gap: 4px; }
+.lam-subcapa-fila > .lam-subcapa { flex: 1; min-width: 0; }
+/* Más pequeño que el de una capa: está sangrado y repetido cinco veces,
+   y al mismo tamaño convierte la sublista en una columna de ruedas. */
+.lam-subcapa-fila .aj-boton { width: 17px; height: 17px; font-size: 8.5px; }
+
 .lam-subcapa-color { position: relative; display: inline-flex; flex: 0 0 auto;
   cursor: pointer; }
 .lam-subcapa-color input[type="color"] { position: absolute; inset: -2px;

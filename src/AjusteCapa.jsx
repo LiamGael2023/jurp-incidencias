@@ -56,7 +56,17 @@ function Fila({ etiqueta, tocado, onSoltar, children }) {
   );
 }
 
-export default function AjusteCapa({ capa }) {
+/**
+ * @param capa        la capa, o un sector disfrazado de capa
+ * @param cosa        cómo llamarla en los textos: «capa» o «sector».
+ * @param soloCampos  limita qué controles salen. Para un sector solo
+ *                    tienen sentido el color y el relleno: el grosor y el
+ *                    punteado son del contorno, que es uno para toda la
+ *                    capa, y los nombres salen del campo del rótulo. Un
+ *                    panel con cuatro controles que no hacen nada enseña
+ *                    a desconfiar del que sí hace algo.
+ */
+export default function AjusteCapa({ capa, soloCampos = null, cosa = 'capa' }) {
   const [abierto, setAbierto] = useState(false);
   const caja = useRef(null);
 
@@ -91,6 +101,7 @@ export default function AjusteCapa({ capa }) {
   const val = { ...base, ...a };
   const tocada = estaAjustada(capa.codigo);
   const esArea = capa.tipo === 'poly';
+  const sale = (campo) => !soloCampos || soloCampos.includes(campo);
 
   const poner = (campo, v) => ajustar(capa.codigo, { [campo]: v });
   const soltar = (campo) => ajustar(capa.codigo, { [campo]: undefined });
@@ -100,7 +111,8 @@ export default function AjusteCapa({ capa }) {
       <button type="button"
         className={`aj-boton${tocada ? ' aj-boton-on' : ''}`}
         onClick={() => setAbierto(v => !v)}
-        title={tocada ? 'Esta capa tiene ajustes tuyos' : 'Ajustar esta capa'}>
+        title={tocada ? `Ajustes tuyos en est${cosa === 'capa' ? 'a capa' : 'e ' + cosa}`
+          : `Ajustar est${cosa === 'capa' ? 'a capa' : 'e ' + cosa}`}>
         <FaSlidersH />
       </button>
 
@@ -112,31 +124,37 @@ export default function AjusteCapa({ capa }) {
               onClick={() => setAbierto(false)} title="Cerrar"><FaTimes /></button>
           </div>
 
-          <Fila etiqueta="Color" tocado={a.color !== undefined}
-            onSoltar={() => soltar('color')}>
-            <input type="color" value={val.color}
-              onChange={(e) => poner('color', e.target.value)} />
-          </Fila>
+          {sale('color') && (
+            <Fila etiqueta="Color" tocado={a.color !== undefined}
+              onSoltar={() => soltar('color')}>
+              <input type="color" value={val.color}
+                onChange={(e) => poner('color', e.target.value)} />
+            </Fila>
+          )}
 
-          <Fila etiqueta="Grosor" tocado={a.weight !== undefined}
-            onSoltar={() => soltar('weight')}>
-            {/* Desde 0,3: el blanco fino de las cuencas está en 0,7 y hay
-                que poder bajar de ahí. Hasta 6, que es más de lo que
-                cualquiera va a querer y evita que un resbalón deje una
-                capa de veinte píxeles. */}
-            <input type="range" min="0.3" max="6" step="0.1" value={val.weight}
-              onChange={(e) => poner('weight', parseFloat(e.target.value))} />
-            <em>{Number(val.weight).toFixed(1)}</em>
-          </Fila>
+          {sale('weight') && (
+            <Fila etiqueta="Grosor" tocado={a.weight !== undefined}
+              onSoltar={() => soltar('weight')}>
+              {/* Desde 0,3: el blanco fino de las cuencas está en 0,7 y hay
+                  que poder bajar de ahí. Hasta 6, que es más de lo que
+                  cualquiera va a querer y evita que un resbalón deje una
+                  capa de veinte píxeles. */}
+              <input type="range" min="0.3" max="6" step="0.1" value={val.weight}
+                onChange={(e) => poner('weight', parseFloat(e.target.value))} />
+              <em>{Number(val.weight).toFixed(1)}</em>
+            </Fila>
+          )}
 
-          <Fila etiqueta="Trazo" tocado={a.opacity !== undefined}
-            onSoltar={() => soltar('opacity')}>
-            <input type="range" min="0" max="1" step="0.05" value={val.opacity}
-              onChange={(e) => poner('opacity', parseFloat(e.target.value))} />
-            <em>{Math.round(val.opacity * 100)}%</em>
-          </Fila>
+          {sale('opacity') && (
+            <Fila etiqueta="Trazo" tocado={a.opacity !== undefined}
+              onSoltar={() => soltar('opacity')}>
+              <input type="range" min="0" max="1" step="0.05" value={val.opacity}
+                onChange={(e) => poner('opacity', parseFloat(e.target.value))} />
+              <em>{Math.round(val.opacity * 100)}%</em>
+            </Fila>
+          )}
 
-          {esArea && (
+          {esArea && sale('fillOpacity') && (
             <Fila etiqueta="Relleno" tocado={a.fillOpacity !== undefined}
               onSoltar={() => soltar('fillOpacity')}>
               <input type="range" min="0" max="1" step="0.02" value={val.fillOpacity}
@@ -145,22 +163,26 @@ export default function AjusteCapa({ capa }) {
             </Fila>
           )}
 
-          <Fila etiqueta="Punteada" tocado={a.dash !== undefined}
-            onSoltar={() => soltar('dash')}>
-            <input type="checkbox" checked={!!val.dash}
-              onChange={(e) => poner('dash', e.target.checked)} />
-          </Fila>
+          {sale('dash') && (
+            <Fila etiqueta="Punteada" tocado={a.dash !== undefined}
+              onSoltar={() => soltar('dash')}>
+              <input type="checkbox" checked={!!val.dash}
+                onChange={(e) => poner('dash', e.target.checked)} />
+            </Fila>
+          )}
 
-          <Fila etiqueta="Nombres" tocado={a.rotulo !== undefined}
-            onSoltar={() => soltar('rotulo')}>
-            <input type="checkbox" checked={!!val.rotulo}
-              onChange={(e) => poner('rotulo', e.target.checked)} />
-          </Fila>
+          {sale('rotulo') && (
+            <Fila etiqueta="Nombres" tocado={a.rotulo !== undefined}
+              onSoltar={() => soltar('rotulo')}>
+              <input type="checkbox" checked={!!val.rotulo}
+                onChange={(e) => poner('rotulo', e.target.checked)} />
+            </Fila>
+          )}
 
           <div className="aj-pie">
             <button type="button" onClick={() => restablecer(capa.codigo)}
               disabled={!tocada}>
-              Restablecer esta capa
+              Restablecer est{cosa === 'capa' ? 'a capa' : 'e ' + cosa}
             </button>
           </div>
           {/* Dónde vive esto, dicho sin rodeos: alguien va a ajustar el

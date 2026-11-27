@@ -240,6 +240,32 @@ export function ponerColorDeSector(nombre, color) {
   return ajustar(PREFIJO_SECTOR + nombre, { color });
 }
 
+/** La clave con la que se guarda un sector. La usa el panel de ajustes. */
+export function claveDeSector(nombre) {
+  return PREFIJO_SECTOR + nombre;
+}
+
+/**
+ * El estilo de un polígono concreto, con lo que se haya elegido para SU
+ * sector encima.
+ *
+ * Se aplica después del ajuste de la capa y gana, porque lo que se pide
+ * es atenuar UN sector dejando los demás como estaban. Si mandara el de
+ * la capa, elegir un relleno para SECTOR 3 no haría nada en cuanto
+ * alguien hubiera tocado el relleno de la capa entera.
+ */
+export function conAjustesDeSector(nombre, base) {
+  if (!nombre) return base;
+  const a = ajusteDe(PREFIJO_SECTOR + nombre);
+  if (!Object.keys(a).length) return base;
+
+  const fuera = { ...base };
+  if (a.color !== undefined) { fuera.color = a.color; fuera.fillColor = a.color; }
+  if (a.fillOpacity !== undefined) fuera.fillOpacity = a.fillOpacity;
+  if (a.opacity !== undefined) fuera.opacity = a.opacity;
+  return fuera;
+}
+
 /** ¿Hay algún sector con color elegido a mano? */
 export function haySectoresAjustados() {
   return Object.keys(todosLosAjustes()).some(k => k.startsWith(PREFIJO_SECTOR));

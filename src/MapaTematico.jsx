@@ -12,7 +12,8 @@ import { TeselasBase, SelectorBase, capaBase, puedeExportar, alternativaExportab
 import { useInventario, CapasInventario, GRUPOS_CAPAS, TODAS_LAS_CAPAS } from './InventarioGIS';
 import AjusteCapa from './AjusteCapa';
 import { useAjustesCapas, hayAjustes, restablecerTodo,
-         ponerColorDeSector, haySectoresAjustados, restablecerSectores } from './estiloCapas';
+         ponerColorDeSector, haySectoresAjustados, restablecerSectores,
+         claveDeSector } from './estiloCapas';
 import {
   latLngToUTM, utmTexto, zonaDe, cuadriculaUTM, barraEscala, numeroLamina,
   zoomParaEscala, escalaDeZoom, terrenoDeLamina, cabeEnLamina, distanciaMetros,
@@ -1615,7 +1616,8 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
                           </span>
                         </div>
                         {inv.sectores.map(s => (
-                          <label key={s.nombre} className="lam-subcapa">
+                          <div key={s.nombre} className="lam-subcapa-fila">
+                          <label className="lam-subcapa">
                             <input type="checkbox"
                               checked={!inv.sectoresOcultos.has(s.nombre)}
                               onChange={() => inv.alternarSector(s.nombre)} />
@@ -1636,6 +1638,18 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
                             </span>
                             <span title={s.nombre}>{s.nombre}</span>
                           </label>
+                          {/* El cuadrito de al lado ya cambia el color de un
+                              clic, que es lo que se hace a menudo. Esto es
+                              para lo otro: atenuar UN sector sin tocar los
+                              demás. Solo color y relleno — el grosor y el
+                              punteado son del contorno, que es uno para toda
+                              la capa. */}
+                          <AjusteCapa
+                            capa={{ codigo: claveDeSector(s.nombre),
+                                    label: s.nombre, tipo: 'poly',
+                                    color: s.color }}
+                            soloCampos={['color', 'fillOpacity']} cosa="sector" />
+                          </div>
                         ))}
                       </div>
                     )}

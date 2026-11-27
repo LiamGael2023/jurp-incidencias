@@ -1449,7 +1449,18 @@ export function CapasInventario({ inv, racimo = null, limites = null, etiquetas 
           };
           // Lo que el usuario haya ajustado va ENCIMA de lo calculado,
           // campo a campo. Ver estiloCapas.js.
-          const estilo = (f) => conAjustes(capa.codigo, estiloBase(f));
+          /* EN UNA CAPA DE SECTORES, CADA POLIGONO PUEDE IR A SU AIRE.
+           *
+           * El ajuste de la capa vale para toda ella, y eso basta en las
+           * demás. Aquí no: un sector es una unidad de trabajo, y lo que se
+           * pide es atenuar UNO para que no tape lo que hay debajo mientras
+           * los otros siguen como estaban. Por eso el ajuste del sector se
+           * aplica DESPUÉS del de la capa, y gana. */
+          const estilo = (f) => {
+            const e = conAjustes(capa.codigo, estiloBase(f));
+            if (!porSector) return e;
+            return conAjustesDeSector(porSector.nombre(f), e);
+          };
 
           return (
             <GeoJSON
