@@ -427,6 +427,10 @@ const construirIcono = (color, estado, ambito, ico) => {
    Hook: estado del módulo
    ══════════════════════════════════════════════════════════ */
 export function useInventario() {
+  /* Los colores de sector que el usuario haya elegido afectan a la lista
+   * de sectores que se calcula más abajo. Ver allí. */
+  const verAjustes = useAjustesCapas();
+
   const [abierto, setAbierto] = useState(false);
   const [campania, setCampania] = useState(null);
   const [campanias, setCampanias] = useState([]);
@@ -1004,7 +1008,12 @@ export function useInventario() {
       .map(([nombre, color]) => ({ nombre, color }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es',
         { numeric: true, sensitivity: 'base' }));
-  }, [datos, ambito, filtroCapa]);
+    /* `verAjustes` entra aquí porque `d.color(f)` consulta el color que el
+     * usuario haya elegido para ese sector. Sin él, cambiar un color
+     * repintaría el mapa pero dejaría el cuadrito de la lista —y el de la
+     * leyenda, que sale de aquí— con el color anterior: el sitio desde el
+     * que acabas de elegirlo sería el único que no se entera. */
+  }, [datos, ambito, filtroCapa, verAjustes]);
 
   /* El filtro espacial. Solo se construye cuando hay sectores cargados, y
    * el calculo por elemento se memoriza dentro, asi que encender y apagar

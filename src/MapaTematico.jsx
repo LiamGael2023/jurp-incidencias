@@ -11,7 +11,8 @@ import { TeselasBase, SelectorBase, capaBase, puedeExportar, alternativaExportab
          CAPA_POR_DEFECTO } from './capasBase';
 import { useInventario, CapasInventario, GRUPOS_CAPAS, TODAS_LAS_CAPAS } from './InventarioGIS';
 import AjusteCapa from './AjusteCapa';
-import { useAjustesCapas, hayAjustes, restablecerTodo } from './estiloCapas';
+import { useAjustesCapas, hayAjustes, restablecerTodo,
+         ponerColorDeSector, haySectoresAjustados, restablecerSectores } from './estiloCapas';
 import {
   latLngToUTM, utmTexto, zonaDe, cuadriculaUTM, barraEscala, numeroLamina,
   zoomParaEscala, escalaDeZoom, terrenoDeLamina, cabeEnLamina, distanciaMetros,
@@ -1598,6 +1599,15 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
                             {inv.sectores.length - inv.sectoresOcultos.size} de {inv.sectores.length}
                           </span>
                           <span>
+                            {/* Solo cuando hay algo que deshacer: ver el
+                                mismo criterio en «Restablecer todo». */}
+                            {haySectoresAjustados() && (
+                              <button type="button" onClick={restablecerSectores}
+                                className="lam-sub-reset"
+                                title="Volver a los colores que reparte el sistema">
+                                Colores
+                              </button>
+                            )}
                             <button type="button" onClick={() => inv.todosLosSectores(true)}
                               disabled={!inv.sectoresOcultos.size}>Todos</button>
                             <button type="button" onClick={() => inv.todosLosSectores(false)}
@@ -1609,7 +1619,21 @@ function MapaTematico({ menu, vistaActual, onNavegar, usuario, onLogout, app, Ra
                             <input type="checkbox"
                               checked={!inv.sectoresOcultos.has(s.nombre)}
                               onChange={() => inv.alternarSector(s.nombre)} />
-                            <i style={{ background: s.color }} />
+                            {/* EL CUADRITO DE COLOR ES EL SELECTOR.
+                                Ya estaba ahí diciendo de qué color va el
+                                sector; hacerlo pulsable es más directo que
+                                añadir otro control al lado, y no ocupa
+                                sitio en un carril que ya va justo.
+                                El `input` va encima, invisible: así hereda
+                                el selector de color del sistema operativo
+                                sin tener que dibujar uno. */}
+                            <span className="lam-subcapa-color"
+                              title={`Color de ${s.nombre} — pulsa para cambiarlo`}>
+                              <i style={{ background: s.color }} />
+                              <input type="color" value={s.color || '#888888'}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => ponerColorDeSector(s.nombre, e.target.value)} />
+                            </span>
                             <span title={s.nombre}>{s.nombre}</span>
                           </label>
                         ))}

@@ -273,6 +273,28 @@
 .lam-subcapa { display: flex !important; align-items: center; gap: 6px;
   margin-bottom: 2px; font-size: 11px; cursor: pointer; }
 .lam-subcapa input { width: auto !important; margin: 0 !important; }
+
+/* EL CUADRITO DE COLOR, PULSABLE.
+ *
+ * El `input type=color` va encima del cuadrito y transparente: se queda
+ * con el clic y abre el selector del sistema, mientras lo que se ve
+ * sigue siendo el mismo cuadrito de siempre. Dibujar un selector propio
+ * costaría cien líneas y sería peor que el del sistema operativo.
+ *
+ * `cursor: pointer` es lo único que delata que se puede pulsar; el
+ * `title` lo dice con palabras para quien no lo intuya. */
+.lam-subcapa-color { position: relative; display: inline-flex; flex: 0 0 auto;
+  cursor: pointer; }
+.lam-subcapa-color input[type="color"] { position: absolute; inset: -2px;
+  width: calc(100% + 4px) !important; height: calc(100% + 4px);
+  padding: 0; border: 0; opacity: 0; cursor: pointer; }
+.lam-subcapa-color:hover i { outline: 2px solid rgba(255,255,255,.45);
+  outline-offset: 1px; }
+
+/* «Colores» para deshacer los elegidos a mano, en el ámbar del resto de
+   avisos de «esto lo has tocado tú». */
+.lam-subcapas-cab .lam-sub-reset { color: #e8b339;
+  border-color: rgba(232,179,57,.4); }
 .lam-subcapa i { width: 10px; height: 10px; border-radius: 3px;
   flex: 0 0 10px; }
 .lam-subcapa span { overflow: hidden; text-overflow: ellipsis;

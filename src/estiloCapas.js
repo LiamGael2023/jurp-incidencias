@@ -216,6 +216,47 @@ export function rotuloAjustado(codigo) {
   return ajusteDe(codigo).rotulo;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+ * LOS COLORES DE CADA SECTOR
+ * ══════════════════════════════════════════════════════════════════════
+ *
+ * Un sector no es una capa, pero se guarda igual: como una entrada más,
+ * con una clave reservada. Así hereda sin escribir nada el guardado, la
+ * suscripción, «restablecer todo» y la lista blanca de campos.
+ *
+ * SE GUARDA POR NOMBRE, no por posición en la lista. El reparto
+ * automático de colores mira qué sector linda con cuál, así que si mañana
+ * llega un polígono nuevo el reparto cambia entero. Un color fijado para
+ * SECTOR 3 tiene que seguir siendo de SECTOR 3 después de eso.
+ */
+const PREFIJO_SECTOR = 'sector:';
+
+export function colorDeSector(nombre) {
+  if (!nombre) return undefined;
+  return ajusteDe(PREFIJO_SECTOR + nombre).color;
+}
+
+export function ponerColorDeSector(nombre, color) {
+  return ajustar(PREFIJO_SECTOR + nombre, { color });
+}
+
+/** ¿Hay algún sector con color elegido a mano? */
+export function haySectoresAjustados() {
+  return Object.keys(todosLosAjustes()).some(k => k.startsWith(PREFIJO_SECTOR));
+}
+
+/** Devuelve todos los sectores a los colores que reparte el algoritmo. */
+export function restablecerSectores() {
+  const todo = todosLosAjustes();
+  for (const k of Object.keys(todo)) {
+    if (k.startsWith(PREFIJO_SECTOR)) delete todo[k];
+  }
+  ajustes = todo;
+  const guardado = escribirDisco();
+  avisar();
+  return guardado;
+}
+
 /**
  * Para los componentes: se repintan cuando alguien ajusta algo.
  *

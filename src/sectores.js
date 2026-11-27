@@ -195,6 +195,8 @@ export function colorearPorVecindad(features = [], paleta = PALETA_SECTOR) {
 
 /* Se calcula una vez por FeatureCollection. La clave es el propio objeto: si
  * la capa se vuelve a descargar llega otro y se recalcula solo. */
+import { colorDeSector } from './estiloCapas';
+
 const cacheSector = new WeakMap();
 
 /**
@@ -212,10 +214,27 @@ export function datosDeCapa(fc) {
   if (!d) {
     const color = colorearPorVecindad(fc.features);
     const campo = campoRotulo(fc.features);
+    const nombre = (f) => nombreRasgo(f?.properties, campo);
     d = {
       campo,
-      color: (f) => color.get(f),
-      nombre: (f) => nombreRasgo(f?.properties, campo),
+      nombre,
+      /* EL COLOR ELEGIDO A MANO GANA AL REPARTIDO.
+       *
+       * Todo lo de arriba —medir vecindades, gastar cuatro colores, que dos
+       * sectores que lindan nunca coincidan— sirve para que la capa se
+       * entienda SIN que nadie la configure. Pero es un buen reparto por
+       * defecto, no una verdad: quien trabaja con estos sectores a diario
+       * tiene sus colores, los de los planos que ya están impresos, y el
+       * algoritmo no puede saberlos.
+       *
+       * Se consulta por NOMBRE de sector, no por posición: un color fijado
+       * para SECTOR 3 lo sigue siendo aunque mañana llegue un polígono más
+       * y el reparto automático cambie entero.
+       *
+       * Y se consulta en cada llamada en vez de resolverse aquí una vez,
+       * porque esto se cachea por FeatureCollection: si se congelara, un
+       * color elegido no se vería hasta recargar la capa. */
+      color: (f) => colorDeSector(nombre(f)) || color.get(f),
     };
     cacheSector.set(fc, d);
   }
