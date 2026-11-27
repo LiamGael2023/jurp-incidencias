@@ -19,7 +19,8 @@ import VisorImagen from './VisorImagen';
 import Swal from 'sweetalert2';
 import { latLngToUTM, primerLatLng } from './cartografia';
 import { datosDeCapa, filtroDeSectores } from './sectores';
-import { conAjustes, rotuloAjustado, useAjustesCapas } from './estiloCapas';
+import { conAjustes, conAjustesDeSector, rotuloAjustado,
+         useAjustesCapas } from './estiloCapas';
 import { codcatsConLicencia, colorLote, tieneLicencia, textoLicencia,
          CAPA_LICENCIAS, COLOR_CON_LICENCIA, COLOR_SIN_LICENCIA } from './lotes';
 import './InventarioGIS.css';
